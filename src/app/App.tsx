@@ -101,7 +101,7 @@ export interface Customer {
   whatsappId?: string;
   lastWhatsAppAt?: string;
   /** CRM lead fields */
-  source?: 'facebook' | 'instagram' | 'google' | 'referral' | 'website' | 'phone' | 'walk-in';
+  source?: 'facebook' | 'instagram' | 'google' | 'referral' | 'website' | 'phone' | 'walk-in' | 'email' | 'purchased';
   campaign?: string;
   adSet?: string;
   leadScore?: number;
@@ -287,6 +287,7 @@ export interface AppContextType {
   accountsAccess: AccountsAccess;
   setAccountsAccess: (next: AccountsAccess) => void;
   addCustomer: (customer: Omit<Customer, 'id' | 'createdAt'>) => Customer;
+  upsertCustomer: (customer: Customer) => void;
   updateCustomer: (id: string, customer: Partial<Customer>) => void;
   deleteCustomer: (id: string) => void;
   addProduct: (product: Omit<Product, 'id' | 'sellPrice'>) => void;
@@ -595,6 +596,18 @@ export default function App() {
     return newCustomer;
   };
 
+  const upsertCustomer = (customer: Customer) => {
+    setCustomers(prev => {
+      const idx = prev.findIndex(c => c.id === customer.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...customer };
+        return next;
+      }
+      return [...prev, customer];
+    });
+  };
+
   const updateCustomer = (id: string, updates: Partial<Customer>) => {
     setCustomers(customers.map(c => c.id === id ? { ...c, ...updates } : c));
   };
@@ -833,6 +846,7 @@ export default function App() {
     accountsAccess,
     setAccountsAccess,
     addCustomer,
+    upsertCustomer,
     updateCustomer,
     deleteCustomer,
     addProduct,

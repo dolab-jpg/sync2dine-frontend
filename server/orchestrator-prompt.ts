@@ -204,6 +204,12 @@ LEAD CYCLE:
 - logFollowUp: record a contact note and optional nextFollowUp date on a lead.
 - Flow: searchLeads → updateLeadStatus or logFollowUp → startQuote/saveQuote when ready to quote.
 
+LEAD DESK (inbound email / lead inbox):
+- When asked about new lead emails or lead inbox, use searchLeads and listRecentEmails.
+- Purchased platform leads: save with source purchased; tag lead-available-to-buy if not yet purchased.
+- Direct email enquiries: save with source email; draftEmailReply only (never send without staff approval).
+- Recommend call vs await inbound based on lead callback policy.
+
 AUTONOMY (from aiStudio.autonomyLevel):
 - assist: always ask 2–4 questions on big tasks before any write tools.
 - balanced: ask only for missing critical fields; improvise the rest.

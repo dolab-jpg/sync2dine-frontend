@@ -19,7 +19,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import {
   loadNotifications,
   subscribe as subscribeNotifications,
+  addNotificationIfNew,
 } from '../engine/notifications/notificationStore';
+import { fetchLeadInbox, getLastPollTime, setLastPollTime } from '../engine/leads/leadInboxService';
+import type { Customer } from '../App';
 import { BrandLogo } from './BrandLogo';
 
 interface AppShellProps {
@@ -65,6 +68,51 @@ export default function AppShell({ children }: AppShellProps) {
       sidebar.close();
     }
   }, [isMobile, isWideViewport, sidebar.isOpen, sidebar.close]);
+
+  useEffect(() => {
+    if (!context?.user || context.user.role === 'customer' || context.user.role === 'builder') return;
+
+    const poll = async () => {
+      try {
+        const since = getLastPollTime();
+        const data = await fetchLeadInbox(since);
+        setLastPollTime(new Date().toISOString());
+
+        for (const raw of data.customers) {
+          const c = raw as Customer;
+          if (!c.id) continue;
+          context.upsertCustomer({
+            ...c,
+            whatsappOptIn: c.whatsappOptIn ?? true,
+            preferredChannel: c.preferredChannel ?? 'email',
+            tags: c.tags ?? [],
+          });
+        }
+
+        for (const item of data.items) {
+          if (item.status !== 'action_required' && item.status !== 'unparsed') continue;
+          addNotificationIfNew({
+            type: 'lead_action_required',
+            title: item.status === 'unparsed' ? 'Lead email needs review' : 'New lead from email',
+            message: item.summary,
+            dedupeKey: `lead-inbox-${item.id}`,
+            data: {
+              route: '/communications?tab=leads',
+              customerId: item.customerId,
+              leadInboxId: item.id,
+            },
+          });
+        }
+      } catch {
+        /* server may be offline */
+      }
+    };
+
+    void poll();
+    const interval = setInterval(() => void poll(), 60_000);
+    return () => clearInterval(interval);
+  }, [context?.user, context?.upsertCustomer]);
+
   const mainRef = useRef<HTMLElement>(null);
   const contentRowRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);

@@ -21,6 +21,8 @@ import { handleAuthRoutes } from './auth';
 import { handleMailboxRoutes } from './mailbox-routes';
 import { handlePackageUpdatesRoute } from './mailbox/package-updates';
 import { handleChannelRoutes } from './channel-routes';
+import { handleLeadsRoutes } from './leads-routes';
+import { startMailboxPoller } from './mailbox/imapSyncService';
 import { startOutboundWorker } from './outbound-worker';
 
 const PORT = Number(process.env.PORT) || 3001;
@@ -88,6 +90,8 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
   if (await handlePlatformRoutes(req, res, pathname)) return;
 
   if (await handleChannelRoutes(req, res, pathname)) return;
+
+  if (await handleLeadsRoutes(req, res, pathname, url)) return;
 
   if (pathname.startsWith('/api/ai/')) {
     await handleAiRequest(req, res, pathname);

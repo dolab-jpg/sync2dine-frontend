@@ -6,7 +6,7 @@ import {
   syncData,
   getProjectById,
 } from './data-store';
-import { canExecuteActionForRoleForRole, type ServerAgentRole } from './role-permissions';
+import { canExecuteActionForRole, type ServerAgentRole } from './role-permissions';
 import { executeServerReadTool, executeCustomerTool } from './orchestrator-tool-exec';
 import { lookupQuotesFromStore, formatQuoteBreakdownText } from './quote-lookup';
 import { researchTaskPrices, pickHigherEnd } from './price-research-service';

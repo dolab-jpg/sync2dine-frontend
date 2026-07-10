@@ -7,7 +7,8 @@ export type NotificationType =
   | 'customer_action_required'
   | 'foreman_plan_sent'
   | 'builder_reply_received'
-  | 'bc_update_detected';
+  | 'bc_update_detected'
+  | 'lead_action_required';
 
 export interface ProjectNotification {
   id: string;
@@ -50,7 +51,8 @@ function isNotificationType(value: unknown): value is NotificationType {
     || value === 'customer_action_required'
     || value === 'foreman_plan_sent'
     || value === 'builder_reply_received'
-    || value === 'bc_update_detected';
+    || value === 'bc_update_detected'
+    || value === 'lead_action_required';
 }
 
 function normalize(raw: unknown): ProjectNotification | null {
@@ -138,6 +140,20 @@ export function addNotification(input: NewNotificationInput): ProjectNotificatio
   emit();
 
   return created;
+}
+
+export function addNotificationIfNew(input: NewNotificationInput & { dedupeKey?: string }): ProjectNotification | null {
+  refreshCache();
+  if (input.dedupeKey) {
+    const exists = cache.some(
+      n => n.data?.dedupeKey === input.dedupeKey
+    );
+    if (exists) return null;
+  }
+  return addNotification({
+    ...input,
+    data: { ...input.data, dedupeKey: input.dedupeKey },
+  });
 }
 
 export function markRead(id: string): void {

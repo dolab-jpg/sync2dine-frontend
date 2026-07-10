@@ -1,5 +1,5 @@
 import { useState, useContext, useEffect } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { AppContext } from '../App';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -20,6 +20,7 @@ import { mailboxService, type MailboxConnection } from '../engine/mailbox/mailbo
 import { InboxPanel } from './mailbox/InboxPanel';
 import { EmailComposePanel } from './mailbox/EmailComposePanel';
 import { MailboxConnectPanel } from './mailbox/MailboxConnectPanel';
+import { LeadInboxPanel } from './mailbox/LeadInboxPanel';
 
 const DEFAULT_TEMPLATES = [
   {
@@ -41,11 +42,18 @@ const DEFAULT_TEMPLATES = [
 export default function CommunicationsHub() {
   const context = useContext(AppContext);
   const userId = context?.user?.id;
-  const [activeTab, setActiveTab] = useState('send');
+  const [searchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(tabFromUrl === 'leads' ? 'leads' : 'send');
   const [logs, setLogs] = useState(messagingHub.getLogs());
   const [sendEmail, setSendEmail] = useState(true);
   const [sendWhatsApp, setSendWhatsApp] = useState(true);
   const [mailboxConnection, setMailboxConnection] = useState<MailboxConnection | null>(null);
+  const [replyDraft, setReplyDraft] = useState<{ to: string; subject: string; body: string } | null>(null);
+
+  useEffect(() => {
+    if (tabFromUrl === 'leads') setActiveTab('leads');
+  }, [tabFromUrl]);
 
   const loadMailbox = async () => {
     if (!userId) return;
@@ -159,6 +167,7 @@ export default function CommunicationsHub() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="send">Send</TabsTrigger>
+          <TabsTrigger value="leads">Lead Inbox</TabsTrigger>
           <TabsTrigger value="inbox">Inbox</TabsTrigger>
           <TabsTrigger value="compose">Compose</TabsTrigger>
           <TabsTrigger value="mailbox">Mailbox</TabsTrigger>
@@ -233,12 +242,28 @@ export default function CommunicationsHub() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="leads" className="mt-4">
+          <LeadInboxPanel
+            onOpenReply={(draft) => {
+              setReplyDraft(draft);
+              setActiveTab('compose');
+            }}
+          />
+        </TabsContent>
+
         <TabsContent value="inbox" className="mt-4">
           <InboxPanel userId={user.id} orgId="default" connection={mailboxConnection} />
         </TabsContent>
 
         <TabsContent value="compose" className="mt-4">
-          <EmailComposePanel userId={user.id} orgId="default" connection={mailboxConnection} />
+          <EmailComposePanel
+            userId={user.id}
+            orgId="default"
+            connection={mailboxConnection}
+            defaultTo={replyDraft?.to}
+            defaultSubject={replyDraft?.subject}
+            defaultBody={replyDraft?.body}
+          />
         </TabsContent>
 
         <TabsContent value="mailbox" className="mt-4">

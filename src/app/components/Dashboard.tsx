@@ -1,10 +1,11 @@
-import { useContext, useEffect } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { AppContext } from '../App';
 import { Link, useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { Users, FileText, Package, TrendingUp, Clock, CheckCircle2, XCircle, AlertCircle, Palette, UserPlus, FolderKanban, Sparkles } from 'lucide-react';
+import { Users, FileText, Package, TrendingUp, Clock, CheckCircle2, XCircle, AlertCircle, Palette, UserPlus, FolderKanban, Sparkles, Mail } from 'lucide-react';
 import { getDueFollowUps } from '../engine/leads/leadService';
+import { fetchLeadInbox } from '../engine/leads/leadInboxService';
 import { getAllTrades } from '../config/trades';
 
 export default function Dashboard() {
@@ -41,6 +42,11 @@ export default function Dashboard() {
   const followUpsDue = getDueFollowUps(customers);
   const awaitingApproval = quotes.filter(q => q.status === 'awaiting_approval').length;
   const sentQuotes = quotes.filter(q => q.status === 'sent').length;
+  const [leadInboxCount, setLeadInboxCount] = useState(0);
+
+  useEffect(() => {
+    void fetchLeadInbox().then(data => setLeadInboxCount(data.actionRequired));
+  }, []);
 
   const recentQuotes = quotes
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -73,12 +79,18 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {(followUpsDue.length > 0 || awaitingApproval > 0 || sentQuotes > 0) && (
+        {(followUpsDue.length > 0 || awaitingApproval > 0 || sentQuotes > 0 || leadInboxCount > 0) && (
           <Card className="mb-6 border-amber-200 bg-amber-50">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Jobs & follow-ups</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-3 text-sm">
+              {leadInboxCount > 0 && (
+                <Button variant="outline" size="sm" onClick={() => navigate('/communications?tab=leads')}>
+                  <Mail className="w-4 h-4 mr-1" />
+                  {leadInboxCount} email lead{leadInboxCount > 1 ? 's' : ''} need action
+                </Button>
+              )}
               {followUpsDue.length > 0 && (
                 <Button variant="outline" size="sm" onClick={() => navigate('/crm')}>
                   {followUpsDue.length} follow-up{followUpsDue.length > 1 ? 's' : ''} due

@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { getDataStore, syncData } from '../data-store';
 import { handleCyrusViaOrchestrator } from '../cyrus-orchestrator';
+import { runLeadEmailAgent } from './leadEmailAgent';
 import type { CachedEmailMessage } from './types';
 import { getConnection } from './mailbox-store';
 
@@ -52,7 +53,7 @@ function appendProjectMessage(projectId: string, msg: Record<string, unknown>): 
   syncData(store);
 }
 
-export async function processInboundEmail(message: CachedEmailMessage): Promise<void> {
+export async function processInboundEmail(message: CachedEmailMessage, orgId = 'default'): Promise<void> {
   const conn = getConnection(message.connectionId);
   const resolved = resolveContactByEmail(message.fromAddr);
   const timestamp = message.receivedAt;
@@ -72,7 +73,14 @@ export async function processInboundEmail(message: CachedEmailMessage): Promise<
     });
   }
 
-  if (!resolved.customerId) return;
+  if (!resolved.customerId) {
+    try {
+      await runLeadEmailAgent(message, orgId);
+    } catch (err) {
+      console.error('leadEmailAgent error:', err);
+    }
+    return;
+  }
 
   try {
     const reply = await handleCyrusViaOrchestrator({
@@ -103,8 +111,8 @@ export async function processInboundEmail(message: CachedEmailMessage): Promise<
   }
 }
 
-export async function processNewMessages(messages: CachedEmailMessage[]): Promise<void> {
+export async function processNewMessages(messages: CachedEmailMessage[], orgId = 'default'): Promise<void> {
   for (const msg of messages) {
-    await processInboundEmail(msg);
+    await processInboundEmail(msg, orgId);
   }
 }

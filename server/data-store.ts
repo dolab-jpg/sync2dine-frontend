@@ -109,11 +109,13 @@ export interface PhoneLine {
 export interface AgentSettings {
   isActive: boolean;
   activeVoiceId?: string;
+  leadCallbackPolicy?: 'alert_only' | 'outbound_first' | 'inbound_only';
   updatedAt: string;
 }
 
 const defaultAgentSettings: AgentSettings = {
   isActive: true,
+  leadCallbackPolicy: 'alert_only',
   updatedAt: new Date().toISOString(),
 };
 
@@ -498,21 +500,40 @@ export function saveRecruitmentInterview(interview: Record<string, unknown>): Re
 
 export function saveCustomerRecord(customer: Record<string, unknown>): Record<string, unknown> {
   const store = getDataStore();
-  const id = String(customer.id ?? `C${Date.now()}`);
-  const existing = store.customers.findIndex(c => String(c.id) === id);
+  const phone = String(customer.phone ?? '');
+  const email = String(customer.email ?? '').trim().toLowerCase();
+
+  let id = customer.id ? String(customer.id) : '';
+  let existingIdx = id ? store.customers.findIndex(c => String(c.id) === id) : -1;
+
+  if (existingIdx < 0 && (phone || email)) {
+    const dup = store.customers.find(c => {
+      if (phone && normalizePhone(String(c.phone ?? '')) === normalizePhone(phone)) return true;
+      if (email && String(c.email ?? '').trim().toLowerCase() === email && email.length > 3) return true;
+      return false;
+    });
+    if (dup) {
+      existingIdx = store.customers.findIndex(c => String(c.id) === String(dup.id));
+      id = String(dup.id);
+    }
+  }
+
+  if (!id) id = `C${Date.now()}`;
+
   const record = {
     ...customer,
     id,
     status: customer.status ?? 'lead',
     createdAt: customer.createdAt ?? new Date().toISOString(),
+    mergedFromDuplicate: existingIdx >= 0 && !customer.id ? true : customer.mergedFromDuplicate,
   };
-  if (existing >= 0) {
-    store.customers[existing] = { ...store.customers[existing], ...record };
+  if (existingIdx >= 0) {
+    store.customers[existingIdx] = { ...store.customers[existingIdx], ...record };
   } else {
     store.customers.unshift(record);
   }
   syncData(store);
-  return record;
+  return store.customers.find(c => String(c.id) === id) ?? record;
 }
 
 export function getAgentSettings(): AgentSettings {

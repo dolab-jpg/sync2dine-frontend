@@ -9,6 +9,7 @@ import {
   MessageCircle,
   Send,
   X,
+  TrendingUp,
 } from 'lucide-react';
 import {
   addNotification,
@@ -135,6 +136,7 @@ export default function NotificationSystem({ onNewLead }: NotificationSystemProp
       case 'customer_action_required': return <AlertCircle className="w-5 h-5 text-red-600" />;
       case 'foreman_plan_sent': return <Send className="w-5 h-5 text-violet-600" />;
       case 'builder_reply_received': return <MessageCircle className="w-5 h-5 text-green-600" />;
+      case 'lead_action_required': return <TrendingUp className="w-5 h-5 text-amber-600" />;
       default: return <Bell className="w-5 h-5 text-gray-600" />;
     }
   };
@@ -147,6 +149,7 @@ export default function NotificationSystem({ onNewLead }: NotificationSystemProp
       case 'customer_action_required': return 'border-l-4 border-red-500 bg-red-50';
       case 'foreman_plan_sent': return 'border-l-4 border-violet-500 bg-violet-50';
       case 'builder_reply_received': return 'border-l-4 border-green-500 bg-green-50';
+      case 'lead_action_required': return 'border-l-4 border-amber-500 bg-amber-50';
       default: return 'border-l-4 border-gray-500 bg-gray-50';
     }
   };

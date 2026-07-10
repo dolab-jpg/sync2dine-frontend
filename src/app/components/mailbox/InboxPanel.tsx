@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Loader2 } from 'lucide-react';
 import { mailboxService, type InboxMessage, type InboxThread, type MailboxConnection } from '../../engine/mailbox/mailboxService';
+import { fetchLeadInbox } from '../../engine/leads/leadInboxService';
 
 function emailBodyText(msg: InboxMessage): string {
   if (msg.textBody?.trim()) return msg.textBody;
@@ -27,6 +27,14 @@ export function InboxPanel({ userId, orgId, connection }: Props) {
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [processedIds, setProcessedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    void fetchLeadInbox().then(data => {
+      const ids = (data as { processedEmailCacheIds?: string[] }).processedEmailCacheIds ?? [];
+      setProcessedIds(new Set(ids));
+    });
+  }, []);
 
   useEffect(() => {
     if (!connection?.id) return;
@@ -92,6 +100,9 @@ export function InboxPanel({ userId, orgId, connection }: Props) {
             <div key={msg.id} className="border rounded-lg p-3">
               <div className="flex items-center gap-2 mb-2">
                 <Badge variant="outline">{msg.fromName || msg.fromAddr}</Badge>
+                {processedIds.has(msg.id) && (
+                  <Badge className="bg-green-100 text-green-800 border-green-200">Lead processed</Badge>
+                )}
                 <span className="text-xs text-gray-500">{new Date(msg.receivedAt).toLocaleString()}</span>
               </div>
               <pre className="text-sm whitespace-pre-wrap font-sans">{emailBodyText(msg)}</pre>
