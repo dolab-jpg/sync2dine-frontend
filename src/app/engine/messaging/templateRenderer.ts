@@ -1,0 +1,83 @@
+import { integrationService } from '../integrations/integrationService';
+import type { PaymentStage } from '../contracts/types';
+
+export interface TemplateVariables {
+  CUSTOMER_NAME?: string;
+  CUSTOMER_EMAIL?: string;
+  CUSTOMER_PHONE?: string;
+  CUSTOMER_ADDRESS?: string;
+  QUOTE_TOTAL?: string;
+  QUOTE_EXPIRY?: string;
+  LABOUR_DAYS?: string;
+  COMPANY_NAME?: string;
+  COMPANY_PHONE?: string;
+  COMPANY_EMAIL?: string;
+  USER_NAME?: string;
+  DISCOUNT_MESSAGE?: string;
+  BOOKING_DATE?: string;
+  BOOKING_TIME?: string;
+  PAYMENT_SCHEDULE?: string;
+  DEPOSIT_AMOUNT?: string;
+  CONTRACT_TOTAL?: string;
+  CONTRACT_SIGN_LINK?: string;
+  JOB_LINE_ITEMS?: string;
+  [key: string]: string | undefined;
+}
+
+const gbp = (n: number) => n.toLocaleString('en-GB', { maximumFractionDigits: 0 });
+
+/** Format a stage payment schedule as readable plain text for emails. */
+export function formatPaymentSchedule(stages: PaymentStage[]): string {
+  if (!stages.length) return '';
+  return stages
+    .map((s) => `• ${s.label} — £${gbp(s.amount)} (${s.percent}%)${s.dueTrigger ? ` — ${s.dueTrigger}` : ''}`)
+    .join('\n');
+}
+
+/** Format job line items (and optional labour/extras) as readable plain text. */
+export function formatJobLineItems(
+  items: { name: string; total: number }[],
+  labour: { description: string; total: number }[] = [],
+  extras: { description: string; price: number }[] = []
+): string {
+  const lines = [
+    ...items.map((i) => `• ${i.name} — £${gbp(i.total)}`),
+    ...labour.map((l) => `• ${l.description} — £${gbp(l.total)}`),
+    ...extras.map((e) => `• ${e.description} — £${gbp(e.price)}`),
+  ];
+  return lines.join('\n');
+}
+
+export function renderTemplate(template: string, variables: TemplateVariables): string {
+  const company = integrationService.getConfig('company');
+  const merged: TemplateVariables = {
+    COMPANY_NAME: company.companyName || 'TradePro Ltd',
+    COMPANY_PHONE: company.phone || '',
+    COMPANY_EMAIL: company.email || '',
+    ...variables,
+  };
+
+  return template.replace(/\{([A-Z_]+)\}/g, (_, key: string) => merged[key] ?? `{${key}}`);
+}
+
+export function buildQuoteVariables(
+  customer: { name: string; email: string; phone: string; address: string },
+  quote: { total: number; expiresAt: string; labour?: { days?: number }[] },
+  userName?: string,
+  discount?: number
+): TemplateVariables {
+  const labourDays = quote.labour?.reduce((sum, l) => sum + (l.days ?? 0), 0) ?? 0;
+  return {
+    CUSTOMER_NAME: customer.name,
+    CUSTOMER_EMAIL: customer.email,
+    CUSTOMER_PHONE: customer.phone,
+    CUSTOMER_ADDRESS: customer.address,
+    QUOTE_TOTAL: quote.total.toLocaleString('en-GB', { minimumFractionDigits: 2 }),
+    QUOTE_EXPIRY: new Date(quote.expiresAt).toLocaleDateString('en-GB'),
+    LABOUR_DAYS: String(labourDays),
+    USER_NAME: userName ?? 'TradePro Team',
+    DISCOUNT_MESSAGE: discount && discount > 0
+      ? `You have received a ${discount}% discount on this quote.`
+      : '',
+  };
+}

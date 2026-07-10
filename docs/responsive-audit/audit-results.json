@@ -1,0 +1,951 @@
+{
+  "auditedAt": "2026-06-26T18:37:12.772Z",
+  "baseUrl": "http://localhost:5174",
+  "totalChecks": 33,
+  "passed": 33,
+  "issues": 0,
+  "errors": 0,
+  "aiChecks": [
+    {
+      "breakpoint": "mobile",
+      "width": 375,
+      "aiButtonFound": true,
+      "panelMode": "bottom-sheet",
+      "dockedInline": false,
+      "bottomSheet": true,
+      "expectedDocked": false,
+      "expectedBottomSheet": true,
+      "aiBehaviorCorrect": true,
+      "panelWidth": 375,
+      "viewportWidth": 375
+    },
+    {
+      "breakpoint": "tablet",
+      "width": 768,
+      "aiButtonFound": true,
+      "panelMode": "bottom-sheet",
+      "dockedInline": false,
+      "bottomSheet": true,
+      "expectedDocked": false,
+      "expectedBottomSheet": true,
+      "aiBehaviorCorrect": true,
+      "panelWidth": 320,
+      "viewportWidth": 768
+    },
+    {
+      "breakpoint": "desktop",
+      "width": 1440,
+      "aiButtonFound": true,
+      "panelMode": "docked-inline",
+      "dockedInline": true,
+      "bottomSheet": false,
+      "expectedDocked": true,
+      "expectedBottomSheet": false,
+      "aiBehaviorCorrect": true,
+      "panelWidth": 320,
+      "viewportWidth": 1440
+    }
+  ],
+  "tableChecks": [
+    {
+      "route": "/costing",
+      "label": "CostingDashboard",
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 1,
+        "tables": [
+          {
+            "index": 0,
+            "tableScrollWidth": 564,
+            "wrapperClientWidth": 277,
+            "hasOverflowWrapper": true,
+            "tableOverflowPx": 287
+          }
+        ]
+      },
+      "status": "Pass",
+      "issues": []
+    },
+    {
+      "route": "/accounts",
+      "label": "AccountsHub",
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "status": "Pass",
+      "issues": []
+    },
+    {
+      "route": "/sales",
+      "label": "SalesManagement",
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 1,
+        "tables": [
+          {
+            "index": 0,
+            "tableScrollWidth": 777,
+            "wrapperClientWidth": 277,
+            "hasOverflowWrapper": true,
+            "tableOverflowPx": 500
+          }
+        ]
+      },
+      "status": "Pass",
+      "issues": []
+    }
+  ],
+  "results": [
+    {
+      "route": "/",
+      "label": "Dashboard",
+      "breakpoint": "mobile",
+      "width": 375,
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": true,
+        "desktopNavVisible": false,
+        "mobileSheetWorks": true
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/mobile-Dashboard.png"
+    },
+    {
+      "route": "/crm",
+      "label": "CRM",
+      "breakpoint": "mobile",
+      "width": 375,
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": true,
+        "desktopNavVisible": false,
+        "mobileSheetWorks": true
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/mobile-CRM.png"
+    },
+    {
+      "route": "/quotes",
+      "label": "Quotes",
+      "breakpoint": "mobile",
+      "width": 375,
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": true,
+        "desktopNavVisible": false,
+        "mobileSheetWorks": true
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/mobile-Quotes.png"
+    },
+    {
+      "route": "/quote",
+      "label": "QuoteBuilder",
+      "breakpoint": "mobile",
+      "width": 375,
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": true,
+        "desktopNavVisible": false,
+        "mobileSheetWorks": true
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/mobile-QuoteBuilder.png"
+    },
+    {
+      "route": "/price-job",
+      "label": "PriceJob",
+      "breakpoint": "mobile",
+      "width": 375,
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": true,
+        "desktopNavVisible": false,
+        "mobileSheetWorks": true
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/mobile-PriceJob.png"
+    },
+    {
+      "route": "/contracts",
+      "label": "Contracts",
+      "breakpoint": "mobile",
+      "width": 375,
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": true,
+        "desktopNavVisible": false,
+        "mobileSheetWorks": true
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/mobile-Contracts.png"
+    },
+    {
+      "route": "/costing",
+      "label": "Costing",
+      "breakpoint": "mobile",
+      "width": 375,
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 1,
+        "tables": [
+          {
+            "index": 0,
+            "tableScrollWidth": 564,
+            "wrapperClientWidth": 277,
+            "hasOverflowWrapper": true,
+            "tableOverflowPx": 287
+          }
+        ]
+      },
+      "nav": {
+        "hamburgerVisible": true,
+        "desktopNavVisible": false,
+        "mobileSheetWorks": true
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/mobile-Costing.png"
+    },
+    {
+      "route": "/accounts",
+      "label": "Accounts",
+      "breakpoint": "mobile",
+      "width": 375,
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": true,
+        "desktopNavVisible": false,
+        "mobileSheetWorks": true
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/mobile-Accounts.png"
+    },
+    {
+      "route": "/sales",
+      "label": "Sales",
+      "breakpoint": "mobile",
+      "width": 375,
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 1,
+        "tables": [
+          {
+            "index": 0,
+            "tableScrollWidth": 777,
+            "wrapperClientWidth": 277,
+            "hasOverflowWrapper": true,
+            "tableOverflowPx": 500
+          }
+        ]
+      },
+      "nav": {
+        "hamburgerVisible": true,
+        "desktopNavVisible": false,
+        "mobileSheetWorks": true
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/mobile-Sales.png"
+    },
+    {
+      "route": "/communications",
+      "label": "Communications",
+      "breakpoint": "mobile",
+      "width": 375,
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": true,
+        "desktopNavVisible": false,
+        "mobileSheetWorks": true
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/mobile-Communications.png"
+    },
+    {
+      "route": "/settings",
+      "label": "Settings",
+      "breakpoint": "mobile",
+      "width": 375,
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": true,
+        "desktopNavVisible": false,
+        "mobileSheetWorks": true
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/mobile-Settings.png"
+    },
+    {
+      "route": "/",
+      "label": "Dashboard",
+      "breakpoint": "tablet",
+      "width": 768,
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/tablet-Dashboard.png"
+    },
+    {
+      "route": "/crm",
+      "label": "CRM",
+      "breakpoint": "tablet",
+      "width": 768,
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/tablet-CRM.png"
+    },
+    {
+      "route": "/quotes",
+      "label": "Quotes",
+      "breakpoint": "tablet",
+      "width": 768,
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/tablet-Quotes.png"
+    },
+    {
+      "route": "/quote",
+      "label": "QuoteBuilder",
+      "breakpoint": "tablet",
+      "width": 768,
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/tablet-QuoteBuilder.png"
+    },
+    {
+      "route": "/price-job",
+      "label": "PriceJob",
+      "breakpoint": "tablet",
+      "width": 768,
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/tablet-PriceJob.png"
+    },
+    {
+      "route": "/contracts",
+      "label": "Contracts",
+      "breakpoint": "tablet",
+      "width": 768,
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/tablet-Contracts.png"
+    },
+    {
+      "route": "/costing",
+      "label": "Costing",
+      "breakpoint": "tablet",
+      "width": 768,
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 1,
+        "tables": [
+          {
+            "index": 0,
+            "tableScrollWidth": 602,
+            "wrapperClientWidth": 602,
+            "hasOverflowWrapper": true,
+            "tableOverflowPx": 0
+          }
+        ]
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/tablet-Costing.png"
+    },
+    {
+      "route": "/accounts",
+      "label": "Accounts",
+      "breakpoint": "tablet",
+      "width": 768,
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/tablet-Accounts.png"
+    },
+    {
+      "route": "/sales",
+      "label": "Sales",
+      "breakpoint": "tablet",
+      "width": 768,
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 1,
+        "tables": [
+          {
+            "index": 0,
+            "tableScrollWidth": 777,
+            "wrapperClientWidth": 602,
+            "hasOverflowWrapper": true,
+            "tableOverflowPx": 175
+          }
+        ]
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/tablet-Sales.png"
+    },
+    {
+      "route": "/communications",
+      "label": "Communications",
+      "breakpoint": "tablet",
+      "width": 768,
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/tablet-Communications.png"
+    },
+    {
+      "route": "/settings",
+      "label": "Settings",
+      "breakpoint": "tablet",
+      "width": 768,
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/tablet-Settings.png"
+    },
+    {
+      "route": "/",
+      "label": "Dashboard",
+      "breakpoint": "desktop",
+      "width": 1440,
+      "overflow": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/desktop-Dashboard.png"
+    },
+    {
+      "route": "/crm",
+      "label": "CRM",
+      "breakpoint": "desktop",
+      "width": 1440,
+      "overflow": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/desktop-CRM.png"
+    },
+    {
+      "route": "/quotes",
+      "label": "Quotes",
+      "breakpoint": "desktop",
+      "width": 1440,
+      "overflow": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/desktop-Quotes.png"
+    },
+    {
+      "route": "/quote",
+      "label": "QuoteBuilder",
+      "breakpoint": "desktop",
+      "width": 1440,
+      "overflow": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/desktop-QuoteBuilder.png"
+    },
+    {
+      "route": "/price-job",
+      "label": "PriceJob",
+      "breakpoint": "desktop",
+      "width": 1440,
+      "overflow": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/desktop-PriceJob.png"
+    },
+    {
+      "route": "/contracts",
+      "label": "Contracts",
+      "breakpoint": "desktop",
+      "width": 1440,
+      "overflow": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/desktop-Contracts.png"
+    },
+    {
+      "route": "/costing",
+      "label": "Costing",
+      "breakpoint": "desktop",
+      "width": 1440,
+      "overflow": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 1,
+        "tables": [
+          {
+            "index": 0,
+            "tableScrollWidth": 954,
+            "wrapperClientWidth": 954,
+            "hasOverflowWrapper": true,
+            "tableOverflowPx": 0
+          }
+        ]
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/desktop-Costing.png"
+    },
+    {
+      "route": "/accounts",
+      "label": "Accounts",
+      "breakpoint": "desktop",
+      "width": 1440,
+      "overflow": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/desktop-Accounts.png"
+    },
+    {
+      "route": "/sales",
+      "label": "Sales",
+      "breakpoint": "desktop",
+      "width": 1440,
+      "overflow": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 1,
+        "tables": [
+          {
+            "index": 0,
+            "tableScrollWidth": 954,
+            "wrapperClientWidth": 954,
+            "hasOverflowWrapper": true,
+            "tableOverflowPx": 0
+          }
+        ]
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/desktop-Sales.png"
+    },
+    {
+      "route": "/communications",
+      "label": "Communications",
+      "breakpoint": "desktop",
+      "width": 1440,
+      "overflow": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/desktop-Communications.png"
+    },
+    {
+      "route": "/settings",
+      "label": "Settings",
+      "breakpoint": "desktop",
+      "width": 1440,
+      "overflow": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "overflowPx": 0,
+        "hasHorizontalOverflow": false,
+        "tableCount": 0,
+        "tables": []
+      },
+      "nav": {
+        "hamburgerVisible": false,
+        "desktopNavVisible": true,
+        "mobileSheetWorks": null
+      },
+      "assessment": {
+        "status": "Pass",
+        "issues": []
+      },
+      "screenshot": "screenshots/desktop-Settings.png"
+    }
+  ]
+}

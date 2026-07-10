@@ -1,0 +1,1040 @@
+'use client';
+
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Badge } from '../ui/badge';
+import { Switch } from '../ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import {
+  Phone, PhoneIncoming, PhoneOutgoing, Clock, MessageSquare,
+  RefreshCw, Play, Send, AlertCircle, Voicemail, Mic, Search,
+  ChevronDown, ChevronUp, User, ExternalLink, Power, Volume2, Plus, Trash2, Radio,
+} from 'lucide-react';
+import { toast } from 'sonner';
+
+interface CallTurn {
+  role: 'caller' | 'agent' | 'system';
+  content: string;
+  timestamp: string;
+}
+
+interface CallRecord {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  from: string;
+  to: string;
+  status: string;
+  intent?: string;
+  outcome?: string;
+  customerId?: string;
+  contactName?: string;
+  sentiment?: 'negative' | 'neutral' | 'positive';
+  durationSec?: number;
+  transcript: CallTurn[];
+  escalated?: boolean;
+  startedAt: string;
+  endedAt?: string;
+  campaignTemplate?: string;
+}
+
+interface OutboundJob {
+  id: string;
+  to: string;
+  template: string;
+  status: string;
+  createdAt: string;
+  callId?: string;
+  error?: string;
+}
+
+interface AgentStatus {
+  isActive: boolean;
+  activeCall: {
+    id: string;
+    from: string;
+    contactName?: string;
+    elapsedSec?: number;
+    status: string;
+    lineLabel?: string;
+    to?: string;
+  } | null;
+  activeCalls?: Array<{
+    id: string;
+    from: string;
+    to?: string;
+    contactName?: string;
+    elapsedSec?: number;
+    status: string;
+    lineLabel?: string;
+  }>;
+  linesSummary?: { total: number; registered: number; onCall: number };
+  todayStats: {
+    totalCalls: number;
+    avgDurationSec: number;
+    aiResolvedPct: number;
+    callbacksBooked: number;
+  };
+}
+
+interface PhoneLine {
+  id: string;
+  label: string;
+  sipUsername: string;
+  sipPassword: string;
+  sipDomain: string;
+  did: string;
+  enabled: boolean;
+  status: 'disconnected' | 'registering' | 'registered' | 'error';
+  lastError?: string;
+  registeredAt?: string;
+}
+
+interface VoiceOption {
+  id: string;
+  name: string;
+  provider: string;
+}
+
+interface ContactLookupResult {
+  found: boolean;
+  name?: string;
+  status?: string;
+  accountValue?: number;
+  lastInteraction?: string;
+  customerId?: string;
+  message?: string;
+}
+
+const LINE_STATUS_LABELS: Record<string, string> = {
+  disconnected: 'Disconnected',
+  registering: 'Registering…',
+  registered: 'Registered',
+  error: 'Error',
+};
+
+const INTENT_LABELS: Record<string, string> = {
+  new_sales_lead: 'New Sales Lead',
+  existing_customer: 'Existing Customer',
+  recruitment: 'Recruitment',
+  supplier: 'Supplier',
+  complaint: 'Complaint',
+  general: 'General',
+  after_hours: 'After Hours',
+};
+
+const SENTIMENT_LABELS: Record<string, string> = {
+  negative: 'Negative',
+  neutral: 'Neutral',
+  positive: 'Positive',
+};
+
+const CAMPAIGN_TEMPLATES = [
+  { value: 'quote_chase', label: 'Quote Follow-up' },
+  { value: 'payment_reminder', label: 'Payment Reminder' },
+  { value: 'appointment_reminder', label: 'Appointment Reminder' },
+  { value: 'recruitment_screening', label: 'Recruitment Screening' },
+  { value: 'satisfaction_check', label: 'Satisfaction Check' },
+  { value: 'lead_callback', label: 'Lead Callback' },
+];
+
+function formatPhone(phone?: string | null): string {
+  if (!phone) return 'Unknown';
+  if (phone.startsWith('44') && phone.length >= 12) {
+    return `+${phone.slice(0, 2)} ${phone.slice(2, 6)} ${phone.slice(6)}`;
+  }
+  return phone;
+}
+
+function formatTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString('en-GB', {
+      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function formatDuration(sec?: number): string {
+  if (sec == null) return '—';
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+export default function CallCenter() {
+  const navigate = useNavigate();
+
+  const [isActive, setIsActive] = useState(true);
+  const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
+  const [calls, setCalls] = useState<CallRecord[]>([]);
+  const [outboundQueue, setOutboundQueue] = useState<OutboundJob[]>([]);
+  const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [togglingAgent, setTogglingAgent] = useState(false);
+
+  const [voices, setVoices] = useState<VoiceOption[]>([]);
+  const [activeVoiceId, setActiveVoiceId] = useState<string | null>(null);
+  const [voiceFallbackNote, setVoiceFallbackNote] = useState<string | null>(null);
+  const [voiceUploadName, setVoiceUploadName] = useState('');
+  const [voiceUploadFile, setVoiceUploadFile] = useState<File | null>(null);
+  const [uploadingVoice, setUploadingVoice] = useState(false);
+
+  const [lookupPhone, setLookupPhone] = useState('');
+  const [lookupResult, setLookupResult] = useState<ContactLookupResult | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
+
+  const [testCallId, setTestCallId] = useState<string | null>(null);
+  const [testFrom, setTestFrom] = useState('447700900123');
+  const [testSpeech, setTestSpeech] = useState('');
+  const [testTranscript, setTestTranscript] = useState<Array<{ role: string; content: string }>>([]);
+  const [testRunning, setTestRunning] = useState(false);
+  const [outboundTo, setOutboundTo] = useState('');
+  const [outboundTemplate, setOutboundTemplate] = useState('lead_callback');
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const [phoneLines, setPhoneLines] = useState<PhoneLine[]>([]);
+  const [bridgeUrl, setBridgeUrl] = useState('');
+  const [linesLoading, setLinesLoading] = useState(false);
+  const [registeringLines, setRegisteringLines] = useState(false);
+  const [lineForm, setLineForm] = useState({
+    label: '',
+    sipUsername: '',
+    sipPassword: '',
+    sipDomain: 'sip.soho66.com',
+    did: '',
+  });
+  const [editingLineId, setEditingLineId] = useState<string | null>(null);
+
+  const playAriaAudio = useCallback(async (text: string) => {
+    if (!text.trim()) return;
+    try {
+      const res = await fetch('/api/agent/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          voiceId: activeVoiceId ?? undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? 'TTS failed');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = audioRef.current ?? new Audio();
+      audio.src = url;
+      audioRef.current = audio;
+      await audio.play();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not play Aria voice');
+    }
+  }, [activeVoiceId]);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/agent/settings');
+      const data = await res.json();
+      setIsActive(data.isActive !== false);
+      setActiveVoiceId(data.activeVoiceId ?? null);
+    } catch {
+      // keep defaults
+    }
+  }, []);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/agent/status');
+      const data = await res.json();
+      setAgentStatus(data);
+      setIsActive(data.isActive !== false);
+    } catch {
+      // silent poll failure
+    }
+  }, []);
+
+  const fetchCalls = useCallback(async () => {
+    try {
+      const res = await fetch('/api/calls?limit=20');
+      const data = await res.json();
+      setCalls(data.calls ?? []);
+      setOutboundQueue(data.outboundQueue ?? []);
+    } catch {
+      toast.error('Failed to load calls');
+    }
+  }, []);
+
+  const fetchVoices = useCallback(async () => {
+    try {
+      const res = await fetch('/api/agent/voices');
+      const data = await res.json();
+      setVoices(data.voices ?? []);
+      setActiveVoiceId(data.activeVoiceId ?? null);
+      setVoiceFallbackNote(data.fallback ? (data.message ?? 'Using OpenAI TTS fallback') : null);
+    } catch {
+      setVoiceFallbackNote('Could not load voices');
+    }
+  }, []);
+
+  const fetchLines = useCallback(async () => {
+    try {
+      const res = await fetch('/api/agent/lines');
+      const data = await res.json();
+      setPhoneLines(data.lines ?? []);
+      setBridgeUrl(data.bridgeUrl ?? '');
+    } catch {
+      toast.error('Failed to load phone lines');
+    }
+  }, []);
+
+  const refreshAll = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([fetchSettings(), fetchStatus(), fetchCalls(), fetchVoices(), fetchLines()]);
+    setLoading(false);
+  }, [fetchSettings, fetchStatus, fetchCalls, fetchVoices, fetchLines]);
+
+  useEffect(() => { refreshAll(); }, [refreshAll]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchStatus();
+      fetchCalls();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [fetchStatus, fetchCalls]);
+
+  async function toggleAgent(checked: boolean) {
+    setTogglingAgent(true);
+    setIsActive(checked);
+    try {
+      const res = await fetch('/api/agent/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: checked }),
+      });
+      const data = await res.json();
+      setIsActive(data.isActive !== false);
+      toast.success(checked ? 'Aria is now answering calls' : 'Aria paused — calls will not be answered');
+    } catch {
+      setIsActive(!checked);
+      toast.error('Failed to update agent status');
+    } finally {
+      setTogglingAgent(false);
+    }
+  }
+
+  async function selectVoice(voiceId: string) {
+    try {
+      const res = await fetch('/api/agent/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activeVoiceId: voiceId }),
+      });
+      const data = await res.json();
+      setActiveVoiceId(data.activeVoiceId ?? voiceId);
+      toast.success('Active voice updated');
+    } catch {
+      toast.error('Failed to set active voice');
+    }
+  }
+
+  async function uploadVoice() {
+    if (!voiceUploadName.trim() || !voiceUploadFile) {
+      toast.error('Enter a name and select a WAV file');
+      return;
+    }
+    setUploadingVoice(true);
+    try {
+      const form = new FormData();
+      form.append('name', voiceUploadName.trim());
+      form.append('file', voiceUploadFile);
+      const res = await fetch('/api/agent/voices', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Upload failed');
+      toast.success('Voice uploaded to Chatterbox');
+      setVoiceUploadName('');
+      setVoiceUploadFile(null);
+      fetchVoices();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploadingVoice(false);
+    }
+  }
+
+  async function runContactLookup() {
+    if (!lookupPhone.trim()) return;
+    setLookupLoading(true);
+    setLookupResult(null);
+    try {
+      const res = await fetch(`/api/contacts/lookup?phone=${encodeURIComponent(lookupPhone.trim())}`);
+      const data = await res.json();
+      setLookupResult(data);
+    } catch {
+      toast.error('Lookup failed');
+    } finally {
+      setLookupLoading(false);
+    }
+  }
+
+  async function startTestCall() {
+    setTestRunning(true);
+    setTestTranscript([]);
+    setTestCallId(null);
+    try {
+      const res = await fetch('/api/calls/mock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: testFrom }),
+      });
+      const data = await res.json();
+      setTestCallId(data.callId);
+      const agentLine = data.speak;
+      setTestTranscript([{ role: 'agent', content: agentLine }]);
+      if (agentLine) void playAriaAudio(agentLine);
+      fetchCalls();
+      fetchStatus();
+    } catch {
+      toast.error('Failed to start test call');
+    } finally {
+      setTestRunning(false);
+    }
+  }
+
+  async function sendTestSpeech() {
+    if (!testSpeech.trim()) return;
+    setTestRunning(true);
+    const userMsg = testSpeech;
+    setTestSpeech('');
+    setTestTranscript(prev => [...prev, { role: 'caller', content: userMsg }]);
+    try {
+      const res = await fetch('/api/calls/mock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: testFrom, speech: userMsg, callId: testCallId }),
+      });
+      const data = await res.json();
+      setTestCallId(data.callId);
+      const agentLine = data.speak;
+      setTestTranscript(prev => [...prev, { role: 'agent', content: agentLine }]);
+      if (agentLine) void playAriaAudio(agentLine);
+      fetchCalls();
+      fetchStatus();
+    } catch {
+      toast.error('Failed to process speech');
+    } finally {
+      setTestRunning(false);
+    }
+  }
+
+  async function savePhoneLine() {
+    if (!lineForm.label.trim() || !lineForm.sipUsername.trim() || !lineForm.sipPassword.trim() || !lineForm.did.trim()) {
+      toast.error('Fill in label, SIP username, password, and DID');
+      return;
+    }
+    setLinesLoading(true);
+    try {
+      const url = editingLineId ? `/api/agent/lines/${editingLineId}` : '/api/agent/lines';
+      const method = editingLineId ? 'PATCH' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(lineForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to save line');
+      toast.success(editingLineId ? 'Line updated' : 'Line added');
+      setLineForm({ label: '', sipUsername: '', sipPassword: '', sipDomain: 'sip.soho66.com', did: '' });
+      setEditingLineId(null);
+      fetchLines();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save line');
+    } finally {
+      setLinesLoading(false);
+    }
+  }
+
+  async function registerAllLines() {
+    setRegisteringLines(true);
+    try {
+      const res = await fetch('/api/agent/lines/register-all', { method: 'POST' });
+      const data = await res.json();
+      setPhoneLines(data.lines ?? []);
+      toast.success(`Registered ${data.registered ?? 0} line(s)${data.failed ? `, ${data.failed} failed` : ''}`);
+      fetchStatus();
+    } catch {
+      toast.error('Failed to register lines');
+    } finally {
+      setRegisteringLines(false);
+    }
+  }
+
+  async function testLine(lineId: string) {
+    try {
+      const res = await fetch(`/api/agent/lines/${lineId}/test`, { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) toast.success(data.message);
+      else toast.error(data.message ?? 'Line test failed');
+    } catch {
+      toast.error('Line test failed');
+    }
+  }
+
+  async function deleteLine(lineId: string) {
+    try {
+      const res = await fetch(`/api/agent/lines/${lineId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+      toast.success('Line removed');
+      fetchLines();
+    } catch {
+      toast.error('Failed to delete line');
+    }
+  }
+
+  function startEditLine(line: PhoneLine) {
+    setEditingLineId(line.id);
+    setLineForm({
+      label: line.label,
+      sipUsername: line.sipUsername,
+      sipPassword: line.sipPassword === '••••••' ? '' : line.sipPassword,
+      sipDomain: line.sipDomain,
+      did: line.did,
+    });
+  }
+
+  async function queueOutbound() {
+    if (!outboundTo.trim()) {
+      toast.error('Enter a phone number');
+      return;
+    }
+    try {
+      const res = await fetch('/api/calls/outbound', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: outboundTo, template: outboundTemplate }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Outbound call queued');
+        setOutboundTo('');
+        fetchCalls();
+      } else {
+        toast.error(data.error ?? 'Failed to queue call');
+      }
+    } catch {
+      toast.error('Failed to queue outbound call');
+    }
+  }
+
+  const activeCalls = agentStatus?.activeCalls ?? (agentStatus?.activeCall ? [agentStatus.activeCall] : []);
+  const linesSummary = agentStatus?.linesSummary;
+  const stats = agentStatus?.todayStats;
+
+  return (
+    <div className="space-y-6 p-4 md:p-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <Phone className="w-7 h-7 text-amber-600" />
+            Call Centre — Aria
+          </h1>
+          <p className="text-slate-600 mt-1">AI voice agent control dashboard</p>
+        </div>
+        <Button variant="outline" onClick={refreshAll} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Section 1: Master on/off */}
+      <Card className={isActive ? 'border-green-200 bg-green-50/30' : 'border-red-200 bg-red-50/30'}>
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Power className={`w-6 h-6 ${isActive ? 'text-green-600' : 'text-red-500'}`} />
+              <div>
+                <p className="font-semibold text-slate-900">AI Agent Master Switch</p>
+                <p className="text-sm text-slate-600">
+                  {isActive ? 'Aria is answering inbound calls' : 'Aria is paused — calls will not be answered'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge variant={isActive ? 'default' : 'destructive'} className={isActive ? 'bg-green-600' : ''}>
+                {isActive ? 'Agent answering' : 'Agent paused'}
+              </Badge>
+              <Switch
+                checked={isActive}
+                onCheckedChange={toggleAgent}
+                disabled={togglingAgent}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Section 2: Live call status */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Live Call Status</CardTitle>
+          <CardDescription>
+            Updates every 5 seconds
+            {linesSummary && (
+              <> · {linesSummary.registered}/{linesSummary.total} lines registered · {linesSummary.onCall} on call</>
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {activeCalls.length > 0 ? (
+            <div className="space-y-2 max-h-[280px] overflow-y-auto">
+              {activeCalls.map(call => (
+                <div key={call.id} className="flex items-center gap-4 p-4 rounded-lg bg-amber-50 border border-amber-200">
+                  <span className="relative flex h-3 w-3 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-slate-900 truncate">On call with {call.contactName ?? 'Unknown caller'}</p>
+                    <p className="text-sm text-slate-600">
+                      {formatPhone(call.from)}
+                      {call.lineLabel ? ` · ${call.lineLabel}` : ''}
+                      {call.to ? ` · ${formatPhone(call.to)}` : ''}
+                      {' · '}{formatDuration(call.elapsedSec ?? undefined)} elapsed
+                    </p>
+                  </div>
+                  <Badge className="shrink-0">{call.status.replace(/_/g, ' ')}</Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-slate-500 text-sm py-2">No active calls right now</p>
+          )}
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-3 rounded-lg border bg-white">
+              <p className="text-2xl font-bold">{stats?.totalCalls ?? 0}</p>
+              <p className="text-xs text-slate-500">Calls today</p>
+            </div>
+            <div className="p-3 rounded-lg border bg-white">
+              <p className="text-2xl font-bold">{formatDuration(stats?.avgDurationSec)}</p>
+              <p className="text-xs text-slate-500">Avg duration</p>
+            </div>
+            <div className="p-3 rounded-lg border bg-white">
+              <p className="text-2xl font-bold">{stats?.aiResolvedPct ?? 0}%</p>
+              <p className="text-xs text-slate-500">Resolved by AI</p>
+            </div>
+            <div className="p-3 rounded-lg border bg-white">
+              <p className="text-2xl font-bold">{stats?.callbacksBooked ?? 0}</p>
+              <p className="text-xs text-slate-500">Callbacks booked</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Tabs defaultValue="dashboard">
+        <TabsList>
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="lines">Phone Lines</TabsTrigger>
+          <TabsTrigger value="test">Test Call (Mock)</TabsTrigger>
+          <TabsTrigger value="outbound">Outbound Queue</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="dashboard" className="mt-4 space-y-6">
+          {/* Section 3: Recent calls log */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Recent Calls</CardTitle>
+              <CardDescription>Last 20 calls — click to expand transcript</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {calls.length === 0 && (
+                <p className="text-slate-500 text-sm py-8 text-center">No calls yet — use the Test Call tab to simulate</p>
+              )}
+              {calls.map(call => {
+                const expanded = expandedCallId === call.id;
+                return (
+                  <div key={call.id} className="border rounded-lg overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedCallId(expanded ? null : call.id)}
+                      className="w-full text-left p-3 hover:bg-slate-50 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {call.direction === 'inbound'
+                            ? <PhoneIncoming className="w-4 h-4 text-green-600 shrink-0" />
+                            : <PhoneOutgoing className="w-4 h-4 text-blue-600 shrink-0" />}
+                          <span className="font-medium text-sm truncate">{call.contactName ?? formatPhone(call.from)}</span>
+                          <span className="text-xs text-slate-400">{formatPhone(call.from)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs text-slate-400">{formatTime(call.startedAt)}</span>
+                          <span className="text-xs text-slate-500">{formatDuration(call.durationSec)}</span>
+                          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 mt-2 flex-wrap">
+                        {call.outcome && <Badge variant="outline" className="text-xs">{call.outcome}</Badge>}
+                        {call.sentiment && (
+                          <Badge
+                            variant={call.sentiment === 'negative' ? 'destructive' : 'secondary'}
+                            className="text-xs"
+                          >
+                            {SENTIMENT_LABELS[call.sentiment] ?? call.sentiment}
+                          </Badge>
+                        )}
+                        {call.intent && (
+                          <Badge variant="secondary" className="text-xs">{INTENT_LABELS[call.intent] ?? call.intent}</Badge>
+                        )}
+                      </div>
+                    </button>
+                    {expanded && (
+                      <div className="border-t p-3 bg-slate-50 space-y-3">
+                        <div className="space-y-2 max-h-[240px] overflow-y-auto">
+                          {(call.transcript ?? []).map((turn, i) => (
+                            <div
+                              key={i}
+                              className={`p-2 rounded text-sm ${turn.role === 'agent' ? 'bg-amber-100 ml-4' : 'bg-white border mr-4'}`}
+                            >
+                              <span className="text-xs text-slate-400">{turn.role === 'agent' ? 'Aria' : 'Caller'}: </span>
+                              {turn.content}
+                            </div>
+                          ))}
+                        </div>
+                        {call.customerId && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => navigate(`/crm?customerId=${call.customerId}`)}
+                          >
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            Open in CRM
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            {/* Section 4: Voice settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Mic className="w-5 h-5" />
+                  Voice Settings
+                </CardTitle>
+                {voiceFallbackNote && (
+                  <CardDescription className="text-amber-700">{voiceFallbackNote}</CardDescription>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-2">
+                  {voices.map(v => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => selectVoice(v.id)}
+                      className={`p-3 rounded-lg border text-left text-sm transition-colors ${
+                        activeVoiceId === v.id ? 'border-amber-500 bg-amber-50 ring-1 ring-amber-400' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <p className="font-medium">{v.name}</p>
+                      <p className="text-xs text-slate-400 capitalize">{v.provider}</p>
+                    </button>
+                  ))}
+                </div>
+                <div className="border-t pt-4 space-y-3">
+                  <p className="text-sm font-medium text-slate-700">Upload cloned voice (WAV)</p>
+                  <p className="text-xs text-slate-500">
+                    For a Cockney / Del Boy accent, upload a short WAV sample you own. Requires Chatterbox on your VPS — see docs/VOICE_SETUP.md.
+                  </p>
+                  <Input
+                    placeholder="Voice name"
+                    value={voiceUploadName}
+                    onChange={e => setVoiceUploadName(e.target.value)}
+                  />
+                  <Input
+                    type="file"
+                    accept=".wav,audio/wav"
+                    onChange={e => setVoiceUploadFile(e.target.files?.[0] ?? null)}
+                  />
+                  <Button onClick={uploadVoice} disabled={uploadingVoice} className="w-full">
+                    {uploadingVoice ? 'Uploading…' : 'Upload to Chatterbox'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Section 5: Contact lookup test */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Search className="w-5 h-5" />
+                  Contact Lookup Test
+                </CardTitle>
+                <CardDescription>Verify CRM connection before go-live</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="447700900123"
+                    value={lookupPhone}
+                    onChange={e => setLookupPhone(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && runContactLookup()}
+                  />
+                  <Button onClick={runContactLookup} disabled={lookupLoading}>
+                    <Search className="w-4 h-4" />
+                  </Button>
+                </div>
+                {lookupResult && (
+                  lookupResult.found ? (
+                    <div className="p-4 rounded-lg border bg-white space-y-2">
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4 text-slate-400" />
+                        <span className="font-semibold">{lookupResult.name}</span>
+                        <Badge variant="secondary">{lookupResult.status}</Badge>
+                      </div>
+                      {lookupResult.accountValue != null && (
+                        <p className="text-sm text-slate-600">Account value: £{lookupResult.accountValue.toLocaleString('en-GB')}</p>
+                      )}
+                      {lookupResult.lastInteraction && (
+                        <p className="text-sm text-slate-600">Last interaction: {formatTime(lookupResult.lastInteraction)}</p>
+                      )}
+                      {lookupResult.customerId && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/crm?customerId=${lookupResult.customerId}`)}
+                        >
+                          Open in CRM
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-600 p-4 rounded-lg border bg-slate-50">
+                      {lookupResult.message ?? 'Aria will create a new contact when this number calls.'}
+                    </p>
+                  )
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="lines" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Radio className="w-5 h-5" />
+                    Soho66 Phone Lines
+                  </CardTitle>
+                  <CardDescription>
+                    Register multiple SIP extensions at once. Bridge: {bridgeUrl || 'Set SOHO66_SIP_BRIDGE_URL in .env.local'}
+                  </CardDescription>
+                </div>
+                <Button onClick={registerAllLines} disabled={registeringLines || phoneLines.length === 0}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${registeringLines ? 'animate-spin' : ''}`} />
+                  Register all lines
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {phoneLines.length === 0 && (
+                <p className="text-slate-500 text-sm py-4 text-center">No lines yet — add your Soho66 extensions below</p>
+              )}
+              {phoneLines.map(line => (
+                <div key={line.id} className="p-4 border rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-slate-900">{line.label}</p>
+                    <p className="text-sm text-slate-600">{line.sipUsername}@{line.sipDomain} · {formatPhone(line.did)}</p>
+                    {line.lastError && <p className="text-xs text-red-600 mt-1">{line.lastError}</p>}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant={line.status === 'registered' ? 'default' : line.status === 'error' ? 'destructive' : 'secondary'}>
+                      {LINE_STATUS_LABELS[line.status] ?? line.status}
+                    </Badge>
+                    <Button size="sm" variant="outline" onClick={() => testLine(line.id)}>Test</Button>
+                    <Button size="sm" variant="outline" onClick={() => startEditLine(line)}>Edit</Button>
+                    <Button size="sm" variant="ghost" onClick={() => deleteLine(line.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{editingLineId ? 'Edit Line' : 'Add Line'}</CardTitle>
+              <CardDescription>SIP login from your Soho66 portal — one extension per line</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Label</Label>
+                  <Input value={lineForm.label} onChange={e => setLineForm(f => ({ ...f, label: e.target.value }))} placeholder="Sales Line 1" />
+                </div>
+                <div>
+                  <Label>DID (phone number)</Label>
+                  <Input value={lineForm.did} onChange={e => setLineForm(f => ({ ...f, did: e.target.value }))} placeholder="+442012345678" />
+                </div>
+                <div>
+                  <Label>SIP Username</Label>
+                  <Input value={lineForm.sipUsername} onChange={e => setLineForm(f => ({ ...f, sipUsername: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>SIP Password</Label>
+                  <Input type="password" value={lineForm.sipPassword} onChange={e => setLineForm(f => ({ ...f, sipPassword: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>SIP Domain</Label>
+                  <Input value={lineForm.sipDomain} onChange={e => setLineForm(f => ({ ...f, sipDomain: e.target.value }))} placeholder="sip.soho66.com" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={savePhoneLine} disabled={linesLoading}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  {editingLineId ? 'Update line' : 'Add line'}
+                </Button>
+                {editingLineId && (
+                  <Button variant="outline" onClick={() => { setEditingLineId(null); setLineForm({ label: '', sipUsername: '', sipPassword: '', sipDomain: 'sip.soho66.com', did: '' }); }}>
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="test" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Voicemail className="w-5 h-5" />
+                Mock Phone Test
+              </CardTitle>
+              <CardDescription>Simulate inbound calls without a phone line</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Caller Number</Label>
+                  <Input value={testFrom} onChange={e => setTestFrom(e.target.value)} placeholder="447700900123" />
+                </div>
+                <div className="flex items-end">
+                  <Button onClick={startTestCall} disabled={testRunning} className="w-full">
+                    <Play className="w-4 h-4 mr-2" />
+                    {testCallId ? 'New Call' : 'Start Call'}
+                  </Button>
+                </div>
+              </div>
+              {testTranscript.length > 0 && (
+                <div className="border rounded-lg p-4 space-y-3 max-h-[300px] overflow-y-auto bg-slate-50">
+                  {testTranscript.map((turn, i) => (
+                    <div key={i} className={`p-2 rounded text-sm flex gap-2 ${turn.role === 'agent' ? 'bg-amber-100' : 'bg-white border'}`}>
+                      <div className="flex-1">
+                        <span className="font-medium text-xs text-slate-500">{turn.role === 'agent' ? 'Aria:' : 'You:'}</span>{' '}
+                        {turn.content}
+                      </div>
+                      {turn.role === 'agent' && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="shrink-0 h-7 w-7 p-0"
+                          onClick={() => playAriaAudio(turn.content)}
+                          title="Play Aria voice"
+                        >
+                          <Volume2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <audio ref={audioRef} className="hidden" />
+              {testCallId && (
+                <div className="flex gap-2">
+                  <Input
+                    value={testSpeech}
+                    onChange={e => setTestSpeech(e.target.value)}
+                    placeholder="Type what the caller says..."
+                    onKeyDown={e => e.key === 'Enter' && sendTestSpeech()}
+                  />
+                  <Button onClick={sendTestSpeech} disabled={testRunning || !testSpeech.trim()}>
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="outbound" className="mt-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Queue Outbound Call</CardTitle>
+                <CardDescription>Ready for your outbound module to plug in</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label>To Number</Label>
+                  <Input value={outboundTo} onChange={e => setOutboundTo(e.target.value)} placeholder="+447700900123" />
+                </div>
+                <div>
+                  <Label>Campaign Template</Label>
+                  <Select value={outboundTemplate} onValueChange={setOutboundTemplate}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CAMPAIGN_TEMPLATES.map(t => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={queueOutbound} className="w-full">
+                  <PhoneOutgoing className="w-4 h-4 mr-2" />
+                  Queue / Dial Now
+                </Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle>Outbound Queue</CardTitle></CardHeader>
+              <CardContent className="space-y-2 max-h-[400px] overflow-y-auto">
+                {outboundQueue.length === 0 && (
+                  <p className="text-slate-500 text-sm py-8 text-center">No outbound jobs queued</p>
+                )}
+                {outboundQueue.map(job => (
+                  <div key={job.id} className="p-3 border rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm">{formatPhone(job.to)}</span>
+                      <Badge variant={job.status === 'failed' ? 'destructive' : 'secondary'}>{job.status}</Badge>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {CAMPAIGN_TEMPLATES.find(t => t.value === job.template)?.label ?? job.template}
+                      {' · '}{formatTime(job.createdAt)}
+                    </p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

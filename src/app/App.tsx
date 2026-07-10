@@ -1,0 +1,1038 @@
+import React, { useState, useEffect, ReactElement } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
+import Login from './components/Login';
+import Dashboard from './components/Dashboard';
+import CustomerManagement from './components/CustomerManagement';
+import BathroomDesigner from './components/BathroomDesigner';
+import ProductCatalog from './components/ProductCatalog';
+import QuoteBuilder from './components/QuoteBuilder';
+import { AIAssistantProvider } from './context/AIAssistantContext';
+import { allTradeProducts, tradePricingRules } from './data/tradeProducts';
+import type { TradeId } from './config/types';
+import QuotesList from './components/QuotesList';
+import Portfolio from './components/Portfolio';
+import Settings from './components/Settings';
+import BookingSystem from './components/BookingSystem';
+import SiteSurvey from './components/SiteSurvey';
+import FinanceApplication from './components/FinanceApplication';
+import CommunicationsHub from './components/CommunicationsHub';
+import CyrusConversations from './components/CyrusConversations';
+import IntegrationsHub from './components/integrations/IntegrationsHub';
+import AIBathroomRender from './components/AIBathroomRender';
+import ComprehensiveCRM from './components/ComprehensiveCRM';
+import TeamManagement from './components/TeamManagement';
+import SalesManagement from './components/SalesManagement';
+import ProjectManagement from './components/ProjectManagement';
+import BuilderDashboard from './components/BuilderDashboard';
+import RecruitmentCRM from './components/RecruitmentCRM';
+import ChangeOrders from './components/ChangeOrders';
+import BuilderProjectManagement from './components/BuilderProjectManagement';
+import CustomerPortal from './components/CustomerPortal';
+import { seedContactsFromCustomers } from './engine/contacts/contactStore';
+import { syncToServer, loadProjects, saveProjects, loadProjectsAsync, initProjectsRealtime } from './engine/project/projectStore';
+import { loadContacts, saveContacts } from './engine/contacts/contactStore';
+import { loadBuilders, saveBuilders } from './engine/builder/builderStore';
+import { loadSurveys, saveSurveys } from './engine/surveyScorer';
+import { loadPlanningApplications } from './engine/planning/planningStore';
+import {
+  loadBankAccounts,
+  loadBankTransactions,
+  loadClientReceipts,
+  saveBankAccounts,
+  saveBankTransactions,
+  saveClientReceipts,
+} from './engine/banking/bankingStore';
+import {
+  type TradeProExportBundle,
+  type MergeStrategy,
+  type ImportResult,
+  mergeById,
+  migrateCustomers,
+  migrateProducts,
+  migrateQuotes,
+  migratePricingRules,
+} from './engine/data/dataImportExportService';
+import BuilderManagement from './components/BuilderManagement';
+import CostingDashboard from './components/CostingDashboard';
+import AccountsHub from './components/accounts/AccountsHub';
+import JobPricing from './components/JobPricing/JobPricing';
+import ApprovalsQueue from './components/Approvals/ApprovalsQueue';
+import ContractsHub from './components/Contracts/ContractsHub';
+import ContractSignPage from './components/Contracts/ContractSignPage';
+import BuildingControlHub from './components/buildingControl/BuildingControlHub';
+import PlanningHub from './components/planning/PlanningHub';
+import PlanningApplicationDetail from './components/planning/PlanningApplicationDetail';
+import PlanningCustomerApproval from './components/planning/PlanningCustomerApproval';
+import ConversationAudit from './components/aiStudio/ConversationAudit';
+import CallCenter from './components/CallCenter/CallCenter';
+import AppShell from './components/AppShell';
+import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
+import { installApiFetchInterceptor } from './engine/platform/orgContext';
+import { Toaster } from './components/ui/sonner';
+import { testCustomers } from './data/testData';
+import { crmLeadSeed } from './data/crmLeads';
+import { migrateQuoteToLines } from './engine/quotes/quoteLineUtils';
+import { syncCustomerStatusFromQuote } from './engine/leads/leadService';
+import { startPmScheduler } from './engine/ai/pmScheduler';
+
+export type UserRole = 'platform_owner' | 'super_admin' | 'manager' | 'staff' | 'builder' | 'recruitment' | 'customer';
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  status: 'lead' | 'quoted' | 'won' | 'lost';
+  createdAt: string;
+  photos: string[];
+  notes: string;
+  interestedTrades?: TradeId[];
+  tradeId?: TradeId;
+  whatsappOptIn: boolean;
+  preferredChannel: 'email' | 'whatsapp' | 'both' | 'phone';
+  whatsappId?: string;
+  lastWhatsAppAt?: string;
+  /** CRM lead fields */
+  source?: 'facebook' | 'instagram' | 'google' | 'referral' | 'website' | 'phone' | 'walk-in';
+  campaign?: string;
+  adSet?: string;
+  leadScore?: number;
+  lastContact?: string;
+  nextFollowUp?: string;
+  budget?: string;
+  timeline?: string;
+  tags?: string[];
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  image: string;
+  basePrice: number;
+  margin: number;
+  sellPrice: number;
+  source: string;
+  category: string;
+  tradeId?: TradeId | null;
+}
+
+export interface PricingRule {
+  id: string;
+  name: string;
+  type: 'per_sqm' | 'per_day' | 'fixed' | 'per_item';
+  basePrice: number;
+  category: string;
+  tradeId?: TradeId | null;
+}
+
+export type QuoteStatus =
+  | 'indicative'
+  | 'draft'
+  | 'awaiting_approval'
+  | 'approved'
+  | 'rejected'
+  | 'sent'
+  | 'accepted'
+  | 'expired';
+
+export interface QuoteApproval {
+  state: 'pending' | 'approved' | 'rejected';
+  by?: string;
+  at?: string;
+  note?: string;
+  originalTotal?: number;
+}
+
+export interface PricingResearchSource {
+  title: string;
+  url: string;
+}
+
+export interface PricingResearchLine {
+  task: string;
+  low: number;
+  typical: number;
+  high: number;
+  unit: string;
+  sources: PricingResearchSource[];
+}
+
+export interface PricingResearch {
+  provider: string;
+  region?: string;
+  summary?: string;
+  lines: PricingResearchLine[];
+  generatedAt: string;
+}
+
+export interface QuoteLine {
+  id: string;
+  description: string;
+  quantity: number;
+  unit: 'sqm' | 'linear_m' | 'cubic_m' | 'item' | 'day' | 'hour' | 'fixed';
+  rate: number;
+  total: number;
+  category?: 'product' | 'labour' | 'extra' | 'material';
+}
+
+export interface Quote {
+  id: string;
+  customerId: string;
+  customerName: string;
+  tradeId?: TradeId;
+  tradeName?: string;
+  createdAt: string;
+  expiresAt: string;
+  items: QuoteItem[];
+  labour: LabourItem[];
+  extras: ExtraItem[];
+  lines?: QuoteLine[];
+  discount: number;
+  total: number;
+  status: QuoteStatus;
+  projectId?: string;
+  designImage?: string;
+  wizardAnswers?: Record<string, unknown>;
+  aiAcceptedFields?: Record<string, unknown>;
+  jobGroupId?: string;
+  approval?: QuoteApproval;
+  pricingResearch?: PricingResearch;
+}
+
+export interface QuoteItem {
+  productId: string;
+  name: string;
+  quantity: number;
+  price: number;
+  total: number;
+}
+
+export interface LabourItem {
+  description: string;
+  days?: number;
+  area?: number;
+  quantity?: number;
+  rateType: 'per_day' | 'per_sqm' | 'fixed' | 'per_item';
+  rate: number;
+  total: number;
+}
+
+export interface ExtraItem {
+  description: string;
+  price: number;
+}
+
+export interface RecruitmentAccess {
+  staff: boolean;
+  manager: boolean;
+}
+
+export interface AccountsAccess {
+  staff: boolean;
+  manager: boolean;
+}
+
+export interface CallTurn {
+  role: 'caller' | 'agent' | 'system';
+  content: string;
+  timestamp: string;
+}
+
+export interface CallSession {
+  id: string;
+  providerCallId?: string;
+  direction: 'inbound' | 'outbound';
+  from: string;
+  to: string;
+  status: string;
+  intent?: string;
+  outcome?: string;
+  customerId?: string | null;
+  candidateId?: string | null;
+  projectId?: string | null;
+  transcript: CallTurn[];
+  recordingUrl?: string;
+  escalated?: boolean;
+  campaignTemplate?: string;
+  startedAt: string;
+  endedAt?: string;
+}
+
+export interface RecruitmentCandidateRecord {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  desiredRole: string;
+  source: string;
+  createdAt: string;
+}
+
+export interface AppContextType {
+  user: User;
+  customers: Customer[];
+  products: Product[];
+  pricingRules: PricingRule[];
+  quotes: Quote[];
+  recruitmentAccess: RecruitmentAccess;
+  setRecruitmentAccess: (next: RecruitmentAccess) => void;
+  accountsAccess: AccountsAccess;
+  setAccountsAccess: (next: AccountsAccess) => void;
+  addCustomer: (customer: Omit<Customer, 'id' | 'createdAt'>) => Customer;
+  updateCustomer: (id: string, customer: Partial<Customer>) => void;
+  deleteCustomer: (id: string) => void;
+  addProduct: (product: Omit<Product, 'id' | 'sellPrice'>) => void;
+  updateProduct: (id: string, product: Partial<Product>) => void;
+  deleteProduct: (id: string) => void;
+  addQuote: (quote: Omit<Quote, 'id' | 'createdAt'>) => void;
+  updateQuote: (id: string, quote: Partial<Quote>) => void;
+  deleteQuote: (id: string) => void;
+  addPricingRule: (rule: Omit<PricingRule, 'id'>) => void;
+  updatePricingRule: (id: string, rule: Partial<PricingRule>) => void;
+  deletePricingRule: (id: string) => void;
+  importDataBundle: (
+    bundle: TradeProExportBundle,
+    options: { strategy: MergeStrategy }
+  ) => ImportResult;
+  logout: () => void;
+}
+
+export const AppContext = React.createContext<AppContextType | null>(null);
+
+// Whether a user can access the Recruitment module, considering both role and
+// super-admin-granted permissions for sales/office staff and managers.
+export function canAccessRecruitment(role: UserRole, access: RecruitmentAccess): boolean {
+  if (role === 'super_admin' || role === 'recruitment') return true;
+  if (role === 'staff') return access.staff;
+  if (role === 'manager') return access.manager;
+  return false;
+}
+
+export function canAccessAccounts(role: UserRole, access: AccountsAccess): boolean {
+  if (role === 'super_admin') return true;
+  if (role === 'staff') return access.staff;
+  if (role === 'manager') return access.manager;
+  return false;
+}
+
+// A contract may only be generated once a manager/super-admin has approved the price.
+export function canCreateContract(quote: Pick<Quote, 'status'>): boolean {
+  return quote.status === 'approved';
+}
+
+// Price approval is a human gate restricted to managers and super admins.
+export function canApproveQuotes(role: UserRole): boolean {
+  return role === 'super_admin' || role === 'manager';
+}
+
+// Protected Route Component for role-based access control
+interface ProtectedRouteProps {
+  element: ReactElement;
+  allowedRoles: UserRole[];
+  user: User;
+}
+
+function ProtectedRoute({ element, allowedRoles, user }: ProtectedRouteProps): ReactElement {
+  if (!allowedRoles.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+  return element;
+}
+
+export default function App() {
+  // Authentication state
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState<User>({
+    id: '1',
+    name: 'John Smith',
+    email: 'john@bathrooms.com',
+    role: 'super_admin'
+  });
+
+  // Load data from localStorage
+  const migrateCustomers = (items: Customer[]): Customer[] =>
+    items.map(c => ({
+      ...c,
+      whatsappOptIn: c.whatsappOptIn ?? true,
+      preferredChannel: c.preferredChannel ?? 'both',
+      tags: c.tags ?? [],
+    }));
+
+  const mergeCrmLeads = (items: Customer[]): Customer[] => {
+    const ids = new Set(items.map((c) => c.id));
+    const merged = [...items];
+    for (const lead of crmLeadSeed) {
+      if (!ids.has(lead.id)) merged.push(lead);
+    }
+    return merged;
+  };
+
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+    const saved = localStorage.getItem('customers');
+    const base = saved
+      ? migrateCustomers(JSON.parse(saved))
+      : migrateCustomers(testCustomers as Customer[]);
+    return mergeCrmLeads(base);
+  });
+
+  const migrateProducts = (items: Product[]): Product[] =>
+    items.map(p => ({ ...p, tradeId: p.tradeId ?? 'bathroom' }));
+
+  const migrateQuotes = (items: Quote[]): Quote[] =>
+    items.map(q => {
+      const base = {
+        ...q,
+        tradeId: q.tradeName === 'Small Jobs' ? q.tradeId : (q.tradeId ?? 'bathroom'),
+        tradeName: q.tradeName ?? 'Bathroom',
+      };
+      const lines = migrateQuoteToLines(base);
+      return { ...base, lines };
+    });
+
+  const migratePricingRules = (items: PricingRule[]): PricingRule[] =>
+    items.map(r => ({ ...r, tradeId: r.tradeId === undefined ? null : r.tradeId }));
+
+  const [products, setProducts] = useState<Product[]>(() => {
+    const saved = localStorage.getItem('products');
+    if (saved) return migrateProducts(JSON.parse(saved));
+    return allTradeProducts;
+  });
+
+  const [pricingRules, setPricingRules] = useState<PricingRule[]>(() => {
+    const saved = localStorage.getItem('pricingRules');
+    return saved ? migratePricingRules(JSON.parse(saved)) : tradePricingRules;
+  });
+
+  const [quotes, setQuotes] = useState<Quote[]>(() => {
+    const saved = localStorage.getItem('quotes');
+    if (saved) return migrateQuotes(JSON.parse(saved));
+
+    // Seed with realistic quotes
+    return [
+      {
+        id: '1',
+        customerId: '2',
+        customerName: 'James Wilson',
+        createdAt: new Date(2026, 3, 20).toISOString(),
+        expiresAt: new Date(2026, 3, 27).toISOString(),
+        items: [],
+        labour: [],
+        extras: [],
+        discount: 0,
+        total: 8500,
+        status: 'sent',
+        tradeId: 'bathroom',
+        tradeName: 'Bathroom'
+      },
+      {
+        id: '2',
+        customerId: '5',
+        customerName: 'Sophie Anderson',
+        createdAt: new Date(2026, 3, 18).toISOString(),
+        expiresAt: new Date(2026, 3, 25).toISOString(),
+        items: [],
+        labour: [],
+        extras: [],
+        discount: 0,
+        total: 12400,
+        status: 'sent',
+        tradeId: 'kitchen',
+        tradeName: 'Kitchen'
+      },
+      {
+        id: '3',
+        customerId: '3',
+        customerName: 'Emma Clarke',
+        createdAt: new Date(2026, 3, 10).toISOString(),
+        expiresAt: new Date(2026, 3, 17).toISOString(),
+        items: [],
+        labour: [],
+        extras: [],
+        discount: 15,
+        total: 7225,
+        status: 'accepted',
+        tradeId: 'bathroom',
+        tradeName: 'Bathroom'
+      },
+      {
+        id: '4',
+        customerId: '9',
+        customerName: 'Olivia Martin',
+        createdAt: new Date(2026, 3, 22).toISOString(),
+        expiresAt: new Date(2026, 3, 29).toISOString(),
+        items: [],
+        labour: [],
+        extras: [],
+        discount: 0,
+        total: 5200,
+        status: 'sent',
+        tradeId: 'electrical',
+        tradeName: 'Electrical'
+      },
+      {
+        id: '5',
+        customerId: '10',
+        customerName: 'Daniel White',
+        createdAt: new Date(2026, 3, 8).toISOString(),
+        expiresAt: new Date(2026, 3, 15).toISOString(),
+        items: [],
+        labour: [],
+        extras: [],
+        discount: 10,
+        total: 15800,
+        status: 'accepted',
+        tradeId: 'loft',
+        tradeName: 'Loft Conversion'
+      }
+    ];
+  });
+
+  const [recruitmentAccess, setRecruitmentAccessState] = useState<RecruitmentAccess>(() => {
+    const saved = localStorage.getItem('recruitmentAccess');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { staff: !!parsed.staff, manager: !!parsed.manager };
+      } catch {
+        // fall through to default
+      }
+    }
+    return { staff: false, manager: false };
+  });
+
+  const setRecruitmentAccess = (next: RecruitmentAccess) => {
+    setRecruitmentAccessState(next);
+    localStorage.setItem('recruitmentAccess', JSON.stringify(next));
+  };
+
+  const [accountsAccess, setAccountsAccessState] = useState<AccountsAccess>(() => {
+    const saved = localStorage.getItem('accountsAccess');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { staff: !!parsed.staff, manager: !!parsed.manager };
+      } catch {
+        // fall through to default
+      }
+    }
+    return { staff: false, manager: false };
+  });
+
+  const setAccountsAccess = (next: AccountsAccess) => {
+    setAccountsAccessState(next);
+    localStorage.setItem('accountsAccess', JSON.stringify(next));
+  };
+
+  useEffect(() => {
+    const stopScheduler = startPmScheduler();
+    return () => stopScheduler();
+  }, []);
+
+  useEffect(() => {
+    return installApiFetchInterceptor();
+  }, []);
+
+  useEffect(() => {
+    void loadProjectsAsync();
+    const unsub = initProjectsRealtime();
+    void import('./engine/data/supabaseStore').then(async ({ isSupabaseConfigured, loadCustomersFromSupabase, loadQuotesFromSupabase, loadProductsFromSupabase, loadPricingRulesFromSupabase }) => {
+      if (!isSupabaseConfigured()) return;
+      const [remoteCustomers, remoteQuotes, remoteProducts, remoteRules] = await Promise.all([
+        loadCustomersFromSupabase(),
+        loadQuotesFromSupabase(),
+        loadProductsFromSupabase(),
+        loadPricingRulesFromSupabase(),
+      ]);
+      if (remoteCustomers.length) setCustomers(remoteCustomers as Customer[]);
+      if (remoteQuotes.length) setQuotes(remoteQuotes as Quote[]);
+      if (remoteProducts.length) setProducts(remoteProducts as Product[]);
+      if (remoteRules.length) setPricingRules(remoteRules as PricingRule[]);
+    }).catch(() => {});
+    return unsub;
+  }, []);
+
+  // Persist to localStorage
+  useEffect(() => {
+    localStorage.setItem('customers', JSON.stringify(customers));
+  }, [customers]);
+
+  useEffect(() => {
+    localStorage.setItem('products', JSON.stringify(products));
+  }, [products]);
+
+  useEffect(() => {
+    localStorage.setItem('pricingRules', JSON.stringify(pricingRules));
+  }, [pricingRules]);
+
+  useEffect(() => {
+    localStorage.setItem('quotes', JSON.stringify(quotes));
+    syncToServer();
+  }, [quotes]);
+
+  useEffect(() => {
+    seedContactsFromCustomers(customers);
+    syncToServer();
+  }, [customers]);
+
+  // CRUD operations
+  const addCustomer = (customer: Omit<Customer, 'id' | 'createdAt'>) => {
+    const newCustomer = {
+      ...customer,
+      whatsappOptIn: customer.whatsappOptIn ?? false,
+      preferredChannel: customer.preferredChannel ?? 'email',
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString()
+    };
+    setCustomers([...customers, newCustomer]);
+    return newCustomer;
+  };
+
+  const updateCustomer = (id: string, updates: Partial<Customer>) => {
+    setCustomers(customers.map(c => c.id === id ? { ...c, ...updates } : c));
+  };
+
+  const deleteCustomer = (id: string) => {
+    setCustomers(customers.filter(c => c.id !== id));
+  };
+
+  const addProduct = (product: Omit<Product, 'id' | 'sellPrice'>) => {
+    const sellPrice = product.basePrice * (1 + product.margin / 100);
+    const newProduct = {
+      ...product,
+      id: Date.now().toString(),
+      sellPrice
+    };
+    setProducts([...products, newProduct]);
+  };
+
+  const updateProduct = (id: string, updates: Partial<Product>) => {
+    setProducts(products.map(p => {
+      if (p.id === id) {
+        const updated = { ...p, ...updates };
+        if (updates.basePrice !== undefined || updates.margin !== undefined) {
+          updated.sellPrice = updated.basePrice * (1 + updated.margin / 100);
+        }
+        return updated;
+      }
+      return p;
+    }));
+  };
+
+  const deleteProduct = (id: string) => {
+    setProducts(products.filter(p => p.id !== id));
+  };
+
+  const addQuote = (quote: Omit<Quote, 'id' | 'createdAt'>) => {
+    const lines = quote.lines?.length ? quote.lines : migrateQuoteToLines(quote as Quote);
+    const newQuote = {
+      ...quote,
+      lines,
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString(),
+    };
+    setQuotes((prev) => [...prev, newQuote]);
+    if (quote.customerId && quote.status) {
+      setCustomers((prev) => {
+        const patch = syncCustomerStatusFromQuote(quote.customerId!, quote.status!, prev);
+        if (!patch) return prev;
+        return prev.map((c) => (c.id === quote.customerId ? { ...c, ...patch } : c));
+      });
+    }
+  };
+
+  const updateQuote = (id: string, updates: Partial<Quote>) => {
+    setQuotes((prev) => {
+      const next = prev.map((q) => {
+        if (q.id !== id) return q;
+        const merged = { ...q, ...updates };
+        if (updates.lines) merged.lines = updates.lines;
+        return merged;
+      });
+      const updated = next.find((q) => q.id === id);
+      if (updated?.customerId && updates.status) {
+        setCustomers((custPrev) => {
+          const patch = syncCustomerStatusFromQuote(updated.customerId!, updates.status!, custPrev);
+          if (!patch) return custPrev;
+          return custPrev.map((c) => (c.id === updated.customerId ? { ...c, ...patch } : c));
+        });
+      }
+      return next;
+    });
+  };
+
+  const deleteQuote = (id: string) => {
+    setQuotes(quotes.filter(q => q.id !== id));
+  };
+
+  const addPricingRule = (rule: Omit<PricingRule, 'id'>) => {
+    const newRule = {
+      ...rule,
+      id: Date.now().toString()
+    };
+    setPricingRules([...pricingRules, newRule]);
+  };
+
+  const updatePricingRule = (id: string, updates: Partial<PricingRule>) => {
+    setPricingRules(pricingRules.map(r => r.id === id ? { ...r, ...updates } : r));
+  };
+
+  const deletePricingRule = (id: string) => {
+    setPricingRules(pricingRules.filter(r => r.id !== id));
+  };
+
+  const importDataBundle = (
+    bundle: TradeProExportBundle,
+    options: { strategy: MergeStrategy }
+  ): ImportResult => {
+    const { strategy } = options;
+    const result: ImportResult = { added: 0, updated: 0, skipped: 0, errors: [] };
+    const { data } = bundle;
+
+    try {
+      if (data.customers) {
+        const incoming = migrateCustomers(data.customers);
+        const merged = mergeById(customers, incoming, strategy);
+        setCustomers(merged.result);
+        result.added += merged.added;
+        result.updated += merged.updated;
+        result.skipped += merged.skipped;
+      }
+
+      if (data.quotes) {
+        const incoming = migrateQuotes(data.quotes);
+        const merged = mergeById(quotes, incoming, strategy);
+        setQuotes(merged.result);
+        result.added += merged.added;
+        result.updated += merged.updated;
+        result.skipped += merged.skipped;
+      }
+
+      if (data.products) {
+        const incoming = migrateProducts(data.products);
+        const merged = mergeById(products, incoming, strategy);
+        setProducts(merged.result);
+        result.added += merged.added;
+        result.updated += merged.updated;
+        result.skipped += merged.skipped;
+      }
+
+      if (data.pricingRules) {
+        const incoming = migratePricingRules(data.pricingRules);
+        const merged = mergeById(pricingRules, incoming, strategy);
+        setPricingRules(merged.result);
+        result.added += merged.added;
+        result.updated += merged.updated;
+        result.skipped += merged.skipped;
+      }
+
+      if (data.surveys) {
+        const merged = mergeById(loadSurveys(), data.surveys, strategy);
+        saveSurveys(merged.result);
+        result.added += merged.added;
+        result.updated += merged.updated;
+        result.skipped += merged.skipped;
+      }
+
+      if (bundle.scope === 'full') {
+        if (data.projects) {
+          const merged = mergeById(loadProjects(), data.projects, strategy);
+          saveProjects(merged.result);
+          result.added += merged.added;
+          result.updated += merged.updated;
+          result.skipped += merged.skipped;
+        }
+
+        if (data.contacts) {
+          const merged = mergeById(loadContacts(), data.contacts, strategy);
+          saveContacts(merged.result);
+          result.added += merged.added;
+          result.updated += merged.updated;
+          result.skipped += merged.skipped;
+        }
+
+        if (data.builders) {
+          const merged = mergeById(loadBuilders(), data.builders, strategy);
+          saveBuilders(merged.result);
+          result.added += merged.added;
+          result.updated += merged.updated;
+          result.skipped += merged.skipped;
+        }
+
+        if (data.planningApplications) {
+          const merged = mergeById(loadPlanningApplications(), data.planningApplications, strategy);
+          localStorage.setItem('tradepro_planning_applications', JSON.stringify(merged.result));
+          result.added += merged.added;
+          result.updated += merged.updated;
+          result.skipped += merged.skipped;
+        }
+
+        if (data.bankAccounts) {
+          const merged = mergeById(loadBankAccounts(), data.bankAccounts, strategy);
+          saveBankAccounts(merged.result);
+          result.added += merged.added;
+          result.updated += merged.updated;
+          result.skipped += merged.skipped;
+        }
+
+        if (data.bankTransactions) {
+          const merged = mergeById(loadBankTransactions(), data.bankTransactions, strategy);
+          saveBankTransactions(merged.result);
+          result.added += merged.added;
+          result.updated += merged.updated;
+          result.skipped += merged.skipped;
+        }
+
+        if (data.clientReceipts) {
+          const merged = mergeById(loadClientReceipts(), data.clientReceipts, strategy);
+          saveClientReceipts(merged.result);
+          result.added += merged.added;
+          result.updated += merged.updated;
+          result.skipped += merged.skipped;
+        }
+      }
+
+      void syncToServer();
+    } catch (err) {
+      result.errors.push(err instanceof Error ? err.message : 'Import failed.');
+    }
+
+    return result;
+  };
+
+  const handleLogin = (userData: User) => {
+    setUser(userData);
+    setIsLoggedIn(true);
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setUser({
+      id: '1',
+      name: 'John Smith',
+      email: 'john@bathrooms.com',
+      role: 'super_admin'
+    });
+  };
+
+  const contextValue: AppContextType = {
+    user,
+    customers,
+    products,
+    pricingRules,
+    quotes,
+    recruitmentAccess,
+    setRecruitmentAccess,
+    accountsAccess,
+    setAccountsAccess,
+    addCustomer,
+    updateCustomer,
+    deleteCustomer,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    addQuote,
+    updateQuote,
+    deleteQuote,
+    addPricingRule,
+    updatePricingRule,
+    deletePricingRule,
+    importDataBundle,
+    logout: handleLogout
+  };
+
+  if (!isLoggedIn) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/contract/:token" element={<ContractSignPage />} />
+          <Route path="/portal/:token" element={<CustomerPortal />} />
+          <Route path="/planning-approve/:token" element={<PlanningCustomerApproval />} />
+          <Route path="/platform/clients" element={<PlatformClientsCRM />} />
+          <Route path="*" element={<Login onLogin={handleLogin} />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
+
+  if (user.role === 'platform_owner') {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/platform/clients" element={<PlatformClientsCRM />} />
+          <Route path="*" element={<Navigate to="/platform/clients" replace />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
+
+  return (
+    <AppContext.Provider value={contextValue}>
+      <AIAssistantProvider>
+      <BrowserRouter>
+        <AppShell>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route
+                path="/booking"
+                element={<ProtectedRoute element={<BookingSystem />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/site-survey"
+                element={<ProtectedRoute element={<SiteSurvey />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/crm"
+                element={<ProtectedRoute element={<ComprehensiveCRM />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/customers"
+                element={<ProtectedRoute element={<CustomerManagement />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/ai-render/:tradeId?"
+                element={<ProtectedRoute element={<AIBathroomRender />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/designer"
+                element={<ProtectedRoute element={<BathroomDesigner />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/products"
+                element={<ProtectedRoute element={<ProductCatalog />} allowedRoles={['super_admin']} user={user} />}
+              />
+              <Route
+                path="/quote/:tradeId?/:customerId?"
+                element={<ProtectedRoute element={<QuoteBuilder />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/ai-estimate/:tradeId?/:customerId?"
+                element={<ProtectedRoute element={<QuoteBuilder />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/quotes"
+                element={<ProtectedRoute element={<QuotesList />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/finance"
+                element={<ProtectedRoute element={<FinanceApplication />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/email"
+                element={<ProtectedRoute element={<CommunicationsHub />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/communications"
+                element={<ProtectedRoute element={<CommunicationsHub />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/cyrus"
+                element={<ProtectedRoute element={<CyrusConversations />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/calls"
+                element={<ProtectedRoute element={<CallCenter />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/agent"
+                element={<Navigate to="/calls" replace />}
+              />
+              <Route
+                path="/integrations"
+                element={<ProtectedRoute element={<IntegrationsHub />} allowedRoles={['super_admin']} user={user} />}
+              />
+              <Route path="/portal/:token" element={<CustomerPortal />} />
+              <Route path="/contract/:token" element={<ContractSignPage />} />
+              <Route path="/portfolio" element={<Portfolio />} />
+              <Route
+                path="/settings"
+                element={<ProtectedRoute element={<Settings />} allowedRoles={['super_admin']} user={user} />}
+              />
+              <Route
+                path="/team"
+                element={<ProtectedRoute element={<TeamManagement />} allowedRoles={['super_admin']} user={user} />}
+              />
+              <Route
+                path="/sales"
+                element={<ProtectedRoute element={<SalesManagement />} allowedRoles={['super_admin']} user={user} />}
+              />
+              <Route path="/projects" element={<BuilderProjectManagement />} />
+              <Route
+                path="/builder"
+                element={<ProtectedRoute element={<BuilderDashboard />} allowedRoles={['builder']} user={user} />}
+              />
+              <Route path="/builder-projects" element={<BuilderProjectManagement />} />
+              <Route
+                path="/costing"
+                element={<ProtectedRoute element={<CostingDashboard />} allowedRoles={['super_admin', 'manager']} user={user} />}
+              />
+              <Route
+                path="/builder-management"
+                element={<ProtectedRoute element={<BuilderManagement />} allowedRoles={['super_admin', 'manager']} user={user} />}
+              />
+              <Route
+                path="/recruitment"
+                element={
+                  canAccessRecruitment(user.role, recruitmentAccess)
+                    ? <RecruitmentCRM />
+                    : <Navigate to="/" replace />
+                }
+              />
+              <Route
+                path="/accounts"
+                element={
+                  canAccessAccounts(user.role, accountsAccess)
+                    ? <AccountsHub />
+                    : <Navigate to="/" replace />
+                }
+              />
+              <Route
+                path="/price-job"
+                element={<ProtectedRoute element={<JobPricing />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/approvals"
+                element={<ProtectedRoute element={<ApprovalsQueue />} allowedRoles={['super_admin', 'manager']} user={user} />}
+              />
+              <Route
+                path="/contracts"
+                element={<ProtectedRoute element={<ContractsHub />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route path="/changes" element={<ChangeOrders />} />
+              <Route
+                path="/building-control"
+                element={<ProtectedRoute element={<BuildingControlHub />} allowedRoles={['super_admin', 'manager', 'staff', 'builder']} user={user} />}
+              />
+              <Route
+                path="/planning"
+                element={<ProtectedRoute element={<PlanningHub />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/planning/:id"
+                element={<ProtectedRoute element={<PlanningApplicationDetail />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route path="/planning-approve/:token" element={<PlanningCustomerApproval />} />
+              <Route
+                path="/platform/clients"
+                element={<PlatformClientsCRM />}
+              />
+              <Route
+                path="/ai-audit"
+                element={<ProtectedRoute element={<ConversationAudit />} allowedRoles={['super_admin', 'manager']} user={user} />}
+              />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          <Toaster />
+        </AppShell>
+      </BrowserRouter>
+      </AIAssistantProvider>
+    </AppContext.Provider>
+  );
+}
