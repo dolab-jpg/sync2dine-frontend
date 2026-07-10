@@ -43,7 +43,8 @@ export function ProjectTimeline({ project }: Props) {
   for (const msg of project.messages) {
     const channel = msg.channel ?? 'app';
     const contact = msg.senderContactName;
-    const text = msg.body ?? (msg as { message?: string }).message ?? '';
+    const english = (msg as { bodyEnglish?: string }).bodyEnglish;
+    const text = english ?? msg.body ?? (msg as { message?: string }).message ?? '';
     entries.push({
       id: msg.id,
       at: msg.timestamp,
@@ -55,12 +56,14 @@ export function ProjectTimeline({ project }: Props) {
 
   for (const action of project.aiActions) {
     const visionAssessment = isVisionAssessment(action);
+    const output = action.output as Record<string, unknown>;
+    const executed = Array.isArray(output.executed) ? output.executed.join('; ') : '';
     entries.push({
       id: action.id,
       at: action.createdAt,
       source: visionAssessment ? 'AI Vision' : 'AI',
-      label: visionAssessment ? `Vision assessment · ${action.action}` : `ProjectBrain · ${action.action}`,
-      body: summariseAiAction(action),
+      label: visionAssessment ? `Vision assessment · ${action.action}` : `Channel AI · ${action.action}`,
+      body: executed || summariseAiAction(action),
     });
   }
 

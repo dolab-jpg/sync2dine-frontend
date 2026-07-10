@@ -2,8 +2,11 @@ import { handleOrchestrator, type OrchestratorRequest, type OrchestratorResult }
 import { buildAriaSystemPrompt, buildGreeting, detectIntentFromSpeech, detectUpsetSentiment } from './phone-prompt';
 import { executePhoneTool, getOpenRecruitmentJobs, PHONE_AUTO_ACTIONS } from './phone-tools';
 import { executeCustomerTool } from './orchestrator-tool-exec';
+import { resolveInboundChannel } from './channel-router';
+import { handleChannelInbound } from './channel-inbound-handler';
 import type { AgentCallContext, CallIntent } from './telephony/types';
 import { OUTBOUND_CAMPAIGN_SCRIPTS } from './telephony/types';
+import { getRequestOrgId } from './data-store';
 
 export interface PhoneOrchestratorRequest {
   callContext: AgentCallContext;
@@ -35,6 +38,28 @@ export async function handlePhoneTurn(body: PhoneOrchestratorRequest): Promise<{
   const afterHours = callContext.isAfterHours ?? false;
   const isKnown = Boolean(callContext.customerId);
   const toolsUsed: string[] = [];
+
+  const staffRoute = resolveInboundChannel(callContext.from, getRequestOrgId());
+  if (staffRoute.mode === 'staff' || staffRoute.mode === 'foreman') {
+    if (isFirstTurn) {
+      const greeting = `Alright ${staffRoute.name ?? 'boss'}, TradePro on the line. What do you need?`;
+      return { content: greeting, intent: callContext.intent, toolsUsed, proposedActions: [] };
+    }
+    const inbound = await handleChannelInbound({
+      orgId: getRequestOrgId(),
+      phone: callContext.from,
+      text: lastMessage,
+      channel: 'phone',
+      contactName: staffRoute.name,
+      projectId: callContext.projectId,
+    });
+    return {
+      content: inbound.replyEnglish.slice(0, 500),
+      intent: callContext.intent,
+      toolsUsed: inbound.toolsUsed,
+      proposedActions: [],
+    };
+  }
 
   if (isFirstTurn) {
     const campaign = callContext.campaignTemplate

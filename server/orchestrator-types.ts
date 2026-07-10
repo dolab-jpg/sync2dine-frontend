@@ -19,7 +19,7 @@ export interface BusinessSnapshot {
   officeTeamRoster?: Array<Record<string, unknown>>;
 }
 
-export type OrchestratorChannel = 'overlay_chat' | 'formal_doc' | 'customer_portal';
+export type OrchestratorChannel = 'overlay_chat' | 'formal_doc' | 'customer_portal' | 'whatsapp_staff' | 'phone_staff' | 'whatsapp' | 'phone';
 export type TaskPhase = 'chat' | 'clarify' | 'execute' | 'complete';
 export type AutonomyLevel = 'assist' | 'balanced' | 'autopilot';
 

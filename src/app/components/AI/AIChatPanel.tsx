@@ -1,5 +1,5 @@
 import { useState, useContext, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Sparkles, Loader2, AlertCircle, Headphones, Square } from 'lucide-react';
+import { Sparkles, Loader2, AlertCircle, Headphones, Square, Mic } from 'lucide-react';
 import { useAIAssistant } from '../../context/AIAssistantContext';
 import { VoiceInputButton } from './VoiceInputButton';
 import { useVoiceConversation } from '../../hooks/useVoiceConversation';
@@ -66,6 +66,34 @@ export function AIChatPanel() {
   const [safetyPending, setSafetyPending] = useState<CopilotAction[]>([]);
   const [connection, setConnection] = useState<OpenAIConnectionState>({ status: 'checking' });
   const scrollRef = useRef<HTMLDivElement>(null);
+  const voiceNoteRef = useRef<HTMLInputElement>(null);
+
+  const handleVoiceNote = async (file: File) => {
+    if (!isChatConnected) return;
+    setLoading(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/ai/transcribe', { method: 'POST', body: form });
+      const data = await res.json() as { text?: string };
+      const text = data.text?.trim();
+      if (text) await handleSend(text);
+      else toast.error('Could not transcribe voice note');
+    } catch {
+      toast.error('Voice note upload failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sessionId = staffContext.userId || 'default-session';
+  const syncConversation = useCallback((role: string, content: string) => {
+    void fetch(`/api/conversations/default/${encodeURIComponent(sessionId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role, content, channel: 'app' }),
+    }).catch(() => undefined);
+  }, [sessionId]);
   const navigate = useNavigate();
   const studio = useAIStudioConfig();
 
@@ -358,6 +386,7 @@ export function AIChatPanel() {
     if (content) {
       addMessage({ role: 'user', content });
       logMsg('user', content);
+      syncConversation('user', content);
     }
 
     if (
@@ -613,6 +642,26 @@ export function AIChatPanel() {
           <VoiceInputButton
             onTranscript={(t) => { setInput(t); if (settings.voiceConversation && isChatConnected) handleSend(t); }}
           />
+          <input
+            ref={voiceNoteRef}
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleVoiceNote(file);
+              e.target.value = '';
+            }}
+          />
+          <button
+            type="button"
+            title="Upload voice note (Whisper)"
+            disabled={!isChatConnected || loading}
+            onClick={() => voiceNoteRef.current?.click()}
+            className="shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-md border bg-white text-slate-600 border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <Mic className="w-4 h-4" />
+          </button>
           {voice.isSupported && (
             <button
               type="button"

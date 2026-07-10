@@ -52,6 +52,42 @@ export interface SyncedData {
   planningApplications: Array<Record<string, unknown>>;
   agentSettings: AgentSettings;
   phoneLines: PhoneLine[];
+  teamMembers: TeamMemberRecord[];
+  whatsappConversations: Record<string, WhatsAppConversationRecord>;
+  pendingConfirmations: PendingConfirmationRecord[];
+}
+
+export interface TeamMemberRecord {
+  id: string;
+  userId: string;
+  name: string;
+  phone: string;
+  role: 'super_admin' | 'manager' | 'staff' | 'builder';
+  updatedAt: string;
+}
+
+export interface WhatsAppConversationRecord {
+  phone: string;
+  orgId: string;
+  messages: Array<{
+    role: string;
+    content: string;
+    bodyEnglish?: string;
+    detectedLanguage?: string;
+    timestamp: string;
+    channel?: string;
+  }>;
+  updatedAt: string;
+}
+
+export interface PendingConfirmationRecord {
+  id: string;
+  phone: string;
+  orgId: string;
+  action: string;
+  input: Record<string, unknown>;
+  createdAt: string;
+  expiresAt: string;
 }
 
 export type PhoneLineStatus = 'disconnected' | 'registering' | 'registered' | 'error';
@@ -107,6 +143,9 @@ const defaultData: SyncedData = {
   planningApplications: [],
   agentSettings: { ...defaultAgentSettings },
   phoneLines: [],
+  teamMembers: [],
+  whatsappConversations: {},
+  pendingConfirmations: [],
 };
 
 function ensureDir() {
@@ -144,6 +183,13 @@ function loadFromDisk(orgId: string): SyncedData {
           ? { ...defaultAgentSettings, ...(parsed.agentSettings as AgentSettings) }
           : { ...defaultAgentSettings },
         phoneLines: Array.isArray(parsed.phoneLines) ? (parsed.phoneLines as PhoneLine[]) : [],
+        teamMembers: Array.isArray(parsed.teamMembers) ? parsed.teamMembers as TeamMemberRecord[] : [],
+        whatsappConversations: parsed.whatsappConversations && typeof parsed.whatsappConversations === 'object'
+          ? parsed.whatsappConversations as Record<string, WhatsAppConversationRecord>
+          : {},
+        pendingConfirmations: Array.isArray(parsed.pendingConfirmations)
+          ? parsed.pendingConfirmations as PendingConfirmationRecord[]
+          : [],
       };
       migrateLegacySoho66Line(result);
       return result;
@@ -206,6 +252,9 @@ export function syncData(data: Partial<SyncedData>, orgId?: string): void {
     whatsappGroups: data.whatsappGroups ?? memoryStore.whatsappGroups,
     agentSettings: data.agentSettings ?? memoryStore.agentSettings,
     phoneLines: data.phoneLines ?? memoryStore.phoneLines,
+    teamMembers: data.teamMembers ?? memoryStore.teamMembers,
+    whatsappConversations: data.whatsappConversations ?? memoryStore.whatsappConversations,
+    pendingConfirmations: data.pendingConfirmations ?? memoryStore.pendingConfirmations,
   };
   memoryStores.set(id, next);
   ensureDir();
@@ -216,11 +265,21 @@ export function syncData(data: Partial<SyncedData>, orgId?: string): void {
   }
 }
 
+export function normalizePhoneExport(phone: string): string {
+  return normalizePhone(phone);
+}
+
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   if (digits.startsWith('44')) return digits;
   if (digits.startsWith('0')) return `44${digits.slice(1)}`;
   return digits;
+}
+
+export function resolveStaffByPhone(phone: string, orgId?: string): TeamMemberRecord | null {
+  const normalized = normalizePhone(phone);
+  const members = getDataStore(orgId).teamMembers ?? [];
+  return members.find((m) => normalizePhone(String(m.phone ?? '')) === normalized) ?? null;
 }
 
 export function resolveContactByPhone(phone: string): {
@@ -252,8 +311,55 @@ export function resolveContactByPhone(phone: string): {
     contactName: contact ? String(contact.name) : 'Guest',
     contactRole: contact ? String(contact.role ?? 'primary') : 'guest',
     projectId: project ? String(project.id) : null,
-    activeQuotes: [],
+    activeQuotes: getActiveQuotesForCustomer(customerId),
   };
+}
+
+function getActiveQuotesForCustomer(customerId: string | null): Array<{
+  tradeName?: string;
+  total: number;
+  status: string;
+  expiresAt: string;
+}> {
+  if (!customerId) return [];
+  const store = getDataStore();
+  return (store.quotes ?? [])
+    .filter((q) => String(q.customerId ?? '') === customerId)
+    .filter((q) => !['rejected', 'expired'].includes(String(q.status ?? '')))
+    .map((q) => ({
+      tradeName: String(q.tradeName ?? q.tradeId ?? ''),
+      total: Number(q.total ?? 0),
+      status: String(q.status ?? 'draft'),
+      expiresAt: String(q.expiresAt ?? ''),
+    }));
+}
+
+export function saveQuoteRecord(quote: Record<string, unknown>): Record<string, unknown> {
+  const store = getDataStore();
+  const id = String(quote.id ?? `Q${Date.now()}`);
+  const existing = store.quotes.findIndex((q) => String(q.id) === id);
+  const record = {
+    ...quote,
+    id,
+    updatedAt: new Date().toISOString(),
+    createdAt: quote.createdAt ?? new Date().toISOString(),
+  };
+  if (existing >= 0) {
+    store.quotes[existing] = { ...store.quotes[existing], ...record };
+  } else {
+    store.quotes.unshift(record);
+  }
+  syncData(store);
+  return record;
+}
+
+export function updateQuoteRecord(id: string, patch: Record<string, unknown>): Record<string, unknown> | null {
+  const store = getDataStore();
+  const idx = store.quotes.findIndex((q) => String(q.id) === id);
+  if (idx < 0) return null;
+  store.quotes[idx] = { ...store.quotes[idx], ...patch, updatedAt: new Date().toISOString() };
+  syncData(store);
+  return store.quotes[idx];
 }
 
 export function getProjectById(id: string): Record<string, unknown> | undefined {

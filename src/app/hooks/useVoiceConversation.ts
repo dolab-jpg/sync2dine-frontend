@@ -51,10 +51,35 @@ export function useVoiceConversation({ onUserMessage }: UseVoiceConversationOpti
     typeof window !== 'undefined' &&
     !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
+  const playAudioBlob = useCallback((blob: Blob): Promise<void> => {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+      audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+      void audio.play();
+    });
+  }, []);
+
+  const fetchTts = useCallback(async (text: string): Promise<Blob | null> => {
+    const openaiConfig = integrationService.getConfig('openai');
+    const res = await fetch('/api/ai/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        voice: openaiConfig.ttsVoice || 'fable',
+        apiKey: openaiConfig.apiKey || undefined,
+      }),
+    });
+    if (!res.ok) return null;
+    return res.blob();
+  }, []);
+
   const speak = useCallback((text: string): Promise<void> => {
     return new Promise<void>((resolve) => {
       if (!text) { resolve(); return; }
-      const openaiConfig = integrationService.getConfig('openai');
 
       const browserFallback = () => {
         if (!('speechSynthesis' in window)) { resolve(); return; }
@@ -66,28 +91,33 @@ export function useVoiceConversation({ onUserMessage }: UseVoiceConversationOpti
         window.speechSynthesis.speak(u);
       };
 
-      void fetch('/api/ai/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          voice: openaiConfig.ttsVoice || 'fable',
-          apiKey: openaiConfig.apiKey || undefined,
-        }),
-      })
-        .then(async (res) => {
-          if (!res.ok) { browserFallback(); return; }
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          const audio = new Audio(url);
-          audioRef.current = audio;
-          audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-          audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-          await audio.play();
+      void fetchTts(text)
+        .then(async (blob) => {
+          if (!blob) { browserFallback(); return; }
+          await playAudioBlob(blob);
+          resolve();
         })
         .catch(() => browserFallback());
     });
-  }, []);
+  }, [fetchTts, playAudioBlob]);
+
+  /** Speak the first sentence immediately, queue the rest (lower lag while streaming). */
+  const speakChunked = useCallback(async (text: string): Promise<void> => {
+    const parts = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+    if (parts.length === 0) return;
+    setStatus('speaking');
+    const first = parts[0];
+    const rest = parts.slice(1).join(' ');
+    const firstBlobPromise = fetchTts(first);
+    if (rest) void fetchTts(rest);
+    const firstBlob = await firstBlobPromise;
+    if (firstBlob) await playAudioBlob(firstBlob);
+    else await speak(first);
+    if (rest && activeRef.current) {
+      const restBlob = await fetchTts(rest);
+      if (restBlob) await playAudioBlob(restBlob);
+    }
+  }, [fetchTts, playAudioBlob, speak]);
 
   const startListening = useCallback(() => {
     if (!activeRef.current) return;
@@ -142,7 +172,7 @@ export function useVoiceConversation({ onUserMessage }: UseVoiceConversationOpti
       const reply = await onUserMessageRef.current(text);
       if (activeRef.current && reply) {
         setStatus('speaking');
-        await speak(reply);
+        await speakChunked(reply);
       }
     } catch {
       // swallow — keep the conversation going
@@ -154,7 +184,7 @@ export function useVoiceConversation({ onUserMessage }: UseVoiceConversationOpti
         setStatus('idle');
       }
     }
-  }, [speak, startListening]);
+  }, [speakChunked, startListening]);
 
   const stopAudio = useCallback(() => {
     if (audioRef.current) {

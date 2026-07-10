@@ -47,6 +47,7 @@ export function aiProxyPlugin(): Plugin {
           const { handleContractRoutes } = await import('./server/contract-routes');
           const { handleMailboxRoutes } = await import('./server/mailbox-routes');
           const { handlePackageUpdatesRoute } = await import('./server/mailbox/package-updates');
+          const { handleChannelRoutes } = await import('./server/channel-routes');
           const { handleAiRequest } = await import('./server/ai-proxy');
 
           if (await handleStripeRoutes(req, res, pathname)) return;
@@ -65,6 +66,7 @@ export function aiProxyPlugin(): Plugin {
           if (await handleMessageRoutes(req, res, pathname)) return;
           if (await handlePriceResearchRoutes(req, res, pathname)) return;
           if (await handleContractRoutes(req, res, pathname)) return;
+          if (await handleChannelRoutes(req, res, pathname)) return;
 
           if (pathname.startsWith('/api/ai/')) {
             await handleAiRequest(req, res, pathname);

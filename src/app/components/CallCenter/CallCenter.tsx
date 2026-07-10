@@ -15,7 +15,7 @@ import {
   RefreshCw, Play, Send, AlertCircle, Voicemail, Mic, Search,
   ChevronDown, ChevronUp, User, ExternalLink, Power, Volume2, Plus, Trash2, Radio,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { SoftPhonePanel } from './SoftPhonePanel';
 
 interface CallTurn {
   role: 'caller' | 'agent' | 'system';
@@ -81,7 +81,7 @@ interface AgentStatus {
   };
 }
 
-interface PhoneLine {
+export interface PhoneLine {
   id: string;
   label: string;
   sipUsername: string;
@@ -642,6 +642,7 @@ export default function CallCenter() {
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="lines">Phone Lines</TabsTrigger>
           <TabsTrigger value="test">Test Call (Mock)</TabsTrigger>
+          <TabsTrigger value="softphone">Soft Phone</TabsTrigger>
           <TabsTrigger value="outbound">Outbound Queue</TabsTrigger>
         </TabsList>
 
@@ -915,6 +916,18 @@ export default function CallCenter() {
                   </Button>
                 )}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="softphone" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Soft Phone (JsSIP)</CardTitle>
+              <CardDescription>Log in with a SIP extension and make or receive calls in the browser.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SoftPhonePanel lines={phoneLines} />
             </CardContent>
           </Card>
         </TabsContent>

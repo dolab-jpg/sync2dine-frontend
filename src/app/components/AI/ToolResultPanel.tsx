@@ -8,6 +8,37 @@ interface ToolResultPanelProps {
 }
 
 function renderBreakdown(output: Record<string, unknown>) {
+  const research = output.pricingResearch as { lines?: Array<Record<string, unknown>> } | undefined;
+  if (research?.lines?.length) {
+    return (
+      <table className="w-full text-xs mt-2 border-collapse">
+        <thead>
+          <tr className="border-b border-slate-200 text-left text-slate-500">
+            <th className="py-1 pr-2">Task</th>
+            <th className="py-1 pr-2">Low</th>
+            <th className="py-1 pr-2">Typical</th>
+            <th className="py-1 pr-2">High</th>
+          </tr>
+        </thead>
+        <tbody>
+          {research.lines.map((l, i) => (
+            <tr key={i} className="border-b border-slate-100">
+              <td className="py-1 pr-2">{String(l.task ?? 'Task')}</td>
+              <td className="py-1 pr-2">£{Number(l.low ?? 0).toLocaleString('en-GB')}</td>
+              <td className="py-1 pr-2">£{Number(l.typical ?? 0).toLocaleString('en-GB')}</td>
+              <td className="py-1 pr-2">£{Number(l.high ?? 0).toLocaleString('en-GB')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
+  const breakdownText = output.breakdownText;
+  if (typeof breakdownText === 'string' && breakdownText.trim()) {
+    return <pre className="mt-2 text-xs whitespace-pre-wrap text-slate-700">{breakdownText}</pre>;
+  }
+
   const items = output.items ?? output.lineItems;
   const labour = output.labour;
   const extras = output.extras;

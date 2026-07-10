@@ -20,7 +20,8 @@ import { handleStripeRoutes } from './stripe-routes';
 import { handleAuthRoutes } from './auth';
 import { handleMailboxRoutes } from './mailbox-routes';
 import { handlePackageUpdatesRoute } from './mailbox/package-updates';
-import { startMailboxPoller } from './mailbox/imapSyncService';
+import { handleChannelRoutes } from './channel-routes';
+import { startOutboundWorker } from './outbound-worker';
 
 const PORT = Number(process.env.PORT) || 3001;
 const ALLOWED_ORIGIN = process.env.APP_BASE_URL?.trim() || '*';
@@ -86,6 +87,8 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
 
   if (await handlePlatformRoutes(req, res, pathname)) return;
 
+  if (await handleChannelRoutes(req, res, pathname)) return;
+
   if (pathname.startsWith('/api/ai/')) {
     await handleAiRequest(req, res, pathname);
     return;
@@ -98,4 +101,5 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
 server.listen(PORT, () => {
   console.log(`TradePro API server running on port ${PORT}`);
   startMailboxPoller();
+  startOutboundWorker();
 });

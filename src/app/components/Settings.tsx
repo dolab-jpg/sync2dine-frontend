@@ -17,7 +17,7 @@ import { integrationService } from '../engine/integrations/integrationService';
 import { toast } from 'sonner';
 import { getAllTrades } from '../config/trades';
 import { useAIAssistant } from '../context/AIAssistantContext';
-import { Switch } from './ui/switch';
+import { StaffPhoneRegistration } from './Settings/StaffPhoneRegistration';
 import { canManageCompanySettings } from '../engine/ai/rolePermissions';
 import type { AgentRole } from '../engine/ai/agentContext';
 
@@ -539,6 +539,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="team" className="space-y-6">
+          <StaffPhoneRegistration />
           <Card>
             <CardHeader>
               <CardTitle>Current User</CardTitle>
@@ -593,8 +594,8 @@ export default function Settings() {
                 </div>
               </div>
 
-              <p className="text-sm text-gray-500 mt-4 p-3 bg-yellow-50 rounded border border-yellow-200">
-                Note: Team management requires backend integration. This is a preview of the role system.
+              <p className="text-sm text-gray-500 mt-4 p-3 bg-slate-50 rounded border">
+                Staff phones registered above are used for WhatsApp and inbound call routing. Role gates apply on all channels.
               </p>
             </CardContent>
           </Card>

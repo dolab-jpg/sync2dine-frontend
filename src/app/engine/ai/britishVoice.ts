@@ -27,14 +27,15 @@ export function buildHumourInstruction(level: HumourLevel, role: string, channel
   if (role === 'customer') {
     return 'Humour: warm and gently witty — reassuring dry British charm is fine; never cheeky, never at their expense, and dial it down if they seem worried.';
   }
-  if (level === 'del_boy' && channel === 'overlay_chat') {
+  const staffChannel = channel === 'whatsapp_staff' || channel === 'phone_staff' || channel === 'overlay_chat';
+  if (level === 'del_boy' && staffChannel) {
     return buildDelBoyChatInstruction(role);
   }
   if (level === 'straight') {
     return 'Humour: minimal — one dry line at most when it lands naturally; stay professional and direct.';
   }
   if (level === 'cheeky' || level === 'del_boy') {
-    return 'Humour: properly funny — dry, matey, lightly sarcastic British banter. One good line per reply when it fits; never rude or cruel.';
+    return 'Humour: properly funny — dry, matey, lightly sarcastic British banter. Plain common English, no corporate jargon. One good line per reply when it fits; never rude or cruel.';
   }
   return 'Humour: understated English wit — dry observations and self-deprecation welcome; one light remark per reply at most.';
 }
@@ -47,10 +48,11 @@ export function buildBritishVoicePrompt(
   humourLevel: HumourLevel,
   role: string,
   companyInstructions?: string,
-  channel?: 'overlay_chat' | 'formal_doc' | 'customer_portal'
+  channel?: 'overlay_chat' | 'formal_doc' | 'customer_portal' | 'whatsapp_staff' | 'phone_staff' | 'whatsapp' | 'phone'
 ): string {
   const parts = [BRITISH_VOICE_BASE, buildHumourInstruction(humourLevel, role, channel)];
-  if (channel === 'overlay_chat' && role !== 'customer') {
+  const informalStaff = channel === 'overlay_chat' || channel === 'whatsapp_staff' || channel === 'phone_staff';
+  if (informalStaff && role !== 'customer') {
     parts.push(FORMAL_TOOL_OUTPUT_RULE);
   }
   if (companyInstructions?.trim()) {

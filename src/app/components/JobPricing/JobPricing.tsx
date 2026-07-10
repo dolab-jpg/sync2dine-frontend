@@ -250,6 +250,34 @@ export default function JobPricing() {
               </ul>
             )}
 
+            {draft.pricingResearch && draft.pricingResearch.lines.length > 0 && (
+              <div className="overflow-x-auto">
+                <p className="text-sm font-medium text-gray-700 mb-2">Local price research (low / typical / high)</p>
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b text-left text-gray-500">
+                      <th className="py-1 pr-2">Task</th>
+                      <th className="py-1 pr-2">Low</th>
+                      <th className="py-1 pr-2">Typical</th>
+                      <th className="py-1 pr-2">High</th>
+                      <th className="py-1">Quoted</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {draft.pricingResearch.lines.map((line, i) => (
+                      <tr key={i} className="border-b border-gray-100">
+                        <td className="py-1 pr-2">{line.task}</td>
+                        <td className="py-1 pr-2">{fmt(line.low)}</td>
+                        <td className="py-1 pr-2">{fmt(line.typical)}</td>
+                        <td className="py-1 pr-2">{fmt(line.high)}</td>
+                        <td className="py-1 font-medium">{fmt(draft.items[i]?.price ?? pickHigherEnd(line))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             {draft.items.length > 0 && (
               <div className="space-y-2">
                 {draft.items.map((it, i) => (

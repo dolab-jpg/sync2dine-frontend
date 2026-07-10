@@ -2,6 +2,7 @@ import { getDataStore, getRequestOrgId } from './data-store';
 import { getOfficeTeamCounts, getOfficeTeamRoster, getTopPerformer } from './team-snapshot';
 import type { OrchestratorRequest } from './orchestrator-types';
 import { getRequestRole } from './role-permissions';
+import { lookupQuotesFromStore } from './quote-lookup';
 import {
   buildPolicyContext,
   canReadCollection,
@@ -88,31 +89,10 @@ export function executeCustomerTool(
   const requestedQuoteId = firstString(input.quoteId, body.customerContext?.quoteId);
 
   if (name === 'lookupQuote') {
-    const matches = projects.filter((project) => {
-      const quoteId = firstString(project.quoteId);
-      const customerId = firstString(project.customerId);
-      if (requestedQuoteId && quoteId === requestedQuoteId) return true;
-      if (requestedCustomerId && customerId === requestedCustomerId) return true;
-      return false;
-    }).map((project) => ({
-      quoteId: firstString(project.quoteId),
-      customerId: firstString(project.customerId),
-      customerName: firstString(project.customerName),
-      projectId: firstString(project.id),
-      projectName: firstString(project.projectName),
-      tradeName: firstString(project.tradeName, project.tradeId),
-      total: Number(project.totalCustomerCost ?? 0),
-      projectStatus: firstString(project.status) ?? 'unknown',
-    }));
-
-    return {
-      count: matches.length,
-      query: {
-        quoteId: requestedQuoteId ?? null,
-        customerId: requestedCustomerId ?? null,
-      },
-      quotes: matches,
-    };
+    return lookupQuotesFromStore({
+      quoteId: requestedQuoteId ?? null,
+      customerId: requestedCustomerId ?? null,
+    });
   }
 
   if (name === 'lookupProjectStatus') {

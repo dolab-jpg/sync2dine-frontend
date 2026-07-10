@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { createHmac } from 'crypto';
-import { handleCyrusViaOrchestrator } from './cyrus-orchestrator';
+import { handleChannelInbound } from './channel-inbound-handler';
+import { getRequestOrgId } from './data-store';
 import {
   resolveContactByPhone,
   updateWhatsAppSession,
@@ -60,6 +61,33 @@ export async function sendWhatsAppText(
     to: to.replace(/\D/g, ''),
     type: 'text',
     text: { body: text },
+  });
+}
+
+export async function sendWhatsAppAudio(
+  phoneNumberId: string,
+  accessToken: string,
+  to: string,
+  audioBuffer: Buffer,
+  mimeType = 'audio/mpeg'
+): Promise<void> {
+  const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/media`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': mimeType,
+    },
+    body: audioBuffer,
+  });
+  const upload = await uploadRes.json() as { id?: string };
+  if (!upload.id) {
+    await sendWhatsAppText(phoneNumberId, accessToken, to, '[Voice reply unavailable — see text above]');
+    return;
+  }
+  await sendWhatsAppPayload(phoneNumberId, accessToken, {
+    to: to.replace(/\D/g, ''),
+    type: 'audio',
+    audio: { id: upload.id },
   });
 }
 
@@ -319,7 +347,30 @@ export async function handleWhatsAppWebhookPost(
       if (groupProject) projectId = String(groupProject.id);
     }
 
-    if (message.type === 'image' || message.type === 'document') {
+    let text = '';
+    if (message.type === 'text') {
+      text = String(message.text?.body ?? '');
+    } else if (message.type === 'audio') {
+      const mediaId = message.audio?.id;
+      if (mediaId && accessToken) {
+        const media = await downloadWhatsAppMedia(mediaId, accessToken);
+        if (media) {
+          try {
+            const { resolveOpenAIApiKey } = await import('./openai-connection');
+            const { default: OpenAI } = await import('openai');
+            const openai = new OpenAI({ apiKey: resolveOpenAIApiKey() });
+            const file = new File([media.buffer], 'voice.ogg', { type: media.mimeType });
+            const transcript = await openai.audio.transcriptions.create({
+              model: 'whisper-1',
+              file,
+            });
+            text = transcript.text ?? '';
+          } catch {
+            text = '[Voice note received — could not transcribe]';
+          }
+        }
+      }
+    } else if (message.type === 'image' || message.type === 'document') {
       const mediaId = message.image?.id ?? message.document?.id;
       if (mediaId && projectId) {
         const media = await downloadWhatsAppMedia(mediaId, accessToken);
@@ -358,27 +409,19 @@ export async function handleWhatsAppWebhookPost(
           }
         }
       }
-      if (message.type === 'image') return;
-    }
-
-    if (message.type !== 'text') return;
-
-    const text = message.text?.body as string;
-    const upset = /upset|angry|unhappy|complaint|terrible|awful|disappointed/i.test(text);
-
-    if (projectId && upset) {
-      const store = getDataStore();
-      const project = store.projects.find(p => String(p.id) === projectId);
-      if (project) {
-        project.escalated = true;
-        syncData(store);
+      if (message.type === 'image') {
+        if (!text) text = 'Customer sent a photo — please summarise progress or extras.';
+      } else if (message.type === 'document') {
+        if (!text) text = 'Customer sent a document.';
       }
     }
+
+    if (!text) return;
 
     appendProjectMessage(projectId ?? 'unknown', {
       id: `WM${Date.now()}`,
       from: resolved.contactName,
-      fromRole: 'customer',
+      fromRole: resolved.contactRole ?? 'customer',
       body: text,
       timestamp: new Date().toISOString(),
       channel: 'whatsapp',
@@ -387,82 +430,52 @@ export async function handleWhatsAppWebhookPost(
       senderContactRole: resolved.contactRole,
     });
 
-    const store = getDataStore();
-    const project = projectId ? store.projects.find(p => String(p.id) === projectId) : null;
-    const todayTasks = project
-      ? (project.tasks as Array<Record<string, unknown>> ?? [])
-          .filter(t => t.status !== 'completed')
-          .slice(0, 3)
-          .map(t => String(t.title))
-      : [];
-
-    const cyrusResult = await handleCyrusViaOrchestrator({
-      messages: [{ role: 'user', content: text }],
-      customerContext: {
-        customerId: resolved.customerId,
-        customerName: resolved.customerName,
-        phone: from,
-        contactName: resolved.contactName,
-        contactRole: resolved.contactRole,
-        projectId,
-        quoteId: project?.quoteId ? String(project.quoteId) : null,
-      },
-      projectContext: project
-        ? {
-            projectId: String(project.id),
-            projectName: String(project.projectName ?? 'Project'),
-            customerId: String(project.customerId ?? ''),
-            quoteId: String(project.quoteId ?? ''),
-            status: String(project.status ?? 'unknown'),
-            todayTasks,
-            nextPaymentDue: (() => {
-              const stages = (project.paymentStages as Array<Record<string, unknown>> ?? []);
-              const due = stages.find(s => s.status === 'due' || s.status === 'pending');
-              return due
-                ? {
-                    name: String(due.name ?? 'Payment stage'),
-                    amount: Number(due.amount ?? 0),
-                    status: String(due.status ?? 'pending'),
-                    dueDate: String(due.dueDate ?? ''),
-                  }
-                : null;
-            })(),
-            portalToken: String(project.portalToken ?? ''),
-          }
-        : undefined,
+    const orgId = getRequestOrgId();
+    const inbound = await handleChannelInbound({
+      orgId,
+      phone: from,
+      text,
+      channel: 'whatsapp',
+      contactName: resolved.contactName,
+      projectId: projectId ?? resolved.projectId,
     });
-    const content = cyrusResult.content;
+
+    const replyText = inbound.replyLocalized || inbound.replyEnglish;
+    const voicePreset = process.env.WHATSAPP_VOICE_REPLY === '1';
 
     if (isGroup && groupId) {
-      await sendWhatsAppText(phoneNumberId, accessToken, groupId, content, 'group');
+      await sendWhatsAppText(phoneNumberId, accessToken, groupId, replyText, 'group');
     } else {
-      await sendWhatsAppText(phoneNumberId, accessToken, from, content);
+      await sendWhatsAppText(phoneNumberId, accessToken, from, replyText);
+      if (voicePreset && inbound.route.mode === 'staff') {
+        try {
+          const { synthesizeSpeech } = await import('./tts');
+          const tts = await synthesizeSpeech(inbound.replyEnglish.slice(0, 500));
+          await sendWhatsAppAudio(phoneNumberId, accessToken, from, tts.buffer, tts.contentType);
+        } catch {
+          // text-only fallback
+        }
+      }
     }
 
     if (projectId) {
       appendProjectMessage(projectId, {
         id: `WM${Date.now()}a`,
-        from: 'Cyrus',
+        from: inbound.route.mode === 'staff' ? 'TradePro AI' : 'Cyrus',
         fromRole: 'office',
-        body: content,
+        body: inbound.replyEnglish,
+        bodyEnglish: inbound.replyEnglish,
         timestamp: new Date().toISOString(),
         channel: 'whatsapp',
       });
       appendProjectAiAction(projectId, {
         id: `AI${Date.now()}`,
-        action: 'cyrusReply',
-        input: {
-          channel: 'whatsapp',
-          senderPhone: from,
-          senderContactName: resolved.contactName,
-        },
-        output: {
-          content,
-          toolsUsed: cyrusResult.toolsUsed,
-        },
+        action: 'channelInbound',
+        input: { channel: 'whatsapp', route: inbound.route.mode, phone: from },
+        output: { executed: inbound.executedSummaries, toolsUsed: inbound.toolsUsed },
         status: 'approved',
         createdAt: new Date().toISOString(),
-        approvedBy: 'Cyrus',
+        approvedBy: 'Channel AI',
       });
     }
   } catch (err) {

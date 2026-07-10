@@ -1,0 +1,60 @@
+import { getDataStore, normalizePhoneExport, resolveContactByPhone } from './data-store';
+import { listTeamMembers } from './conversation-store';
+
+export type ChannelRouteMode = 'staff' | 'foreman' | 'customer' | 'unknown';
+
+export interface ChannelRoute {
+  mode: ChannelRouteMode;
+  role?: string;
+  userId?: string;
+  name?: string;
+  builderId?: string;
+  customerId?: string | null;
+  customerName?: string;
+  contactName?: string;
+  projectId?: string | null;
+  preferredLanguage?: string | null;
+}
+
+export function resolveInboundChannel(phone: string, orgId?: string): ChannelRoute {
+  const normalized = normalizePhoneExport(phone);
+  const members = listTeamMembers(orgId);
+  const staffMatch = members.find((m) => normalizePhoneExport(m.phone) === normalized);
+  if (staffMatch) {
+    return {
+      mode: 'staff',
+      role: staffMatch.role,
+      userId: staffMatch.userId,
+      name: staffMatch.name,
+    };
+  }
+
+  const store = getDataStore(orgId);
+  const builderMatch = (store.builders ?? []).find(
+    (b) => normalizePhoneExport(String(b.phone ?? '')) === normalized
+  );
+  if (builderMatch) {
+    return {
+      mode: 'foreman',
+      role: 'builder',
+      builderId: String(builderMatch.id ?? ''),
+      name: String(builderMatch.name ?? builderMatch.companyName ?? 'Builder'),
+    };
+  }
+
+  const contact = resolveContactByPhone(phone);
+  if (contact.customerId) {
+    const customer = store.customers.find((c) => String(c.id) === contact.customerId);
+    return {
+      mode: 'customer',
+      role: 'customer',
+      customerId: contact.customerId,
+      customerName: contact.customerName,
+      contactName: contact.contactName,
+      projectId: contact.projectId,
+      preferredLanguage: customer?.preferredLanguage ? String(customer.preferredLanguage) : null,
+    };
+  }
+
+  return { mode: 'unknown', name: 'Guest' };
+}
