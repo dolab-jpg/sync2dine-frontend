@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Plus, Search, Phone, Mail, MapPin, FileText, Trash2, Edit, MessageCircle } from 'lucide-react';
 import { Switch } from './ui/switch';
 import { toast } from 'sonner';
+import { AddressMapLink } from './ui/AddressMapLink';
 import { CustomerContactsPanel } from './CustomerContactsPanel';
 import { seedContactsFromCustomers } from '../engine/contacts/contactStore';
 import { syncToServer } from '../engine/project/projectStore';
@@ -362,7 +363,7 @@ export default function CustomerManagement() {
                   </div>
                   <div className="flex items-start gap-2 text-sm text-gray-600">
                     <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <span>{customer.address}</span>
+                    <AddressMapLink address={customer.address} />
                   </div>
                   {customer.interestedTrades && customer.interestedTrades.length > 0 && (
                     <div className="flex flex-wrap gap-1 pt-1">

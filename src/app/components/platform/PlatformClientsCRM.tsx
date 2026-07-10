@@ -12,6 +12,7 @@ import {
   Building2, Mail, Phone, MapPin, Calendar, TrendingUp, Plus, CreditCard,
   Zap, Crown, Rocket, AlertTriangle, PauseCircle,
 } from 'lucide-react';
+import { AddressMapLink } from '../ui/AddressMapLink';
 import { toast } from 'sonner';
 import {
   createOrganization,
@@ -364,7 +365,7 @@ export default function PlatformClientsCRM() {
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                           <div className="flex items-center gap-2"><Mail className="w-4 h-4 text-gray-400" /><span>{client.contactEmail}</span></div>
                           <div className="flex items-center gap-2"><Phone className="w-4 h-4 text-gray-400" /><span>{client.contactPhone || '—'}</span></div>
-                          <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /><span className="truncate">{client.address || '—'}</span></div>
+                          <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /><AddressMapLink address={client.address} className="truncate" /></div>
                           <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-gray-400" /><span>{new Date(client.createdAt).toLocaleDateString('en-GB')}</span></div>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">

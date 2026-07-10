@@ -15,6 +15,7 @@ import {
   CheckCircle2, AlertCircle, Send, ChevronLeft, ChevronRight, Eye, FileText,
   Hammer, TrendingUp, BarChart3, Users, Briefcase, Camera, Video, X, FolderKanban, ShieldCheck
 } from 'lucide-react';
+import { AddressMapLink } from './ui/AddressMapLink';
 import { toast } from 'sonner';
 import { messagingHub } from '../engine/messaging/messagingHub';
 import { testBuilders } from '../data/testData';
@@ -649,7 +650,7 @@ export default function BuilderProjectManagement() {
                         </CardTitle>
                         <p className="text-sm text-slate-600 mt-1 flex items-center gap-1">
                           <MapPin className="w-3 h-3" />
-                          {project.address}
+                          <AddressMapLink address={project.address} />
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-2">
@@ -948,7 +949,7 @@ export default function BuilderProjectManagement() {
                     <Label className="text-slate-600 text-xs sm:text-sm">Address</Label>
                     <p className="font-medium flex items-center gap-1 text-sm sm:text-base">
                       <MapPin className="w-3 h-3 sm:w-4 sm:h-4 text-slate-400 flex-shrink-0" />
-                      <span className="break-words">{selectedProject.address}</span>
+                      <AddressMapLink address={selectedProject.address} className="break-words" />
                     </p>
                   </div>
                   <div>

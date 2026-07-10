@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from 'sonner';
 import { messagingHub } from '../engine/messaging/messagingHub';
 import { renderTemplate, buildQuoteVariables } from '../engine/messaging/templateRenderer';
+import { AddressMapLink } from './ui/AddressMapLink';
 import { getAllTrades } from '../config/trades';
 import { createProjectFromQuote, getProject, syncToServer } from '../engine/project/projectStore';
 
@@ -428,7 +429,7 @@ export default function QuotesList() {
                       </div>
                       <div className="flex items-start gap-2 text-sm text-gray-700">
                         <MapPin className="w-4 h-4 mt-0.5" />
-                        <span>{customer.address}</span>
+                        <AddressMapLink address={customer.address} />
                       </div>
                     </div>
                   )}

@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from './ui/badge';
 import { Facebook, Instagram, Search as GoogleIcon, Phone, Mail, User, MapPin, Calendar, TrendingUp, Filter, Plus, MessageSquare, Video, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import { AddressMapLink } from './ui/AddressMapLink';
 import { getAllTrades } from '../config/trades';
 import type { TradeId } from '../config/types';
 import { getDueFollowUps } from '../engine/leads/leadService';
@@ -359,7 +360,7 @@ export default function ComprehensiveCRM() {
                       </div>
                       <div className="flex items-center gap-2">
                         <MapPin className="w-4 h-4 text-gray-400" />
-                        <span className="truncate">{lead.address}</span>
+                        <AddressMapLink address={lead.address} className="truncate" />
                       </div>
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-gray-400" />

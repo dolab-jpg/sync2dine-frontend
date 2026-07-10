@@ -3,6 +3,7 @@ import { AppContext } from '../App';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
+import { AddressMapLink } from './ui/AddressMapLink';
 import { PhotoCapture } from './AI/PhotoCapture';
 import { loadProjects } from '../engine/project/projectStore';
 import { loadBuilders } from '../engine/builder/builderStore';
@@ -312,7 +313,8 @@ export default function BuilderDashboard() {
                       <div key={task.id} className="p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
                         <h4 className="font-bold text-gray-900 mb-1">{task.title}</h4>
                         <p className="text-sm text-gray-600 flex items-center gap-2">
-                          <MapPin className="w-4 h-4" />{task.jobAddress}
+                          <MapPin className="w-4 h-4" />
+                          <AddressMapLink address={task.jobAddress} />
                         </p>
                       </div>
                     ))}
@@ -345,7 +347,8 @@ export default function BuilderDashboard() {
                         <div>
                           <h3 className="font-bold text-lg text-gray-900">{job.customerName}</h3>
                           <p className="text-sm text-gray-600 flex items-center gap-1">
-                            <MapPin className="w-4 h-4" />{job.address}
+                            <MapPin className="w-4 h-4" />
+                            <AddressMapLink address={job.address} />
                           </p>
                         </div>
                         <span className={`px-3 py-1 rounded-full text-sm font-bold ${
