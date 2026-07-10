@@ -34,12 +34,38 @@ export function resolveInboundChannel(phone: string, orgId?: string): ChannelRou
     (b) => normalizePhoneExport(String(b.phone ?? '')) === normalized
   );
   if (builderMatch) {
+    const activeProject = store.projects.find((p) => {
+      const status = String(p.status ?? '');
+      if (status === 'completed' || status === 'cancelled') return false;
+      return String(p.assignedBuilder ?? '').trim() === String(builderMatch.name ?? '').trim();
+    });
     return {
       mode: 'foreman',
       role: 'builder',
       builderId: String(builderMatch.id ?? ''),
       name: String(builderMatch.name ?? builderMatch.companyName ?? 'Builder'),
+      projectId: activeProject ? String(activeProject.id) : null,
     };
+  }
+
+  for (const project of store.projects) {
+    const status = String(project.status ?? '');
+    if (status === 'completed' || status === 'cancelled') continue;
+    const assignedBuilder = String(project.assignedBuilder ?? '').trim();
+    if (!assignedBuilder) continue;
+    const match = (store.builders ?? []).find((builder) =>
+      String(builder.name ?? '').trim() === assignedBuilder
+      && normalizePhoneExport(String(builder.phone ?? '')) === normalized
+    );
+    if (match) {
+      return {
+        mode: 'foreman',
+        role: 'builder',
+        builderId: String(match.id ?? ''),
+        name: assignedBuilder,
+        projectId: String(project.id),
+      };
+    }
   }
 
   const contact = resolveContactByPhone(phone);

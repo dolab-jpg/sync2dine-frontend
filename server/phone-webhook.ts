@@ -152,6 +152,7 @@ async function appendAuditLog(
 async function processCallTurn(
   event: CallEvent,
   speechText?: string,
+  digits?: string,
 ): Promise<{ speak: string; gather?: boolean; transferTo?: string; hangup?: boolean }> {
   if (!isAgentActive()) {
     return {
@@ -165,6 +166,18 @@ async function processCallTurn(
   const resolved = resolveContactByPhone(event.from);
   const candidate = resolveCandidateByPhone(event.from);
   const afterHours = isAfterHours();
+
+  const isStart = event.type === 'call_started' || (!speechText && !digits);
+  const { handleIvrTurn, getIvrRouteForCall, isIvrEnabled } = await import('./ivr-handler');
+  if (isIvrEnabled()) {
+    const existingRoute = getIvrRouteForCall(String(call.id));
+    if (!existingRoute || existingRoute === 'menu') {
+      const ivrResult = handleIvrTurn(String(call.id), speechText, digits, isStart);
+      if (ivrResult && ivrResult.ivrRoute === 'menu') {
+        return ivrResult;
+      }
+    }
+  }
 
   if (speechText) {
     appendCallTurn(String(call.id), { role: 'caller', content: speechText });
@@ -275,7 +288,8 @@ export async function handlePhoneInbound(req: IncomingMessage, res: ServerRespon
   event.callId = callId;
 
   const isStart = event.type === 'call_started' || (!event.speechResult && event.type !== 'speech_turn');
-  const response = await processCallTurn(event, isStart ? undefined : event.speechResult);
+  const dtmf = String(body.digits ?? body.Digits ?? '');
+  const response = await processCallTurn(event, isStart ? undefined : event.speechResult, dtmf || undefined);
 
   const built = provider.buildResponse(response, callId, config);
   res.statusCode = 200;

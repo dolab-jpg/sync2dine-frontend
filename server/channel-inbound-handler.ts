@@ -13,7 +13,11 @@ import {
 } from './channel-action-executor';
 import { getDataStore, setRequestOrgId } from './data-store';
 import { readStudioConfigExport } from './ai-studio-routes';
+import { executeBusinessSnapshot } from './orchestrator-tool-exec';
+import { getOfficeTeamRoster } from './team-snapshot';
+import { buildBritishVoicePrompt, formatKnowledgeChunks } from './british-voice';
 import type { ServerAgentRole } from './role-permissions';
+import type { OrchestratorRequest } from './orchestrator-types';
 
 export interface ChannelInboundRequest {
   orgId: string;
@@ -38,10 +42,11 @@ export interface ChannelInboundResult {
 
 function buildStaffContext(orgId: string, route: ChannelRoute): OrchestratorRequest['staffContext'] {
   const store = getDataStore(orgId);
-  return {
+  const staffContext: NonNullable<OrchestratorRequest['staffContext']> = {
     role: route.role ?? 'staff',
     userId: route.userId,
     userName: route.name,
+    route: '/',
     customers: store.customers.slice(0, 200).map((c) => ({
       id: String(c.id ?? ''),
       name: String(c.name ?? ''),
@@ -59,6 +64,16 @@ function buildStaffContext(orgId: string, route: ChannelRoute): OrchestratorRequ
       total: Number(q.total ?? 0),
       status: String(q.status ?? ''),
     })),
+  };
+  return staffContext;
+}
+
+function buildBusinessSnapshot(orgId: string, staffContext: OrchestratorRequest['staffContext']): OrchestratorRequest['businessSnapshot'] {
+  const body: OrchestratorRequest = { messages: [], staffContext };
+  const snapshot = executeBusinessSnapshot(body);
+  return {
+    ...snapshot,
+    officeTeamRoster: getOfficeTeamRoster(),
   };
 }
 
@@ -144,20 +159,43 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
       : channelKey === 'overlay_chat'
         ? 'overlay_chat'
         : 'customer_portal';
+  const resolvedRole = resolveRole(route);
+  const knowledgeChunks = Array.isArray(studio?.knowledgeChunks) ? studio.knowledgeChunks as unknown[] : [];
+  const knowledgeBlock = formatKnowledgeChunks(knowledgeChunks);
+  const voicePrompt = [
+    buildBritishVoicePrompt(
+      String(studio?.humourLevel ?? 'balanced'),
+      resolvedRole,
+      [companyInstructions, knowledgeBlock].filter(Boolean).join('\n\n') || undefined,
+      orchestratorChannel === 'whatsapp_staff' || orchestratorChannel === 'phone_staff'
+        ? orchestratorChannel
+        : channel === 'whatsapp'
+          ? 'whatsapp'
+          : channel === 'phone'
+            ? 'phone'
+            : 'customer_portal',
+    ),
+  ].join('\n\n');
+
+  const staffContext = route.mode === 'staff' || route.mode === 'foreman'
+    ? buildStaffContext(orgId, route)
+    : undefined;
+
   const orchestratorBody: OrchestratorRequest = {
     messages: [...history, { role: 'user', content: normalized.english }],
     orchestratorMode: resolveOrchestratorMode(route),
     channel: orchestratorChannel,
+    voicePrompt,
     apiKey: req.apiKey,
     model: req.model ?? 'gpt-4o-mini',
     aiStudio: {
       humourLevel,
       companyInstructions,
+      knowledgeChunks,
       autonomyLevel: (studio?.autonomyLevel as OrchestratorRequest['aiStudio'] extends { autonomyLevel?: infer A } ? A : never) ?? 'autopilot',
     },
-    staffContext: route.mode === 'staff' || route.mode === 'foreman'
-      ? buildStaffContext(orgId, route)
-      : undefined,
+    businessSnapshot: staffContext ? buildBusinessSnapshot(orgId, staffContext) : undefined,
+    staffContext,
     customerContext: route.mode === 'customer' || route.mode === 'unknown'
       ? {
           customerId: route.customerId,

@@ -21,6 +21,12 @@ const CUSTOMER_SELF_SERVICE = new Set([
   'getPortalLink',
   'escalateToStaff',
   'navigateTo',
+  'approveChangeOrder',
+  'rejectChangeOrder',
+  'sendPaymentLink',
+  'bookSurvey',
+  'confirmHandover',
+  'confirmContract',
 ]);
 
 const SALES_QUOTING = new Set([

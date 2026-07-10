@@ -8,6 +8,7 @@ import {
 } from './data-store';
 import { canExecuteActionForRole, type ServerAgentRole } from './role-permissions';
 import { executeServerReadTool, executeCustomerTool } from './orchestrator-tool-exec';
+import { executeChannelWrite } from './channel-writes';
 import { lookupQuotesFromStore, formatQuoteBreakdownText } from './quote-lookup';
 import { researchTaskPrices, pickHigherEnd } from './price-research-service';
 import { savePendingConfirmation, consumePendingConfirmation } from './conversation-store';
@@ -21,6 +22,7 @@ export const CONFIRM_ACTIONS = new Set([
   'draftInvoice',
   'sendEmailReply',
   'sendEmailWithAttachment',
+  'notifyCustomerChangeOrder',
 ]);
 
 export const CUSTOMER_ALLOWED_ACTIONS = new Set([
@@ -551,13 +553,15 @@ export async function executeChannelAction(
     case 'updateTaskStatus':
     case 'updateProject':
       return execUpdateProject(input, role);
-    default:
-      return {
-        action,
-        executed: false,
-        summary: `Action ${action} queued — open the app for full edit.`,
-        output: { ...input, serverNote: 'partial_channel_support' },
-      };
+    default: {
+      const write = await executeChannelWrite(action, input, {
+        role,
+        approvedBy,
+        orchestratorBody: body,
+        phone,
+      });
+      return write;
+    }
   }
 }
 
@@ -576,6 +580,23 @@ export async function executeChannelActions(
         needsConfirm: true,
         confirmPrompt: `Reply YES to confirm ${item.action.replace(/([A-Z])/g, ' $1').trim()}, or NO to cancel.`,
         summary: `Awaiting YES/NO for ${item.action}.`,
+        output: merged,
+      });
+      continue;
+    }
+    if (
+      item.action === 'writeData'
+      && String(merged.operation ?? '') === 'delete'
+      && ctx.phone
+      && !ctx.skipConfirm
+    ) {
+      savePendingConfirmation(ctx.orgId, ctx.phone, item.action, merged);
+      results.push({
+        action: item.action,
+        executed: false,
+        needsConfirm: true,
+        confirmPrompt: 'Reply YES to confirm delete, or NO to cancel.',
+        summary: 'Awaiting YES/NO for writeData delete.',
         output: merged,
       });
       continue;

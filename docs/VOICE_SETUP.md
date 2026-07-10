@@ -104,3 +104,18 @@ Caller → Telephony (Twilio / Soho66+bridge) → OpenAI (brain) → Chatterbox 
 ```
 
 Fallback: if Chatterbox is unavailable, `/api/agent/tts` uses OpenAI `tts-1` (British-ish preset voices, not Cockney).
+
+## 6. Optional IVR menu (off by default)
+
+Set `IVR_ENABLED=1` to play a DTMF menu before Aria on inbound calls:
+
+- **1** — Sales / quotes (continues to AI)
+- **2** — Site / foreman queue
+- **3** — Transfer to office (`VOICE_TRANSFER_NUMBER`) or take a message
+- **9** — Voicemail / capture message
+
+Configure a custom tree via agent settings `ivrTree` JSON (`greeting` + `options[]` with `digit`, `label`, `route`).
+
+Smoke test: `npx tsx server/debug-smoke.ts` (sets `IVR_ENABLED=1` briefly for the IVR check).
+
+Webhooks unchanged: `{WEBHOOK_BASE_URL}/webhooks/voice/inbound` and `/webhooks/voice/turn` (pass `Digits` or DTMF in the turn body for Jambonz/Twilio).

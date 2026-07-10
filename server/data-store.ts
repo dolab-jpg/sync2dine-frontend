@@ -110,6 +110,7 @@ export interface AgentSettings {
   isActive: boolean;
   activeVoiceId?: string;
   leadCallbackPolicy?: 'alert_only' | 'outbound_first' | 'inbound_only';
+  ivrTree?: Record<string, unknown>;
   updatedAt: string;
 }
 
@@ -366,6 +367,32 @@ export function updateQuoteRecord(id: string, patch: Record<string, unknown>): R
 
 export function getProjectById(id: string): Record<string, unknown> | undefined {
   return getDataStore().projects.find(p => String(p.id) === id);
+}
+
+export function updateProjectRecord(
+  projectId: string,
+  patch: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const store = getDataStore();
+  const idx = store.projects.findIndex((p) => String(p.id) === projectId);
+  if (idx < 0) return null;
+  store.projects[idx] = { ...store.projects[idx], ...patch, updatedAt: new Date().toISOString() };
+  syncData(store);
+  return store.projects[idx];
+}
+
+export function appendProjectMessageRecord(
+  projectId: string,
+  message: Record<string, unknown>,
+): void {
+  const store = getDataStore();
+  const idx = store.projects.findIndex((p) => String(p.id) === projectId);
+  if (idx < 0) return;
+  const project = store.projects[idx];
+  const messages = Array.isArray(project.messages) ? [...project.messages as unknown[]] : [];
+  messages.push(message);
+  store.projects[idx] = { ...project, messages };
+  syncData(store);
 }
 
 export function getProjectByGroupId(groupId: string): Record<string, unknown> | undefined {

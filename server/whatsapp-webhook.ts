@@ -322,25 +322,13 @@ export async function handleWhatsAppWebhookPost(
     const isGroup = Boolean(groupId);
     updateWhatsAppSession(from, isGroup ? 'group' : 'individual', groupId);
 
-    const builderInbound = findBuilderInboundProject(from);
-    if (builderInbound) {
-      const inboundText = message.type === 'text'
-        ? String(message.text?.body ?? '')
-        : `Sent a ${String(message.type ?? 'message')}`;
-      await handleBuilderInbound(
-        builderInbound.projectId,
-        builderInbound.builderName,
-        from,
-        inboundText
-      );
-      return;
-    }
-
     const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
     if (!accessToken || !phoneNumberId) return;
 
+    const builderInbound = findBuilderInboundProject(from);
+
     const resolved = resolveContactByPhone(from);
-    let projectId = resolved.projectId;
+    let projectId = builderInbound?.projectId ?? resolved.projectId;
 
     if (isGroup && groupId) {
       const groupProject = getProjectByGroupId(groupId);
@@ -417,6 +405,29 @@ export async function handleWhatsAppWebhookPost(
     }
 
     if (!text) return;
+
+    if (builderInbound) {
+      const timestamp = new Date().toISOString();
+      appendProjectMessage(builderInbound.projectId, {
+        id: `WM${Date.now()}`,
+        from: builderInbound.builderName,
+        fromRole: 'builder',
+        body: text,
+        timestamp,
+        channel: 'whatsapp',
+        senderPhone: from,
+      });
+      appendContractorComm(builderInbound.projectId, {
+        id: `CC${Date.now()}`,
+        builderId: 'builder',
+        builderName: builderInbound.builderName,
+        subject: 'Builder inbound',
+        body: text,
+        status: 'replied',
+        channel: 'whatsapp',
+        createdAt: timestamp,
+      });
+    }
 
     appendProjectMessage(projectId ?? 'unknown', {
       id: `WM${Date.now()}`,
