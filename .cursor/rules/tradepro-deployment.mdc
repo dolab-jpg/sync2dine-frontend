@@ -1,0 +1,124 @@
+---
+description: TradePro repos, git push, and Supabase deploy — read this first; do not search the whole machine
+alwaysApply: true
+---
+
+# TradePro deployment and auth (persistent)
+
+## Repos and paths
+
+| Role | Local path | GitHub remote | Branch |
+|------|------------|---------------|--------|
+| Frontend (this workspace) | `c:\Users\dolab\Downloads\Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` |
+| Backend (Supabase + Node) | `c:\Users\dolab\Downloads\tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` |
+
+GitHub account: **dolab-jpg**. Both remotes are already configured on this machine.
+
+## Git — already connected
+
+Do **not** search the computer for git credentials. Use normal git commands:
+
+```powershell
+# Frontend
+cd "c:\Users\dolab\Downloads\Bathroom Sales Estimation Platform"
+git push origin master
+
+# Backend
+cd "c:\Users\dolab\Downloads\tradepro-backend"
+git push origin master
+```
+
+Auth is stored in **Windows Credential Manager** (Git Credential Manager):
+
+- Target: `git:https://github.com`
+- User: `dolab-jpg`
+- Also: repo-specific targets for `tradepro-frontend` and `tradepro-backend`
+
+If push fails in a non-interactive shell, use `git credential-manager get` with protocol=https host=github.com — do not embed tokens in commits or rules.
+
+Commit identity when needed: `-c user.name=dolab -c user.email=dolab@users.noreply.local`
+
+## Supabase — connect in Cursor (preferred; no terminal)
+
+Use **Supabase MCP** so login happens in Cursor’s UI, not `npx supabase login`.
+
+1. **Cursor Settings** → **Tools & MCP**
+2. Find **supabase** (from `.cursor/mcp.json` in this project)
+3. Click **Connect** (or click **Needs authentication** under the server name if Connect fails)
+4. Browser opens → log in to Supabase → **Authorize Cursor**
+5. Redirect should go to `cursor://…` (handled by Cursor). **Not** `http://127.0.0.1:…` — that URL is only for the CLI and will not save auth in Cursor.
+6. Green status + tools enabled = connected. Agent can run migrations via MCP `apply_migration` / `list_migrations`.
+
+If OAuth hangs: **View → Output → MCP: supabase**, copy the `https://api.supabase.com/v1/oauth/authorize?...` URL, open it in your normal browser, complete auth.
+
+Optional: scope to one project in `.cursor/mcp.json`:
+`"url": "https://mcp.supabase.com/mcp?project_ref=YOUR_REF"`
+
+## Supabase — browser paste popup (no terminal; user cannot use shell)
+
+When the user cannot use the terminal or OAuth fails:
+
+1. Run `npm run dev` in the frontend repo (port **5174**)
+2. Open **http://localhost:5174/cursor-paste** (browser MCP or tell user the URL)
+3. User pastes Supabase PAT + project ref → clicks **Save for Cursor**
+4. When user says **credentials saved**, read `.cursor/local/deploy.env` first — do not ask again
+
+If MCP OAuth failed but `deploy.env` has a PAT, patch `.cursor/mcp.json`:
+
+```json
+"supabase": {
+  "type": "http",
+  "url": "https://mcp.supabase.com/mcp?project_ref=YOUR_REF",
+  "headers": { "Authorization": "Bearer ${env:SUPABASE_ACCESS_TOKEN}" }
+}
+```
+
+Set Windows user env `SUPABASE_ACCESS_TOKEN` from deploy.env if `${env:...}` interpolation is needed. User reloads MCP in Cursor Settings → Tools & MCP.
+
+Verify save: `GET http://localhost:5174/api/agent/credentials/status` (masked values only).
+
+## Supabase CLI fallback (terminal only)
+
+CLI auth is **not** in Credential Manager. After login, token lives at:
+
+`C:\Users\dolab\.supabase\access-token`
+
+For agents without MCP, check (gitignored):
+
+`.cursor/local/deploy.env`
+
+Required variables in `deploy.env`:
+
+```
+SUPABASE_ACCESS_TOKEN=sbp_...
+SUPABASE_PROJECT_REF=xxxxxxxx
+```
+
+Get token: Supabase Dashboard → Account → Access Tokens, or run `npx supabase login` in an **interactive** terminal (keep it open until browser redirects to `http://127.0.0.1:PORT/?code=...`).
+
+**OAuth popup alone is not enough** — the Supabase CLI must be running and listening on that localhost port when the browser returns.
+
+## Supabase push workflow
+
+From backend repo:
+
+```powershell
+cd "c:\Users\dolab\Downloads\tradepro-backend"
+# Load token if deploy.env exists
+if (Test-Path "..\\Bathroom Sales Estimation Platform\\.cursor\\local\\deploy.env") {
+  Get-Content "..\\Bathroom Sales Estimation Platform\\.cursor\\local\\deploy.env" | ForEach-Object {
+    if ($_ -match '^([^#=]+)=(.*)$') { Set-Item -Path "env:$($matches[1].Trim())" -Value $matches[2].Trim() }
+  }
+}
+npx supabase link --project-ref $env:SUPABASE_PROJECT_REF
+npm run supabase:push
+```
+
+Backend migrations: `tradepro-backend/supabase/migrations/`
+Local config name: `project_id = "tradepro"` in `supabase/config.toml` (link uses cloud project ref, not this string).
+
+## What not to do
+
+- Do not scan `%USERPROFILE%`, Downloads, or agent transcripts for repo URLs or tokens
+- Do not commit `.cursor/local/deploy.env`, `.env.local`, or access tokens
+- Do not create new GitHub repos unless the user asks — use the two remotes above

@@ -18,6 +18,7 @@ import FinanceApplication from './components/FinanceApplication';
 import CommunicationsHub from './components/CommunicationsHub';
 import CyrusConversations from './components/CyrusConversations';
 import IntegrationsHub from './components/integrations/IntegrationsHub';
+import CursorPastePage from './pages/CursorPastePage';
 import AIBathroomRender from './components/AIBathroomRender';
 import ComprehensiveCRM from './components/ComprehensiveCRM';
 import TeamManagement from './components/TeamManagement';
@@ -862,10 +863,21 @@ export default function App() {
     logout: handleLogout
   };
 
+  if (typeof window !== 'undefined' && window.location.pathname === '/cursor-paste') {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/cursor-paste" element={<CursorPastePage />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
+
   if (!isLoggedIn) {
     return (
       <BrowserRouter>
         <Routes>
+          <Route path="/cursor-paste" element={<CursorPastePage />} />
           <Route path="/contract/:token" element={<ContractSignPage />} />
           <Route path="/portal/:token" element={<CustomerPortal />} />
           <Route path="/planning-approve/:token" element={<PlanningCustomerApproval />} />

@@ -2,6 +2,8 @@ node_modules/
 dist/
 .env.local
 .env*.local
+.cursor/local/deploy.env
+.cursor/local/secrets.env
 server/data/*.json
 *.log
 .DS_Store

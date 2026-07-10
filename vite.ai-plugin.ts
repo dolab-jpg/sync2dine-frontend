@@ -48,7 +48,10 @@ export function aiProxyPlugin(): Plugin {
           const { handleMailboxRoutes } = await import('./server/mailbox-routes');
           const { handlePackageUpdatesRoute } = await import('./server/mailbox/package-updates');
           const { handleChannelRoutes } = await import('./server/channel-routes');
+          const { handleAgentCredentialsRoutes } = await import('./server/agent-credentials-routes');
           const { handleAiRequest } = await import('./server/ai-proxy');
+
+          if (await handleAgentCredentialsRoutes(req, res, pathname)) return;
 
           if (await handleStripeRoutes(req, res, pathname)) return;
           if (await handleAuthRoutes(req, res, pathname)) return;

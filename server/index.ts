@@ -22,6 +22,7 @@ import { handleMailboxRoutes } from './mailbox-routes';
 import { handlePackageUpdatesRoute } from './mailbox/package-updates';
 import { handleChannelRoutes } from './channel-routes';
 import { handleLeadsRoutes } from './leads-routes';
+import { handleAgentCredentialsRoutes } from './agent-credentials-routes';
 import { startMailboxPoller } from './mailbox/imapSyncService';
 import { startOutboundWorker } from './outbound-worker';
 
@@ -92,6 +93,8 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
   if (await handleChannelRoutes(req, res, pathname)) return;
 
   if (await handleLeadsRoutes(req, res, pathname, url)) return;
+
+  if (await handleAgentCredentialsRoutes(req, res, pathname)) return;
 
   if (pathname.startsWith('/api/ai/')) {
     await handleAiRequest(req, res, pathname);
