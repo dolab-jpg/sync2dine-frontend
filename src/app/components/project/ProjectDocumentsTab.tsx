@@ -20,7 +20,7 @@ export function ProjectDocumentsTab({ project, customerPhone, customerWhatsappOp
   const sendInvoice = async (invoiceId: string) => {
     const inv = project.invoices.find(i => i.id === invoiceId);
     if (!inv) return;
-    const pdf = generateInvoicePdf(
+    const pdf = await generateInvoicePdf(
       project.customerName,
       project.projectName,
       inv.lineItems,
@@ -52,7 +52,7 @@ export function ProjectDocumentsTab({ project, customerPhone, customerWhatsappOp
   const sendContract = async (contractId: string) => {
     const con = project.contracts.find(c => c.id === contractId);
     if (!con) return;
-    const pdf = generateContractPdf(project.customerName, project.projectName, con.terms, project.totalCustomerCost);
+    const pdf = await generateContractPdf(project.customerName, project.projectName, con.terms, project.totalCustomerCost);
     await messagingHub.send({
       channels: ['email', 'whatsapp'],
       to: {

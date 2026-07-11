@@ -6,8 +6,20 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { CreditCard, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { integrationService } from '../engine/integrations/integrationService';
+import { Link } from 'react-router';
+
+function isFinanceConnected(): boolean {
+  const inst = integrationService.getInstance('stripe');
+  return Boolean(
+    inst?.enabled
+    && integrationService.getStatus('stripe') === 'connected'
+    && !integrationService.isMockMode('stripe')
+  );
+}
 
 export default function FinanceApplication() {
+  const financeConnected = isFinanceConnected();
   const [step, setStep] = useState(1);
   const [loanAmount, setLoanAmount] = useState('');
   const [monthlyPayment, setMonthlyPayment] = useState(0);
@@ -49,11 +61,12 @@ export default function FinanceApplication() {
   };
 
   const handleSubmit = () => {
-    toast.success('Finance application submitted! Awaiting approval...');
-    setTimeout(() => {
-      toast.success('Finance application approved! £' + loanAmount + ' available.');
-      setStep(3);
-    }, 2000);
+    if (!financeConnected) {
+      toast.error('Connect Stripe in Integrations before submitting finance applications.');
+      return;
+    }
+    toast.success('Finance application submitted — awaiting lender review.');
+    setStep(3);
   };
 
   return (
@@ -174,6 +187,15 @@ export default function FinanceApplication() {
             <CardTitle>Customer Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {!financeConnected && (
+              <div className="flex items-start gap-2 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Finance partner not connected</p>
+                  <p className="mt-1">Connect Stripe in <Link to="/integrations" className="underline font-medium">Integrations</Link> to submit live finance applications.</p>
+                </div>
+              </div>
+            )}
             <div>
               <Label htmlFor="name">Full Name</Label>
               <Input
@@ -294,7 +316,7 @@ export default function FinanceApplication() {
                 onClick={handleSubmit}
                 size="lg"
                 className="flex-1 text-lg py-6 bg-green-600 hover:bg-green-700"
-                disabled={!formData.customerName || !formData.email || !formData.employmentStatus}
+                disabled={!financeConnected || !formData.customerName || !formData.email || !formData.employmentStatus}
               >
                 Submit Application
               </Button>
@@ -306,21 +328,21 @@ export default function FinanceApplication() {
       {step === 3 && (
         <Card>
           <CardContent className="p-12 text-center">
-            <CheckCircle className="w-24 h-24 text-green-600 mx-auto mb-6" />
-            <h2 className="text-3xl font-bold text-green-900 mb-3">Application Approved!</h2>
+            <CheckCircle className="w-24 h-24 text-blue-600 mx-auto mb-6" />
+            <h2 className="text-3xl font-bold text-blue-900 mb-3">Application Submitted</h2>
             <p className="text-lg text-gray-700 mb-6">
-              Finance of £{loanAmount} has been approved for {formData.customerName}
+              Finance application for £{loanAmount} has been sent for {formData.customerName}. You will be notified when the lender responds.
             </p>
 
-            <div className="bg-green-50 p-6 rounded-lg border-2 border-green-500 mb-6">
+            <div className="bg-blue-50 p-6 rounded-lg border-2 border-blue-500 mb-6">
               <div className="grid grid-cols-2 gap-4 text-left">
                 <div>
                   <p className="text-sm text-gray-600">Monthly Payment</p>
-                  <p className="text-2xl font-bold text-green-700">£{monthlyPayment.toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-blue-700">£{monthlyPayment.toFixed(2)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Term</p>
-                  <p className="text-2xl font-bold text-green-700">{formData.term} months</p>
+                  <p className="text-2xl font-bold text-blue-700">{formData.term} months</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Total Amount</p>

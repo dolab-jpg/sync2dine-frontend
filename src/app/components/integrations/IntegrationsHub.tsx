@@ -8,6 +8,7 @@ import { Plug, Shield, RefreshCw } from 'lucide-react';
 import { INTEGRATION_REGISTRY } from '../../config/integrations/registry';
 import type { IntegrationCategory, IntegrationsStoreData } from '../../config/integrations/types';
 import { integrationService } from '../../engine/integrations/integrationService';
+import { getIntegrationValues } from '../../engine/integrations/integrationsStore';
 import { IntegrationCard } from './IntegrationCard';
 import { AppContext } from '../../App';
 import { simulateInboundWhatsApp } from '../../engine/cyrus/cyrusChatService';
@@ -56,6 +57,11 @@ export default function IntegrationsHub() {
   );
 
   const connectedCount = integrationService.getConnectedCount();
+  const bankingProvider = getIntegrationValues('open_banking').provider || 'mock';
+  const bankingIsMock =
+    bankingProvider === 'mock'
+    || integrationService.isMockMode('open_banking')
+    || integrationService.getStatus('open_banking') !== 'connected';
 
   const handleSimulateWhatsApp = async (message: string) => {
     try {
@@ -85,6 +91,9 @@ export default function IntegrationsHub() {
                   {store.masterMockMode ? 'Master Mock Mode ON' : 'Live Mode'}
                 </Badge>
                 <Badge className="bg-white/20 text-white capitalize">{store.environment}</Badge>
+                <Badge className={bankingIsMock ? 'bg-amber-500/90 text-white' : 'bg-emerald-500/90 text-white'}>
+                  Open Banking: {bankingIsMock ? 'Demo / mock feed' : `Connected (${bankingProvider})`}
+                </Badge>
               </div>
             </div>
           </div>

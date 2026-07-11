@@ -34,6 +34,7 @@ import {
   getTotalCashBalance,
   getIncomingTotal,
   getOutgoingTotal,
+  initBankingStore,
 } from '../../engine/banking/bankingStore';
 import type { BankAccount, BankTransaction, TransactionCategory } from '../../engine/banking/types';
 import { CATEGORY_LABELS, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../../engine/banking/types';
@@ -45,6 +46,8 @@ import {
 } from '../../engine/banking/bankingService';
 import { issueClientReceipt, suggestPaymentMatches } from '../../engine/banking/clientReceiptService';
 import { toast } from 'sonner';
+import { getIntegrationValues } from '../../engine/integrations/integrationsStore';
+import { integrationService } from '../../engine/integrations/integrationService';
 
 type TabId = 'overview' | 'bank' | 'income' | 'outgoings' | 'job-costing' | 'receipts';
 
@@ -88,7 +91,7 @@ export default function AccountsHub() {
   };
 
   useEffect(() => {
-    refreshLocal();
+    void initBankingStore().finally(refreshLocal);
   }, []);
 
   const portfolio = useMemo(() => getPortfolioProfit(projects), [projects]);
@@ -126,6 +129,12 @@ export default function AccountsHub() {
   }, [filteredTx]);
 
   const jobCostRows = useMemo(() => portfolio.projects, [portfolio]);
+
+  const bankingProvider = getIntegrationValues('open_banking').provider || 'mock';
+  const bankingIsMock =
+    bankingProvider === 'mock'
+    || integrationService.isMockMode('open_banking')
+    || integrationService.getStatus('open_banking') !== 'connected';
 
   const handleSync = async () => {
     setSyncing(true);
@@ -218,6 +227,11 @@ export default function AccountsHub() {
             <p className="text-indigo-100 mt-2">
               CRM-connected financials — income, outgoings, job costing, and client receipts
             </p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <Badge className={bankingIsMock ? 'bg-amber-500/90 text-white' : 'bg-emerald-500/90 text-white'}>
+                {bankingIsMock ? 'Demo bank feed' : `Connected · ${bankingProvider}`}
+              </Badge>
+            </div>
           </div>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={handleConnect} className="gap-2">
@@ -309,7 +323,12 @@ export default function AccountsHub() {
                   {accounts.map((a) => (
                     <div key={a.id} className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border">
                       <div>
-                        <p className="font-semibold">{a.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold">{a.name}</p>
+                          <Badge variant="outline" className="text-xs capitalize">
+                            {a.provider === 'mock' || bankingIsMock ? 'Mock' : 'Live'}
+                          </Badge>
+                        </div>
                         <p className="text-xs text-muted-foreground">
                           {a.sortCode} · {a.accountNumberMasked} · {a.provider}
                         </p>

@@ -46,6 +46,7 @@ export default defineConfig(({ mode }) => {
     'AUTH_ENFORCED',
     'PLATFORM_OWNER_EMAIL',
     'PLATFORM_OWNER_PASSWORD',
+    'VITE_API_BASE_URL',
   ]) {
     if (env[key] && !process.env[key]) process.env[key] = env[key]
   }

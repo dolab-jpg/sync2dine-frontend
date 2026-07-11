@@ -1,4 +1,5 @@
 import { testProjects } from '../../data/testData';
+import { readLocalJson, writeLocalJson, useCloudPersistence } from '../data/cloudPersist';
 import { loadContacts } from '../contacts/contactStore';
 import { loadBuilders } from '../builder/builderStore';
 import type { UnifiedProject, PortalToken, WhatsAppSession, PaymentStage, AssignedContractor } from './types';
@@ -135,12 +136,9 @@ function generateToken(): string {
 
 export function loadProjects(): UnifiedProject[] {
   if (supabaseProjectsCache) return supabaseProjectsCache;
-  try {
-    const raw = localStorage.getItem(PROJECTS_KEY);
-    if (raw) return JSON.parse(raw).map(migrateProject);
-  } catch {
-    // fall through
-  }
+  const fromLocal = readLocalJson<UnifiedProject[]>(PROJECTS_KEY, []);
+  if (fromLocal.length) return fromLocal.map(migrateProject);
+  if (useCloudPersistence()) return [];
   const seeded = (testProjects as unknown as UnifiedProject[]).map(migrateProject);
   saveProjects(seeded);
   return seeded;
@@ -154,8 +152,14 @@ export async function loadProjectsAsync(): Promise<UnifiedProject[]> {
       const remote = await loadProjectsFromSupabase();
       if (remote.length > 0) {
         supabaseProjectsCache = remote.map(migrateProject);
-        localStorage.setItem(PROJECTS_KEY, JSON.stringify(supabaseProjectsCache));
+        if (!useCloudPersistence()) {
+          writeLocalJson(PROJECTS_KEY, supabaseProjectsCache);
+        }
         return supabaseProjectsCache;
+      }
+      if (useCloudPersistence()) {
+        supabaseProjectsCache = [];
+        return [];
       }
     }
   } catch {
@@ -169,7 +173,9 @@ export function initProjectsRealtime(): () => void {
     if (!isSupabaseConfigured()) return;
     return subscribeProjects((projects) => {
       supabaseProjectsCache = projects.map(migrateProject);
-      localStorage.setItem(PROJECTS_KEY, JSON.stringify(supabaseProjectsCache));
+      if (!useCloudPersistence()) {
+        writeLocalJson(PROJECTS_KEY, supabaseProjectsCache);
+      }
     });
   }).catch(() => {});
   return () => { supabaseProjectsCache = null; };
@@ -177,7 +183,9 @@ export function initProjectsRealtime(): () => void {
 
 export function saveProjects(projects: UnifiedProject[]): void {
   supabaseProjectsCache = projects;
-  localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+  if (!useCloudPersistence()) {
+    writeLocalJson(PROJECTS_KEY, projects);
+  }
   void import('../data/supabaseStore').then(({ isSupabaseConfigured, saveAllProjectsToSupabase }) => {
     if (isSupabaseConfigured()) return saveAllProjectsToSupabase(projects);
   }).catch(() => {});
@@ -323,6 +331,7 @@ export function isWithin24hWindow(phone: string): boolean {
 }
 
 export async function syncToServer(): Promise<void> {
+  if (useCloudPersistence()) return;
   try {
     const { isSupabaseConfigured, saveAllProjectsToSupabase, saveCustomersToSupabase, saveQuotesToSupabase, saveContactsToSupabase, saveBuildersToSupabase } = await import('../data/supabaseStore');
 

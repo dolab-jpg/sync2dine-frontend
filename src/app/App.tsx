@@ -23,7 +23,6 @@ import AIBathroomRender from './components/AIBathroomRender';
 import ComprehensiveCRM from './components/ComprehensiveCRM';
 import TeamManagement from './components/TeamManagement';
 import SalesManagement from './components/SalesManagement';
-import ProjectManagement from './components/ProjectManagement';
 import BuilderDashboard from './components/BuilderDashboard';
 import RecruitmentCRM from './components/RecruitmentCRM';
 import ChangeOrders from './components/ChangeOrders';
@@ -31,6 +30,7 @@ import BuilderProjectManagement from './components/BuilderProjectManagement';
 import CustomerPortal from './components/CustomerPortal';
 import { seedContactsFromCustomers } from './engine/contacts/contactStore';
 import { syncToServer, loadProjects, saveProjects, loadProjectsAsync, initProjectsRealtime } from './engine/project/projectStore';
+import { initBankingStore } from './engine/banking/bankingStore';
 import { loadContacts, saveContacts } from './engine/contacts/contactStore';
 import { loadBuilders, saveBuilders } from './engine/builder/builderStore';
 import { loadSurveys, saveSurveys } from './engine/surveyScorer';
@@ -75,6 +75,10 @@ import { crmLeadSeed } from './data/crmLeads';
 import { migrateQuoteToLines } from './engine/quotes/quoteLineUtils';
 import { syncCustomerStatusFromQuote } from './engine/leads/leadService';
 import { startPmScheduler } from './engine/ai/pmScheduler';
+import { isSupabaseConfigured } from '../lib/supabase/client';
+import { useCloudPersistence } from './engine/data/cloudPersist';
+
+const CLOUD_MODE = isSupabaseConfigured();
 
 export type UserRole = 'platform_owner' | 'super_admin' | 'manager' | 'staff' | 'builder' | 'recruitment' | 'customer';
 
@@ -378,6 +382,7 @@ export default function App() {
   };
 
   const [customers, setCustomers] = useState<Customer[]>(() => {
+    if (CLOUD_MODE) return [];
     const saved = localStorage.getItem('customers');
     const base = saved
       ? migrateCustomers(JSON.parse(saved))
@@ -403,17 +408,20 @@ export default function App() {
     items.map(r => ({ ...r, tradeId: r.tradeId === undefined ? null : r.tradeId }));
 
   const [products, setProducts] = useState<Product[]>(() => {
+    if (CLOUD_MODE) return [];
     const saved = localStorage.getItem('products');
     if (saved) return migrateProducts(JSON.parse(saved));
     return allTradeProducts;
   });
 
   const [pricingRules, setPricingRules] = useState<PricingRule[]>(() => {
+    if (CLOUD_MODE) return [];
     const saved = localStorage.getItem('pricingRules');
     return saved ? migratePricingRules(JSON.parse(saved)) : tradePricingRules;
   });
 
   const [quotes, setQuotes] = useState<Quote[]>(() => {
+    if (CLOUD_MODE) return [];
     const saved = localStorage.getItem('quotes');
     if (saved) return migrateQuotes(JSON.parse(saved));
 
@@ -544,6 +552,7 @@ export default function App() {
 
   useEffect(() => {
     void loadProjectsAsync();
+    void initBankingStore();
     const unsub = initProjectsRealtime();
     void import('./engine/data/supabaseStore').then(async ({ isSupabaseConfigured, loadCustomersFromSupabase, loadQuotesFromSupabase, loadProductsFromSupabase, loadPricingRulesFromSupabase }) => {
       if (!isSupabaseConfigured()) return;
@@ -553,36 +562,60 @@ export default function App() {
         loadProductsFromSupabase(),
         loadPricingRulesFromSupabase(),
       ]);
-      if (remoteCustomers.length) setCustomers(remoteCustomers as Customer[]);
-      if (remoteQuotes.length) setQuotes(remoteQuotes as Quote[]);
-      if (remoteProducts.length) setProducts(remoteProducts as Product[]);
-      if (remoteRules.length) setPricingRules(remoteRules as PricingRule[]);
+      if (remoteCustomers.length) setCustomers(migrateCustomers(remoteCustomers as Customer[]));
+      else if (!CLOUD_MODE) setCustomers((prev) => (prev.length ? prev : mergeCrmLeads(migrateCustomers(testCustomers as Customer[]))));
+      if (remoteQuotes.length) setQuotes(migrateQuotes(remoteQuotes as Quote[]));
+      if (remoteProducts.length) setProducts(migrateProducts(remoteProducts as Product[]));
+      else if (!CLOUD_MODE && remoteProducts.length === 0) setProducts((prev) => (prev.length ? prev : allTradeProducts));
+      if (remoteRules.length) setPricingRules(migratePricingRules(remoteRules as PricingRule[]));
+      else if (!CLOUD_MODE) setPricingRules((prev) => (prev.length ? prev : tradePricingRules));
     }).catch(() => {});
     return unsub;
   }, []);
 
-  // Persist to localStorage
+  // Persist — Supabase when configured; localStorage only in offline dev
   useEffect(() => {
-    localStorage.setItem('customers', JSON.stringify(customers));
+    if (useCloudPersistence()) {
+      void import('./engine/data/supabaseStore').then(({ saveCustomersToSupabase }) => {
+        void saveCustomersToSupabase(customers as unknown as Record<string, unknown>[]);
+      });
+    } else {
+      localStorage.setItem('customers', JSON.stringify(customers));
+    }
+    seedContactsFromCustomers(customers);
+    if (!useCloudPersistence()) void syncToServer();
   }, [customers]);
 
   useEffect(() => {
-    localStorage.setItem('products', JSON.stringify(products));
+    if (useCloudPersistence()) {
+      void import('./engine/data/supabaseStore').then(({ saveProductsToSupabase }) => {
+        void saveProductsToSupabase(products as unknown as Record<string, unknown>[]);
+      });
+    } else {
+      localStorage.setItem('products', JSON.stringify(products));
+    }
   }, [products]);
 
   useEffect(() => {
-    localStorage.setItem('pricingRules', JSON.stringify(pricingRules));
+    if (useCloudPersistence()) {
+      void import('./engine/data/supabaseStore').then(({ savePricingRulesToSupabase }) => {
+        void savePricingRulesToSupabase(pricingRules as unknown as Record<string, unknown>[]);
+      });
+    } else {
+      localStorage.setItem('pricingRules', JSON.stringify(pricingRules));
+    }
   }, [pricingRules]);
 
   useEffect(() => {
-    localStorage.setItem('quotes', JSON.stringify(quotes));
-    syncToServer();
+    if (useCloudPersistence()) {
+      void import('./engine/data/supabaseStore').then(({ saveQuotesToSupabase }) => {
+        void saveQuotesToSupabase(quotes as unknown as Record<string, unknown>[]);
+      });
+    } else {
+      localStorage.setItem('quotes', JSON.stringify(quotes));
+      void syncToServer();
+    }
   }, [quotes]);
-
-  useEffect(() => {
-    seedContactsFromCustomers(customers);
-    syncToServer();
-  }, [customers]);
 
   // CRUD operations
   const addCustomer = (customer: Omit<Customer, 'id' | 'createdAt'>) => {

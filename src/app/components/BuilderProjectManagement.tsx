@@ -20,7 +20,9 @@ import { toast } from 'sonner';
 import { messagingHub } from '../engine/messaging/messagingHub';
 import { testBuilders } from '../data/testData';
 import { loadProjects, saveProjects, updateProject, syncToServer } from '../engine/project/projectStore';
-import type { UnifiedProject } from '../engine/project/types';
+import type { UnifiedProject, PaymentStage, Invoice, PaymentStageStatus } from '../engine/project/types';
+import { generateReceiptPdf, generateInvoicePdf } from '../engine/messaging/pdfGenerator';
+import { addClientReceipt } from '../engine/banking/bankingStore';
 import { uploadProjectFile } from '../engine/storage/storageService';
 import { getContactsForCustomer } from '../engine/contacts/contactStore';
 import { ProjectPhotosTab } from './project/ProjectPhotosTab';
@@ -64,33 +66,11 @@ export interface BuilderPayment {
   builderId: string;
   builderName: string;
   paymentType: 'price_work' | 'day_rate';
-  agreedAmount?: number; // for price work
-  dayRate?: number; // for day work
+  agreedAmount?: number;
+  dayRate?: number;
   daysWorked?: number;
   totalEarned: number;
   status: 'pending' | 'approved' | 'paid';
-}
-
-export interface Invoice {
-  id: string;
-  projectId: string;
-  type: 'customer' | 'builder';
-  amount: number;
-  issueDate: string;
-  dueDate: string;
-  paidDate?: string;
-  status: 'draft' | 'sent' | 'paid' | 'overdue';
-}
-
-export interface PaymentStage {
-  id: string;
-  name: string;
-  percentage: number;
-  amount: number;
-  status: 'pending' | 'due' | 'paid';
-  dueDate?: string;
-  paidDate?: string;
-  description: string;
 }
 
 export interface BuilderProject {
@@ -170,7 +150,149 @@ export default function BuilderProjectManagement() {
   const [view, setView] = useState<'calendar' | 'list'>('calendar');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isAssigningBuilder, setIsAssigningBuilder] = useState(false);
+  const [stageForm, setStageForm] = useState<{ id?: string; name: string; percentage: string; amount: string; notes: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const patchProjectPayments = (patch: { paymentStages?: PaymentStage[]; invoices?: Invoice[] }) => {
+    if (!selectedProject) return;
+    const updated = updateProject(selectedProject.id, patch);
+    if (updated) refreshProject(updated);
+  };
+
+  const savePaymentStage = () => {
+    if (!selectedProject || !stageForm?.name.trim()) return;
+    const percentage = parseFloat(stageForm.percentage) || 0;
+    const amount = parseFloat(stageForm.amount) || Math.round(selectedProject.totalCustomerCost * (percentage / 100));
+    const stages = [...selectedProject.paymentStages];
+    if (stageForm.id) {
+      const idx = stages.findIndex((s) => s.id === stageForm.id);
+      if (idx >= 0) {
+        stages[idx] = { ...stages[idx], name: stageForm.name, percentage, amount, notes: stageForm.notes };
+      }
+    } else {
+      stages.push({
+        id: `PS${Date.now()}`,
+        name: stageForm.name,
+        percentage,
+        amount,
+        status: 'pending',
+        notes: stageForm.notes,
+      });
+    }
+    patchProjectPayments({ paymentStages: stages });
+    setStageForm(null);
+    toast.success(stageForm.id ? 'Payment stage updated' : 'Payment stage added');
+  };
+
+  const setStageStatus = (stageId: string, status: PaymentStageStatus) => {
+    if (!selectedProject) return;
+    const paymentStages = selectedProject.paymentStages.map((s) =>
+      s.id === stageId
+        ? {
+            ...s,
+            status,
+            dueDate: status === 'due' ? s.dueDate ?? new Date().toISOString().split('T')[0] : s.dueDate,
+            paidDate: status === 'paid' ? new Date().toISOString().split('T')[0] : s.paidDate,
+          }
+        : s
+    );
+    patchProjectPayments({ paymentStages });
+    toast.success(`Stage marked ${status}`);
+  };
+
+  const createInvoiceForStage = async (stage: PaymentStage) => {
+    if (!selectedProject) return;
+    const invoice: Invoice = {
+      id: `INV-${Date.now()}`,
+      stageId: stage.id,
+      lineItems: [{ description: stage.name, amount: stage.amount }],
+      total: stage.amount,
+      status: 'draft',
+      createdAt: new Date().toISOString(),
+    };
+    patchProjectPayments({ invoices: [...selectedProject.invoices, invoice] });
+    toast.success(`Invoice ${invoice.id} created`);
+  };
+
+  const sendInvoiceForStage = async (stage: PaymentStage) => {
+    if (!selectedProject) return;
+    const customer = customers.find((c) => c.id === selectedProject.customerId);
+    if (!customer) return;
+    let invoice = selectedProject.invoices.find((i) => i.stageId === stage.id);
+    if (!invoice) {
+      invoice = {
+        id: `INV-${Date.now()}`,
+        stageId: stage.id,
+        lineItems: [{ description: stage.name, amount: stage.amount }],
+        total: stage.amount,
+        status: 'draft',
+        createdAt: new Date().toISOString(),
+      };
+    }
+    const pdf = await generateInvoicePdf(
+      selectedProject.customerName,
+      selectedProject.description || selectedProject.customerName,
+      invoice.lineItems,
+      invoice.total,
+      invoice.id
+    );
+    await messagingHub.send({
+      channels: ['email'],
+      to: {
+        email: selectedProject.customerEmail,
+        phone: customer.phone,
+        customerId: selectedProject.customerId,
+        customerName: selectedProject.customerName,
+      },
+      subject: `Invoice ${invoice.id} — ${stage.name}`,
+      body: `Please find your invoice for ${stage.name}. Amount due: £${invoice.total.toFixed(2)}.`,
+      eventType: 'invoice',
+      attachment: pdf,
+      templateId: 'invoice_ready',
+    }, customer);
+    const invoices = [...selectedProject.invoices.filter((i) => i.id !== invoice!.id), { ...invoice, status: 'sent' as const, sentAt: new Date().toISOString(), pdfPath: pdf.filename }];
+    patchProjectPayments({ invoices });
+    toast.success('Invoice sent');
+  };
+
+  const sendReceiptForStage = async (stage: PaymentStage) => {
+    if (!selectedProject) return;
+    const customer = customers.find((c) => c.id === selectedProject.customerId);
+    if (!customer) return;
+    const pdf = await generateReceiptPdf(
+      selectedProject.customerName,
+      selectedProject.description || selectedProject.customerName,
+      stage.amount,
+      stage.name
+    );
+    await messagingHub.send({
+      channels: ['email'],
+      to: {
+        email: selectedProject.customerEmail,
+        phone: customer.phone,
+        customerId: selectedProject.customerId,
+        customerName: selectedProject.customerName,
+      },
+      subject: `Payment receipt — ${stage.name}`,
+      body: `Thank you for your payment of £${stage.amount.toFixed(2)} for ${stage.name}.`,
+      eventType: 'receipt',
+      attachment: pdf,
+      templateId: 'payment_receipt',
+    }, customer);
+    addClientReceipt({
+      customerId: customer.id,
+      customerName: customer.name,
+      projectId: selectedProject.id,
+      projectName: selectedProject.description || selectedProject.customerName,
+      stageId: stage.id,
+      amount: stage.amount,
+      date: stage.paidDate ?? new Date().toISOString().split('T')[0],
+      pdfPath: pdf.filename,
+      sentVia: 'email',
+      sentAt: new Date().toISOString(),
+    });
+    toast.success('Receipt sent');
+  };
 
   const linkedPlanningApp = useMemo(
     () => (selectedProject ? findPlanningApplicationByProjectId(selectedProject.id) : undefined),
@@ -1333,12 +1455,45 @@ export default function BuilderProjectManagement() {
                   <CardHeader className="p-4 sm:p-6">
                     <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                       <span className="text-base sm:text-lg">Payment Schedule</span>
-                      <Badge variant="secondary" className="text-xs sm:text-sm">
-                        Total: £{selectedProject.totalCustomerCost.toLocaleString()}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs sm:text-sm">
+                          Total: £{selectedProject.totalCustomerCost.toLocaleString()}
+                        </Badge>
+                        {user.role !== 'customer' && (
+                          <Button size="sm" onClick={() => setStageForm({ name: '', percentage: '', amount: '', notes: '' })}>
+                            Add stage
+                          </Button>
+                        )}
+                      </div>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+                    {stageForm && user.role !== 'customer' && (
+                      <div className="mb-4 p-4 border rounded-lg bg-slate-50 space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <Label>Stage name</Label>
+                            <Input value={stageForm.name} onChange={(e) => setStageForm({ ...stageForm, name: e.target.value })} />
+                          </div>
+                          <div>
+                            <Label>Percentage</Label>
+                            <Input type="number" value={stageForm.percentage} onChange={(e) => setStageForm({ ...stageForm, percentage: e.target.value })} />
+                          </div>
+                          <div>
+                            <Label>Amount (£)</Label>
+                            <Input type="number" value={stageForm.amount} onChange={(e) => setStageForm({ ...stageForm, amount: e.target.value })} />
+                          </div>
+                          <div>
+                            <Label>Notes</Label>
+                            <Input value={stageForm.notes} onChange={(e) => setStageForm({ ...stageForm, notes: e.target.value })} />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={savePaymentStage}>Save stage</Button>
+                          <Button size="sm" variant="outline" onClick={() => setStageForm(null)}>Cancel</Button>
+                        </div>
+                      </div>
+                    )}
                     {selectedProject.paymentStages.length === 0 ? (
                       <p className="text-center text-slate-500 py-8 text-sm sm:text-base">No payment stages configured</p>
                     ) : (
@@ -1361,7 +1516,7 @@ export default function BuilderProjectManagement() {
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <h3 className="font-bold text-sm sm:text-lg text-slate-900 break-words">{stage.name}</h3>
-                                    <p className="text-xs sm:text-sm text-slate-600 mt-1 break-words">{stage.description}</p>
+                                    <p className="text-xs sm:text-sm text-slate-600 mt-1 break-words">{stage.notes}</p>
                                   </div>
                                 </div>
                                 <div className="text-left sm:text-right w-full sm:w-auto flex-shrink-0">
@@ -1412,6 +1567,23 @@ export default function BuilderProjectManagement() {
                                   </Button>
                                 </div>
                               )}
+
+                              {user.role !== 'customer' && (
+                                <div className="mt-3 flex flex-wrap gap-2 pt-3 border-t border-slate-200">
+                                  <Button size="sm" variant="outline" onClick={() => setStageForm({ id: stage.id, name: stage.name, percentage: String(stage.percentage), amount: String(stage.amount), notes: stage.notes ?? '' })}>Edit</Button>
+                                  {stage.status !== 'due' && stage.status !== 'paid' && (
+                                    <Button size="sm" variant="outline" onClick={() => setStageStatus(stage.id, 'due')}>Mark due</Button>
+                                  )}
+                                  {stage.status !== 'paid' && (
+                                    <Button size="sm" variant="outline" onClick={() => setStageStatus(stage.id, 'paid')}>Mark paid</Button>
+                                  )}
+                                  <Button size="sm" variant="outline" onClick={() => void createInvoiceForStage(stage)}>Create invoice</Button>
+                                  <Button size="sm" variant="outline" onClick={() => void sendInvoiceForStage(stage)}>Send invoice</Button>
+                                  {stage.status === 'paid' && (
+                                    <Button size="sm" onClick={() => void sendReceiptForStage(stage)}>Send receipt</Button>
+                                  )}
+                                </div>
+                              )}
                             </CardContent>
                           </Card>
                         ))}
@@ -1429,11 +1601,11 @@ export default function BuilderProjectManagement() {
                       <CardTitle className="text-base sm:text-lg">Your Invoices</CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 sm:p-6 pt-0">
-                      {selectedProject.invoices.filter(inv => inv.type === 'customer').length === 0 ? (
+                      {selectedProject.invoices.length === 0 ? (
                         <p className="text-center text-slate-500 py-8 text-sm">No invoices yet</p>
                       ) : (
                         <div className="space-y-3">
-                          {selectedProject.invoices.filter(inv => inv.type === 'customer').map(invoice => (
+                          {selectedProject.invoices.map(invoice => (
                             <Card key={invoice.id} className={`${
                               invoice.status === 'paid' ? 'bg-green-50 border-green-200' :
                               invoice.status === 'sent' ? 'bg-blue-50 border-blue-200' :
@@ -1447,25 +1619,19 @@ export default function BuilderProjectManagement() {
                                       <h3 className="font-bold text-base sm:text-lg">Invoice #{invoice.id}</h3>
                                     </div>
                                     <div className="space-y-1 text-xs sm:text-sm text-slate-600">
-                                      <p>Issued: {new Date(invoice.issueDate).toLocaleDateString('en-GB', {
+                                      <p>Issued: {new Date(invoice.createdAt).toLocaleDateString('en-GB', {
                                         day: 'numeric', month: 'long', year: 'numeric'
                                       })}</p>
-                                      <p>Due: {new Date(invoice.dueDate).toLocaleDateString('en-GB', {
-                                        day: 'numeric', month: 'long', year: 'numeric'
-                                      })}</p>
-                                      {invoice.paidDate && (
-                                        <p className="text-green-700 font-medium flex items-center gap-1">
-                                          <CheckCircle2 className="w-3 h-3" />
-                                          Paid: {new Date(invoice.paidDate).toLocaleDateString('en-GB', {
-                                            day: 'numeric', month: 'long', year: 'numeric'
-                                          })}
-                                        </p>
+                                      {invoice.sentAt && (
+                                        <p>Sent: {new Date(invoice.sentAt).toLocaleDateString('en-GB', {
+                                          day: 'numeric', month: 'long', year: 'numeric'
+                                        })}</p>
                                       )}
                                     </div>
                                   </div>
                                   <div className="text-left sm:text-right flex flex-col justify-between gap-2">
                                     <div>
-                                      <p className="text-2xl sm:text-3xl font-bold text-slate-900">£{invoice.amount.toLocaleString()}</p>
+                                      <p className="text-2xl sm:text-3xl font-bold text-slate-900">£{invoice.total.toLocaleString()}</p>
                                       <Badge variant={
                                         invoice.status === 'paid' ? 'default' :
                                         invoice.status === 'sent' ? 'secondary' : 'outline'
@@ -1613,11 +1779,11 @@ export default function BuilderProjectManagement() {
                                 <div>
                                   <p className="font-medium">Invoice #{invoice.id}</p>
                                   <p className="text-sm text-slate-600">
-                                    Issued: {new Date(invoice.issueDate).toLocaleDateString('en-GB')}
+                                    Issued: {new Date(invoice.createdAt).toLocaleDateString('en-GB')}
                                   </p>
                                 </div>
                                 <div className="text-right">
-                                  <p className="font-bold text-lg">£{invoice.amount}</p>
+                                  <p className="font-bold text-lg">£{invoice.total}</p>
                                   <Badge variant={invoice.status === 'paid' ? 'default' : 'secondary'}>
                                     {invoice.status}
                                   </Badge>

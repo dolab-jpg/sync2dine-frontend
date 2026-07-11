@@ -3,7 +3,7 @@ import {
   Home, Calendar, ClipboardCheck, ClipboardList, Mail, Image, Settings, TrendingUp,
   Sparkles, Users, BarChart3, Wrench, FolderKanban, UserPlus, UserCircle, LogOut,
   ChevronDown, MessageCircle, PenLine, GitBranch, ShieldCheck, DollarSign, Menu, Phone,
-  Landmark, Calculator, BadgeCheck, FileSignature, ScrollText, Building2,
+  Landmark, Calculator, BadgeCheck, FileSignature, ScrollText, Building2, Plug, Package, Palette, CreditCard,
 } from 'lucide-react';
 import OrgActingAsPicker from './platform/OrgActingAsPicker';
 import { AppContext, canAccessAccounts } from '../App';
@@ -24,6 +24,7 @@ import {
 import { fetchLeadInbox, getLastPollTime, setLastPollTime } from '../engine/leads/leadInboxService';
 import type { Customer } from '../App';
 import { BrandLogo } from './BrandLogo';
+import { integrationService } from '../engine/integrations/integrationService';
 
 interface AppShellProps {
   children: ReactNode;
@@ -169,6 +170,15 @@ export default function AppShell({ children }: AppShellProps) {
   };
 
   const getNavItems = () => {
+    const financeConnected = (() => {
+      const inst = integrationService.getInstance('stripe');
+      return Boolean(
+        inst?.enabled
+        && integrationService.getStatus('stripe') === 'connected'
+        && !integrationService.isMockMode('stripe')
+      );
+    })();
+
     if (user.role === 'builder') {
       return [
         { to: '/builder', icon: Home, label: 'Dashboard' },
@@ -192,12 +202,17 @@ export default function AppShell({ children }: AppShellProps) {
     return [
       { to: '/', icon: Home, label: 'Dashboard' },
       { to: '/crm', icon: TrendingUp, label: 'CRM' },
+      { to: '/customers', icon: Users, label: 'Customers' },
       { to: '/booking', icon: Calendar, label: 'Book' },
       { to: '/site-survey', icon: ClipboardCheck, label: 'Survey' },
+      { to: '/designer', icon: Palette, label: 'Designer' },
       { to: '/ai-render', icon: Sparkles, label: 'AI Design' },
       { to: '/quote', icon: PenLine, label: 'New Quote' },
       { to: '/quotes', icon: ClipboardList, label: 'Quotes' },
       { to: '/price-job', icon: Calculator, label: 'Price Job' },
+      ...(financeConnected
+        ? [{ to: '/finance', icon: CreditCard, label: 'Finance' }]
+        : []),
       ...(user.role === 'super_admin' || user.role === 'manager'
         ? [{ to: '/approvals', icon: BadgeCheck, label: 'Approvals' }]
         : []),
@@ -213,14 +228,20 @@ export default function AppShell({ children }: AppShellProps) {
       ...(user.role === 'super_admin'
         ? [
             { to: '/platform/clients', icon: Building2, label: 'Clients' },
+            { to: '/products', icon: Package, label: 'Products' },
+            { to: '/integrations', icon: Plug, label: 'Integrations' },
             { to: '/builder-management', icon: Wrench, label: 'Builders' },
             { to: '/costing', icon: DollarSign, label: 'Costing' },
             { to: '/accounts', icon: Landmark, label: 'Accounts' },
             { to: '/sales', icon: BarChart3, label: 'Sales' },
             { to: '/team', icon: Users, label: 'Team' },
             { to: '/recruitment', icon: UserPlus, label: 'Recruit' },
+            { to: '/ai-audit', icon: ShieldCheck, label: 'AI Audit' },
             { to: '/settings', icon: Settings, label: 'Settings' },
           ]
+        : []),
+      ...(user.role === 'manager'
+        ? [{ to: '/ai-audit', icon: ShieldCheck, label: 'AI Audit' }]
         : []),
       ...((user.role === 'staff') && canAccessAccounts(user.role, accountsAccess)
         ? [{ to: '/accounts', icon: Landmark, label: 'Accounts' }]

@@ -1,4 +1,5 @@
 import type { Customer } from '../../App';
+import { useCloudPersistence } from '../data/cloudPersist';
 
 export interface LeadInboxItem {
   id: string;
@@ -29,6 +30,7 @@ export interface LeadInboxResponse {
 }
 
 const POLL_STORAGE_KEY = 'tradepro_lead_inbox_last_poll';
+let lastPollMemory: string | undefined;
 
 export async function fetchLeadInbox(since?: string): Promise<LeadInboxResponse> {
   const params = since ? `?since=${encodeURIComponent(since)}` : '';
@@ -49,6 +51,9 @@ export async function markLeadHandled(id: string): Promise<void> {
 }
 
 export function getLastPollTime(): string | undefined {
+  if (useCloudPersistence()) {
+    return lastPollMemory;
+  }
   try {
     return localStorage.getItem(POLL_STORAGE_KEY) ?? undefined;
   } catch {
@@ -57,6 +62,8 @@ export function getLastPollTime(): string | undefined {
 }
 
 export function setLastPollTime(iso: string): void {
+  lastPollMemory = iso;
+  if (useCloudPersistence()) return;
   try {
     localStorage.setItem(POLL_STORAGE_KEY, iso);
   } catch {

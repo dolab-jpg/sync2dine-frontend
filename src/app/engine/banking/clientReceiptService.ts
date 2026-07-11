@@ -5,6 +5,7 @@ import { addClientReceipt, categorizeTransaction, loadBankTransactions } from '.
 import type { BankTransaction, ClientReceipt } from './types';
 import { messagingHub } from '../messaging/messagingHub';
 import type { MessageChannel } from '../messaging/types';
+import { generateReceiptPdf } from '../messaging/pdfGenerator';
 
 export interface IssueReceiptInput {
   transactionId: string;
@@ -80,7 +81,10 @@ export async function issueClientReceipt(input: IssueReceiptInput): Promise<Issu
   let updated = project;
   if (input.stageId) updated = markStagePaid(updated, input.stageId, paidDate);
   if (input.invoiceId) updated = markInvoicePaid(updated, input.invoiceId);
-  updateProject(updated);
+  updateProject(project.id, {
+    paymentStages: updated.paymentStages,
+    invoices: updated.invoices,
+  });
 
   categorizeTransaction(tx.id, tx.category === 'uncategorised' ? 'stage-payment' : tx.category, 'Matched when receipt issued', {
     matchedProjectId: project.id,
@@ -91,6 +95,12 @@ export async function issueClientReceipt(input: IssueReceiptInput): Promise<Issu
 
   const channels: MessageChannel[] = input.channels ?? ['email'];
   const body = buildReceiptBody(input.customer, project, tx.amount, stage?.name);
+  const pdf = await generateReceiptPdf(
+    input.customer.name,
+    project.projectName,
+    tx.amount,
+    stage?.name
+  );
   const sendResult = await messagingHub.send(
     {
       channels,
@@ -104,6 +114,7 @@ export async function issueClientReceipt(input: IssueReceiptInput): Promise<Issu
       body,
       eventType: 'receipt',
       templateId: 'payment_receipt',
+      attachment: pdf,
     },
     input.customer
   );
@@ -118,7 +129,7 @@ export async function issueClientReceipt(input: IssueReceiptInput): Promise<Issu
     transactionId: tx.id,
     amount: tx.amount,
     date: paidDate,
-    pdfPath: `/receipts/${project.id}-${tx.id}.pdf`,
+    pdfPath: pdf.filename,
     sentVia: channels.length > 1 ? 'both' : channels[0] === 'whatsapp' ? 'whatsapp' : 'email',
     sentAt: sendResult.success ? new Date().toISOString() : undefined,
   });

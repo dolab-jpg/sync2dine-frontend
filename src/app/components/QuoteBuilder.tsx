@@ -128,7 +128,7 @@ export default function QuoteBuilder() {
         subject: renderTemplate('Your Quote from {COMPANY_NAME}', vars),
         body,
         eventType: 'quote_sent',
-        attachment: attachPdf ? generateQuotePdfStub(customer.name, totals.total) : undefined,
+        attachment: attachPdf ? await generateQuotePdfStub(customer.name, totals.total) : undefined,
         templateId: 'quote_ready',
       }, customer);
 

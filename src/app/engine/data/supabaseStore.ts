@@ -103,6 +103,45 @@ export const saveProductsToSupabase = (items: Record<string, unknown>[]) => save
 export const loadPricingRulesFromSupabase = () => loadEntities<Record<string, unknown>>('pricing_rules');
 export const savePricingRulesToSupabase = (items: Record<string, unknown>[]) => saveEntities('pricing_rules', items);
 
+export const loadClientReceiptsFromSupabase = () => loadEntities<Record<string, unknown>>('client_receipts');
+export const saveClientReceiptsToSupabase = (items: Record<string, unknown>[]) => saveEntities('client_receipts', items);
+
+export const loadBankAccountsFromSupabase = () => loadEntities<Record<string, unknown>>('bank_accounts');
+export const saveBankAccountsToSupabase = (items: Record<string, unknown>[]) => saveEntities('bank_accounts', items);
+
+export const loadBankTransactionsFromSupabase = () => loadEntities<Record<string, unknown>>('bank_transactions');
+export const saveBankTransactionsToSupabase = (items: Record<string, unknown>[]) => saveEntities('bank_transactions', items);
+
+async function deleteEntity(table: string, id: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const supabase = getSupabase();
+  const orgId = await resolveOrg();
+  await supabase.from(table).delete().eq('org_id', orgId).eq('id', String(id));
+}
+
+export async function deleteCustomerFromSupabase(id: string): Promise<void> {
+  await deleteEntity('customers', id);
+}
+
+export async function deleteQuoteFromSupabase(id: string): Promise<void> {
+  await deleteEntity('quotes', id);
+}
+
+export async function deleteProductFromSupabase(id: string): Promise<void> {
+  await deleteEntity('products', id);
+}
+
+export async function deletePricingRuleFromSupabase(id: string): Promise<void> {
+  await deleteEntity('pricing_rules', id);
+}
+
+export async function deleteProjectFromSupabase(id: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const supabase = getSupabase();
+  const orgId = await resolveOrg();
+  await supabase.from('projects').delete().eq('org_id', orgId).eq('id', String(id));
+}
+
 // ── Storage ──
 
 export async function uploadFileToStorage(

@@ -1,8 +1,13 @@
 import type { BankAccount, BankTransaction, ClientReceipt, TransactionCategory } from './types';
+import { readLocalJson, writeLocalJson, useCloudPersistence } from '../data/cloudPersist';
 
 const ACCOUNTS_KEY = 'bankAccounts';
 const TRANSACTIONS_KEY = 'bankTransactions';
 const RECEIPTS_KEY = 'clientReceipts';
+
+let accountsCache: BankAccount[] | null = null;
+let transactionsCache: BankTransaction[] | null = null;
+let receiptsCache: ClientReceipt[] | null = null;
 
 function seedAccounts(): BankAccount[] {
   const now = new Date().toISOString();
@@ -127,50 +132,98 @@ function seedTransactions(): BankTransaction[] {
   ];
 }
 
+function persistAccountsToCloud(accounts: BankAccount[]): void {
+  void import('../data/supabaseStore').then(({ saveBankAccountsToSupabase }) => {
+    void saveBankAccountsToSupabase(accounts as unknown as Record<string, unknown>[]);
+  });
+}
+
+function persistTransactionsToCloud(transactions: BankTransaction[]): void {
+  void import('../data/supabaseStore').then(({ saveBankTransactionsToSupabase }) => {
+    void saveBankTransactionsToSupabase(transactions as unknown as Record<string, unknown>[]);
+  });
+}
+
+function persistReceiptsToCloud(receipts: ClientReceipt[]): void {
+  void import('../data/supabaseStore').then(({ saveClientReceiptsToSupabase }) => {
+    void saveClientReceiptsToSupabase(receipts as unknown as Record<string, unknown>[]);
+  });
+}
+
+export async function initBankingStore(): Promise<void> {
+  if (!useCloudPersistence()) return;
+  const {
+    loadBankAccountsFromSupabase,
+    loadBankTransactionsFromSupabase,
+    loadClientReceiptsFromSupabase,
+  } = await import('../data/supabaseStore');
+  const [accounts, transactions, receipts] = await Promise.all([
+    loadBankAccountsFromSupabase(),
+    loadBankTransactionsFromSupabase(),
+    loadClientReceiptsFromSupabase(),
+  ]);
+  accountsCache = accounts.length ? (accounts as unknown as BankAccount[]) : [];
+  transactionsCache = transactions.length ? (transactions as unknown as BankTransaction[]) : [];
+  receiptsCache = receipts.length ? (receipts as unknown as ClientReceipt[]) : [];
+}
+
 export function loadBankAccounts(): BankAccount[] {
-  try {
-    const raw = localStorage.getItem(ACCOUNTS_KEY);
-    if (raw) return JSON.parse(raw) as BankAccount[];
-  } catch {
-    // fall through
+  if (useCloudPersistence()) {
+    if (accountsCache) return accountsCache;
+    return [];
   }
+  const cached = readLocalJson<BankAccount[] | null>(ACCOUNTS_KEY, null);
+  if (cached?.length) return cached;
   const seeded = seedAccounts();
   saveBankAccounts(seeded);
   return seeded;
 }
 
 export function saveBankAccounts(accounts: BankAccount[]): void {
-  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+  if (useCloudPersistence()) {
+    accountsCache = accounts;
+    persistAccountsToCloud(accounts);
+    return;
+  }
+  writeLocalJson(ACCOUNTS_KEY, accounts);
 }
 
 export function loadBankTransactions(): BankTransaction[] {
-  try {
-    const raw = localStorage.getItem(TRANSACTIONS_KEY);
-    if (raw) return JSON.parse(raw) as BankTransaction[];
-  } catch {
-    // fall through
+  if (useCloudPersistence()) {
+    if (transactionsCache) return transactionsCache;
+    return [];
   }
+  const cached = readLocalJson<BankTransaction[] | null>(TRANSACTIONS_KEY, null);
+  if (cached?.length) return cached;
   const seeded = seedTransactions();
   saveBankTransactions(seeded);
   return seeded;
 }
 
 export function saveBankTransactions(transactions: BankTransaction[]): void {
-  localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+  if (useCloudPersistence()) {
+    transactionsCache = transactions;
+    persistTransactionsToCloud(transactions);
+    return;
+  }
+  writeLocalJson(TRANSACTIONS_KEY, transactions);
 }
 
 export function loadClientReceipts(): ClientReceipt[] {
-  try {
-    const raw = localStorage.getItem(RECEIPTS_KEY);
-    if (raw) return JSON.parse(raw) as ClientReceipt[];
-  } catch {
-    // fall through
+  if (useCloudPersistence()) {
+    if (receiptsCache) return receiptsCache;
+    return [];
   }
-  return [];
+  return readLocalJson<ClientReceipt[]>(RECEIPTS_KEY, []);
 }
 
 export function saveClientReceipts(receipts: ClientReceipt[]): void {
-  localStorage.setItem(RECEIPTS_KEY, JSON.stringify(receipts));
+  if (useCloudPersistence()) {
+    receiptsCache = receipts;
+    persistReceiptsToCloud(receipts);
+    return;
+  }
+  writeLocalJson(RECEIPTS_KEY, receipts);
 }
 
 export function updateTransaction(
