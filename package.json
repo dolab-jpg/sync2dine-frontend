@@ -6,6 +6,9 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
+    "test:responsive": "playwright test",
+    "test:responsive:ui": "playwright test --ui",
+    "test:bridge": "vitest run",
     "sync:types": "node -e \"const fs=require('fs');const p='../tradepro-backend/shared/database.types.ts';if(fs.existsSync(p)){fs.mkdirSync('src/lib/supabase',{recursive:true});fs.copyFileSync(p,'src/lib/supabase/types.ts');console.log('Types synced');}else{console.warn('Run gen:types in tradepro-backend first');}\""
   },
   "dependencies": {
@@ -80,13 +83,16 @@
     "vaul": "1.1.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/vite": "^4.1.12",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@vitejs/plugin-react": "4.7.0",
+    "jsdom": "^26.1.0",
     "puppeteer-core": "^25.0.4",
     "tailwindcss": "4.1.12",
-    "vite": "6.3.5"
+    "vite": "6.3.5",
+    "vitest": "^3.2.7"
   },
   "peerDependencies": {
     "react": "18.3.1",

@@ -31,6 +31,7 @@ import CustomerPortal from './components/CustomerPortal';
 import { seedContactsFromCustomers } from './engine/contacts/contactStore';
 import { syncToServer, loadProjects, saveProjects, loadProjectsAsync, initProjectsRealtime } from './engine/project/projectStore';
 import { initBankingStore } from './engine/banking/bankingStore';
+import { initCompanyProfile } from './engine/integrations/companyProfileSync';
 import { loadContacts, saveContacts } from './engine/contacts/contactStore';
 import { loadBuilders, saveBuilders } from './engine/builder/builderStore';
 import { loadSurveys, saveSurveys } from './engine/surveyScorer';
@@ -70,6 +71,14 @@ import AppShell from './components/AppShell';
 import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
 import { installApiFetchInterceptor } from './engine/platform/orgContext';
 import { Toaster } from './components/ui/sonner';
+import { OnlineStatusBanner } from './components/OnlineStatusBanner';
+import { requestNativeNotifications } from './bridge/nativeBridge';
+import {
+  saveSessionUser,
+  loadSessionUser,
+  clearSessionUser,
+  parseDemoRoleFromUrl,
+} from './engine/auth/sessionStore';
 import { testCustomers } from './data/testData';
 import { crmLeadSeed } from './data/crmLeads';
 import { migrateQuoteToLines } from './engine/quotes/quoteLineUtils';
@@ -354,14 +363,58 @@ function ProtectedRoute({ element, allowedRoles, user }: ProtectedRouteProps): R
 }
 
 export default function App() {
+  const savedUser = typeof window !== 'undefined' ? loadSessionUser() : null;
+
   // Authentication state
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [user, setUser] = useState<User>({
-    id: '1',
-    name: 'John Smith',
-    email: 'john@bathrooms.com',
-    role: 'super_admin'
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(!!savedUser);
+  const [user, setUser] = useState<User>(
+    savedUser ?? {
+      id: '1',
+      name: 'John Smith',
+      email: 'john@bathrooms.com',
+      role: 'super_admin',
+    },
+  );
+
+  useEffect(() => {
+    const restore = async () => {
+      const stored = loadSessionUser();
+      if (stored) {
+        setUser(stored);
+        setIsLoggedIn(true);
+        return;
+      }
+
+      if (isSupabaseConfigured()) {
+        try {
+          const { getSupabase } = await import('../lib/supabase/client');
+          const supabase = getSupabase();
+          const { data } = await supabase.auth.getSession();
+          if (data.session?.user) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('id, name, email, role')
+              .eq('id', data.session.user.id)
+              .single();
+            if (profile) {
+              const restored: User = {
+                id: profile.id,
+                name: profile.name ?? profile.email?.split('@')[0] ?? 'User',
+                email: profile.email ?? data.session.user.email ?? '',
+                role: (profile.role ?? 'staff') as UserRole,
+              };
+              saveSessionUser(restored);
+              setUser(restored);
+              setIsLoggedIn(true);
+            }
+          }
+        } catch {
+          // session restore optional
+        }
+      }
+    };
+    void restore();
+  }, []);
 
   // Load data from localStorage
   const migrateCustomers = (items: Customer[]): Customer[] =>
@@ -553,6 +606,7 @@ export default function App() {
   useEffect(() => {
     void loadProjectsAsync();
     void initBankingStore();
+    void initCompanyProfile();
     const unsub = initProjectsRealtime();
     void import('./engine/data/supabaseStore').then(async ({ isSupabaseConfigured, loadCustomersFromSupabase, loadQuotesFromSupabase, loadProductsFromSupabase, loadPricingRulesFromSupabase }) => {
       if (!isSupabaseConfigured()) return;
@@ -857,16 +911,22 @@ export default function App() {
   const handleLogin = (userData: User) => {
     setUser(userData);
     setIsLoggedIn(true);
+    saveSessionUser(userData);
+    void requestNativeNotifications();
   };
 
   const handleLogout = () => {
+    clearSessionUser();
     setIsLoggedIn(false);
     setUser({
       id: '1',
       name: 'John Smith',
       email: 'john@bathrooms.com',
-      role: 'super_admin'
+      role: 'super_admin',
     });
+    if (isSupabaseConfigured()) {
+      void import('../lib/supabase/client').then(({ getSupabase }) => getSupabase().auth.signOut());
+    }
   };
 
   const contextValue: AppContextType = {
@@ -909,6 +969,7 @@ export default function App() {
   if (!isLoggedIn) {
     return (
       <BrowserRouter>
+        <OnlineStatusBanner />
         <Routes>
           <Route path="/cursor-paste" element={<CursorPastePage />} />
           <Route path="/contract/:token" element={<ContractSignPage />} />

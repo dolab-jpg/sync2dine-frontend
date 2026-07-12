@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Camera, Upload, X } from 'lucide-react';
 import { Button } from '../ui/button';
+import { isNativeBridgeAvailable, nativeTakePhoto } from '../../bridge/nativeBridge';
 
 interface PhotoCaptureProps {
   photos: string[];
@@ -16,14 +17,28 @@ export function PhotoCapture({ photos, onChange, maxPhotos = 5, photoGuidance, s
   const [guidanceFromClick, setGuidanceFromClick] = useState(false);
   const showHints = showGuidance || guidanceFromClick || photos.length > 0;
 
-  const openUpload = () => {
+  const openCamera = async () => {
     setGuidanceFromClick(true);
-    fileRef.current?.click();
+    if (isNativeBridgeAvailable()) {
+      const result = await nativeTakePhoto(true);
+      if (result?.ok && result.dataUrl) {
+        onChange([...photos, result.dataUrl].slice(0, maxPhotos));
+        return;
+      }
+    }
+    cameraRef.current?.click();
   };
 
-  const openCamera = () => {
+  const openUpload = async () => {
     setGuidanceFromClick(true);
-    cameraRef.current?.click();
+    if (isNativeBridgeAvailable()) {
+      const result = await nativeTakePhoto(false);
+      if (result?.ok && result.dataUrl) {
+        onChange([...photos, result.dataUrl].slice(0, maxPhotos));
+        return;
+      }
+    }
+    fileRef.current?.click();
   };
 
   const addFiles = (files: FileList | null) => {

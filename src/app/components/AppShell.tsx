@@ -25,6 +25,7 @@ import { fetchLeadInbox, getLastPollTime, setLastPollTime } from '../engine/lead
 import type { Customer } from '../App';
 import { BrandLogo } from './BrandLogo';
 import { integrationService } from '../engine/integrations/integrationService';
+import { OnlineStatusBanner } from './OnlineStatusBanner';
 
 interface AppShellProps {
   children: ReactNode;
@@ -117,27 +118,6 @@ export default function AppShell({ children }: AppShellProps) {
   const mainRef = useRef<HTMLElement>(null);
   const contentRowRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const measure = () => {
-      const main = mainRef.current;
-      const shell = shellRef.current;
-      const aside = shell?.querySelector('aside[aria-label="Navigation"]') as HTMLElement | null;
-      const aiPanel = shell?.querySelector('[aria-label="TradePro AI assistant"]') as HTMLElement | null;
-      const viewportW = window.innerWidth;
-      const sidebarW = aside?.offsetWidth ?? 0;
-      const aiW = aiPanel?.offsetWidth ?? 0;
-      const mainW = main?.clientWidth ?? 0;
-      const dockedInline = aiOpen && aiSettings.panelDocked && isWideViewport;
-      const mainPct = viewportW > 0 ? Math.round((mainW / viewportW) * 100) : 0;
-      // #region agent log
-      fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'76f60a'},body:JSON.stringify({sessionId:'76f60a',location:'AppShell.tsx:layoutMeasure',message:'viewport layout metrics',data:{viewportW,sidebarW,sidebarExpanded:sidebar.isOpen,isMobile,isWideViewport,aiOpen,aiDocked:aiSettings.panelDocked,aiDockedInline:dockedInline,aiW,mainW,mainPct,path:location.pathname},timestamp:Date.now(),runId:'post-fix',hypothesisId:'A-B-C'})}).catch(()=>{});
-      // #endregion
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [sidebar.isOpen, aiOpen, aiSettings.panelDocked, location.pathname, isMobile, isWideViewport]);
 
   useEffect(() => {
     loadNotifications();
@@ -270,9 +250,6 @@ export default function AppShell({ children }: AppShellProps) {
         title={label}
         onClick={() => {
           onNavigate?.();
-          // #region agent log
-          fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'76f60a'},body:JSON.stringify({sessionId:'76f60a',location:'AppShell.tsx:navClick',message:'sidebar nav clicked',data:{to,role:user.role,currentPath:location.pathname},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
-          // #endregion
         }}
         className={({ isActive }) =>
           `flex items-center gap-3 rounded-xl transition-all duration-200 font-medium text-sm min-h-11 touch-manipulation ${
@@ -296,7 +273,9 @@ export default function AppShell({ children }: AppShellProps) {
     ));
 
   return (
-    <div ref={shellRef} className="h-screen flex bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden">
+    <div className="native-shell h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden safe-area-x">
+      <OnlineStatusBanner />
+      <div ref={shellRef} className="flex flex-1 min-h-0 overflow-hidden">
       <aside
         style={{ width: expanded ? EXPANDED_WIDTH : RAIL_WIDTH }}
         className="relative hidden md:flex shrink-0 flex-col bg-gradient-to-b from-slate-900/95 via-slate-800/95 to-slate-900/95 backdrop-blur-sm border-r border-white/10 shadow-xl transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] touch-manipulation select-none"
@@ -446,7 +425,7 @@ export default function AppShell({ children }: AppShellProps) {
         </header>
 
         <div ref={contentRowRef} className="flex-1 flex min-h-0 overflow-hidden relative">
-          <main ref={mainRef} className="flex-1 overflow-auto min-w-0 transition-[margin] duration-300">{children}</main>
+          <main ref={mainRef} className="flex-1 overflow-x-hidden overflow-y-auto min-w-0 transition-[margin] duration-300">{children}</main>
           {aiSettings.enabled && aiSettings.showOverlay && aiOpen && (
             <>
               <div

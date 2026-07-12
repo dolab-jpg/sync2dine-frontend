@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -9,6 +9,7 @@ import { User, Briefcase, Wrench, Users, UserCheck, Building2, Shield } from 'lu
 import { BrandLogo } from './BrandLogo';
 import { syncActiveOrgFromProfile } from '../engine/platform/orgContext';
 import { getSupabase, isSupabaseConfigured } from '../../lib/supabase/client';
+import { parseDemoRoleFromUrl } from '../engine/auth/sessionStore';
 
 interface LoginProps {
   onLogin: (user: {
@@ -26,9 +27,14 @@ const DEMO_LOGIN_ENABLED = import.meta.env.VITE_DEMO_LOGIN !== 'false';
 export default function Login({ onLogin }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedRole, setSelectedRole] = useState<DemoRole>('staff');
+  const [selectedRole, setSelectedRole] = useState<DemoRole>(() => parseDemoRoleFromUrl() ?? 'staff');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const urlRole = parseDemoRoleFromUrl();
+    if (urlRole) setSelectedRole(urlRole);
+  }, []);
 
   const roles = [
     { value: 'platform_owner' as const, label: 'Platform Owner', icon: Building2, color: 'from-indigo-500 to-violet-600', description: 'Manage client companies, billing & tokens' },
