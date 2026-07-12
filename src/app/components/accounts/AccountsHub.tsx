@@ -216,13 +216,13 @@ export default function AccountsHub() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="bg-gradient-to-r from-indigo-900 to-slate-800 p-8 rounded-3xl shadow-2xl flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-200 to-violet-200 bg-clip-text text-transparent flex items-center gap-3">
-              <Landmark className="w-10 h-10 text-indigo-300" />
-              Accounts & Banking
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-3 sm:p-6 overflow-x-hidden">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 min-w-0">
+        <div className="bg-gradient-to-r from-indigo-900 to-slate-800 p-4 sm:p-8 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-indigo-200 to-violet-200 bg-clip-text text-transparent flex items-center gap-2 sm:gap-3">
+              <Landmark className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-300 shrink-0" />
+              <span className="break-words">Accounts & Banking</span>
             </h1>
             <p className="text-indigo-100 mt-2">
               CRM-connected financials — income, outgoings, job costing, and client receipts
@@ -245,12 +245,13 @@ export default function AccountsHub() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin">
           {tabs.map((t) => (
             <Button
               key={t.id}
               variant={tab === t.id ? 'default' : 'outline'}
               size="sm"
+              className="shrink-0 min-h-11 touch-manipulation"
               onClick={() => setTab(t.id)}
             >
               {t.label}
