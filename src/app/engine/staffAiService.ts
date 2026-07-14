@@ -47,7 +47,7 @@ export async function sendStaffAIMessage(
         messages,
         staffContext,
         model,
-        apiKey: openaiConfig.apiKey || undefined,
+        apiKey: integrationService.getLiveOpenAIApiKey(),
       }),
     });
     if (res.ok) {

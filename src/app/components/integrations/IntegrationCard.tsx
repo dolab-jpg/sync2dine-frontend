@@ -60,6 +60,12 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
 
     if (hasCredentials && definition.id === 'openai') {
       toast.success('OpenAI key saved for the whole company — staff, builders, and customers will use it');
+      // Cloud-sync warnings land on lastTestError asynchronously after PUT /api/org/openai-key.
+      window.setTimeout(() => {
+        const err = integrationService.getInstance('openai').lastTestError;
+        if (err) toast.warning(err);
+        onUpdate();
+      }, 600);
     } else if (hasCredentials) {
       toast.success(`${definition.name} settings saved — live mode enabled`);
     } else {

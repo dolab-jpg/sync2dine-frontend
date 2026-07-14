@@ -3,6 +3,15 @@ import { loadIntegrationsStore, saveIntegrationsStore } from './integrationsStor
 export interface OrgOpenAIKeyStatus {
   configured: boolean;
   maskedHint?: string;
+  syncedToCloud?: boolean;
+  cloudSyncWarning?: string;
+}
+
+function isRealLocalApiKey(value: string | undefined): boolean {
+  const key = value?.trim() ?? '';
+  if (!key) return false;
+  if (key.startsWith('••••')) return false;
+  return true;
 }
 
 async function fetchOrgOpenAIKeyStatus(role?: string): Promise<OrgOpenAIKeyStatus | null> {
@@ -35,14 +44,15 @@ export async function saveOrgOpenAIKey(apiKey: string, role = 'super_admin'): Pr
 
 /**
  * Hydrate Integrations Hub from the org-wide key (source of truth for all users).
- * Does not expose the full key — only marks OpenAI as connected/live when configured.
+ * Does not expose the full key — never writes a masked placeholder into apiKey.
  */
-export async function initOrgOpenAIKey(role?: string): Promise<void> {
+export async function initOrgOpenAIKey(role?: string): Promise<boolean> {
   const status = await fetchOrgOpenAIKeyStatus(role);
-  if (!status?.configured) return;
+  if (!status?.configured) return false;
 
   const store = loadIntegrationsStore();
   const current = store.integrations.openai;
+  const localKey = current.values.apiKey;
   store.masterMockMode = false;
   store.integrations.openai = {
     ...current,
@@ -51,11 +61,10 @@ export async function initOrgOpenAIKey(role?: string): Promise<void> {
     status: 'connected',
     values: {
       ...current.values,
-      // Keep any locally typed key for Super Admin edits; otherwise show masked placeholder.
-      apiKey: current.values.apiKey?.trim()
-        ? current.values.apiKey
-        : (status.maskedHint || '••••configured'),
+      // Keep a real Super Admin typed key; clear previous masked placeholders.
+      apiKey: isRealLocalApiKey(localKey) ? localKey!.trim() : '',
     },
   };
   saveIntegrationsStore(store);
+  return true;
 }

@@ -37,7 +37,7 @@ interface RunOptions {
 
 function getApiKey(): string | undefined {
   if (integrationService.isMasterMockMode()) return undefined;
-  return integrationService.getConfig('openai').apiKey || undefined;
+  return integrationService.getLiveOpenAIApiKey();
 }
 
 export function buildPlanningOrchestratorContext(app: PlanningApplication) {

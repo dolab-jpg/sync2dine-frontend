@@ -12,12 +12,20 @@ export class OpenAIConnectionError extends Error {
   }
 }
 
+function sanitizeBodyApiKey(bodyApiKey?: string): string | undefined {
+  const key = (bodyApiKey || '').trim();
+  if (!key) return undefined;
+  // Client may have stored a masked UI placeholder — never treat it as a real key.
+  if (key.startsWith('••••')) return undefined;
+  return key;
+}
+
 export function resolveOpenAIApiKey(bodyApiKey?: string, orgId?: string | null): string | undefined {
   if (orgId) {
     const orgKey = getOrgOpenAIApiKey(orgId);
     if (orgKey) return orgKey;
   }
-  const key = (bodyApiKey || process.env.OPENAI_API_KEY || '').trim();
+  const key = (sanitizeBodyApiKey(bodyApiKey) || process.env.OPENAI_API_KEY || '').trim();
   return key || undefined;
 }
 

@@ -87,7 +87,7 @@ export async function generatePaymentSchedule(input: GenerateScheduleInput): Pro
       body: JSON.stringify({
         systemPrompt,
         model: openai.staffModel || 'gpt-4o-mini',
-        apiKey: openai.apiKey || undefined,
+        apiKey: integrationService.getLiveOpenAIApiKey(),
         messages: [
           {
             role: 'user',

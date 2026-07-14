@@ -125,7 +125,7 @@ export async function sendCyrusMessage(
   const payload = {
     systemPrompt,
     model: openaiConfig.cyrusModel || 'gpt-4o-mini',
-    apiKey: openaiConfig.apiKey || undefined,
+    apiKey: integrationService.getLiveOpenAIApiKey(),
     messages: [
       ...history.map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: userMessage },

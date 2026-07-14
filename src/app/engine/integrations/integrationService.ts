@@ -51,6 +51,23 @@ export const integrationService = {
     return loadIntegrationsStore().integrations[id]?.values ?? {};
   },
 
+  /** True when stored value is a real secret, not a masked UI placeholder. */
+  isLiveOpenAIApiKey(value?: string): boolean {
+    const key = value?.trim() ?? '';
+    if (!key) return false;
+    if (key.startsWith('••••')) return false;
+    return true;
+  },
+
+  /**
+   * Returns a real local OpenAI API key for request bodies, or undefined.
+   * Company org keys are resolved server-side via X-Org-Id — do not send masks.
+   */
+  getLiveOpenAIApiKey(): string | undefined {
+    const key = integrationService.getConfig('openai').apiKey?.trim();
+    return integrationService.isLiveOpenAIApiKey(key) ? key : undefined;
+  },
+
   getInstance(id: IntegrationId): IntegrationInstanceState {
     return loadIntegrationsStore().integrations[id];
   },
@@ -113,11 +130,14 @@ export const integrationService = {
 
     if (id === 'openai' && integrationService.hasCredentials(id, values)) {
       const apiKey = values.apiKey?.trim();
-      // Skip syncing masked placeholders from org hydration.
-      if (apiKey && !apiKey.startsWith('••••')) {
-        void saveOrgOpenAIKey(apiKey, 'super_admin')
-          .then(() => {
-            integrationService.updateIntegration('openai', { status: 'connected' });
+      if (integrationService.isLiveOpenAIApiKey(apiKey)) {
+        void saveOrgOpenAIKey(apiKey!, 'super_admin')
+          .then((status) => {
+            integrationService.updateIntegration('openai', {
+              status: 'connected',
+              lastTestError: status.cloudSyncWarning,
+            });
+            notify();
           })
           .catch((err) => {
             const message = err instanceof Error ? err.message : 'Failed to activate org OpenAI key';
@@ -160,9 +180,10 @@ export const integrationService = {
   },
 
   /** Load org-wide OpenAI key status for all users (staff/customers included). */
-  async initOrgOpenAIKey(role?: string): Promise<void> {
-    await hydrateOrgOpenAIKey(role);
+  async initOrgOpenAIKey(role?: string): Promise<boolean> {
+    const configured = await hydrateOrgOpenAIKey(role);
     notify();
+    return configured;
   },
 
   getActiveEmailProvider(): IntegrationId | null {

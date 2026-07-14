@@ -55,7 +55,7 @@ export async function parseReceiptPhoto(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      apiKey: openaiConfig.apiKey || undefined,
+      apiKey: integrationService.getLiveOpenAIApiKey(),
       images: [resized],
       projectName,
     }),

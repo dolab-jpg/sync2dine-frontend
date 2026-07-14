@@ -97,7 +97,7 @@ export async function generateThreadSummary(
       })),
       customerName,
       model: openaiConfig.summaryModel || 'gpt-4o-mini',
-      apiKey: openaiConfig.apiKey || undefined,
+      apiKey: integrationService.getLiveOpenAIApiKey(),
     }),
   });
 

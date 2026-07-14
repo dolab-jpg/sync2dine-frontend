@@ -151,10 +151,10 @@ export function AIChatPanel() {
 
   const refreshConnection = useCallback(async () => {
     setConnection({ status: 'checking' });
-    const next = await checkOpenAIConnection();
+    const next = await checkOpenAIConnection({ role: agentContext.role });
     setConnection(next);
     return next;
-  }, []);
+  }, [agentContext.role]);
 
   useEffect(() => {
     void refreshConnection();
@@ -490,21 +490,30 @@ export function AIChatPanel() {
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <div>
               <p className="font-medium">
-                {connection.status === 'rejected' ? 'OpenAI key rejected' : 'Not connected to OpenAI'}
+                {connection.status === 'rejected'
+                  ? 'OpenAI key rejected'
+                  : (agentContext.role === 'customer' || agentContext.role === 'builder')
+                    ? 'Company AI unavailable'
+                    : 'Not connected to OpenAI'}
               </p>
               <p className="mt-1">
-                {connection.message ?? 'Add your API key in Settings → Integrations → OpenAI and Save.'}
+                {connection.message
+                  ?? ((agentContext.role === 'customer' || agentContext.role === 'builder')
+                    ? 'Company AI not configured yet — ask your Super Admin to add an OpenAI key in Integrations.'
+                    : 'Add your API key in Settings → Integrations → OpenAI and Save.')}
               </p>
             </div>
           </div>
           <div className="flex gap-2">
-            <button
-              type="button"
-              className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium"
-              onClick={() => navigate('/settings')}
-            >
-              Open Settings
-            </button>
+            {(agentContext.role === 'super_admin' || agentContext.role === 'manager') && (
+              <button
+                type="button"
+                className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium"
+                onClick={() => navigate('/settings')}
+              >
+                Open Settings
+              </button>
+            )}
             <button
               type="button"
               className="px-3 py-1.5 rounded-lg border border-red-300 text-xs"

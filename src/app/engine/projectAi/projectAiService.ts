@@ -67,7 +67,7 @@ export async function sendProjectAIMessage(
     body: JSON.stringify({
       systemPrompt: buildProjectAISystemPrompt(project, company.companyName),
       model: openaiConfig.staffModel || 'gpt-4o-mini',
-      apiKey: openaiConfig.apiKey || undefined,
+      apiKey: integrationService.getLiveOpenAIApiKey(),
       messages: [...history, { role: 'user', content: userMessage }],
       projectContext: {
         projectId: project.id,

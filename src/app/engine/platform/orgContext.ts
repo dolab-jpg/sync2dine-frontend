@@ -1,7 +1,9 @@
-import { getSupabase, isSupabaseConfigured, getCurrentProfile } from '../../../lib/supabase/client';
+import { getSupabase, isSupabaseConfigured, getCurrentProfile, getOrgId } from '../../../lib/supabase/client';
 
 const ACTIVE_ORG_KEY = 'activeOrgId';
 const AUTH_TOKEN_KEY = 'authToken';
+
+let orgResolveInFlight: Promise<string | null> | null = null;
 
 export function getActiveOrgId(): string | null {
   try {
@@ -54,6 +56,27 @@ export async function signOut(): Promise<void> {
   }
 }
 
+/** Resolve and cache org id from profile when localStorage is empty. */
+export async function ensureActiveOrgId(): Promise<string | null> {
+  const existing = getActiveOrgId();
+  if (existing) return existing;
+  if (!isSupabaseConfigured()) return null;
+  if (!orgResolveInFlight) {
+    orgResolveInFlight = (async () => {
+      try {
+        const orgId = await getOrgId();
+        if (orgId) setActiveOrgId(orgId);
+        return orgId;
+      } catch {
+        return null;
+      } finally {
+        orgResolveInFlight = null;
+      }
+    })();
+  }
+  return orgResolveInFlight;
+}
+
 export function installApiFetchInterceptor(): () => void {
   const original = window.fetch.bind(window);
   const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '');
@@ -69,7 +92,10 @@ export function installApiFetchInterceptor(): () => void {
 
     if (url.includes('/api/') || url.includes('/webhooks/')) {
       const headers = new Headers(init?.headers);
-      const orgId = getActiveOrgId();
+      let orgId = getActiveOrgId();
+      if (!orgId && !headers.has('X-Org-Id')) {
+        orgId = await ensureActiveOrgId();
+      }
       const token = await getSupabaseAccessToken();
       if (orgId && !headers.has('X-Org-Id')) headers.set('X-Org-Id', orgId);
       if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);

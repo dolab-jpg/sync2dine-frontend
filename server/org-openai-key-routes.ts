@@ -109,10 +109,12 @@ export async function handleOrgOpenAIKeyRoutes(
     }
 
     const updated = setOrgOpenAIApiKey(orgId!, apiKey);
-    void syncOrgOpenAIKeyToSupabase(orgId!, updated.openaiApiKeyEncrypted);
+    const syncResult = await syncOrgOpenAIKeyToSupabase(orgId!, updated.openaiApiKeyEncrypted);
     sendJson(res, 200, {
       configured: true,
       maskedHint: getOrgOpenAIKeyStatus(orgId!).maskedHint,
+      syncedToCloud: syncResult.synced,
+      cloudSyncWarning: syncResult.warning,
     });
     return true;
   }

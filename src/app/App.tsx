@@ -386,7 +386,7 @@ export default function App() {
         setUser(stored);
         setIsLoggedIn(true);
         await syncActiveOrgFromProfile();
-        void integrationService.initOrgOpenAIKey(stored.role);
+        await integrationService.initOrgOpenAIKey(stored.role);
         return;
       }
 
@@ -412,7 +412,7 @@ export default function App() {
               setUser(restored);
               setIsLoggedIn(true);
               await syncActiveOrgFromProfile();
-              void integrationService.initOrgOpenAIKey(restored.role);
+              await integrationService.initOrgOpenAIKey(restored.role);
             }
           }
         } catch {
@@ -614,8 +614,11 @@ export default function App() {
   useEffect(() => {
     void loadProjectsAsync();
     void initBankingStore();
-    void initCompanyProfile();
-    void integrationService.initOrgOpenAIKey();
+    void (async () => {
+      await syncActiveOrgFromProfile();
+      await initCompanyProfile();
+      await integrationService.initOrgOpenAIKey();
+    })();
     const unsub = initProjectsRealtime();
     void import('./engine/data/supabaseStore').then(async ({ isSupabaseConfigured, loadCustomersFromSupabase, loadQuotesFromSupabase, loadProductsFromSupabase, loadPricingRulesFromSupabase }) => {
       if (!isSupabaseConfigured()) return;
@@ -1094,11 +1097,13 @@ export default function App() {
                 element={<ProtectedRoute element={<SalesManagement />} allowedRoles={['super_admin']} user={user} />}
               />
               <Route path="/projects" element={<BuilderProjectManagement />} />
+              <Route path="/projects/:projectId" element={<BuilderProjectManagement />} />
               <Route
                 path="/builder"
                 element={<ProtectedRoute element={<BuilderDashboard />} allowedRoles={['builder']} user={user} />}
               />
               <Route path="/builder-projects" element={<BuilderProjectManagement />} />
+              <Route path="/builder-projects/:projectId" element={<BuilderProjectManagement />} />
               <Route
                 path="/costing"
                 element={<ProtectedRoute element={<CostingDashboard />} allowedRoles={['super_admin', 'manager']} user={user} />}

@@ -188,7 +188,7 @@ export async function sendOrchestratorMessage(
 
   const body: Record<string, unknown> = {
     model: options?.model || openaiConfig.staffModel || 'gpt-4o-mini',
-    apiKey: openaiConfig.apiKey || undefined,
+    apiKey: integrationService.getLiveOpenAIApiKey(),
     messages,
     voicePrompt,
     companyName: options?.companyName ?? 'TradePro',

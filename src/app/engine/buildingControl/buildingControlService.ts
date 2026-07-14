@@ -11,7 +11,7 @@ export interface BuildingControlResponse {
 
 function getApiKey(): string | undefined {
   if (integrationService.isMasterMockMode()) return undefined;
-  return integrationService.getConfig('openai').apiKey || undefined;
+  return integrationService.getLiveOpenAIApiKey();
 }
 
 export async function sendBuildingControlMessage(

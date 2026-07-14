@@ -70,7 +70,7 @@ export function useVoiceConversation({ onUserMessage }: UseVoiceConversationOpti
       body: JSON.stringify({
         text,
         voice: openaiConfig.ttsVoice || 'fable',
-        apiKey: openaiConfig.apiKey || undefined,
+        apiKey: integrationService.getLiveOpenAIApiKey(),
       }),
     });
     if (!res.ok) return null;

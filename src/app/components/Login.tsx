@@ -72,7 +72,7 @@ export default function Login({ onLogin }: LoginProps) {
 
       await syncActiveOrgFromProfile();
       const role = (profile?.role ?? 'staff') as DemoRole;
-      void integrationService.initOrgOpenAIKey(role);
+      await integrationService.initOrgOpenAIKey(role);
 
       onLogin({
         id: profile?.id ?? data.user.id,

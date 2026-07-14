@@ -48,7 +48,7 @@ export async function researchPrices(req: PriceResearchRequest): Promise<Pricing
         region,
         provider: cfg.provider || 'openai_web',
         searchApiKey: cfg.apiKey || undefined,
-        apiKey: openai.apiKey || undefined,
+        apiKey: integrationService.getLiveOpenAIApiKey(),
       }),
     });
     if (res.ok) {

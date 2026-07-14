@@ -16,7 +16,7 @@ export function useVoiceOutput() {
           body: JSON.stringify({
             text,
             voice: openaiConfig.ttsVoice || 'fable',
-            apiKey: openaiConfig.apiKey || undefined,
+            apiKey: integrationService.getLiveOpenAIApiKey(),
           }),
         });
         if (res.ok) {

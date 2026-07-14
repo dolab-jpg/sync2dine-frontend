@@ -1,4 +1,5 @@
 import { integrationService } from '../integrations/integrationService';
+import { syncActiveOrgFromProfile } from '../platform/orgContext';
 
 export type OpenAIConnectionStatus = 'checking' | 'connected' | 'missing' | 'rejected';
 
@@ -10,18 +11,29 @@ export interface OpenAIConnectionState {
 const MISSING_MESSAGE =
   'OpenAI not connected — add your API key in Settings → Integrations → OpenAI and Save.';
 
-export async function checkOpenAIConnection(): Promise<OpenAIConnectionState> {
-  const apiKey = integrationService.getConfig('openai').apiKey?.trim();
+const MISSING_MESSAGE_NON_ADMIN =
+  'Company AI not configured yet — ask your Super Admin to add an OpenAI key in Integrations.';
+
+export async function checkOpenAIConnection(options?: {
+  role?: string;
+}): Promise<OpenAIConnectionState> {
+  await syncActiveOrgFromProfile();
+  const apiKey = integrationService.getLiveOpenAIApiKey();
+  const body: Record<string, string> = {};
+  if (apiKey) body.apiKey = apiKey;
 
   try {
     const response = await fetch('/api/ai/health', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey: apiKey || undefined }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
-      return { status: 'missing', message: MISSING_MESSAGE };
+      return {
+        status: 'missing',
+        message: options?.role === 'super_admin' ? MISSING_MESSAGE : MISSING_MESSAGE_NON_ADMIN,
+      };
     }
 
     const data = await response.json() as {
@@ -41,19 +53,27 @@ export async function checkOpenAIConnection(): Promise<OpenAIConnectionState> {
       };
     }
 
+    const fallback =
+      options?.role === 'super_admin' || options?.role === 'platform_owner'
+        ? MISSING_MESSAGE
+        : MISSING_MESSAGE_NON_ADMIN;
+
     return {
       status: 'missing',
-      message: data.message ?? MISSING_MESSAGE,
+      message: data.message ?? fallback,
     };
   } catch {
-    return { status: 'missing', message: MISSING_MESSAGE };
+    return {
+      status: 'missing',
+      message: options?.role === 'super_admin' ? MISSING_MESSAGE : MISSING_MESSAGE_NON_ADMIN,
+    };
   }
 }
 
 export function connectionFromOrchestratorError(err: unknown): OpenAIConnectionState | null {
   if (!(err instanceof Error)) return null;
   const message = err.message;
-  if (/openai not connected/i.test(message)) {
+  if (/openai not connected|not configured for this company/i.test(message)) {
     return { status: 'missing', message };
   }
   if (/openai key rejected/i.test(message)) {

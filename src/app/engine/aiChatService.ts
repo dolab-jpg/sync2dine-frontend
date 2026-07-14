@@ -14,7 +14,7 @@ export async function sendChatMessage(
       body: JSON.stringify({
         messages,
         systemPrompt: buildChatSystemPrompt(tradeName, pageContext),
-        apiKey: openaiConfig.apiKey || undefined,
+        apiKey: integrationService.getLiveOpenAIApiKey(),
         model: openaiConfig.staffModel || 'gpt-4o-mini',
       }),
     });

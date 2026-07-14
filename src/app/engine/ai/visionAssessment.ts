@@ -50,8 +50,7 @@ function readStringArray(value: unknown): string[] {
 
 function getOpenAiApiKey(): string | undefined {
   if (integrationService.isMasterMockMode()) return undefined;
-  const apiKey = integrationService.getConfig('openai').apiKey?.trim();
-  return apiKey || undefined;
+  return integrationService.getLiveOpenAIApiKey();
 }
 
 function hasApiKey(): boolean {

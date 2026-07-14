@@ -190,7 +190,7 @@ export async function estimateFromPhotos(
         context,
         systemPrompt: buildEstimationSystemPrompt(trade),
         schema: buildExtractionSchema(trade),
-        apiKey: openaiConfig.apiKey || undefined,
+        apiKey: integrationService.getLiveOpenAIApiKey(),
       }),
     });
 

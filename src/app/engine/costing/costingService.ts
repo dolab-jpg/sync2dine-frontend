@@ -311,7 +311,7 @@ export async function generateCostInsights(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      apiKey: openaiConfig.apiKey || undefined,
+      apiKey: integrationService.getLiveOpenAIApiKey(),
       model: openaiConfig.staffModel || 'gpt-4o-mini',
       systemPrompt: 'You are a UK construction finance AI. Analyse job costing data and give concise profit insights, flag overspend, and highlight margin risks. Use GBP.',
       messages: [{

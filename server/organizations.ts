@@ -187,16 +187,27 @@ async function getSupabaseServiceClient(): Promise<{
 }
 
 /** Persist encrypted org key to Supabase when service role is available. */
-export async function syncOrgOpenAIKeyToSupabase(orgId: string, encrypted: string): Promise<void> {
+export async function syncOrgOpenAIKeyToSupabase(orgId: string, encrypted: string): Promise<{ synced: boolean; warning?: string }> {
   const supabase = await getSupabaseServiceClient();
-  if (!supabase) return;
+  if (!supabase) {
+    return {
+      synced: false,
+      warning:
+        'Key saved on this server, but cloud sync is unavailable (missing SUPABASE_SERVICE_ROLE_KEY). Builder/customer AI may fail if API runs in another process.',
+    };
+  }
   const { error } = await supabase
     .from('organizations')
     .update({ openai_api_key_encrypted: encrypted, updated_at: new Date().toISOString() })
     .eq('id', orgId);
   if (error) {
     console.warn('[org-openai-key] Supabase sync failed:', error.message);
+    return {
+      synced: false,
+      warning: `Key saved locally, but cloud sync failed (${error.message}). Builder/customer AI may fail until the key is available to the API server.`,
+    };
   }
+  return { synced: true };
 }
 
 /** Load org key from Supabase into local store/cache when missing locally. */
@@ -207,7 +218,11 @@ export async function ensureOrgOpenAIKeyLoaded(orgId: string): Promise<void> {
   orgOpenAIKeyLoadAttempts.add(orgId);
 
   const supabase = await getSupabaseServiceClient();
-  if (!supabase) return;
+  if (!supabase) {
+    // Allow retry later if service role env becomes available.
+    orgOpenAIKeyLoadAttempts.delete(orgId);
+    return;
+  }
 
   try {
     const { data } = await supabase
@@ -216,7 +231,11 @@ export async function ensureOrgOpenAIKeyLoaded(orgId: string): Promise<void> {
       .eq('id', orgId)
       .maybeSingle();
     const encrypted = data?.openai_api_key_encrypted?.trim();
-    if (!encrypted) return;
+    if (!encrypted) {
+      // Key may be saved moments later — allow a future retry.
+      orgOpenAIKeyLoadAttempts.delete(orgId);
+      return;
+    }
     ensureLocalOrgStub(orgId);
     const orgs = listOrganizations();
     const idx = orgs.findIndex(o => o.id === orgId);
@@ -227,7 +246,9 @@ export async function ensureOrgOpenAIKeyLoaded(orgId: string): Promise<void> {
     }
     const key = decryptSecret(encrypted).trim();
     if (key) orgOpenAIKeyCache.set(orgId, key);
+    else orgOpenAIKeyLoadAttempts.delete(orgId);
   } catch (err) {
+    orgOpenAIKeyLoadAttempts.delete(orgId);
     console.warn('[org-openai-key] Failed to load key from Supabase:', err);
   }
 }
