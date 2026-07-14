@@ -1,0 +1,286 @@
+import { FormEvent, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import { AuthLayout } from '../AuthLayout';
+import { AuthFormError } from '../components/AuthFormError';
+import { PasswordField } from '../components/PasswordField';
+import { SignupMode, SignupModeTabs } from '../components/SignupModeTabs';
+import { UsernameField, validateUsername, normalizeUsername } from '../components/UsernameField';
+
+const STAGE_PLACEHOLDER = 'Account creation comes in the next stage. This form is UI-only for now.';
+
+const MOCK_INVITE = {
+  orgName: 'Acme Bathrooms',
+  role: 'staff',
+  email: 'new.hire@acmebathrooms.com',
+};
+
+function validatePasswordPair(password: string, confirm: string): string | null {
+  if (!password) return 'Password is required.';
+  if (password.length < 8) return 'Password must be at least 8 characters.';
+  if (password !== confirm) return 'Passwords do not match.';
+  return null;
+}
+
+export default function SignupPage() {
+  const [searchParams] = useSearchParams();
+  const inviteFromUrl = searchParams.get('invite')?.trim() ?? '';
+  const navigate = useNavigate();
+
+  const [mode, setMode] = useState<SignupMode>(inviteFromUrl ? 'invite' : 'company');
+  const [companyName, setCompanyName] = useState('');
+  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState(inviteFromUrl ? MOCK_INVITE.email : '');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [pasteToken, setPasteToken] = useState(inviteFromUrl);
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+
+  const inviteToken = inviteFromUrl || (mode === 'invite' ? pasteToken.trim() : '');
+  const hasInvite = Boolean(inviteToken) && inviteToken !== 'invalid';
+
+  const title = useMemo(
+    () => (mode === 'company' ? 'Create your company account' : 'Join your team'),
+    [mode],
+  );
+
+  const handleModeChange = (next: SignupMode) => {
+    setMode(next);
+    setError('');
+    setInfo('');
+    if (next === 'invite' && inviteFromUrl) {
+      setEmail(MOCK_INVITE.email);
+    }
+  };
+
+  const handleCompanySubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setInfo('');
+    if (!companyName.trim()) {
+      setError('Company name is required.');
+      return;
+    }
+    if (!name.trim()) {
+      setError('Full name is required.');
+      return;
+    }
+    const usernameError = validateUsername(username);
+    if (usernameError) {
+      setError(usernameError);
+      return;
+    }
+    if (!email.trim() || !email.includes('@')) {
+      setError('A valid work email is required.');
+      return;
+    }
+    const pwError = validatePasswordPair(password, confirm);
+    if (pwError) {
+      setError(pwError);
+      return;
+    }
+    void normalizeUsername(username);
+    setInfo(STAGE_PLACEHOLDER);
+  };
+
+  const handleInviteSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setInfo('');
+    if (!hasInvite) {
+      setError('Paste a valid invite token to continue.');
+      return;
+    }
+    if (!name.trim()) {
+      setError('Full name is required.');
+      return;
+    }
+    const usernameError = validateUsername(username);
+    if (usernameError) {
+      setError(usernameError);
+      return;
+    }
+    const pwError = validatePasswordPair(password, confirm);
+    if (pwError) {
+      setError(pwError);
+      return;
+    }
+    setInfo(STAGE_PLACEHOLDER);
+  };
+
+  const applyPastedToken = () => {
+    const token = pasteToken.trim();
+    if (!token) {
+      setError('Enter an invite token.');
+      return;
+    }
+    navigate(`/signup?invite=${encodeURIComponent(token)}`);
+    setMode('invite');
+    setEmail(token === 'invalid' ? '' : MOCK_INVITE.email);
+    setError('');
+  };
+
+  return (
+    <AuthLayout>
+      <Card className="shadow-2xl rounded-2xl border-0">
+        <CardHeader className="bg-gradient-to-r from-slate-800 to-slate-900 text-white space-y-3">
+          <CardTitle className="text-center text-2xl">{title}</CardTitle>
+          <SignupModeTabs mode={mode} onChange={handleModeChange} />
+        </CardHeader>
+        <CardContent className="p-6 space-y-4">
+          {mode === 'company' ? (
+            <form onSubmit={handleCompanySubmit} className="space-y-4">
+              <div>
+                <Label htmlFor="company-name">Company name</Label>
+                <Input
+                  id="company-name"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="Acme Bathrooms Ltd"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="full-name">Your full name</Label>
+                <Input
+                  id="full-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Jane Smith"
+                  className="mt-1"
+                />
+              </div>
+              <UsernameField
+                value={username}
+                onChange={setUsername}
+                hint="3–30 characters: lowercase letters, numbers, . _ -"
+              />
+              <div>
+                <Label htmlFor="work-email">Work email</Label>
+                <Input
+                  id="work-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  className="mt-1"
+                />
+              </div>
+              <PasswordField
+                id="signup-password"
+                label="Password"
+                value={password}
+                onChange={setPassword}
+                autoComplete="new-password"
+              />
+              <PasswordField
+                id="signup-confirm"
+                label="Confirm password"
+                value={confirm}
+                onChange={setConfirm}
+                autoComplete="new-password"
+                placeholder="Confirm password"
+              />
+              <AuthFormError message={error} />
+              {info && <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">{info}</p>}
+              <Button type="submit" className="w-full py-6 text-lg">
+                Create company account
+              </Button>
+              <p className="text-sm text-center text-slate-600">
+                Joining a team?{' '}
+                <button type="button" className="text-amber-700 font-medium hover:underline" onClick={() => handleModeChange('invite')}>
+                  Use invite
+                </button>
+              </p>
+            </form>
+          ) : (
+            <form onSubmit={handleInviteSubmit} className="space-y-4">
+              {!hasInvite ? (
+                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-700">Paste your invite token to join an existing company.</p>
+                  <div className="flex gap-2">
+                    <Input
+                      value={pasteToken}
+                      onChange={(e) => setPasteToken(e.target.value)}
+                      placeholder="Invite token"
+                    />
+                    <Button type="button" variant="outline" onClick={applyPastedToken}>
+                      Apply
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+                    {MOCK_INVITE.orgName}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800 capitalize">
+                    Role: {MOCK_INVITE.role}
+                  </span>
+                </div>
+              )}
+
+              <div>
+                <Label htmlFor="invite-name">Full name</Label>
+                <Input
+                  id="invite-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Jane Smith"
+                  className="mt-1"
+                />
+              </div>
+              <UsernameField value={username} onChange={setUsername} />
+              <div>
+                <Label htmlFor="invite-email">Email</Label>
+                <Input
+                  id="invite-email"
+                  type="email"
+                  value={hasInvite ? MOCK_INVITE.email : email}
+                  readOnly={hasInvite}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={`mt-1 ${hasInvite ? 'bg-slate-100 text-slate-600' : ''}`}
+                />
+                {hasInvite && (
+                  <p className="text-xs text-slate-500 mt-1">Email is locked to this invite.</p>
+                )}
+              </div>
+              <PasswordField
+                id="invite-password"
+                label="Password"
+                value={password}
+                onChange={setPassword}
+                autoComplete="new-password"
+              />
+              <PasswordField
+                id="invite-confirm"
+                label="Confirm password"
+                value={confirm}
+                onChange={setConfirm}
+                autoComplete="new-password"
+                placeholder="Confirm password"
+              />
+              <AuthFormError message={error} />
+              {info && <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">{info}</p>}
+              <Button type="submit" className="w-full py-6 text-lg" disabled={!hasInvite}>
+                Join team
+              </Button>
+            </form>
+          )}
+
+          <p className="text-sm text-center text-slate-600">
+            Already have an account?{' '}
+            <Link to="/login" className="text-amber-700 font-medium hover:underline">
+              Sign in
+            </Link>
+          </p>
+        </CardContent>
+      </Card>
+    </AuthLayout>
+  );
+}

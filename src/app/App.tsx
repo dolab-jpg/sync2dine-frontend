@@ -1,6 +1,12 @@
 import React, { useState, useEffect, ReactElement } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
-import Login from './components/Login';
+import LoginPage from './auth/pages/LoginPage';
+import SignupPage from './auth/pages/SignupPage';
+import ForgotPasswordPage from './auth/pages/ForgotPasswordPage';
+import ResetPasswordPage from './auth/pages/ResetPasswordPage';
+import InviteAcceptPage from './auth/pages/InviteAcceptPage';
+import ProfilePage from './auth/pages/ProfilePage';
+import ChangePasswordPage from './auth/pages/ChangePasswordPage';
 import Dashboard from './components/Dashboard';
 import CustomerManagement from './components/CustomerManagement';
 import BathroomDesigner from './components/BathroomDesigner';
@@ -1023,7 +1029,12 @@ export default function App() {
           <Route path="/contract/:token" element={<ContractSignPage />} />
           <Route path="/portal/:token" element={<CustomerPortal />} />
           <Route path="/planning-approve/:token" element={<PlanningCustomerApproval />} />
-          <Route path="*" element={<Login onLogin={handleLogin} />} />
+          <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/invite/:token" element={<InviteAcceptPage />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
     );
@@ -1195,6 +1206,8 @@ export default function App() {
                 path="/ai-audit"
                 element={<ProtectedRoute element={<ConversationAudit />} allowedRoles={['super_admin', 'manager']} user={user} />}
               />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/profile/password" element={<ChangePasswordPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           <Toaster />

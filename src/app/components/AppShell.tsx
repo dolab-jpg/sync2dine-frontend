@@ -445,6 +445,14 @@ export default function AppShell({ children }: AppShellProps) {
                       <p className="font-semibold">{user.name}</p>
                       <p className="text-sm text-amber-100">{user.email}</p>
                     </div>
+                    <NavLink
+                      to="/profile"
+                      onClick={() => setShowUserMenu(false)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left text-gray-700 hover:bg-gray-100/80"
+                    >
+                      <UserCircle className="w-4 h-4" />
+                      <span className="font-medium">Profile</span>
+                    </NavLink>
                     <button
                       type="button"
                       onClick={() => {
