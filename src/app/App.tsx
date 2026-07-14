@@ -112,6 +112,8 @@ export interface Customer {
   tradeId?: TradeId;
   whatsappOptIn: boolean;
   preferredChannel: 'email' | 'whatsapp' | 'both' | 'phone';
+  /** Channel reply language pack: en | sq | uk | zh | es | pl | fa */
+  preferredLanguage?: 'en' | 'sq' | 'uk' | 'zh' | 'es' | 'pl' | 'fa';
   whatsappId?: string;
   lastWhatsAppAt?: string;
   /** CRM lead fields */
@@ -422,6 +424,7 @@ export default function App() {
       ...c,
       whatsappOptIn: c.whatsappOptIn ?? true,
       preferredChannel: c.preferredChannel ?? 'both',
+      preferredLanguage: c.preferredLanguage ?? 'en',
       tags: c.tags ?? [],
     }));
 
@@ -677,6 +680,7 @@ export default function App() {
       ...customer,
       whatsappOptIn: customer.whatsappOptIn ?? false,
       preferredChannel: customer.preferredChannel ?? 'email',
+      preferredLanguage: customer.preferredLanguage ?? 'en',
       id: Date.now().toString(),
       createdAt: new Date().toISOString()
     };

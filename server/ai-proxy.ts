@@ -65,8 +65,8 @@ export async function handleAiRequest(req: IncomingMessage, res: ServerResponse,
 
   const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
   const orgId = attachOrgContext(req, body);
-  const { resolveOpenAIApiKey } = await import('./openai-connection');
-  const apiKey = resolveOpenAIApiKey(body.apiKey as string | undefined, orgId);
+  const { resolveOpenAIApiKeyAsync } = await import('./openai-connection');
+  const apiKey = await resolveOpenAIApiKeyAsync(body.apiKey as string | undefined, orgId);
 
   if (pathname === '/api/ai/cyrus') {
     const { handleCyrusChat } = await import('./cyrus-handler');

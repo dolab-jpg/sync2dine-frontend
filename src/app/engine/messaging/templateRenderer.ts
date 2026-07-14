@@ -12,6 +12,9 @@ export interface TemplateVariables {
   COMPANY_NAME?: string;
   COMPANY_PHONE?: string;
   COMPANY_EMAIL?: string;
+  COMPANY_WEBSITE?: string;
+  COMPANY_REGISTRATION?: string;
+  COMPANY_VAT?: string;
   USER_NAME?: string;
   DISCOUNT_MESSAGE?: string;
   BOOKING_DATE?: string;
@@ -54,6 +57,9 @@ export function renderTemplate(template: string, variables: TemplateVariables): 
     COMPANY_NAME: company.companyName || 'TradePro Ltd',
     COMPANY_PHONE: company.phone || '',
     COMPANY_EMAIL: company.email || '',
+    COMPANY_WEBSITE: company.website || '',
+    COMPANY_REGISTRATION: company.companyRegistrationNumber || '',
+    COMPANY_VAT: company.vatNumber || '',
     ...variables,
   };
 

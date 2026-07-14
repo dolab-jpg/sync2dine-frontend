@@ -7,6 +7,9 @@ import type {
   TestConnectionResult,
 } from '../../config/integrations/types';
 import { loadIntegrationsStore, saveIntegrationsStore } from './integrationsStore';
+import { saveCompanyProfileToSupabase, initCompanyProfile, getCompanyProfile } from './companyProfileSync';
+import { initOrgOpenAIKey as hydrateOrgOpenAIKey, saveOrgOpenAIKey } from './orgOpenAIKeySync';
+import { useCloudPersistence } from '../data/cloudPersist';
 
 type StoreListener = (data: IntegrationsStoreData) => void;
 const listeners = new Set<StoreListener>();
@@ -74,6 +77,9 @@ export const integrationService = {
       store.integrations[id].values = { ...store.integrations[id].values, ...updates.values };
     }
     saveIntegrationsStore(store);
+    if (id === 'company' && useCloudPersistence()) {
+      void saveCompanyProfileToSupabase(store.integrations.company);
+    }
     notify();
   },
 
@@ -92,6 +98,7 @@ export const integrationService = {
 
   /**
    * Save integration field values and switch to live mode when credentials are present.
+   * OpenAI keys are also persisted org-wide so every user in the company uses them.
    */
   saveIntegrationValues(id: IntegrationId, values: Record<string, string>): void {
     const updates: Partial<IntegrationInstanceState> = { values };
@@ -103,6 +110,24 @@ export const integrationService = {
       }
     }
     integrationService.updateIntegration(id, updates);
+
+    if (id === 'openai' && integrationService.hasCredentials(id, values)) {
+      const apiKey = values.apiKey?.trim();
+      // Skip syncing masked placeholders from org hydration.
+      if (apiKey && !apiKey.startsWith('••••')) {
+        void saveOrgOpenAIKey(apiKey, 'super_admin')
+          .then(() => {
+            integrationService.updateIntegration('openai', { status: 'connected' });
+          })
+          .catch((err) => {
+            const message = err instanceof Error ? err.message : 'Failed to activate org OpenAI key';
+            integrationService.updateIntegration('openai', {
+              status: 'error',
+              lastTestError: message,
+            });
+          });
+      }
+    }
   },
 
   getStatus(id: IntegrationId): IntegrationStatus {
@@ -122,6 +147,22 @@ export const integrationService = {
 
   getCompanyName(): string {
     return integrationService.getConfig('company').companyName || 'TradePro Ltd';
+  },
+
+  getCompanyProfile(): ReturnType<typeof getCompanyProfile> {
+    return getCompanyProfile();
+  },
+
+  async initCompanyProfile(): Promise<void> {
+    await initCompanyProfile();
+    await hydrateOrgOpenAIKey();
+    notify();
+  },
+
+  /** Load org-wide OpenAI key status for all users (staff/customers included). */
+  async initOrgOpenAIKey(role?: string): Promise<void> {
+    await hydrateOrgOpenAIKey(role);
+    notify();
   },
 
   getActiveEmailProvider(): IntegrationId | null {

@@ -218,6 +218,7 @@ function writeCustomer(
     interestedTrades: (data.interestedTrades as Customer['interestedTrades']) ?? [],
     whatsappOptIn: Boolean(data.whatsappOptIn ?? false),
     preferredChannel: (data.preferredChannel as Customer['preferredChannel']) ?? 'email',
+    preferredLanguage: (data.preferredLanguage as Customer['preferredLanguage']) ?? 'en',
   });
   return {
     success: true,

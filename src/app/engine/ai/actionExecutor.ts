@@ -6,6 +6,7 @@ import { loadProjects } from '../project/projectStore';
 import { applyProposedAction as applyProjectServiceAction } from '../projectAi/projectAiService';
 import { categorizeTransaction } from '../banking/bankingStore';
 import { issueClientReceipt } from '../banking/clientReceiptService';
+import { sendReceiptForStage } from '../banking/paymentReceiptService';
 import type { TransactionCategory } from '../banking/types';
 import type { CopilotAction } from './orchestratorService';
 import { executeForemanAutoAction } from './foremanExecutor';
@@ -252,18 +253,32 @@ async function executeAutoActionInternal(
     return `Transaction matched to project ${projectId}.`;
   }
 
-  if (action.action === 'draftClientReceipt') {
-    const txId = readOptionalString(action.output.transactionId);
+  if (action.action === 'sendClientReceipt' || action.action === 'draftClientReceipt') {
     const projectId = readOptionalString(action.output.projectId);
     const customerId = readOptionalString(action.output.customerId);
-    if (!txId || !projectId || !customerId) return 'Missing receipt fields.';
-    const customer = app.customers.find((c) => c.id === customerId);
-    if (!customer) return 'Customer not found.';
-    const result = await issueClientReceipt({
-      transactionId: txId,
+    const txId = readOptionalString(action.output.transactionId);
+    if (txId && projectId && customerId) {
+      const customer = app.customers.find((c) => c.id === customerId);
+      if (!customer) return 'Customer not found.';
+      const result = await issueClientReceipt({
+        transactionId: txId,
+        projectId,
+        customer,
+        stageId: readOptionalString(action.output.stageId),
+      });
+      return result.message;
+    }
+    if (!projectId) return 'Missing projectId.';
+    const resolvedCustomer = customerId
+      ? app.customers.find((c) => c.id === customerId)
+      : undefined;
+    if (!resolvedCustomer) return 'Customer not found.';
+    const result = await sendReceiptForStage({
       projectId,
-      customer,
       stageId: readOptionalString(action.output.stageId),
+      stageName: readOptionalString(action.output.stageName),
+      customer: resolvedCustomer,
+      force: action.action === 'sendClientReceipt',
     });
     return result.message;
   }

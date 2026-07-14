@@ -1,4 +1,4 @@
-import type { NavigateFunction } from 'react-router';
+import { autoSendReceiptAfterMarkPaid, sendReceiptForStage } from '../banking/paymentReceiptService';
 import type { AppContextType, ExtraItem, LabourItem, QuoteItem, QuoteLine } from '../../App';
 import type { TradeId } from '../../config/types';
 import { getTrade, isValidTradeId } from '../../config/trades';
@@ -980,7 +980,7 @@ function executeAssignContractor(output: Record<string, unknown>, ctx: ToolRunti
   };
 }
 
-function executeMarkPaymentReceived(output: Record<string, unknown>, ctx: ToolRuntimeContext): ToolExecutionResult {
+async function executeMarkPaymentReceived(output: Record<string, unknown>, ctx: ToolRuntimeContext): Promise<ToolExecutionResult> {
   const projectId = readOptionalString(output.projectId) ?? ctx.projectId;
   if (!projectId) {
     return { action: 'markPaymentReceived', summary: 'Need an open project.', output, executed: false };
@@ -992,24 +992,69 @@ function executeMarkPaymentReceived(output: Record<string, unknown>, ctx: ToolRu
   const stageId = readOptionalString(output.stageId);
   const stageName = readOptionalString(output.stageName)?.toLowerCase();
   const paidDate = readOptionalString(output.paidDate) ?? new Date().toISOString().slice(0, 10);
+  let matchedStageId: string | undefined;
   const stages = project.paymentStages.map((stage) => {
     const matchesId = stageId && stage.id === stageId;
     const matchesName = stageName && stage.name.toLowerCase().includes(stageName);
     if (!matchesId && !matchesName) return stage;
+    matchedStageId = stage.id;
     return { ...stage, status: 'paid' as const, paidDate };
   });
   const matched = stages.some((s, i) => s !== project.paymentStages[i]);
-  if (!matched) {
+  if (!matched || !matchedStageId) {
     return { action: 'markPaymentReceived', summary: 'Payment stage not found.', output, executed: false };
   }
   updateProject(projectId, { paymentStages: stages });
+
+  let summary = `Payment marked received on ${project.projectName}.`;
+  const customer = ctx.app?.customers.find((c) => c.id === project.customerId);
+  if (customer) {
+    const receiptResult = await autoSendReceiptAfterMarkPaid(projectId, matchedStageId, customer);
+    if (receiptResult && !receiptResult.skipped) {
+      summary += receiptResult.success
+        ? ` ${receiptResult.message}`
+        : ` Receipt not sent: ${receiptResult.message}`;
+    }
+  }
+
   return {
     action: 'markPaymentReceived',
-    summary: `Payment marked received on ${project.projectName}.`,
+    summary,
     entityId: projectId,
     openRoute: '/projects',
-    output: { ...output, projectId, paidDate },
+    output: { ...output, projectId, paidDate, stageId: matchedStageId },
     executed: true,
+  };
+}
+
+async function executeSendClientReceipt(output: Record<string, unknown>, ctx: ToolRuntimeContext): Promise<ToolExecutionResult> {
+  const projectId = readOptionalString(output.projectId) ?? ctx.projectId;
+  if (!projectId) {
+    return { action: 'sendClientReceipt', summary: 'Need projectId.', output, executed: false };
+  }
+  const project = getProject(projectId);
+  if (!project) {
+    return { action: 'sendClientReceipt', summary: 'Project not found.', output, executed: false };
+  }
+  const customerId = readOptionalString(output.customerId) ?? project.customerId;
+  const customer = ctx.app?.customers.find((c) => c.id === customerId);
+  if (!customer) {
+    return { action: 'sendClientReceipt', summary: 'Customer not found.', output, executed: false };
+  }
+  const result = await sendReceiptForStage({
+    projectId,
+    stageId: readOptionalString(output.stageId),
+    stageName: readOptionalString(output.stageName),
+    customer,
+    force: output.force === true || output.force === 'true',
+  });
+  return {
+    action: 'sendClientReceipt',
+    summary: result.message,
+    entityId: projectId,
+    openRoute: '/projects',
+    output: { ...output, projectId },
+    executed: result.success,
   };
 }
 
@@ -1195,6 +1240,7 @@ async function executeSingleTool(
   if (name === 'completeHandover') return executeCompleteHandover(output, ctx);
   if (name === 'assignContractor') return executeAssignContractor(output, ctx);
   if (name === 'markPaymentReceived') return executeMarkPaymentReceived(output, ctx);
+  if (name === 'sendClientReceipt' || name === 'draftClientReceipt') return executeSendClientReceipt(output, ctx);
 
   if (
     name === 'listRecentEmails'

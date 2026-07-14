@@ -4,7 +4,13 @@ import {
   appendConversationMessage,
   conversationToOrchestratorMessages,
 } from './conversation-store';
-import { normalizeInboundText, localizeOutboundText } from './translation-service';
+import {
+  normalizeInboundText,
+  localizeOutboundText,
+  getSystemInstruction,
+  getPhrase,
+  normalizeLang,
+} from './translation-service';
 import {
   executeChannelActions,
   filterActionsForChannelMode,
@@ -112,13 +118,14 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
   });
   if (confirm.handled) {
     const route = resolveInboundChannel(phone, orgId);
-    const replyEnglish = confirm.reply ?? 'Done.';
-    const replyLocalized = await localizeOutboundText(replyEnglish, route.preferredLanguage);
+    const lang = normalizeLang(route.preferredLanguage);
+    const replyEnglish = confirm.reply ?? getPhrase(lang, 'done');
+    const replyLocalized = await localizeOutboundText(replyEnglish, lang);
     appendConversationMessage(orgId, phone, {
       role: 'user',
       content: text,
       bodyEnglish: text,
-      detectedLanguage: 'en',
+      detectedLanguage: lang,
       channel,
     });
     appendConversationMessage(orgId, phone, {
@@ -130,7 +137,7 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
     return {
       replyEnglish,
       replyLocalized,
-      detectedLanguage: route.preferredLanguage ?? 'en',
+      detectedLanguage: lang,
       route,
       toolsUsed: confirm.results?.map((r) => r.action) ?? [],
       executedSummaries: confirm.results?.map((r) => r.summary) ?? [],
@@ -138,7 +145,8 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
   }
 
   const route = resolveInboundChannel(phone, orgId);
-  const normalized = await normalizeInboundText(text, route.preferredLanguage);
+  const targetLang = normalizeLang(route.preferredLanguage);
+  const normalized = await normalizeInboundText(text, targetLang);
   const history = conversationToOrchestratorMessages(orgId, phone, 20);
   const studio = readStudioConfigExport();
   const humourLevel = String(studio?.humourLevel ?? 'balanced');
@@ -148,7 +156,7 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
     role: 'user',
     content: text,
     bodyEnglish: normalized.english,
-    detectedLanguage: normalized.detectedLanguage,
+    detectedLanguage: targetLang,
     channel,
   });
 
@@ -162,6 +170,7 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
   const resolvedRole = resolveRole(route);
   const knowledgeChunks = Array.isArray(studio?.knowledgeChunks) ? studio.knowledgeChunks as unknown[] : [];
   const knowledgeBlock = formatKnowledgeChunks(knowledgeChunks);
+  const languageInstruction = getSystemInstruction(targetLang);
   const voicePrompt = [
     buildBritishVoicePrompt(
       String(studio?.humourLevel ?? 'balanced'),
@@ -175,7 +184,8 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
             ? 'phone'
             : 'customer_portal',
     ),
-  ].join('\n\n');
+    languageInstruction,
+  ].filter(Boolean).join('\n\n');
 
   const staffContext = route.mode === 'staff' || route.mode === 'foreman'
     ? buildStaffContext(orgId, route)
@@ -235,21 +245,28 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
 
   const executedSummaries = executed.filter((e) => e.executed).map((e) => e.summary);
   const pendingConfirm = executed.find((e) => e.needsConfirm);
-  let replyEnglish = result.content ?? '';
+  let replyText = result.content ?? '';
   if (pendingConfirm?.confirmPrompt) {
-    replyEnglish = `${replyEnglish}\n\n${pendingConfirm.confirmPrompt}`.trim();
+    const confirmLine = targetLang === 'en'
+      ? pendingConfirm.confirmPrompt
+      : getPhrase(targetLang, 'confirm_yes_no');
+    replyText = `${replyText}\n\n${confirmLine}`.trim();
   }
   if (executedSummaries.length) {
     const actionBlock = executedSummaries.join('\n');
-    replyEnglish = replyEnglish ? `${replyEnglish}\n\n${actionBlock}` : actionBlock;
+    replyText = replyText ? `${replyText}\n\n${actionBlock}` : actionBlock;
+  }
+  if (!replyText.trim()) {
+    replyText = getPhrase(targetLang, 'greeting');
   }
 
-  const replyLocalized = await localizeOutboundText(replyEnglish, route.preferredLanguage);
+  // Orchestrator already replies in target language via pack systemInstruction — no OpenAI translate.
+  const replyLocalized = await localizeOutboundText(replyText, targetLang);
 
   appendConversationMessage(orgId, phone, {
     role: 'assistant',
     content: replyLocalized,
-    bodyEnglish: replyEnglish,
+    bodyEnglish: replyText,
     channel,
   });
 
@@ -266,9 +283,9 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
   }
 
   return {
-    replyEnglish,
+    replyEnglish: replyText,
     replyLocalized,
-    detectedLanguage: route.preferredLanguage ?? normalized.detectedLanguage,
+    detectedLanguage: targetLang,
     route,
     toolsUsed: executed.map((e) => e.action),
     executedSummaries,

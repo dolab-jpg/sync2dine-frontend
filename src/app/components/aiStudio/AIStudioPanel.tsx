@@ -26,6 +26,7 @@ import type {
 } from '../../config/ai/types';
 import type { AgentRole } from '../../engine/ai/agentContext';
 import { BCDocLibrary } from '../buildingControl/BCDocLibrary';
+import { LanguagePacksPanel } from './LanguagePacksPanel';
 
 const CATEGORIES: CommandCategory[] = [
   'customer_self_service',
@@ -457,6 +458,8 @@ export function AIStudioPanel() {
           </Link>
         </CardContent>
       </Card>
+
+      <LanguagePacksPanel />
     </div>
   );
 }

@@ -44,6 +44,7 @@ export default function CustomerManagement() {
     photos: [] as string[],
     whatsappOptIn: false,
     preferredChannel: 'email' as Customer['preferredChannel'],
+    preferredLanguage: 'en' as NonNullable<Customer['preferredLanguage']>,
     interestedTrades: [] as TradeId[],
   });
 
@@ -67,6 +68,7 @@ export default function CustomerManagement() {
       photos: [],
       whatsappOptIn: false,
       preferredChannel: 'email',
+      preferredLanguage: 'en',
       interestedTrades: [],
     });
     setEditingCustomer(null);
@@ -97,6 +99,7 @@ export default function CustomerManagement() {
       photos: customer.photos,
       whatsappOptIn: customer.whatsappOptIn ?? false,
       preferredChannel: customer.preferredChannel ?? 'email',
+      preferredLanguage: customer.preferredLanguage ?? 'en',
       interestedTrades: customer.interestedTrades ?? [],
     });
     setIsAddDialogOpen(true);
@@ -263,6 +266,29 @@ export default function CustomerManagement() {
                       <SelectItem value="both">Both</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <Label htmlFor="preferredLanguage">Preferred language</Label>
+                  <Select
+                    value={formData.preferredLanguage}
+                    onValueChange={(v: NonNullable<Customer['preferredLanguage']>) =>
+                      setFormData({ ...formData, preferredLanguage: v })
+                    }
+                  >
+                    <SelectTrigger id="preferredLanguage"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="en">English</SelectItem>
+                      <SelectItem value="sq">Albanian</SelectItem>
+                      <SelectItem value="uk">Ukrainian</SelectItem>
+                      <SelectItem value="zh">Chinese</SelectItem>
+                      <SelectItem value="es">Spanish</SelectItem>
+                      <SelectItem value="pl">Polish</SelectItem>
+                      <SelectItem value="fa">Farsi</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-green-800 mt-1">
+                    Saved language pack for WhatsApp/phone — no live translation.
+                  </p>
                 </div>
                 <p className="text-xs text-green-800">Phone format: UK mobile e.g. 07700 900000 or +447700900000</p>
               </div>

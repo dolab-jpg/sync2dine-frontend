@@ -280,14 +280,29 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   {
     id: 'company',
     name: 'Company Profile',
-    description: 'Used by Cyrus, templates, and PDFs',
+    description: 'Used by Cyrus, templates, and invoice/quote/receipt PDFs',
     category: 'general',
     fields: [
       { key: 'companyName', label: 'Company Name', type: 'text', placeholder: 'TradePro Ltd' },
+      { key: 'website', label: 'Website', type: 'url', placeholder: 'https://www.example.com' },
+      { key: 'companyRegistrationNumber', label: 'Company registration number', type: 'text', placeholder: '12345678' },
+      { key: 'vatNumber', label: 'VAT number', type: 'text', placeholder: 'GB123456789' },
       { key: 'phone', label: 'Phone', type: 'text', placeholder: '020 1234 5678' },
       { key: 'email', label: 'Email', type: 'text', placeholder: 'info@tradepro.com' },
       { key: 'address', label: 'Address', type: 'text' },
-      { key: 'logoUrl', label: 'Logo URL', type: 'url' },
+      { key: 'logoUrl', label: 'Logo URL', type: 'url', placeholder: 'Upload below or paste image URL' },
+      { key: 'accountName', label: 'Bank account name', type: 'text', placeholder: 'TradePro Ltd' },
+      { key: 'sortCode', label: 'Sort code', type: 'text', placeholder: '20-00-00' },
+      { key: 'accountNumber', label: 'Account number', type: 'text', placeholder: '12345678' },
+      {
+        key: 'autoSendReceiptOnPaid',
+        label: 'Auto-send receipt when payment marked paid',
+        type: 'select',
+        options: [
+          { value: 'true', label: 'Yes — email receipt automatically' },
+          { value: 'false', label: 'No — manual send only' },
+        ],
+      },
     ],
   },
 ];
@@ -319,6 +334,7 @@ export function getDefaultFieldValues(def: IntegrationDefinition): Record<string
     values.phone = '020 1234 5678';
     values.email = 'info@tradepro.com';
     values.address = '123 High Street, London, SW1A 1AA';
+    values.autoSendReceiptOnPaid = 'true';
   }
   if (def.id === 'email_oauth') {
     values.microsoftTenantId = 'common';

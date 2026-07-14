@@ -119,6 +119,7 @@ const ACCOUNTS = new Set([
   'categorizeTransaction',
   'matchTransactionToProject',
   'draftClientReceipt',
+  'sendClientReceipt',
 ]);
 
 const EMAIL = new Set([

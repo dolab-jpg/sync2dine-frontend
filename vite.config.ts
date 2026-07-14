@@ -47,6 +47,9 @@ export default defineConfig(({ mode }) => {
     'PLATFORM_OWNER_EMAIL',
     'PLATFORM_OWNER_PASSWORD',
     'VITE_API_BASE_URL',
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'VITE_SUPABASE_URL',
   ]) {
     if (env[key] && !process.env[key]) process.env[key] = env[key]
   }

@@ -34,6 +34,7 @@ function toLead(c: Customer): Lead | null {
     tags: c.tags ?? [],
     whatsappOptIn: c.whatsappOptIn ?? false,
     preferredChannel: c.preferredChannel ?? 'email',
+    preferredLanguage: c.preferredLanguage ?? 'en',
   };
 }
 

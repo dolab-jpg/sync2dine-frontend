@@ -87,6 +87,7 @@ const CUSTOMER_CSV_HEADERS = [
   'interestedTrades',
   'whatsappOptIn',
   'preferredChannel',
+  'preferredLanguage',
   'createdAt',
 ] as const;
 
@@ -95,6 +96,7 @@ export function migrateCustomers(items: Customer[]): Customer[] {
     ...c,
     whatsappOptIn: c.whatsappOptIn ?? true,
     preferredChannel: c.preferredChannel ?? 'both',
+    preferredLanguage: c.preferredLanguage ?? 'en',
     tags: c.tags ?? [],
     photos: c.photos ?? [],
     notes: c.notes ?? '',
@@ -227,6 +229,7 @@ export function buildCustomersCsv(customers: Customer[]): string {
         (c.interestedTrades ?? []).join(';'),
         String(c.whatsappOptIn ?? false),
         c.preferredChannel ?? 'both',
+        c.preferredLanguage ?? 'en',
         c.createdAt,
       ]
         .map((v) => escapeCsv(String(v ?? '')))
@@ -436,6 +439,12 @@ export function parseCustomersCsv(text: string): { customers: Customer[]; errors
       ? (tradesRaw.split(';').map((t) => t.trim()).filter(Boolean) as TradeId[])
       : undefined;
 
+    const langRaw = get('preferredlanguage');
+    const preferredLanguage: Customer['preferredLanguage'] =
+      langRaw === 'sq' || langRaw === 'uk' || langRaw === 'zh' || langRaw === 'es' || langRaw === 'pl' || langRaw === 'fa' || langRaw === 'en'
+        ? langRaw
+        : 'en';
+
     customers.push({
       id: get('id') || `${Date.now()}-${row}`,
       name,
@@ -447,6 +456,7 @@ export function parseCustomersCsv(text: string): { customers: Customer[]; errors
       interestedTrades,
       whatsappOptIn: get('whatsappoptin').toLowerCase() === 'true',
       preferredChannel,
+      preferredLanguage,
       createdAt: get('createdat') || new Date().toISOString(),
       photos: [],
     });

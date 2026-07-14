@@ -49,6 +49,7 @@ export default function IntegrationsHub() {
   }, []);
 
   useEffect(() => {
+    void integrationService.initCompanyProfile().then(refresh);
     return integrationService.subscribe(refresh);
   }, [refresh]);
 

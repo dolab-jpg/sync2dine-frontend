@@ -6,6 +6,7 @@ import {
   listTeamMembers,
 } from './conversation-store';
 import { detectLanguage, translateToEnglish, translateFromEnglish } from './translation-service';
+import { loadLanguagePacks, saveLanguagePacks, type LanguagePacksMap } from './language-packs';
 import { enqueueOutboundCall, getDataStore } from './data-store';
 import { resolveInboundChannel } from './channel-router';
 
@@ -51,6 +52,24 @@ export async function handleChannelRoutes(
     }
   }
 
+  if (pathname === '/api/language-packs' && req.method === 'GET') {
+    sendJson(res, 200, { packs: loadLanguagePacks() });
+    return true;
+  }
+
+  if (pathname === '/api/language-packs' && req.method === 'PUT') {
+    const body = JSON.parse(await readBody(req));
+    const packs = (body.packs ?? body) as LanguagePacksMap;
+    if (!packs || typeof packs !== 'object') {
+      sendJson(res, 400, { error: 'Expected packs object' });
+      return true;
+    }
+    const saved = saveLanguagePacks(packs);
+    sendJson(res, 200, { packs: saved });
+    return true;
+  }
+
+  // Stubs: pack-backed, no OpenAI (kept for any old clients)
   if (pathname === '/api/translate/detect' && req.method === 'POST') {
     const body = JSON.parse(await readBody(req));
     const lang = await detectLanguage(String(body.text ?? ''));

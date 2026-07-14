@@ -1,4 +1,4 @@
-import { getOrgOpenAIApiKey } from './organizations';
+import { ensureOrgOpenAIKeyLoaded, getOrgOpenAIApiKey } from './organizations';
 
 export type OpenAIConnectionReason = 'missing' | 'rejected';
 
@@ -21,12 +21,42 @@ export function resolveOpenAIApiKey(bodyApiKey?: string, orgId?: string | null):
   return key || undefined;
 }
 
+export async function resolveOpenAIApiKeyAsync(
+  bodyApiKey?: string,
+  orgId?: string | null,
+): Promise<string | undefined> {
+  if (orgId) {
+    await ensureOrgOpenAIKeyLoaded(orgId);
+  }
+  return resolveOpenAIApiKey(bodyApiKey, orgId);
+}
+
 export function requireOpenAIApiKey(bodyApiKey?: string, orgId?: string | null): string {
   const key = resolveOpenAIApiKey(bodyApiKey, orgId);
   if (!key) {
     if (orgId) {
       throw new OpenAIConnectionError(
-        'OpenAI API key not configured for this client — add a key in Platform → Clients.',
+        'OpenAI API key not configured for this company — add a key in Settings → Integrations → OpenAI (Super Admin).',
+        'missing',
+      );
+    }
+    throw new OpenAIConnectionError(
+      'OpenAI not connected — add your API key in Settings → Integrations → OpenAI and Save.',
+      'missing',
+    );
+  }
+  return key;
+}
+
+export async function requireOpenAIApiKeyAsync(
+  bodyApiKey?: string,
+  orgId?: string | null,
+): Promise<string> {
+  const key = await resolveOpenAIApiKeyAsync(bodyApiKey, orgId);
+  if (!key) {
+    if (orgId) {
+      throw new OpenAIConnectionError(
+        'OpenAI API key not configured for this company — add a key in Settings → Integrations → OpenAI (Super Admin).',
         'missing',
       );
     }
@@ -77,7 +107,7 @@ export async function createOpenAIClientForOrg(
 ) {
   const { default: OpenAI } = await import('openai');
   const { wrapOpenAIWithMetering } = await import('./metered-openai');
-  const apiKey = requireOpenAIApiKey(bodyApiKey, orgId);
+  const apiKey = await requireOpenAIApiKeyAsync(bodyApiKey, orgId);
   const openai = new OpenAI({ apiKey });
   return wrapOpenAIWithMetering(openai, orgId, endpoint);
 }

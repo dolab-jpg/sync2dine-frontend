@@ -21,8 +21,8 @@ import { messagingHub } from '../engine/messaging/messagingHub';
 import { testBuilders } from '../data/testData';
 import { loadProjects, saveProjects, updateProject, syncToServer } from '../engine/project/projectStore';
 import type { UnifiedProject, PaymentStage, Invoice, PaymentStageStatus } from '../engine/project/types';
-import { generateReceiptPdf, generateInvoicePdf } from '../engine/messaging/pdfGenerator';
-import { addClientReceipt } from '../engine/banking/bankingStore';
+import { generateInvoicePdf } from '../engine/messaging/pdfGenerator';
+import { sendReceiptForStage as sendStageReceipt, autoSendReceiptAfterMarkPaid } from '../engine/banking/paymentReceiptService';
 import { uploadProjectFile } from '../engine/storage/storageService';
 import { getContactsForCustomer } from '../engine/contacts/contactStore';
 import { ProjectPhotosTab } from './project/ProjectPhotosTab';
@@ -184,7 +184,7 @@ export default function BuilderProjectManagement() {
     toast.success(stageForm.id ? 'Payment stage updated' : 'Payment stage added');
   };
 
-  const setStageStatus = (stageId: string, status: PaymentStageStatus) => {
+  const setStageStatus = async (stageId: string, status: PaymentStageStatus) => {
     if (!selectedProject) return;
     const paymentStages = selectedProject.paymentStages.map((s) =>
       s.id === stageId
@@ -198,6 +198,16 @@ export default function BuilderProjectManagement() {
     );
     patchProjectPayments({ paymentStages });
     toast.success(`Stage marked ${status}`);
+    if (status === 'paid') {
+      const customer = customers.find((c) => c.id === selectedProject.customerId);
+      if (customer) {
+        const result = await autoSendReceiptAfterMarkPaid(selectedProject.id, stageId, customer);
+        if (result && !result.skipped) {
+          if (result.success) toast.success(result.message);
+          else toast.error(result.message);
+        }
+      }
+    }
   };
 
   const createInvoiceForStage = async (stage: PaymentStage) => {
@@ -259,39 +269,14 @@ export default function BuilderProjectManagement() {
     if (!selectedProject) return;
     const customer = customers.find((c) => c.id === selectedProject.customerId);
     if (!customer) return;
-    const pdf = await generateReceiptPdf(
-      selectedProject.customerName,
-      selectedProject.description || selectedProject.customerName,
-      stage.amount,
-      stage.name
-    );
-    await messagingHub.send({
-      channels: ['email'],
-      to: {
-        email: selectedProject.customerEmail,
-        phone: customer.phone,
-        customerId: selectedProject.customerId,
-        customerName: selectedProject.customerName,
-      },
-      subject: `Payment receipt — ${stage.name}`,
-      body: `Thank you for your payment of £${stage.amount.toFixed(2)} for ${stage.name}.`,
-      eventType: 'receipt',
-      attachment: pdf,
-      templateId: 'payment_receipt',
-    }, customer);
-    addClientReceipt({
-      customerId: customer.id,
-      customerName: customer.name,
+    const result = await sendStageReceipt({
       projectId: selectedProject.id,
-      projectName: selectedProject.description || selectedProject.customerName,
       stageId: stage.id,
-      amount: stage.amount,
-      date: stage.paidDate ?? new Date().toISOString().split('T')[0],
-      pdfPath: pdf.filename,
-      sentVia: 'email',
-      sentAt: new Date().toISOString(),
+      customer,
+      force: true,
     });
-    toast.success('Receipt sent');
+    if (result.success) toast.success(result.message);
+    else toast.error(result.message);
   };
 
   const linkedPlanningApp = useMemo(
@@ -1570,17 +1555,17 @@ export default function BuilderProjectManagement() {
 
                               {user.role !== 'customer' && (
                                 <div className="mt-3 flex flex-wrap gap-2 pt-3 border-t border-slate-200">
-                                  <Button size="sm" variant="outline" onClick={() => setStageForm({ id: stage.id, name: stage.name, percentage: String(stage.percentage), amount: String(stage.amount), notes: stage.notes ?? '' })}>Edit</Button>
+                                  <Button size="sm" variant="outline" className="min-h-11 touch-manipulation" onClick={() => setStageForm({ id: stage.id, name: stage.name, percentage: String(stage.percentage), amount: String(stage.amount), notes: stage.notes ?? '' })}>Edit</Button>
                                   {stage.status !== 'due' && stage.status !== 'paid' && (
-                                    <Button size="sm" variant="outline" onClick={() => setStageStatus(stage.id, 'due')}>Mark due</Button>
+                                    <Button size="sm" variant="outline" className="min-h-11 touch-manipulation" onClick={() => void setStageStatus(stage.id, 'due')}>Mark due</Button>
                                   )}
                                   {stage.status !== 'paid' && (
-                                    <Button size="sm" variant="outline" onClick={() => setStageStatus(stage.id, 'paid')}>Mark paid</Button>
+                                    <Button size="sm" variant="outline" className="min-h-11 touch-manipulation" onClick={() => void setStageStatus(stage.id, 'paid')}>Mark paid</Button>
                                   )}
-                                  <Button size="sm" variant="outline" onClick={() => void createInvoiceForStage(stage)}>Create invoice</Button>
-                                  <Button size="sm" variant="outline" onClick={() => void sendInvoiceForStage(stage)}>Send invoice</Button>
+                                  <Button size="sm" variant="outline" className="min-h-11 touch-manipulation" onClick={() => void createInvoiceForStage(stage)}>Create invoice</Button>
+                                  <Button size="sm" variant="outline" className="min-h-11 touch-manipulation" onClick={() => void sendInvoiceForStage(stage)}>Send invoice</Button>
                                   {stage.status === 'paid' && (
-                                    <Button size="sm" onClick={() => void sendReceiptForStage(stage)}>Send receipt</Button>
+                                    <Button size="sm" className="min-h-11 touch-manipulation" onClick={() => void sendReceiptForStage(stage)}>Send receipt</Button>
                                   )}
                                 </div>
                               )}

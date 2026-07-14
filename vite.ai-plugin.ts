@@ -50,12 +50,14 @@ export function aiProxyPlugin(): Plugin {
           const { handleChannelRoutes } = await import('./server/channel-routes');
           const { handleAgentCredentialsRoutes } = await import('./server/agent-credentials-routes');
           const { handleLeadsRoutes } = await import('./server/leads-routes');
+          const { handleOrgOpenAIKeyRoutes } = await import('./server/org-openai-key-routes');
           const { handleAiRequest } = await import('./server/ai-proxy');
 
           if (await handleAgentCredentialsRoutes(req, res, pathname)) return;
 
           if (await handleStripeRoutes(req, res, pathname)) return;
           if (await handleAuthRoutes(req, res, pathname)) return;
+          if (await handleOrgOpenAIKeyRoutes(req, res, pathname)) return;
           if (await handlePlatformRoutes(req, res, pathname)) return;
           if (await handleWhatsAppRoutes(req, res, pathname, url)) return;
           if (await handlePhoneRoutes(req, res, pathname, url)) return;

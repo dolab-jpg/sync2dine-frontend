@@ -200,7 +200,7 @@ const STAFF_TOOLS = [
     type: 'function' as const,
     function: {
       name: 'saveCustomer',
-      description: 'Create or update a customer record in CRM with name, contact details, and interested trades',
+      description: 'Create or update a customer record in CRM with name, contact details, interested trades, and preferred language pack',
       parameters: {
         type: 'object',
         properties: {
@@ -210,6 +210,10 @@ const STAFF_TOOLS = [
           phone: { type: 'string' },
           address: { type: 'string' },
           interestedTrades: { type: 'array', items: { type: 'string' } },
+          preferredLanguage: {
+            type: 'string',
+            description: 'Saved language pack code: en, sq, uk, zh, es, pl, or fa',
+          },
           isNew: { type: 'boolean' },
         },
         required: ['name'],
@@ -2777,11 +2781,13 @@ async function runStaffOrchestrator(
         output = toolName === 'updateLeadStatus'
           ? executeUpdateLeadStatus(parsedInput)
           : parsedInput;
+        const { resolveOpenAIApiKeyAsync } = await import('./openai-connection');
+        const visionKey = await resolveOpenAIApiKeyAsync(body.apiKey, orgId) ?? '';
         const executedOutput = await executeVisionTool(
           toolName,
           parsedInput,
           body,
-          body.apiKey ?? process.env.OPENAI_API_KEY ?? ''
+          visionKey
         );
         if (executedOutput) output = executedOutput;
         proposedActions.push({ action: toolName, input: parsedInput, output });

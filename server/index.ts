@@ -23,6 +23,7 @@ import { handlePackageUpdatesRoute } from './mailbox/package-updates';
 import { handleChannelRoutes } from './channel-routes';
 import { handleLeadsRoutes } from './leads-routes';
 import { handleAgentCredentialsRoutes } from './agent-credentials-routes';
+import { handleOrgOpenAIKeyRoutes } from './org-openai-key-routes';
 import { startMailboxPoller } from './mailbox/imapSyncService';
 import { startOutboundWorker } from './outbound-worker';
 
@@ -50,7 +51,7 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
 
   res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Org-Id, X-User-Id');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Org-Id, X-User-Id, X-User-Role');
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
@@ -87,6 +88,8 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
   if (await handleStripeRoutes(req, res, pathname)) return;
 
   if (await handleAuthRoutes(req, res, pathname)) return;
+
+  if (await handleOrgOpenAIKeyRoutes(req, res, pathname)) return;
 
   if (await handlePlatformRoutes(req, res, pathname)) return;
 

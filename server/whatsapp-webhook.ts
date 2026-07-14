@@ -344,9 +344,10 @@ export async function handleWhatsAppWebhookPost(
         const media = await downloadWhatsAppMedia(mediaId, accessToken);
         if (media) {
           try {
-            const { resolveOpenAIApiKey } = await import('./openai-connection');
+            const { resolveOpenAIApiKeyAsync } = await import('./openai-connection');
             const { default: OpenAI } = await import('openai');
-            const openai = new OpenAI({ apiKey: resolveOpenAIApiKey() });
+            const waOrgId = getRequestOrgId();
+            const openai = new OpenAI({ apiKey: await resolveOpenAIApiKeyAsync(undefined, waOrgId) });
             const file = new File([media.buffer], 'voice.ogg', { type: media.mimeType });
             const transcript = await openai.audio.transcriptions.create({
               model: 'whisper-1',

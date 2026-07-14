@@ -8,6 +8,7 @@ import { ChevronDown, ChevronUp, ExternalLink, Loader2, Zap } from 'lucide-react
 import { toast } from 'sonner';
 import type { IntegrationDefinition, IntegrationInstanceState, IntegrationStatus } from '../../config/integrations/types';
 import { IntegrationFieldForm } from './IntegrationFieldForm';
+import { CompanyLogoUpload } from './CompanyLogoUpload';
 import { integrationService } from '../../engine/integrations/integrationService';
 
 interface IntegrationCardProps {
@@ -121,6 +122,12 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
 
       {expanded && (
         <CardContent className="pt-0 space-y-4 border-t">
+          {definition.id === 'company' && (
+            <CompanyLogoUpload
+              logoUrl={localValues.logoUrl ?? ''}
+              onLogoUrlChange={(url) => setLocalValues((prev) => ({ ...prev, logoUrl: url }))}
+            />
+          )}
           <IntegrationFieldForm
             fields={definition.fields}
             values={localValues}
