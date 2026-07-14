@@ -49,6 +49,10 @@ const DEFAULT_SETTINGS: AISettings = {
 interface AIAssistantContextType {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
+  /** When true, AIChatPanel should auto-start hands-free voice once on open. */
+  preferVoiceOnOpen: boolean;
+  requestVoiceStart: () => void;
+  clearPreferVoiceOnOpen: () => void;
   messages: ChatMessage[];
   addMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   clearMessages: () => void;
@@ -124,6 +128,7 @@ function readStoredMessages(storageKey: string): ChatMessage[] {
 
 export function AIAssistantProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpenState] = useState(readAiPanelOpen);
+  const [preferVoiceOnOpen, setPreferVoiceOnOpen] = useState(false);
 
   const setIsOpen = useCallback((open: boolean) => {
     setIsOpenState(open);
@@ -133,6 +138,15 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
       // ignore
     }
   }, []);
+
+  const requestVoiceStart = useCallback(() => {
+    setPreferVoiceOnOpen(true);
+  }, []);
+
+  const clearPreferVoiceOnOpen = useCallback(() => {
+    setPreferVoiceOnOpen(false);
+  }, []);
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [settings, setSettings] = useState<AISettings>(() => {
     try {
@@ -320,7 +334,9 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
   const clearPendingTask = useCallback(() => setPendingTaskState(undefined), []);
 
   const value = useMemo<AIAssistantContextType>(() => ({
-    isOpen, setIsOpen, messages, addMessage, clearMessages,
+    isOpen, setIsOpen,
+    preferVoiceOnOpen, requestVoiceStart, clearPreferVoiceOnOpen,
+    messages, addMessage, clearMessages,
     settings, updateSettings,
     pendingQuoteFields, setPendingQuoteFields, clearPendingQuoteFields,
     lastAcceptedFields, setLastAcceptedFields,
@@ -334,7 +350,9 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
     pendingTask, setPendingTask, clearPendingTask,
     bcSessionActive, setBcSessionActive,
   }), [
-    isOpen, setIsOpen, messages, addMessage, clearMessages,
+    isOpen, setIsOpen,
+    preferVoiceOnOpen, requestVoiceStart, clearPreferVoiceOnOpen,
+    messages, addMessage, clearMessages,
     settings, updateSettings,
     pendingQuoteFields, setPendingQuoteFields, clearPendingQuoteFields,
     lastAcceptedFields, pageContext, setPageContext,

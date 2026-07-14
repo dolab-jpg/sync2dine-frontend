@@ -49,6 +49,8 @@ import { buildPlanningOrchestratorContext } from '../../engine/planning/planning
 export function AIChatPanel() {
   const app = useContext(AppContext);
   const {
+    isOpen,
+    preferVoiceOnOpen, clearPreferVoiceOnOpen,
     messages, addMessage, settings, pageContext,
     setPendingQuoteFields, setLastAcceptedFields,
     detectedTrades, setDetectedTrades,
@@ -468,6 +470,30 @@ export function AIChatPanel() {
     onUserMessage: async (text) => (await handleSend(text)) ?? '',
   });
 
+  // Auto-start hands-free voice when opened from AI Design (requestVoiceStart).
+  useEffect(() => {
+    if (!isOpen || !preferVoiceOnOpen) return;
+    if (!voice.isSupported || !isChatConnected) {
+      if (isOpen && preferVoiceOnOpen && !voice.isSupported) {
+        clearPreferVoiceOnOpen();
+        toast.info('Voice not supported in this browser — type your message instead');
+      }
+      return;
+    }
+    if (!voice.active) {
+      voice.start();
+    }
+    clearPreferVoiceOnOpen();
+  }, [
+    isOpen,
+    preferVoiceOnOpen,
+    isChatConnected,
+    voice.isSupported,
+    voice.active,
+    voice.start,
+    clearPreferVoiceOnOpen,
+  ]);
+
   const voiceStatusLabel =
     voice.status === 'listening' ? 'Listening…'
     : voice.status === 'thinking' ? 'Thinking…'
@@ -650,7 +676,10 @@ export function AIChatPanel() {
         )}
         <div className="flex gap-2 items-end">
           <VoiceInputButton
-            onTranscript={(t) => { setInput(t); if (settings.voiceConversation && isChatConnected) handleSend(t); }}
+            onTranscript={(t) => {
+              setInput(t);
+              if ((settings.voiceConversation || voice.active) && isChatConnected) void handleSend(t);
+            }}
           />
           <input
             ref={voiceNoteRef}

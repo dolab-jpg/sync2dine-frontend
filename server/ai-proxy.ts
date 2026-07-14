@@ -254,6 +254,13 @@ export async function handleAiRequest(req: IncomingMessage, res: ServerResponse,
       return;
     }
 
+    if (pathname === '/api/ai/render') {
+      const { handleAiRender } = await import('./render-handler');
+      const result = await handleAiRender(body as { image?: string; prompt?: string; tradeId?: string }, openai);
+      sendJson(res, 200, result);
+      return;
+    }
+
     sendJson(res, 404, { error: 'Not found' });
   } catch (err) {
     sendOpenAIConnectionError(res, err);

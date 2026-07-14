@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Upload, Sparkles, Download, RefreshCw, Layers } from 'lucide-react';
+import { Upload, Sparkles, Download, RefreshCw, Layers, Headphones } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAllTrades, getTrade, isValidTradeId } from '../config/trades';
 import type { TradeId } from '../config/types';
@@ -12,11 +12,12 @@ import { getDefaultRenderSettings, getRenderOptionsForTrade } from '../config/tr
 import { useAIAssistant } from '../context/AIAssistantContext';
 import { useResolvedTrade } from '../hooks/useResolvedTrade';
 import { Badge } from './ui/badge';
+import { buildRenderPrompt, generateAiRender } from '../engine/ai/renderService';
 
 export default function AIBathroomRender() {
   const { tradeId: routeTradeId } = useParams();
   const navigate = useNavigate();
-  const { setIsOpen } = useAIAssistant();
+  const { setIsOpen, requestVoiceStart, setPageContext } = useAIAssistant();
   const { tradeId: resolvedTradeId, isAiDetected, setTradeOverride } = useResolvedTrade();
   const [showManualPicker, setShowManualPicker] = useState(false);
 
@@ -36,53 +37,50 @@ export default function AIBathroomRender() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    setPageContext({
+      route: tradeId ? `/ai-render/${tradeId}` : '/ai-render',
+      page: 'ai-design',
+      tradeId: tradeId ?? null,
+    });
+  }, [tradeId, setPageContext]);
+
+  useEffect(() => {
     if (!tradeId) return;
     setSettings(getDefaultRenderSettings(tradeId));
     setRenderedImage(null);
   }, [tradeId]);
 
-  const handleTradeChange = (id: string) => {
-    if (isValidTradeId(id)) {
-      navigate(`/ai-render/${id}`, { replace: true });
-    }
+  const openAssistantWithVoice = useCallback(() => {
+    requestVoiceStart();
+    setIsOpen(true);
+  }, [requestVoiceStart, setIsOpen]);
+
+  const drawProductLabel = (ctx: CanvasRenderingContext2D, x: number, y: number, label: string, value: string) => {
+    ctx.save();
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.9)';
+    ctx.beginPath();
+    ctx.arc(x, y, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('✓', x, y + 8);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(x - 60, y + 40, 120, 30);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px Arial';
+    ctx.fillText(label, x, y + 52);
+    ctx.font = '10px Arial';
+    ctx.fillText(value.slice(0, 14), x, y + 64);
+    ctx.restore();
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setUploadedImage(event.target?.result as string);
-        setRenderedImage(null);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleRender = async () => {
-    if (!trade) {
-      toast.error('Describe the job in AI or pick a trade first');
-      return;
-    }
-    if (!uploadedImage) {
-      toast.error(`Please upload a ${trade.name.toLowerCase()} photo first`);
-      return;
-    }
-
-    setIsRendering(true);
-    toast.info(`AI is generating your ${trade.name.toLowerCase()} design...`);
-
-    setTimeout(() => {
-      setRenderedImage(uploadedImage);
-      drawOverlay();
-      setIsRendering(false);
-      toast.success(`${trade.name} design generated!`);
-      toast.info('Showing mock render — connect AI API for real results');
-    }, 3000);
-  };
-
-  const drawOverlay = () => {
-    if (!canvasRef.current || !uploadedImage) return;
+  const drawOverlay = useCallback(() => {
+    const source = renderedImage ?? uploadedImage;
+    if (!canvasRef.current || !source || !trade) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -113,44 +111,84 @@ export default function AIBathroomRender() {
         ctx.strokeRect(30, canvas.height - 35, 40, 20);
       }
 
-      let xPos = canvas.width / (renderGroups.length + 1);
+      const xPos = canvas.width / (renderGroups.length + 1);
       renderGroups.slice(0, 4).forEach((group, i) => {
         const opt = group.options.find(o => o.value === settings[group.key]);
         drawProductLabel(ctx, xPos * (i + 1), 100, group.label, opt?.label ?? settings[group.key] ?? '');
       });
     };
 
-    img.src = uploadedImage;
+    img.src = source;
+  }, [renderedImage, uploadedImage, trade, renderGroups, settings]);
+
+  useEffect(() => {
+    if (!renderedImage || !showOverlay) return;
+    // Draw after canvas mounts from the renderedImage branch
+    const id = requestAnimationFrame(() => drawOverlay());
+    return () => cancelAnimationFrame(id);
+  }, [renderedImage, showOverlay, settings, drawOverlay]);
+
+  const handleTradeChange = (id: string) => {
+    if (isValidTradeId(id)) {
+      navigate(`/ai-render/${id}`, { replace: true });
+    }
   };
 
-  const drawProductLabel = (ctx: CanvasRenderingContext2D, x: number, y: number, label: string, value: string) => {
-    ctx.save();
-    ctx.fillStyle = 'rgba(245, 158, 11, 0.9)';
-    ctx.beginPath();
-    ctx.arc(x, y, 30, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 24px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('✓', x, y + 8);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.fillRect(x - 60, y + 40, 120, 30);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 11px Arial';
-    ctx.fillText(label, x, y + 52);
-    ctx.font = '10px Arial';
-    ctx.fillText(value.slice(0, 14), x, y + 64);
-    ctx.restore();
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setUploadedImage(event.target?.result as string);
+        setRenderedImage(null);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRender = async () => {
+    if (!trade || !tradeId) {
+      toast.error('Describe the job in AI or pick a trade first');
+      return;
+    }
+    if (!uploadedImage) {
+      toast.error(`Please upload a ${trade.name.toLowerCase()} photo first`);
+      return;
+    }
+
+    setIsRendering(true);
+    toast.info(`AI is generating your ${trade.name.toLowerCase()} design...`);
+
+    try {
+      const prompt = buildRenderPrompt(trade.name, settings, renderGroups);
+      const result = await generateAiRender({
+        image: uploadedImage,
+        prompt,
+        tradeId,
+      });
+      setRenderedImage(result.image);
+      toast.success(`${trade.name} design generated!`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'AI render failed';
+      toast.error(message);
+    } finally {
+      setIsRendering(false);
+    }
   };
 
   const handleDownload = () => {
-    if (!canvasRef.current) return;
     const link = document.createElement('a');
     link.download = `${tradeId}-render.png`;
-    link.href = canvasRef.current.toDataURL();
+
+    if (showOverlay && canvasRef.current && canvasRef.current.width > 0) {
+      link.href = canvasRef.current.toDataURL('image/png');
+    } else if (renderedImage) {
+      link.href = renderedImage;
+    } else {
+      toast.error('Nothing to download yet');
+      return;
+    }
+
     link.click();
     toast.success('Image downloaded!');
   };
@@ -163,10 +201,11 @@ export default function AIBathroomRender() {
             <Sparkles className="w-12 h-12 mx-auto text-purple-600" />
             <h1 className="text-2xl font-bold text-slate-900">AI Design</h1>
             <p className="text-slate-600">
-              Use the AI assistant to describe the job — it will detect the trade automatically.
+              Speak to the AI assistant to describe the job — it will detect the trade automatically.
             </p>
-            <Button className="w-full" onClick={() => setIsOpen(true)}>
-              Open AI Assistant
+            <Button className="w-full" onClick={openAssistantWithVoice}>
+              <Headphones className="w-4 h-4 mr-2" />
+              Talk to AI Assistant
             </Button>
             {!showManualPicker ? (
               <Button variant="ghost" className="w-full" onClick={() => setShowManualPicker(true)}>
@@ -211,25 +250,31 @@ export default function AIBathroomRender() {
                 )}
               </div>
             </div>
-            {showManualPicker ? (
-              <div className="w-full sm:w-56">
-                <Label className="text-amber-200 text-sm mb-1 block">Trade</Label>
-                <Select value={tradeId} onValueChange={handleTradeChange}>
-                  <SelectTrigger className="bg-white/10 border-white/20 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getAllTrades().map(t => (
-                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : (
-              <Button variant="outline" className="border-white/30 text-white" onClick={() => setShowManualPicker(true)}>
-                Change trade
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+              <Button variant="outline" className="border-white/30 text-white" onClick={openAssistantWithVoice}>
+                <Headphones className="w-4 h-4 mr-2" />
+                Talk to AI
               </Button>
-            )}
+              {showManualPicker ? (
+                <div className="w-full sm:w-56">
+                  <Label className="text-amber-200 text-sm mb-1 block">Trade</Label>
+                  <Select value={tradeId} onValueChange={handleTradeChange}>
+                    <SelectTrigger className="bg-white/10 border-white/20 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getAllTrades().map(t => (
+                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <Button variant="outline" className="border-white/30 text-white" onClick={() => setShowManualPicker(true)}>
+                  Change trade
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
