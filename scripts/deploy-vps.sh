@@ -23,6 +23,17 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_URI} !^/api/
 RewriteCond %{REQUEST_URI} !^/webhooks/
 RewriteRule . /index.html [L]
+
+# Never cache the HTML shell so new deploys are picked up immediately;
+# hashed assets in /assets are safe to cache forever.
+<IfModule mod_headers.c>
+  <Files "index.html">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </Files>
+  <FilesMatch "\.(js|css|woff2?)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>
 EOF
 
 echo "== API env file =="
