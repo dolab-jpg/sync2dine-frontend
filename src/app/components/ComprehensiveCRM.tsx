@@ -85,7 +85,7 @@ export default function ComprehensiveCRM() {
   const handleStartQuote = () => {
     if (!selectedLead) return;
     const trade = selectedLead.tradeId ?? inferTradeFromTags(selectedLead.tags);
-    updateCustomer(selectedLead.id, { status: 'quoted', lastContact: new Date().toISOString() });
+    updateCustomer(selectedLead.id, { lastContact: new Date().toISOString() });
     navigate(`/quote/${trade}/${selectedLead.id}`);
     setSelectedLead(null);
   };
@@ -94,6 +94,7 @@ export default function ComprehensiveCRM() {
     if (!selectedLead) return;
     updateCustomer(selectedLead.id, { status: 'lost', lastContact: new Date().toISOString() });
     toast.info(`${selectedLead.name} marked as lost`);
+    setActiveTab('lost');
     setSelectedLead(null);
   };
 

@@ -2,8 +2,10 @@ import type { Customer, Quote } from '../../App';
 
 export type LeadSource = NonNullable<Customer['source']>;
 
+const PIPELINE_STATUSES = new Set(['lead', 'quoted', 'won', 'lost']);
+
 export function isLeadCustomer(c: Customer): boolean {
-  return c.status === 'lead' || c.status === 'quoted' || !!c.source;
+  return PIPELINE_STATUSES.has(c.status) || !!c.source;
 }
 
 export function getDueFollowUps(customers: Customer[]): Customer[] {
@@ -52,7 +54,8 @@ export function syncCustomerStatusFromQuote(
   if (quoteStatus === 'accepted') {
     return { status: 'won', lastContact: new Date().toISOString() };
   }
-  if (quoteStatus === 'rejected' || quoteStatus === 'expired') {
+  // Manager price rejection must not close the sales lead — only expired quotes do.
+  if (quoteStatus === 'expired') {
     return { status: 'lost', lastContact: new Date().toISOString() };
   }
   return null;
@@ -60,7 +63,7 @@ export function syncCustomerStatusFromQuote(
 
 export function buildLeadPipelineSnapshot(customers: Customer[]) {
   return {
-    total: customers.filter((c) => c.source || c.status === 'lead' || c.status === 'quoted').length,
+    total: customers.filter(isLeadCustomer).length,
     leads: customers.filter((c) => c.status === 'lead').length,
     quoted: customers.filter((c) => c.status === 'quoted').length,
     won: customers.filter((c) => c.status === 'won').length,
