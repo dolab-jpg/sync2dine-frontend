@@ -196,10 +196,50 @@ export async function syncOrgOpenAIKeyToSupabase(orgId: string, encrypted: strin
         'Key saved on this server, but cloud sync is unavailable (missing SUPABASE_SERVICE_ROLE_KEY). Builder/customer AI may fail if API runs in another process.',
     };
   }
-  const { error } = await supabase
+
+  const now = new Date().toISOString();
+  const local = getOrganizationById(orgId);
+  const { data: existing, error: readError } = await supabase
     .from('organizations')
-    .update({ openai_api_key_encrypted: encrypted, updated_at: new Date().toISOString() })
-    .eq('id', orgId);
+    .select('id')
+    .eq('id', orgId)
+    .maybeSingle();
+
+  if (readError) {
+    console.warn('[org-openai-key] Supabase read failed:', readError.message);
+    return {
+      synced: false,
+      warning: `Key saved locally, but cloud sync failed (${readError.message}).`,
+    };
+  }
+
+  let error: { message: string } | null = null;
+  if (existing?.id) {
+    const result = await supabase
+      .from('organizations')
+      .update({ openai_api_key_encrypted: encrypted, updated_at: now })
+      .eq('id', orgId);
+    error = result.error;
+  } else {
+    // Org UUID from auth profiles may not exist yet in cloud — upsert a stub with the key.
+    const result = await supabase.from('organizations').upsert(
+      {
+        id: orgId,
+        name: local?.name || 'Organization',
+        contact_name: local?.contactName || '',
+        contact_email: local?.contactEmail || '',
+        contact_phone: local?.contactPhone || '',
+        status: local?.status || 'active',
+        plan: local?.plan || 'starter',
+        openai_api_key_encrypted: encrypted,
+        monthly_token_cap: local?.monthlyTokenCap ?? 500_000,
+        updated_at: now,
+      },
+      { onConflict: 'id' },
+    );
+    error = result.error;
+  }
+
   if (error) {
     console.warn('[org-openai-key] Supabase sync failed:', error.message);
     return {
