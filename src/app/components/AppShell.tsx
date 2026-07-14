@@ -2,7 +2,7 @@ import { NavLink } from 'react-router';
 import {
   Home, Calendar, ClipboardCheck, ClipboardList, Mail, Image, Settings, TrendingUp,
   Sparkles, Users, BarChart3, Wrench, FolderKanban, UserPlus, UserCircle, LogOut,
-  ChevronDown, MessageCircle, PenLine, GitBranch, ShieldCheck, DollarSign, Menu, Phone,
+  ChevronDown, ChevronLeft, ChevronRight, MessageCircle, PenLine, GitBranch, ShieldCheck, DollarSign, Menu, Phone,
   Landmark, Calculator, BadgeCheck, FileSignature, ScrollText, Building2, Plug, Package, Palette, CreditCard,
 } from 'lucide-react';
 import OrgActingAsPicker from './platform/OrgActingAsPicker';
@@ -13,7 +13,6 @@ import { useLocation } from 'react-router';
 import { useAIAssistant } from '../context/AIAssistantContext';
 import { AIAssistantPanel } from './AI/AIAssistantOverlay';
 import { useGestureToggle } from '../hooks/useGestureToggle';
-import { GestureEdgeHint } from './ui/GestureHint';
 import { useIsMobile } from './ui/use-mobile';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from './ui/sheet';
 import {
@@ -87,6 +86,7 @@ export default function AppShell({ children }: AppShellProps) {
             ...c,
             whatsappOptIn: c.whatsappOptIn ?? true,
             preferredChannel: c.preferredChannel ?? 'email',
+            preferredLanguage: c.preferredLanguage ?? 'en',
             tags: c.tags ?? [],
           });
         }
@@ -281,16 +281,8 @@ export default function AppShell({ children }: AppShellProps) {
         className="relative hidden md:flex shrink-0 flex-col bg-gradient-to-b from-slate-900/95 via-slate-800/95 to-slate-900/95 backdrop-blur-sm border-r border-white/10 shadow-xl transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] touch-manipulation select-none"
         aria-label="Navigation"
         aria-expanded={expanded}
-        title="Double-tap or swipe to expand"
       >
-        <GestureEdgeHint side="right" />
-
-        <div
-          {...sidebar.railGestureProps}
-          className="p-3 border-b border-white/5 flex items-center gap-2 min-h-[3.5rem]"
-          onDoubleClick={sidebar.onDoubleClick}
-          title="Double-tap or swipe to expand"
-        >
+        <div className="p-3 border-b border-white/5 flex items-center gap-2 min-h-[3.5rem]">
           <BrandLogo
             size={expanded ? 'md' : 'sm'}
             showWordmark={expanded}
@@ -302,7 +294,29 @@ export default function AppShell({ children }: AppShellProps) {
           {renderNavLinks(expanded)}
         </nav>
 
-        <div className="p-2 border-t border-white/5">
+        <div className="p-2 border-t border-white/5 space-y-0.5">
+          <button
+            type="button"
+            onClick={sidebar.toggle}
+            className={`w-full flex items-center gap-3 rounded-xl text-amber-100/80 hover:bg-white/8 hover:text-white transition-all duration-200 text-sm min-h-11 touch-manipulation ${
+              expanded ? 'px-3' : 'justify-center'
+            }`}
+            aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            title={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          >
+            {expanded ? (
+              <ChevronLeft className="w-5 h-5 shrink-0" />
+            ) : (
+              <ChevronRight className="w-5 h-5 shrink-0" />
+            )}
+            <span
+              className={`truncate transition-all duration-300 ${
+                expanded ? 'opacity-100' : 'opacity-0 w-0 overflow-hidden'
+              }`}
+            >
+              Collapse
+            </span>
+          </button>
           <button
             type="button"
             onClick={logout}
