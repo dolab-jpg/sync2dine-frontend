@@ -4,12 +4,13 @@ import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
-import { ChevronDown, ChevronUp, ExternalLink, Loader2, Zap } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, ExternalLink, Loader2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import type { IntegrationDefinition, IntegrationInstanceState, IntegrationStatus } from '../../config/integrations/types';
 import { IntegrationFieldForm } from './IntegrationFieldForm';
 import { CompanyLogoUpload } from './CompanyLogoUpload';
 import { integrationService } from '../../engine/integrations/integrationService';
+import { fetchEmbedSnippet } from '../../engine/cyrus/cyrusThreadApi';
 
 interface IntegrationCardProps {
   definition: IntegrationDefinition;
@@ -39,6 +40,7 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
   const [localValues, setLocalValues] = useState(instance.values);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [simulateMsg, setSimulateMsg] = useState('What is the status of my quote?');
+  const [embedSnippet, setEmbedSnippet] = useState('');
 
   const status = integrationService.getStatus(definition.id);
   const hasCredentials = integrationService.hasCredentials(definition.id, localValues);
@@ -46,6 +48,13 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
   useEffect(() => {
     setLocalValues(instance.values);
   }, [instance.values]);
+
+  useEffect(() => {
+    if (definition.id !== 'company' || !expanded) return;
+    void fetchEmbedSnippet()
+      .then((data) => setEmbedSnippet(data.snippet))
+      .catch(() => setEmbedSnippet(''));
+  }, [definition.id, expanded, savedAt, localValues.website]);
 
   const handleSave = () => {
     if (definition.fields.some(f => f.required) && !hasCredentials) {
@@ -172,6 +181,32 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
                 <span className="text-red-600 block mt-1">{instance.lastTestError}</span>
               )}
             </p>
+          )}
+
+          {definition.id === 'company' && (
+            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+              <Label className="font-semibold text-slate-900">Cyrus website chat (existing site)</Label>
+              <p className="text-xs text-slate-600">
+                Paste this into your company website footer (the URL above). Visitors chat with Cyrus;
+                threads appear under Cyrus Conversations for staff handoff.
+              </p>
+              <pre className="text-xs bg-white border rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all">
+                {embedSnippet || 'Save Company Profile to generate the snippet.'}
+              </pre>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!embedSnippet}
+                onClick={() => {
+                  void navigator.clipboard.writeText(embedSnippet).then(() => {
+                    toast.success('Embed snippet copied');
+                  });
+                }}
+              >
+                <Copy className="w-4 h-4 mr-1" />
+                Copy snippet
+              </Button>
+            </div>
           )}
 
           {definition.id === 'whatsapp' && simulateWhatsApp && (

@@ -31,6 +31,7 @@ export interface PendingTaskPayload {
 }
 
 export interface OrchestratorRequest {
+  orgId?: string;
   systemPrompt?: string;
   voicePrompt?: string;
   companyName?: string;

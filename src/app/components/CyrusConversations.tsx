@@ -1,10 +1,13 @@
-import { useState, useContext, useEffect } from 'react';
+import { useState, useContext, useEffect, useCallback } from 'react';
 import { AppContext } from '../App';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { MessageCircle, User, FileText, Loader2, RefreshCw } from 'lucide-react';
-import { getAllConversationThreads, findCustomerByPhone } from '../engine/cyrus/cyrusChatService';
+import { Input } from './ui/input';
+import {
+  MessageCircle, User, FileText, Loader2, RefreshCw, Mic, MicOff, Send, Bot, UserRoundCog,
+} from 'lucide-react';
+import { findCustomerByPhone, getAllConversationThreads } from '../engine/cyrus/cyrusChatService';
 import { integrationService } from '../engine/integrations/integrationService';
 import { getActiveProjectForCustomer } from '../engine/project/projectStore';
 import {
@@ -15,57 +18,123 @@ import {
   syncSummaryToCustomerNotes,
   type ChatSummaryRecord,
 } from '../engine/cyrus/conversationSummaryService';
+import {
+  askCyrusOnThread,
+  fetchCyrusThreads,
+  setThreadHandoff,
+  staffReplyToThread,
+  type ServerThread,
+} from '../engine/cyrus/cyrusThreadApi';
+import { checkOpenAIConnection, type OpenAIConnectionState } from '../engine/ai/openaiConnectionService';
+import { useVoiceInput } from '../hooks/useVoiceInput';
+import { toast } from 'sonner';
+
+function mergeThreads(server: ServerThread[], localFallback: ReturnType<typeof getAllConversationThreads>): ServerThread[] {
+  if (server.length > 0) return server;
+  return localFallback.map((t) => ({
+    sessionId: t.phone,
+    phone: t.phone,
+    orgId: 'local',
+    channel: 'whatsapp',
+    contactName: t.contactName,
+    handoffMode: 'ai_active' as const,
+    messages: t.messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp,
+      channel: 'whatsapp',
+    })),
+    lastAt: t.lastAt,
+    updatedAt: t.lastAt,
+  }));
+}
 
 export default function CyrusConversations() {
   const context = useContext(AppContext);
-  const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
-  const [threads, setThreads] = useState<ReturnType<typeof getAllConversationThreads>>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [threads, setThreads] = useState<ServerThread[]>([]);
+  const [loading, setLoading] = useState(true);
   const [summaryRecord, setSummaryRecord] = useState<ChatSummaryRecord | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [composer, setComposer] = useState('');
+  const [sending, setSending] = useState(false);
+  const [openaiState, setOpenaiState] = useState<OpenAIConnectionState | null>(null);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const server = await fetchCyrusThreads();
+      const merged = mergeThreads(server, getAllConversationThreads());
+      setThreads(merged);
+      setSelectedId((prev) => {
+        if (prev && merged.some((t) => t.sessionId === prev || t.phone === prev)) return prev;
+        return merged[0]?.sessionId ?? null;
+      });
+    } catch {
+      const merged = mergeThreads([], getAllConversationThreads());
+      setThreads(merged);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const list = getAllConversationThreads();
-    setThreads(list);
-    if (list.length > 0 && !selectedPhone) setSelectedPhone(list[0].phone);
-  }, [selectedPhone]);
+    void reload();
+    const id = window.setInterval(() => { void reload(); }, 15000);
+    return () => window.clearInterval(id);
+  }, [reload]);
 
   useEffect(() => {
-    if (!selectedPhone) {
+    void checkOpenAIConnection({ role: context?.user?.role }).then(setOpenaiState);
+  }, [context?.user?.role]);
+
+  useEffect(() => {
+    if (!selectedId) {
       setSummaryRecord(null);
       setSummaryError(null);
       return;
     }
-    setSummaryRecord(getCachedSummary(selectedPhone) ?? null);
+    setSummaryRecord(getCachedSummary(selectedId) ?? null);
     setSummaryError(null);
-  }, [selectedPhone]);
+  }, [selectedId]);
+
+  const onVoice = useCallback((text: string) => {
+    if (text) setComposer((prev) => (prev ? `${prev} ${text}` : text));
+  }, []);
+  const { isListening, startListening, stopListening, isSupported } = useVoiceInput(onVoice);
 
   if (!context) return null;
-  const { customers, updateCustomer } = context;
+  const { customers, updateCustomer, user } = context;
+  const userRole = user.role;
   const cyrusName = integrationService.getConfig('whatsapp').cyrusDisplayName || 'Cyrus';
 
-  const selectedThread = threads.find(t => t.phone === selectedPhone);
+  const selectedThread = threads.find((t) => t.sessionId === selectedId || t.phone === selectedId);
   const selectedCustomer = selectedThread
     ? findCustomerByPhone(customers, selectedThread.phone)
     : undefined;
   const summaryIsStale = selectedThread
-    ? isSummaryStale(selectedThread.phone, selectedThread.messages.length)
+    ? isSummaryStale(selectedThread.sessionId, selectedThread.messages.length)
     : false;
 
   const handleGenerateSummary = async () => {
     if (!selectedThread) return;
-
     setSummaryLoading(true);
     setSummaryError(null);
-
     try {
+      const msgs = selectedThread.messages.map((m) => ({
+        id: m.timestamp,
+        role: m.role === 'system' ? 'assistant' as const : m.role,
+        content: m.content,
+        timestamp: m.timestamp,
+        phone: selectedThread.phone,
+      }));
       const record = await generateThreadSummary(
-        selectedThread.phone,
-        selectedThread.messages,
+        selectedThread.sessionId,
+        msgs,
         selectedCustomer?.name ?? selectedThread.contactName,
       );
       setSummaryRecord(record);
-
       if (selectedCustomer) {
         syncSummaryToCustomerNotes(selectedCustomer, record, updateCustomer);
       }
@@ -76,15 +145,73 @@ export default function CyrusConversations() {
     }
   };
 
+  const sendStaff = async () => {
+    if (!selectedThread || !composer.trim()) return;
+    setSending(true);
+    try {
+      await staffReplyToThread(selectedThread.sessionId, composer.trim(), user.name);
+      setComposer('');
+      await reload();
+      toast.success('Reply sent — thread is in human takeover');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Send failed');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const askCyrus = async () => {
+    if (!selectedThread || !composer.trim()) return;
+    setSending(true);
+    try {
+      await askCyrusOnThread(selectedThread.sessionId, composer.trim());
+      setComposer('');
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Cyrus failed — check OpenAI in Integrations');
+      void checkOpenAIConnection({ role: userRole }).then(setOpenaiState);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const toggleHandoff = async () => {
+    if (!selectedThread) return;
+    const next = selectedThread.handoffMode === 'human_takeover' ? 'ai_active' : 'human_takeover';
+    try {
+      await setThreadHandoff(selectedThread.sessionId, next);
+      await reload();
+      toast.success(next === 'human_takeover' ? 'You own this chat' : `${cyrusName} is handling replies again`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Handoff update failed');
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-          <MessageCircle className="w-8 h-8 text-green-600" />
-          {cyrusName} Conversations
-        </h1>
-        <p className="text-gray-600 mt-1">WhatsApp threads with clients — powered by Cyrus AI</p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+            <MessageCircle className="w-8 h-8 text-green-600" />
+            {cyrusName} Conversations
+          </h1>
+          <p className="text-gray-600 mt-1">
+            Live inbox — WhatsApp, website, and portal — powered by OpenAI via Cyrus
+          </p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
+
+      {openaiState && openaiState.status !== 'connected' && (
+        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {openaiState.message ?? 'OpenAI not connected.'}
+          {' '}
+          Add your API key in <strong>Settings → Integrations → OpenAI</strong> and Save.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-1">
@@ -92,35 +219,44 @@ export default function CyrusConversations() {
             <CardTitle className="text-lg">Threads ({threads.length})</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            {threads.length === 0 ? (
+            {loading && threads.length === 0 ? (
+              <p className="p-4 text-sm text-gray-500 flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+              </p>
+            ) : threads.length === 0 ? (
               <p className="p-4 text-sm text-gray-500">
-                No conversations yet. Use Integrations → WhatsApp → Simulate inbound message to test Cyrus.
+                No conversations yet. Use Integrations → WhatsApp → Simulate inbound, the website embed,
+                or portal Ask Cyrus.
               </p>
             ) : (
               <div className="divide-y max-h-[600px] overflow-auto">
-                {threads.map(({ phone, messages, contactName, contactRole }) => {
-                  const customer = findCustomerByPhone(customers, phone);
+                {threads.map((thread) => {
+                  const customer = findCustomerByPhone(customers, thread.phone);
                   const activeProject = customer ? getActiveProjectForCustomer(customer.id) : undefined;
                   const hasRecentCyrusAudit = Boolean(activeProject?.aiActions?.some((action) => (
                     action.action === 'cyrusReply'
                     && Date.now() - new Date(action.createdAt).getTime() < 7 * 24 * 60 * 60 * 1000
                   )));
-                  const last = messages[messages.length - 1];
-                  const displayName = contactName && contactName !== customer?.name
-                    ? `${contactName} (${contactRole}) — ${customer?.name ?? 'Guest'}`
-                    : (customer?.name ?? contactName ?? phone);
-                  const threadHasSummary = hasCachedSummary(phone);
-                  const threadSummaryStale = isSummaryStale(phone, messages.length);
+                  const last = thread.messages[thread.messages.length - 1];
+                  const displayName = thread.contactName && thread.contactName !== customer?.name
+                    ? `${thread.contactName} — ${customer?.name ?? 'Guest'}`
+                    : (customer?.name ?? thread.contactName ?? thread.phone);
+                  const threadHasSummary = hasCachedSummary(thread.sessionId);
+                  const threadSummaryStale = isSummaryStale(thread.sessionId, thread.messages.length);
 
                   return (
                     <button
-                      key={phone}
+                      key={thread.sessionId}
                       type="button"
-                      className={`w-full text-left p-4 hover:bg-gray-50 ${selectedPhone === phone ? 'bg-green-50' : ''}`}
-                      onClick={() => setSelectedPhone(phone)}
+                      className={`w-full text-left p-4 hover:bg-gray-50 ${selectedId === thread.sessionId ? 'bg-green-50' : ''}`}
+                      onClick={() => setSelectedId(thread.sessionId)}
                     >
                       <p className="font-medium flex items-center gap-2 flex-wrap">
                         <span>{displayName}</span>
+                        <Badge variant="outline" className="text-[10px] capitalize">{thread.channel}</Badge>
+                        {thread.handoffMode === 'human_takeover' && (
+                          <Badge className="text-[10px] bg-blue-100 text-blue-800">Human</Badge>
+                        )}
                         {threadHasSummary && (
                           <Badge variant="outline" className="text-[10px] gap-1">
                             <FileText className="w-3 h-3" />
@@ -134,7 +270,7 @@ export default function CyrusConversations() {
                           <Badge variant="secondary" className="text-[10px]">Audit</Badge>
                         )}
                       </p>
-                      <p className="text-xs text-gray-400">{phone}</p>
+                      <p className="text-xs text-gray-400">{thread.phone}</p>
                       <p className="text-sm text-gray-600 truncate">{last?.content}</p>
                       <p className="text-xs text-gray-400 mt-1">
                         {last ? new Date(last.timestamp).toLocaleString() : ''}
@@ -149,16 +285,27 @@ export default function CyrusConversations() {
 
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              {selectedThread ? (
-                <>
-                  <User className="w-4 h-4" />
-                  {selectedCustomer?.name ?? selectedThread.phone}
-                </>
-              ) : (
-                'Select a thread'
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                {selectedThread ? (
+                  <>
+                    <User className="w-4 h-4" />
+                    {selectedCustomer?.name ?? selectedThread.contactName ?? selectedThread.phone}
+                  </>
+                ) : (
+                  'Select a thread'
+                )}
+              </CardTitle>
+              {selectedThread && (
+                <Button type="button" size="sm" variant="outline" onClick={() => void toggleHandoff()}>
+                  {selectedThread.handoffMode === 'human_takeover' ? (
+                    <><Bot className="w-4 h-4 mr-1" /> Return to {cyrusName}</>
+                  ) : (
+                    <><UserRoundCog className="w-4 h-4 mr-1" /> Take over</>
+                  )}
+                </Button>
               )}
-            </CardTitle>
+            </div>
           </CardHeader>
           <CardContent>
             {!selectedThread ? (
@@ -194,20 +341,11 @@ export default function CyrusConversations() {
                           disabled={summaryLoading || selectedThread.messages.length === 0}
                         >
                           {summaryLoading ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                              Generating...
-                            </>
+                            <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Generating...</>
                           ) : summaryRecord ? (
-                            <>
-                              <RefreshCw className="w-4 h-4 mr-1" />
-                              Refresh summary
-                            </>
+                            <><RefreshCw className="w-4 h-4 mr-1" /> Refresh summary</>
                           ) : (
-                            <>
-                              <FileText className="w-4 h-4 mr-1" />
-                              Generate summary
-                            </>
+                            <><FileText className="w-4 h-4 mr-1" /> Generate summary</>
                           )}
                         </Button>
                       </div>
@@ -223,36 +361,85 @@ export default function CyrusConversations() {
                       </p>
                     ) : (
                       <p className="text-sm text-gray-600">
-                        Generate an AI summary so other staff can quickly understand this conversation
-                        without reading every message.
+                        Generate an AI summary so other staff can quickly understand this conversation.
                       </p>
                     )}
                   </CardContent>
                 </Card>
 
-                <div className="space-y-3 max-h-[500px] overflow-auto">
-                  {selectedThread.messages.map(msg => (
-                    <div
-                      key={msg.id}
-                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
+                <div className="space-y-3 max-h-[360px] overflow-auto">
+                  {selectedThread.messages.map((msg, idx) => {
+                    const isUser = msg.role === 'user';
+                    const isStaff = msg.fromRole === 'staff';
+                    return (
                       <div
-                        className={`max-w-[80%] rounded-2xl px-4 py-2 ${
-                          msg.role === 'user'
-                            ? 'bg-green-600 text-white'
-                            : 'bg-gray-100 text-gray-900'
-                        }`}
+                        key={`${msg.timestamp}-${idx}`}
+                        className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
                       >
-                        {msg.role === 'assistant' && (
-                          <Badge variant="outline" className="mb-1 text-xs">{cyrusName}</Badge>
-                        )}
-                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                        <p className={`text-xs mt-1 ${msg.role === 'user' ? 'text-green-100' : 'text-gray-400'}`}>
-                          {new Date(msg.timestamp).toLocaleTimeString()}
-                        </p>
+                        <div
+                          className={`max-w-[80%] rounded-2xl px-4 py-2 ${
+                            isUser
+                              ? 'bg-green-600 text-white'
+                              : isStaff
+                                ? 'bg-blue-100 text-blue-950'
+                                : 'bg-gray-100 text-gray-900'
+                          }`}
+                        >
+                          {!isUser && (
+                            <Badge variant="outline" className="mb-1 text-xs">
+                              {isStaff ? 'Staff' : msg.fromRole === 'system' ? 'System' : cyrusName}
+                            </Badge>
+                          )}
+                          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                          <p className={`text-xs mt-1 ${isUser ? 'text-green-100' : 'text-gray-400'}`}>
+                            {new Date(msg.timestamp).toLocaleTimeString()}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+                </div>
+
+                <div className="border-t pt-3 space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      value={composer}
+                      onChange={(e) => setComposer(e.target.value)}
+                      placeholder="Type a reply or ask Cyrus…"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          void sendStaff();
+                        }
+                      }}
+                    />
+                    {isSupported && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => (isListening ? stopListening() : startListening())}
+                        title="Speak"
+                      >
+                        {isListening ? <MicOff className="w-4 h-4 text-red-600" /> : <Mic className="w-4 h-4" />}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" onClick={() => void sendStaff()} disabled={sending || !composer.trim()}>
+                      <Send className="w-4 h-4 mr-1" />
+                      Send as staff
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => void askCyrus()}
+                      disabled={sending || !composer.trim() || openaiState?.status === 'missing'}
+                    >
+                      <Bot className="w-4 h-4 mr-1" />
+                      Ask {cyrusName}
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}

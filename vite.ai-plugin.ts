@@ -48,6 +48,7 @@ export function aiProxyPlugin(): Plugin {
           const { handleMailboxRoutes } = await import('./server/mailbox-routes');
           const { handlePackageUpdatesRoute } = await import('./server/mailbox/package-updates');
           const { handleChannelRoutes } = await import('./server/channel-routes');
+          const { handleCyrusRoutes } = await import('./server/cyrus-routes');
           const { handleAgentCredentialsRoutes } = await import('./server/agent-credentials-routes');
           const { handleLeadsRoutes } = await import('./server/leads-routes');
           const { handleOrgOpenAIKeyRoutes } = await import('./server/org-openai-key-routes');
@@ -73,6 +74,7 @@ export function aiProxyPlugin(): Plugin {
           if (await handlePriceResearchRoutes(req, res, pathname)) return;
           if (await handleContractRoutes(req, res, pathname)) return;
           if (await handleChannelRoutes(req, res, pathname)) return;
+          if (await handleCyrusRoutes(req, res, pathname)) return;
 
           if (await handleLeadsRoutes(req, res, pathname, url)) return;
 

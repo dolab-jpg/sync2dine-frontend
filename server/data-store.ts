@@ -55,6 +55,7 @@ export interface SyncedData {
   teamMembers: TeamMemberRecord[];
   whatsappConversations: Record<string, WhatsAppConversationRecord>;
   pendingConfirmations: PendingConfirmationRecord[];
+  companySettings?: { website?: string; companyName?: string };
 }
 
 export interface TeamMemberRecord {
@@ -66,6 +67,8 @@ export interface TeamMemberRecord {
   updatedAt: string;
 }
 
+export type ConversationHandoffMode = 'ai_active' | 'human_takeover';
+
 export interface WhatsAppConversationRecord {
   phone: string;
   orgId: string;
@@ -76,8 +79,13 @@ export interface WhatsAppConversationRecord {
     detectedLanguage?: string;
     timestamp: string;
     channel?: string;
+    fromRole?: string;
   }>;
   updatedAt: string;
+  /** Primary channel for this thread (whatsapp | web | portal | email | phone | app) */
+  channel?: string;
+  contactName?: string;
+  handoffMode?: ConversationHandoffMode;
 }
 
 export interface PendingConfirmationRecord {
@@ -193,6 +201,9 @@ function loadFromDisk(orgId: string): SyncedData {
         pendingConfirmations: Array.isArray(parsed.pendingConfirmations)
           ? parsed.pendingConfirmations as PendingConfirmationRecord[]
           : [],
+        companySettings: parsed.companySettings && typeof parsed.companySettings === 'object'
+          ? parsed.companySettings
+          : undefined,
       };
       migrateLegacySoho66Line(result);
       return result;

@@ -21,6 +21,7 @@ import { handleAuthRoutes } from './auth';
 import { handleMailboxRoutes } from './mailbox-routes';
 import { handlePackageUpdatesRoute } from './mailbox/package-updates';
 import { handleChannelRoutes } from './channel-routes';
+import { handleCyrusRoutes } from './cyrus-routes';
 import { handleLeadsRoutes } from './leads-routes';
 import { handleAgentCredentialsRoutes } from './agent-credentials-routes';
 import { handleOrgOpenAIKeyRoutes } from './org-openai-key-routes';
@@ -49,11 +50,16 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
   const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
   const pathname = url.pathname;
 
-  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  // Widget on company site needs dynamic CORS — cyrus-routes sets it for /api/cyrus/web*
+  const isCyrusWeb = pathname.startsWith('/api/cyrus/web');
+  if (!isCyrusWeb) {
+    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Org-Id, X-User-Id, X-User-Role');
 
   if (req.method === 'OPTIONS') {
+    if (isCyrusWeb && await handleCyrusRoutes(req, res, pathname)) return;
     res.statusCode = 204;
     res.end();
     return;
@@ -94,6 +100,8 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
   if (await handlePlatformRoutes(req, res, pathname)) return;
 
   if (await handleChannelRoutes(req, res, pathname)) return;
+
+  if (await handleCyrusRoutes(req, res, pathname)) return;
 
   if (await handleLeadsRoutes(req, res, pathname, url)) return;
 

@@ -210,10 +210,36 @@ export async function simulateInboundWhatsApp(
     : { customerName: 'Guest', phone, activeQuotes: [] };
 
   const key = normalizeUkPhone(phone);
-  const history = (loadConversations()[key] ?? []).map(m => ({
-    role: m.role,
-    content: m.content,
-  }));
+
+  // Prefer server channel inbound so threads appear in /cyrus live inbox
+  try {
+    const { getActiveOrgId } = await import('../platform/orgContext');
+    const orgId = getActiveOrgId() || 'default';
+    const res = await fetch(`/api/cyrus/threads/${encodeURIComponent(key)}/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Org-Id': orgId },
+      body: JSON.stringify({ text: message, contactName: resolved.contactName, orgId }),
+    });
+    if (res.ok) {
+      const data = await res.json() as { reply?: string };
+      const reply = data.reply ?? '';
+      // Mirror into localStorage for offline summary cache
+      appendConversationMessage(phone, {
+        role: 'user',
+        content: message,
+        phone: key,
+        contactName: resolved.contactName,
+        contactRole: resolved.contactRole,
+      });
+      if (reply) {
+        appendConversationMessage(phone, { role: 'assistant', content: reply, phone: key });
+      }
+      syncToServer();
+      return reply || 'Cyrus received your message.';
+    }
+  } catch {
+    // fall through to client-side Cyrus
+  }
 
   appendConversationMessage(phone, {
     role: 'user',
@@ -222,6 +248,10 @@ export async function simulateInboundWhatsApp(
     contactName: resolved.contactName,
     contactRole: resolved.contactRole,
   });
+  const history = (loadConversations()[key] ?? [])
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .slice(0, -1)
+    .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
   const reply = await sendCyrusMessage(message, context, history);
   appendConversationMessage(phone, { role: 'assistant', content: reply, phone: key });
   syncToServer();

@@ -17,6 +17,26 @@ export interface ChannelRoute {
 }
 
 export function resolveInboundChannel(phone: string, orgId?: string): ChannelRoute {
+  // Website / portal session keys are always customer-facing Cyrus routes
+  if (/^(web_|portal_)/i.test(phone.trim())) {
+    const store = getDataStore(orgId);
+    if (/^portal_/i.test(phone.trim())) {
+      const token = phone.trim().replace(/^portal_/i, '');
+      const project = store.projects.find((p) => String(p.portalToken) === token);
+      if (project) {
+        return {
+          mode: 'customer',
+          role: 'customer',
+          customerId: project.customerId ? String(project.customerId) : null,
+          customerName: String(project.customerName ?? 'Customer'),
+          contactName: String(project.customerName ?? 'Customer'),
+          projectId: String(project.id),
+        };
+      }
+    }
+    return { mode: 'customer', role: 'customer', name: 'Website visitor', contactName: 'Website visitor' };
+  }
+
   const normalized = normalizePhoneExport(phone);
   const members = listTeamMembers(orgId);
   const staffMatch = members.find((m) => normalizePhoneExport(m.phone) === normalized);

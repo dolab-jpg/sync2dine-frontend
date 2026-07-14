@@ -185,12 +185,11 @@ export async function handleAiRequest(req: IncomingMessage, res: ServerResponse,
       sendJson(res, 200, { content: 'TradePro AI mock mode. Set OPENAI_API_KEY in .env.local or Integrations Hub for real responses.' });
       return;
     }
-    if (pathname === '/api/ai/cyrus') {
-      const name = (body.customerContext as { customerName?: string })?.customerName ?? 'there';
-      sendJson(res, 200, { content: `Hi ${name}! I'm Cyrus (mock mode). Configure OpenAI in Settings → Integrations for live responses.` });
-      return;
-    }
-    sendJson(res, 503, { error: 'OpenAI API key not configured' });
+    // Cyrus / orchestrator paths already ran above — never silently mock customer chat
+    sendJson(res, 503, {
+      error: 'OpenAI API key not configured — add your API key in Settings → Integrations → OpenAI and Save.',
+      code: 'missing',
+    });
     return;
   }
 

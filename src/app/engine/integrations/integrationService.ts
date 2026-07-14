@@ -128,6 +128,12 @@ export const integrationService = {
     }
     integrationService.updateIntegration(id, updates);
 
+    if (id === 'company') {
+      void import('../cyrus/cyrusThreadApi').then(({ syncCompanySettingsToServer }) =>
+        syncCompanySettingsToServer(values.website, values.companyName),
+      );
+    }
+
     if (id === 'openai' && integrationService.hasCredentials(id, values)) {
       const apiKey = values.apiKey?.trim();
       if (integrationService.isLiveOpenAIApiKey(apiKey)) {

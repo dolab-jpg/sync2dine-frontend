@@ -16,6 +16,14 @@ import { markDepositPaidOnProject } from '../engine/salesCloseFlow';
 import { integrationService } from '../engine/integrations/integrationService';
 import type { ChangeOrder, UnifiedProject } from '../engine/project/types';
 import { toast } from 'sonner';
+import {
+  fetchPortalCyrusThread,
+  sendPortalCyrusMessage,
+  type ServerConversationMessage,
+} from '../engine/cyrus/cyrusThreadApi';
+import { useVoiceInput } from '../hooks/useVoiceInput';
+import { useVoiceOutput } from '../hooks/useVoiceOutput';
+import { Mic, MicOff } from 'lucide-react';
 
 type CustomerDecision = 'approved' | 'rejected';
 
@@ -36,6 +44,15 @@ export default function CustomerPortal() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const notifiedPendingChangeOrders = useRef<Set<string>>(new Set());
+  const [cyrusMessages, setCyrusMessages] = useState<ServerConversationMessage[]>([]);
+  const [cyrusInput, setCyrusInput] = useState('');
+  const [cyrusBusy, setCyrusBusy] = useState(false);
+  const cyrusName = integrationService.getConfig('whatsapp').cyrusDisplayName || 'Cyrus';
+  const { speak } = useVoiceOutput();
+  const onCyrusVoice = useCallback((text: string) => {
+    if (text) setCyrusInput((prev) => (prev ? `${prev} ${text}` : text));
+  }, []);
+  const { isListening, startListening, stopListening, isSupported } = useVoiceInput(onCyrusVoice);
 
   const refreshProject = useCallback(() => {
     if (!token) return;
@@ -63,6 +80,13 @@ export default function CustomerPortal() {
   useEffect(() => {
     refreshProject();
   }, [refreshProject]);
+
+  useEffect(() => {
+    if (!token) return;
+    void fetchPortalCyrusThread(token).then((data) => {
+      setCyrusMessages(data.messages ?? []);
+    });
+  }, [token]);
 
   useEffect(() => {
     if (!project || searchParams.get('deposit') !== 'paid') return;
@@ -188,6 +212,27 @@ export default function CustomerPortal() {
     if (updated) setProject(updated);
     setIsUpdatingChangeOrder(null);
   };
+
+  async function sendCyrus() {
+    if (!token || !cyrusInput.trim()) return;
+    const text = cyrusInput.trim();
+    setCyrusBusy(true);
+    setCyrusInput('');
+    try {
+      const data = await sendPortalCyrusMessage(token, text);
+      setCyrusMessages(data.messages ?? []);
+      if (data.reply) {
+        const voiceMode = (integrationService.getConfig('openai').ttsVoice
+          ? 'openai'
+          : 'browser') as 'openai' | 'browser';
+        void speak(data.reply, voiceMode);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `${cyrusName} is unavailable`);
+    } finally {
+      setCyrusBusy(false);
+    }
+  }
 
   if (error) {
     return (
@@ -475,6 +520,61 @@ export default function CustomerPortal() {
           </Card>
         )}
       </div>
+
+      <Card className="border-green-200">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Ask {cyrusName}</CardTitle>
+          <p className="text-xs text-slate-500">
+            Quick answers about your project — the office can also take over from Cyrus Conversations.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="max-h-56 overflow-y-auto space-y-2">
+            {cyrusMessages.length === 0 ? (
+              <p className="text-sm text-slate-500">Ask about schedule, payments, or next steps.</p>
+            ) : (
+              cyrusMessages.map((m, idx) => (
+                <div
+                  key={`${m.timestamp}-${idx}`}
+                  className={`text-sm p-2 rounded ${
+                    m.role === 'user' ? 'bg-green-50 ml-6' : 'bg-white border mr-6'
+                  }`}
+                >
+                  <p className="text-xs font-medium text-slate-500 mb-1">
+                    {m.role === 'user' ? 'You' : cyrusName}
+                  </p>
+                  <p className="whitespace-pre-wrap">{m.content}</p>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              value={cyrusInput}
+              onChange={e => setCyrusInput(e.target.value)}
+              placeholder={`Message ${cyrusName}…`}
+              onKeyDown={e => {
+                if (e.key === 'Enter') void sendCyrus();
+              }}
+              disabled={cyrusBusy}
+            />
+            {isSupported && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => (isListening ? stopListening() : startListening())}
+                title="Speak"
+              >
+                {isListening ? <MicOff className="w-4 h-4 text-red-600" /> : <Mic className="w-4 h-4" />}
+              </Button>
+            )}
+            <Button onClick={() => void sendCyrus()} disabled={cyrusBusy || !cyrusInput.trim()}>
+              {cyrusBusy ? '…' : 'Ask'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-2">

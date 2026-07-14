@@ -1,8 +1,9 @@
-import { handleOrchestrator, type OrchestratorRequest } from './orchestrator-handler';
+import { handleOrchestrator } from './orchestrator-handler';
 import { resolveInboundChannel, type ChannelRoute } from './channel-router';
 import {
   appendConversationMessage,
   conversationToOrchestratorMessages,
+  getHandoffMode,
 } from './conversation-store';
 import {
   normalizeInboundText,
@@ -24,17 +25,22 @@ import { getOfficeTeamRoster } from './team-snapshot';
 import { buildBritishVoicePrompt, formatKnowledgeChunks } from './british-voice';
 import type { ServerAgentRole } from './role-permissions';
 import type { OrchestratorRequest } from './orchestrator-types';
+import { OpenAIConnectionError, requireOpenAIApiKeyAsync } from './openai-connection';
+
+export type ChannelInboundChannel = 'whatsapp' | 'phone' | 'app' | 'web' | 'portal' | 'email';
 
 export interface ChannelInboundRequest {
   orgId: string;
   phone: string;
   text: string;
-  channel: 'whatsapp' | 'phone' | 'app';
+  channel: ChannelInboundChannel;
   contactName?: string;
   projectId?: string | null;
   voiceReply?: boolean;
   apiKey?: string;
   model?: string;
+  /** When true, skip AI even if handoff is ai_active (used for staff composer logs). */
+  skipAi?: boolean;
 }
 
 export interface ChannelInboundResult {
@@ -102,7 +108,9 @@ function buildChannelPrompt(channel: string, route: ChannelRoute): string {
     ? (route.mode === 'staff' ? 'whatsapp_staff' : route.mode === 'customer' ? 'whatsapp_customer' : 'whatsapp')
     : channel === 'phone'
       ? (route.mode === 'staff' ? 'phone_staff' : 'phone')
-      : 'overlay_chat';
+      : channel === 'web' || channel === 'portal'
+        ? 'customer_portal'
+        : 'overlay_chat';
   return base;
 }
 
@@ -110,14 +118,48 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
   const { orgId, phone, text, channel, projectId } = req;
   setRequestOrgId(orgId);
 
+  const route = resolveInboundChannel(phone, orgId);
+  const handoffMode = getHandoffMode(orgId, phone);
+
+  // Staff takeover: store inbound only, no auto-Cyrus reply
+  if (req.skipAi || handoffMode === 'human_takeover') {
+    const lang = normalizeLang(route.preferredLanguage);
+    appendConversationMessage(orgId, phone, {
+      role: 'user',
+      content: text,
+      bodyEnglish: text,
+      detectedLanguage: lang,
+      channel,
+    }, { channel, contactName: req.contactName });
+    const notice = handoffMode === 'human_takeover'
+      ? 'Thanks — a team member will reply shortly.'
+      : '';
+    if (notice) {
+      appendConversationMessage(orgId, phone, {
+        role: 'assistant',
+        content: notice,
+        bodyEnglish: notice,
+        channel,
+        fromRole: 'system',
+      }, { channel });
+    }
+    return {
+      replyEnglish: notice,
+      replyLocalized: notice,
+      detectedLanguage: lang,
+      route,
+      toolsUsed: [],
+      executedSummaries: ['human_takeover'],
+    };
+  }
+
   const confirm = await handleConfirmationReply(orgId, phone, text, {
-    role: resolveRole(resolveInboundChannel(phone, orgId)),
+    role: resolveRole(route),
     orgId,
     phone,
-    approvedBy: resolveInboundChannel(phone, orgId).name,
+    approvedBy: route.name,
   });
   if (confirm.handled) {
-    const route = resolveInboundChannel(phone, orgId);
     const lang = normalizeLang(route.preferredLanguage);
     const replyEnglish = confirm.reply ?? getPhrase(lang, 'done');
     const replyLocalized = await localizeOutboundText(replyEnglish, lang);
@@ -127,13 +169,13 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
       bodyEnglish: text,
       detectedLanguage: lang,
       channel,
-    });
+    }, { channel, contactName: req.contactName });
     appendConversationMessage(orgId, phone, {
       role: 'assistant',
       content: replyLocalized,
       bodyEnglish: replyEnglish,
       channel,
-    });
+    }, { channel });
     return {
       replyEnglish,
       replyLocalized,
@@ -144,7 +186,15 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
     };
   }
 
-  const route = resolveInboundChannel(phone, orgId);
+  // Resolve org OpenAI key up front — no silent mock for live Cyrus channels
+  let resolvedApiKey = req.apiKey;
+  try {
+    resolvedApiKey = await requireOpenAIApiKeyAsync(req.apiKey, orgId);
+  } catch (err) {
+    if (err instanceof OpenAIConnectionError) throw err;
+    throw err;
+  }
+
   const targetLang = normalizeLang(route.preferredLanguage);
   const normalized = await normalizeInboundText(text, targetLang);
   const history = conversationToOrchestratorMessages(orgId, phone, 20);
@@ -158,7 +208,7 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
     bodyEnglish: normalized.english,
     detectedLanguage: targetLang,
     channel,
-  });
+  }, { channel, contactName: req.contactName });
 
   const channelKey = buildChannelPrompt(channel, route);
   const orchestratorChannel: OrchestratorRequest['channel'] =
@@ -268,7 +318,7 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
     content: replyLocalized,
     bodyEnglish: replyText,
     channel,
-  });
+  }, { channel });
 
   const pid = projectId ?? route.projectId;
   if (pid && executed.some((e) => e.executed)) {

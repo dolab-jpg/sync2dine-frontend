@@ -492,6 +492,19 @@ export async function handleWhatsAppWebhookPost(
     }
   } catch (err) {
     console.error('WhatsApp webhook error:', err);
+    try {
+      const { OpenAIConnectionError } = await import('./openai-connection');
+      if (err instanceof OpenAIConnectionError && from && phoneNumberId && accessToken) {
+        await sendWhatsAppText(
+          phoneNumberId,
+          accessToken,
+          from,
+          'Sorry — our AI assistant is temporarily unavailable. A team member will follow up shortly.',
+        );
+      }
+    } catch {
+      // ignore secondary failures
+    }
   }
 }
 
