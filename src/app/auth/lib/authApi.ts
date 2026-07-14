@@ -86,6 +86,48 @@ export async function createInvite(
   }>(res);
 }
 
+export interface OrgMember {
+  id: string;
+  name: string;
+  email: string;
+  username: string | null;
+  role: string;
+  created_at: string;
+}
+
+export interface PendingInvite {
+  id: string;
+  email: string;
+  role: string;
+  expiresAt: string;
+  acceptUrl: string;
+}
+
+export async function fetchMembers(accessToken: string, orgId?: string): Promise<OrgMember[]> {
+  const qs = orgId ? `?orgId=${encodeURIComponent(orgId)}` : '';
+  const res = await fetch(`${apiBase()}/api/auth/members${qs}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await parseJson<{ members: OrgMember[] }>(res);
+  return data.members;
+}
+
+export async function removeMember(memberId: string, accessToken: string): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/auth/members/${encodeURIComponent(memberId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  await parseJson<{ removed: boolean }>(res);
+}
+
+export async function fetchPendingInvites(accessToken: string): Promise<PendingInvite[]> {
+  const res = await fetch(`${apiBase()}/api/auth/invites`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await parseJson<{ invites: PendingInvite[] }>(res);
+  return data.invites;
+}
+
 export function homePathForRole(role: string): string {
   switch (role) {
     case 'builder':

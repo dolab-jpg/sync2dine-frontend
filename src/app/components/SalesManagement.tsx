@@ -1,7 +1,7 @@
-import { useContext, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import { AppContext } from '../App';
 import { computeLeadAttribution } from '../engine/leads/leadService';
-import { getOfficeTeamRoster } from '../engine/team/teamSnapshot';
+import { getOfficeTeamRoster, loadOfficeTeam } from '../engine/team/teamSnapshot';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import {
@@ -17,12 +17,18 @@ export default function SalesManagement() {
   const { user, customers, quotes } = context;
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter'>('month');
 
+  const [teamVersion, setTeamVersion] = useState(0);
+  useEffect(() => {
+    void loadOfficeTeam().then(() => setTeamVersion((v) => v + 1));
+  }, []);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const teamMembers = useMemo(() => getOfficeTeamRoster().map((m) => ({
     id: m.id,
     name: m.name,
     role: m.role === 'manager' ? 'Manager' : 'Staff',
     ...m.performance,
-  })), []);
+  })), [teamVersion]);
 
   const leadSources = useMemo(() => computeLeadAttribution(customers, quotes).map((row) => ({
     source: row.source,

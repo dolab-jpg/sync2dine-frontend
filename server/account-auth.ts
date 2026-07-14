@@ -424,6 +424,110 @@ export async function handleAccountAuthRoutes(
       return true;
     }
 
+    if (pathname === '/api/auth/members' && req.method === 'GET') {
+      const profile = await getProfileByBearer(req);
+      if (!profile || !['super_admin', 'platform_owner', 'manager'].includes(String(profile.role))) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+      }
+      const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
+      const orgId =
+        profile.role === 'platform_owner' && url.searchParams.get('orgId')?.trim()
+          ? url.searchParams.get('orgId')!.trim()
+          : (profile.org_id as string | null);
+      if (!orgId) {
+        sendJson(res, 400, { error: 'Organization is required' });
+        return true;
+      }
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, name, email, username, role, created_at')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: true });
+      if (error) {
+        sendJson(res, 500, { error: error.message });
+        return true;
+      }
+      sendJson(res, 200, { members: data ?? [] });
+      return true;
+    }
+
+    if (pathname.startsWith('/api/auth/members/') && req.method === 'DELETE') {
+      const profile = await getProfileByBearer(req);
+      if (!profile || !['super_admin', 'platform_owner'].includes(String(profile.role))) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+      }
+      const memberId = decodeURIComponent(pathname.slice('/api/auth/members/'.length)).trim();
+      if (!memberId) {
+        sendJson(res, 400, { error: 'Member id is required' });
+        return true;
+      }
+      if (memberId === profile.id) {
+        sendJson(res, 400, { error: 'You cannot remove your own account' });
+        return true;
+      }
+      const supabase = getSupabaseAdmin();
+      const { data: target } = await supabase
+        .from('profiles')
+        .select('id, org_id, role')
+        .eq('id', memberId)
+        .maybeSingle();
+      if (!target) {
+        sendJson(res, 404, { error: 'Member not found' });
+        return true;
+      }
+      if (profile.role !== 'platform_owner' && target.org_id !== profile.org_id) {
+        sendJson(res, 403, { error: 'Member is not in your organization' });
+        return true;
+      }
+      if (target.role === 'platform_owner') {
+        sendJson(res, 403, { error: 'Platform owner accounts cannot be removed here' });
+        return true;
+      }
+      const { error: authError } = await supabase.auth.admin.deleteUser(memberId);
+      if (authError) {
+        sendJson(res, 500, { error: authError.message });
+        return true;
+      }
+      await supabase.from('profiles').delete().eq('id', memberId);
+      sendJson(res, 200, { removed: true });
+      return true;
+    }
+
+    if (pathname === '/api/auth/invites' && req.method === 'GET') {
+      const profile = await getProfileByBearer(req);
+      if (!profile || !['super_admin', 'platform_owner', 'manager'].includes(String(profile.role))) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+      }
+      const orgId = profile.org_id as string | null;
+      if (!orgId) {
+        sendJson(res, 200, { invites: [] });
+        return true;
+      }
+      const supabase = getSupabaseAdmin();
+      const { data } = await supabase
+        .from('org_invites')
+        .select('id, token, email, role, expires_at, created_at')
+        .eq('org_id', orgId)
+        .is('accepted_at', null)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false });
+      const baseUrl = process.env.APP_BASE_URL?.trim() || 'http://localhost:5174';
+      sendJson(res, 200, {
+        invites: (data ?? []).map((i) => ({
+          id: i.id,
+          email: i.email,
+          role: i.role,
+          expiresAt: i.expires_at,
+          acceptUrl: `${baseUrl}/invite/${i.token}`,
+        })),
+      });
+      return true;
+    }
+
     if (pathname === '/api/auth/username-available' && req.method === 'GET') {
       const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
       const username = normalizeUsername(url.searchParams.get('username') ?? '');

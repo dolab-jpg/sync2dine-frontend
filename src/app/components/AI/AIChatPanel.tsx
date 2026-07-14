@@ -28,7 +28,7 @@ import {
 } from '../../engine/ai/openaiConnectionService';
 import { getProject, loadProjects } from '../../engine/project/projectStore';
 import { loadBuilders } from '../../engine/builder/builderStore';
-import { getOfficeTeamCounts, getOfficeTeamRoster } from '../../engine/team/teamSnapshot';
+import { getOfficeTeamCounts, getOfficeTeamRoster, loadOfficeTeam } from '../../engine/team/teamSnapshot';
 import { buildLeadPipelineSnapshot } from '../../engine/leads/leadService';
 import { integrationService } from '../../engine/integrations/integrationService';
 import { blockedActionMessage } from '../../engine/ai/rolePermissions';
@@ -125,6 +125,11 @@ export function AIChatPanel() {
     }).catch(() => undefined);
   }, [sessionId]);
 
+  const [teamVersion, setTeamVersion] = useState(0);
+  useEffect(() => {
+    void loadOfficeTeam().then(() => setTeamVersion((v) => v + 1));
+  }, []);
+
   const businessSnapshot = useMemo(() => {
     const office = getOfficeTeamCounts();
     const isManager = agentContext.role === 'super_admin' || agentContext.role === 'manager';
@@ -146,7 +151,8 @@ export function AIChatPanel() {
         leadPipeline: buildLeadPipelineSnapshot(customers),
       } : {}),
     };
-  }, [app?.customers, app?.quotes, agentContext.role]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app?.customers, app?.quotes, agentContext.role, teamVersion]);
 
   const isChatConnected = connection.status === 'connected';
 

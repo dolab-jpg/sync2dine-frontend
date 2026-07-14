@@ -386,14 +386,14 @@ function ProtectedRoute({ element, allowedRoles, user }: ProtectedRouteProps): R
 export default function App() {
   const savedUser = typeof window !== 'undefined' ? loadSessionUser() : null;
 
-  // Authentication state
+  // Authentication state — only real Supabase accounts; placeholder is inert until login
   const [isLoggedIn, setIsLoggedIn] = useState(!!savedUser);
   const [user, setUser] = useState<User>(
     savedUser ?? {
-      id: '1',
-      name: 'John Smith',
-      email: 'john@bathrooms.com',
-      role: 'super_admin',
+      id: '',
+      name: 'Signed out',
+      email: '',
+      role: 'staff',
     },
   );
 
@@ -974,10 +974,10 @@ export default function App() {
     const finish = () => {
       setIsLoggedIn(false);
       setUser({
-        id: '1',
-        name: 'John Smith',
-        email: 'john@bathrooms.com',
-        role: 'super_admin',
+        id: '',
+        name: 'Signed out',
+        email: '',
+        role: 'staff',
       });
     };
     if (isSupabaseConfigured()) {

@@ -1,30 +1,57 @@
-import { useState, useContext } from 'react';
+import { useState, useContext, useEffect, useCallback } from 'react';
 import { AppContext } from '../App';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Switch } from './ui/switch';
-import { Users, Plus, Trash2, Edit2, Mail, Phone, Shield, UserPlus, Landmark } from 'lucide-react';
-import { testSalesStaff, testManagers } from '../data/testData';
-import { createInvite } from '../auth/lib/authApi';
+import { Users, Plus, Trash2, Mail, AtSign, Shield, UserPlus, Landmark, Copy } from 'lucide-react';
+import {
+  createInvite,
+  fetchMembers,
+  fetchPendingInvites,
+  removeMember,
+  type OrgMember,
+  type PendingInvite,
+} from '../auth/lib/authApi';
 import { getSupabase, isSupabaseConfigured } from '../../lib/supabase/client';
 import { toast } from 'sonner';
 
 type InviteRole = 'manager' | 'staff' | 'builder' | 'recruitment' | 'customer';
+
+const ROLE_BADGES: Record<string, string> = {
+  platform_owner: 'bg-indigo-100 text-indigo-700',
+  super_admin: 'bg-red-100 text-red-700',
+  manager: 'bg-blue-100 text-blue-700',
+  staff: 'bg-green-100 text-green-700',
+  builder: 'bg-purple-100 text-purple-700',
+  recruitment: 'bg-amber-100 text-amber-700',
+  customer: 'bg-pink-100 text-pink-700',
+};
+
+function roleLabel(role: string): string {
+  return role.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+async function getAccessToken(): Promise<string | null> {
+  if (!isSupabaseConfigured()) return null;
+  const { data } = await getSupabase().auth.getSession();
+  return data.session?.access_token ?? null;
+}
 
 export default function TeamManagement() {
   const context = useContext(AppContext);
   if (!context) return null;
 
   const { user, recruitmentAccess, setRecruitmentAccess, accountsAccess, setAccountsAccess } = context;
-  // Combine managers and staff from test data
-  const [teamMembers, setTeamMembers] = useState(() => {
-    return [...testManagers, ...testSalesStaff];
-  });
+
+  // Real org members and pending invites from Supabase — no static data
+  const [teamMembers, setTeamMembers] = useState<OrgMember[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [inviteUrl, setInviteUrl] = useState('');
   const [formData, setFormData] = useState({
     name: '',
@@ -32,6 +59,32 @@ export default function TeamManagement() {
     role: 'staff' as InviteRole,
     phone: '',
   });
+
+  const refresh = useCallback(async () => {
+    setLoadError('');
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        setLoadError('Sign in with a real account to manage your team.');
+        setLoading(false);
+        return;
+      }
+      const [members, invites] = await Promise.all([
+        fetchMembers(token),
+        fetchPendingInvites(token).catch(() => [] as PendingInvite[]),
+      ]);
+      setTeamMembers(members);
+      setPendingInvites(invites);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Could not load team members');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   if (user.role !== 'super_admin' && user.role !== 'platform_owner') {
     return (
@@ -51,72 +104,58 @@ export default function TeamManagement() {
     e.preventDefault();
     setInviteUrl('');
 
-    if (editingId) {
-      setTeamMembers(teamMembers.map(member =>
-        member.id === editingId
-          ? { ...member, name: formData.name, email: formData.email, role: formData.role as 'manager' | 'staff', phone: formData.phone }
-          : member
-      ));
-      setFormData({ name: '', email: '', role: 'staff', phone: '' });
-      setShowForm(false);
-      setEditingId(null);
-      return;
-    }
-
     if (!isSupabaseConfigured()) {
       toast.error('Supabase is required to send invites');
       return;
     }
     try {
-      const { data } = await getSupabase().auth.getSession();
-      const token = data.session?.access_token;
+      const token = await getAccessToken();
       if (!token) {
         toast.error('Sign in with a real account to invite teammates');
         return;
       }
       const result = await createInvite({ email: formData.email.trim(), role: formData.role }, token);
       setInviteUrl(result.invite.acceptUrl);
-      setTeamMembers([
-        ...teamMembers,
-        {
-          id: result.invite.id,
-          name: formData.name || formData.email,
-          email: formData.email,
-          role: (formData.role === 'manager' ? 'manager' : 'staff') as 'manager' | 'staff',
-          phone: formData.phone,
-          status: 'active' as const,
-        },
-      ]);
       toast.success('Invite created — share the accept link with your teammate');
       setFormData({ name: '', email: '', role: 'staff', phone: '' });
-      setEditingId(null);
+      void refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not create invite');
     }
   };
 
-  const handleEdit = (member: typeof teamMembers[0]) => {
-    setFormData({
-      name: member.name,
-      email: member.email,
-      role: member.role,
-      phone: member.phone,
-    });
-    setEditingId(member.id);
-    setShowForm(true);
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to remove this team member?')) {
-      setTeamMembers(teamMembers.filter(m => m.id !== id));
+  const handleDelete = async (member: OrgMember) => {
+    if (member.id === user.id) {
+      toast.error('You cannot remove your own account');
+      return;
+    }
+    if (!confirm(`Remove ${member.name || member.email}? Their account will be deleted and they will no longer be able to sign in.`)) {
+      return;
+    }
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        toast.error('Sign in with a real account first');
+        return;
+      }
+      await removeMember(member.id, token);
+      toast.success(`${member.name || member.email} removed`);
+      setTeamMembers((prev) => prev.filter((m) => m.id !== member.id));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not remove member');
     }
   };
 
-  const getRoleBadge = (role: 'manager' | 'staff') => {
-    return role === 'manager'
-      ? 'bg-blue-100 text-blue-700'
-      : 'bg-green-100 text-green-700';
+  const copyInviteLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Invite link copied');
+    } catch {
+      toast.error('Could not copy — select and copy the link manually');
+    }
   };
+
+  const getRoleBadge = (role: string) => ROLE_BADGES[role] ?? 'bg-gray-100 text-gray-700';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -132,7 +171,6 @@ export default function TeamManagement() {
             <Button
               onClick={() => {
                 setShowForm(!showForm);
-                setEditingId(null);
                 setFormData({ name: '', email: '', role: 'staff', phone: '' });
                 setInviteUrl('');
               }}
@@ -147,9 +185,7 @@ export default function TeamManagement() {
         {showForm && (
           <Card className="mb-6 shadow-xl border-2 border-amber-500">
             <CardHeader>
-              <CardTitle className="text-2xl">
-                {editingId ? 'Edit Team Member' : 'Invite Team Member'}
-              </CardTitle>
+              <CardTitle className="text-2xl">Invite Team Member</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
@@ -203,11 +239,10 @@ export default function TeamManagement() {
                   </div>
                 </div>
 
-                {!editingId && (
-                  <p className="text-sm text-slate-600 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                    An invite link will be created. Your teammate sets their own password when they accept.
-                  </p>
-                )}
+                <p className="text-sm text-slate-600 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  An invite link will be created. Your teammate sets their own username and password
+                  when they accept — a real account, ready to sign in.
+                </p>
 
                 {inviteUrl && (
                   <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm break-all">
@@ -220,13 +255,12 @@ export default function TeamManagement() {
                     type="submit"
                     className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-8 py-6 text-lg rounded-xl"
                   >
-                    {editingId ? 'Update Member' : 'Send Invite'}
+                    Send Invite
                   </Button>
                   <Button
                     type="button"
                     onClick={() => {
                       setShowForm(false);
-                      setEditingId(null);
                       setInviteUrl('');
                       setFormData({ name: '', email: '', role: 'staff', phone: '' });
                     }}
@@ -248,6 +282,17 @@ export default function TeamManagement() {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {loading && <p className="text-gray-500 py-4">Loading team members…</p>}
+            {!loading && loadError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+                {loadError}
+              </div>
+            )}
+            {!loading && !loadError && teamMembers.length === 0 && (
+              <p className="text-gray-500 py-4">
+                No team members yet — send an invite to add your first teammate.
+              </p>
+            )}
             <div className="space-y-4">
               {teamMembers.map((member) => (
                 <div
@@ -257,42 +302,80 @@ export default function TeamManagement() {
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-xl font-bold text-gray-900">{member.name}</h3>
+                        <h3 className="text-xl font-bold text-gray-900">{member.name || member.email}</h3>
                         <span className={`px-3 py-1 rounded-full text-sm font-medium ${getRoleBadge(member.role)}`}>
-                          {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                          {roleLabel(member.role)}
                         </span>
+                        {member.id === user.id && (
+                          <span className="px-3 py-1 rounded-full text-sm font-medium bg-slate-200 text-slate-700">
+                            You
+                          </span>
+                        )}
                       </div>
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-gray-600">
                           <Mail className="w-4 h-4" />
                           <span>{member.email}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <Phone className="w-4 h-4" />
-                          <span>{member.phone}</span>
-                        </div>
+                        {member.username && (
+                          <div className="flex items-center gap-2 text-gray-600">
+                            <AtSign className="w-4 h-4" />
+                            <span>{member.username}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <div className="flex gap-3">
+                    {member.id !== user.id && member.role !== 'platform_owner' && (
                       <Button
-                        onClick={() => handleEdit(member)}
-                        className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-4 rounded-xl"
-                      >
-                        <Edit2 className="w-5 h-5" />
-                      </Button>
-                      <Button
-                        onClick={() => handleDelete(member.id)}
+                        onClick={() => void handleDelete(member)}
                         className="bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-xl"
+                        title="Remove member (deletes their account)"
                       >
                         <Trash2 className="w-5 h-5" />
                       </Button>
-                    </div>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
+
+        {pendingInvites.length > 0 && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-2xl flex items-center gap-3">
+                <UserPlus className="w-7 h-7" />
+                Pending Invites ({pendingInvites.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {pendingInvites.map((invite) => (
+                  <div
+                    key={invite.id}
+                    className="flex items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900 truncate">{invite.email}</p>
+                      <p className="text-sm text-gray-600">
+                        {roleLabel(invite.role)} · expires {new Date(invite.expiresAt).toLocaleDateString('en-GB')}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => void copyInviteLink(invite.acceptUrl)}
+                      className="shrink-0"
+                    >
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy link
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="mt-6">
           <CardHeader>

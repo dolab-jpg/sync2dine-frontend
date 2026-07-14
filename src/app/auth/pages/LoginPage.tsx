@@ -4,8 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { User, Briefcase, Wrench, Users, UserCheck, Building2, Shield, ChevronDown, ChevronUp } from 'lucide-react';
-import { parseDemoRoleFromUrl } from '../../engine/auth/sessionStore';
 import { syncActiveOrgFromProfile } from '../../engine/platform/orgContext';
 import { integrationService } from '../../engine/integrations/integrationService';
 import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client';
@@ -26,8 +24,6 @@ interface LoginProps {
 
 type DemoRole = LoginProps['onLogin'] extends (u: infer U) => void ? U['role'] : never;
 
-const DEMO_LOGIN_ENABLED = import.meta.env.VITE_DEMO_LOGIN === 'true';
-
 export default function LoginPage({ onLogin }: LoginProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -35,16 +31,9 @@ export default function LoginPage({ onLogin }: LoginProps) {
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedRole, setSelectedRole] = useState<DemoRole>(() => parseDemoRoleFromUrl() ?? 'staff');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [inviteToken, setInviteToken] = useState('');
-  const [demoOpen, setDemoOpen] = useState(false);
-
-  useEffect(() => {
-    const urlRole = parseDemoRoleFromUrl();
-    if (urlRole) setSelectedRole(urlRole);
-  }, []);
 
   // OAuth / existing Supabase session return
   useEffect(() => {
@@ -96,26 +85,6 @@ export default function LoginPage({ onLogin }: LoginProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const roles = [
-    { value: 'platform_owner' as const, label: 'Super Admin (controlling)', icon: Building2, color: 'from-indigo-500 to-violet-600', description: 'Same full CRM + create/control client companies' },
-    { value: 'super_admin' as const, label: 'Super Admin', icon: Shield, color: 'from-red-500 to-red-600', description: 'Full CRM for one company — pricing, team & settings' },
-    { value: 'manager' as const, label: 'Manager', icon: Briefcase, color: 'from-blue-500 to-blue-600', description: 'View all jobs, manage customers & quotes' },
-    { value: 'staff' as const, label: 'Sales Representative', icon: User, color: 'from-green-500 to-green-600', description: 'On-site surveys, quotes & customer visits' },
-    { value: 'builder' as const, label: 'Builder', icon: Wrench, color: 'from-purple-500 to-purple-600', description: 'Job updates, task management & project progress' },
-    { value: 'recruitment' as const, label: 'Recruitment', icon: Users, color: 'from-indigo-500 to-indigo-600', description: 'Hiring, candidate tracking & onboarding' },
-    { value: 'customer' as const, label: 'Customer', icon: UserCheck, color: 'from-pink-500 to-pink-600', description: 'View project progress & add requests' },
-  ];
-
-  const demoUsers: Record<DemoRole, { id: string; name: string; email: string; role: DemoRole }> = {
-    platform_owner: { id: '0', name: 'Super Admin', email: 'owner@tradepro.com', role: 'platform_owner' },
-    super_admin: { id: '1', name: 'John Smith', email: 'john@bathroompro.com', role: 'super_admin' },
-    manager: { id: '2', name: 'Sarah Johnson', email: 'sarah@bathroompro.com', role: 'manager' },
-    staff: { id: '3', name: 'Mike Davis', email: 'mike@bathroompro.com', role: 'staff' },
-    builder: { id: '4', name: 'Mike Wilson', email: 'mike.wilson@bathroompro.com', role: 'builder' },
-    recruitment: { id: '5', name: 'Emma Thompson', email: 'emma@bathroompro.com', role: 'recruitment' },
-    customer: { id: '6', name: 'Amanda Peterson', email: 'amanda.peterson@email.com', role: 'customer' },
-  };
 
   const finishLogin = async (user: {
     id: string;
@@ -218,15 +187,6 @@ export default function LoginPage({ onLogin }: LoginProps) {
     if (oauthError) setError(oauthError.message);
   };
 
-  const handleDemoLogin = () => {
-    if (isLoading || !DEMO_LOGIN_ENABLED) return;
-    setIsLoading(true);
-    setError('');
-    setTimeout(() => {
-      void finishLogin(demoUsers[selectedRole]).finally(() => setIsLoading(false));
-    }, 300);
-  };
-
   const fillSeedAccount = (account: SeedAccount) => {
     setIdentifier(account.email);
     setPassword(SEED_PASSWORD);
@@ -310,50 +270,6 @@ export default function LoginPage({ onLogin }: LoginProps) {
       </Card>
 
       <SeedAccountsPanel onFill={fillSeedAccount} />
-
-      {DEMO_LOGIN_ENABLED && (
-        <div className="mt-6">
-          <button
-            type="button"
-            onClick={() => setDemoOpen((o) => !o)}
-            className="w-full flex items-center justify-between rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-left text-white hover:bg-white/15"
-          >
-            <span className="font-semibold">Developer demo</span>
-            {demoOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </button>
-          {demoOpen && (
-            <div className="mt-3 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {roles.map((role) => {
-                  const Icon = role.icon;
-                  const isSelected = selectedRole === role.value;
-                  return (
-                    <button
-                      key={role.value}
-                      type="button"
-                      onClick={() => setSelectedRole(role.value)}
-                      className={`p-4 rounded-2xl border-4 transition-all text-left ${
-                        isSelected ? 'border-amber-500 bg-white shadow-xl' : 'border-white/20 bg-white/10 hover:bg-white/20'
-                      }`}
-                    >
-                      <div className={`inline-block bg-gradient-to-br ${role.color} p-3 rounded-xl mb-2`}>
-                        <Icon className="w-6 h-6 text-white" />
-                      </div>
-                      <h3 className={`font-bold ${isSelected ? 'text-slate-900' : 'text-white'}`}>{role.label}</h3>
-                      <p className={`text-xs mt-1 ${isSelected ? 'text-slate-600' : 'text-amber-100'}`}>{role.description}</p>
-                    </button>
-                  );
-                })}
-              </div>
-              <Button onClick={handleDemoLogin} disabled={isLoading} className="w-full py-6 text-lg">
-                {isLoading
-                  ? 'Signing in...'
-                  : `Demo as ${roles.find((r) => r.value === selectedRole)?.label}`}
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
     </AuthLayout>
   );
 }
