@@ -8,9 +8,12 @@ import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Plus, Search, Phone, Mail, MapPin, FileText, Trash2, Edit, MessageCircle } from 'lucide-react';
+import { Plus, Search, Phone, Mail, MapPin, FileText, Trash2, Edit, MessageCircle, KeyRound } from 'lucide-react';
 import { Switch } from './ui/switch';
 import { toast } from 'sonner';
+import { PasswordField } from '../auth/components/PasswordField';
+import { createCustomerLogin } from '../auth/lib/authApi';
+import { getSupabase, isSupabaseConfigured } from '../../lib/supabase/client';
 import { AddressMapLink } from './ui/AddressMapLink';
 import { CustomerContactsPanel } from './CustomerContactsPanel';
 import { seedContactsFromCustomers } from '../engine/contacts/contactStore';
@@ -33,6 +36,8 @@ export default function CustomerManagement() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [portalPassword, setPortalPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -72,19 +77,58 @@ export default function CustomerManagement() {
       interestedTrades: [],
     });
     setEditingCustomer(null);
+    setPortalPassword('');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (editingCustomer) {
       updateCustomer(editingCustomer.id, formData);
       toast.success('Customer updated successfully');
-    } else {
+      setIsAddDialogOpen(false);
+      resetForm();
+      return;
+    }
+
+    const wantsPortalLogin = portalPassword.trim().length > 0;
+    if (wantsPortalLogin && portalPassword.length < 8) {
+      toast.error('Portal password must be at least 8 characters');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (wantsPortalLogin) {
+        if (!isSupabaseConfigured()) {
+          toast.error('Supabase is not configured — cannot create a portal login');
+          return;
+        }
+        const { data } = await getSupabase().auth.getSession();
+        const accessToken = data.session?.access_token;
+        if (!accessToken) {
+          toast.error('You must be signed in to create a customer portal login');
+          return;
+        }
+        try {
+          const result = await createCustomerLogin(
+            { name: formData.name, email: formData.email, password: portalPassword },
+            accessToken,
+          );
+          toast.success(`Portal login created for ${result.user.email}`);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Failed to create portal login');
+          return;
+        }
+      }
       addCustomer(formData);
       toast.success('Customer added successfully');
+      setIsAddDialogOpen(false);
+      resetForm();
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsAddDialogOpen(false);
-    resetForm();
   };
 
   const handleEdit = (customer: Customer) => {
@@ -147,7 +191,7 @@ export default function CustomerManagement() {
               Add Customer
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingCustomer ? 'Edit Customer' : 'Add New Customer'}</DialogTitle>
             </DialogHeader>
@@ -293,6 +337,27 @@ export default function CustomerManagement() {
                 <p className="text-xs text-green-800">Phone format: UK mobile e.g. 07700 900000 or +447700900000</p>
               </div>
 
+              {!editingCustomer && (
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-3">
+                  <div className="flex items-center gap-2 font-medium text-blue-900">
+                    <KeyRound className="w-4 h-4" /> Create portal login (optional)
+                  </div>
+                  <p className="text-xs text-blue-800">
+                    Set a password to create a real login for this customer using the email above.
+                    They can sign in at /login to view their projects. Leave blank to skip.
+                  </p>
+                  <PasswordField
+                    id="portalPassword"
+                    label="Portal password"
+                    value={portalPassword}
+                    onChange={setPortalPassword}
+                    placeholder="Min 8 characters — leave blank to skip"
+                    autoComplete="new-password"
+                    disabled={isSubmitting}
+                  />
+                </div>
+              )}
+
               {editingCustomer && (
                 <CustomerContactsPanel
                   customerId={editingCustomer.id}
@@ -308,8 +373,8 @@ export default function CustomerManagement() {
                 }}>
                   Cancel
                 </Button>
-                <Button type="submit">
-                  {editingCustomer ? 'Update' : 'Add'} Customer
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Saving…' : `${editingCustomer ? 'Update' : 'Add'} Customer`}
                 </Button>
               </div>
             </form>

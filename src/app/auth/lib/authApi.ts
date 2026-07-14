@@ -86,6 +86,23 @@ export async function createInvite(
   }>(res);
 }
 
+export async function createCustomerLogin(
+  input: { name: string; email: string; password: string; username?: string; orgId?: string },
+  accessToken: string,
+) {
+  const res = await fetch(`${apiBase()}/api/auth/customers`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(input),
+  });
+  return parseJson<{
+    user: { id: string; email: string; name: string; username: string; role: string; org_id: string };
+  }>(res);
+}
+
 export interface OrgMember {
   id: string;
   name: string;
