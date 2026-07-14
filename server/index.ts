@@ -120,4 +120,5 @@ server.listen(PORT, () => {
   console.log(`TradePro API server running on port ${PORT}`);
   startMailboxPoller();
   startOutboundWorker();
+  void import('./code-fix-handler').then(({ startCodeFixWorker }) => startCodeFixWorker());
 });

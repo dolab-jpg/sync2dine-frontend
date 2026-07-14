@@ -217,7 +217,7 @@ function executeConvertQuoteToProject(
       action: 'convertQuoteToProject',
       summary: `Project already exists for this quote (${existingId}).`,
       entityId: existingId,
-      openRoute: '/projects',
+      openRoute: `/projects/${existingId}`,
       output: { ...output, projectId: existingId, quoteId: quote.id },
       executed: true,
     };
@@ -242,7 +242,7 @@ function executeConvertQuoteToProject(
     summary: `Created project ${project.id} for ${quote.customerName}.${planNote}`,
     entityLabel: project.projectName,
     entityId: project.id,
-    openRoute: '/projects',
+    openRoute: `/projects/${project.id}`,
     output: { ...output, projectId: project.id, quoteId: quote.id },
     executed: true,
   };
@@ -1266,6 +1266,23 @@ async function executeSingleTool(
       openRoute: route,
       output,
       executed: ok,
+    };
+  }
+
+  if (name === 'requestCodeFix') {
+    const { emitSelfHealError } = await import('./selfHealEvents');
+    const errorCode = readOptionalString(output.errorCode) || readOptionalString(output.code) || 'MANUAL';
+    const description =
+      readOptionalString(output.description) ||
+      readOptionalString(output.message) ||
+      'Staff requested a code fix from chat';
+    const route = readOptionalString(output.route) || (typeof window !== 'undefined' ? window.location.pathname : '');
+    emitSelfHealError({ errorCode, description, route });
+    return {
+      action: name,
+      summary: `Offered code fix for ${errorCode} in chat (Yes/No).`,
+      output: { errorCode, description, route },
+      executed: true,
     };
   }
 

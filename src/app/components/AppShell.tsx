@@ -14,6 +14,7 @@ import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { useAIAssistant } from '../context/AIAssistantContext';
 import { AIAssistantPanel } from './AI/AIAssistantOverlay';
+import { SelfHealErrorBridge } from './AI/SelfHealErrorBridge';
 import { useGestureToggle } from '../hooks/useGestureToggle';
 import { useIsMobile } from './ui/use-mobile';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from './ui/sheet';
@@ -299,6 +300,7 @@ export default function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="native-shell h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden safe-area-x">
+      <SelfHealErrorBridge />
       <OnlineStatusBanner />
       <div ref={shellRef} className="flex flex-1 min-h-0 overflow-hidden">
       <aside

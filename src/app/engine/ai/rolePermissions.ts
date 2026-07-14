@@ -166,6 +166,7 @@ const ROLE_ACTIONS: Record<AgentRole, Set<string>> = {
     ...CONTRACTS_PRICING,
     ...PLANNING,
     ...EMAIL,
+    'requestCodeFix',
   ]),
   manager: new Set([
     ...CUSTOMER_SELF_SERVICE,
@@ -184,6 +185,7 @@ const ROLE_ACTIONS: Record<AgentRole, Set<string>> = {
     ...MANAGER_INSIGHTS,
     ...PLANNING,
     ...EMAIL,
+    'requestCodeFix',
   ]),
   super_admin: new Set([
     ...CUSTOMER_SELF_SERVICE,
@@ -202,6 +204,7 @@ const ROLE_ACTIONS: Record<AgentRole, Set<string>> = {
     ...MANAGER_INSIGHTS,
     ...PLANNING,
     ...EMAIL,
+    'requestCodeFix',
   ]),
   builder: new Set([
     ...FOREMAN,
@@ -214,6 +217,7 @@ const ROLE_ACTIONS: Record<AgentRole, Set<string>> = {
     'assessExtraFromPhotos',
     'navigateTo',
     'searchProjects',
+    'requestCodeFix',
   ]),
   recruitment: new Set([...SALES_QUOTING, 'searchCustomers', ...RECRUITMENT, ...PHONE_RECEPTION]),
   unknown: new Set(['lookupQuote', 'lookupProjectStatus', 'escalateToStaff', ...PHONE_RECEPTION]),

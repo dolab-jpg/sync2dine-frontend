@@ -45,13 +45,21 @@ import { buildRawDataSnapshot } from '../../engine/ai/dataAccess';
 import { logConversationMessage } from '../../engine/ai/conversationLogService';
 import { getPlanningApplication } from '../../engine/planning/planningStore';
 import { buildPlanningOrchestratorContext } from '../../engine/planning/planningAiService';
+import {
+  dismissCodeFix,
+  enqueueCodeFix,
+  getCodeFixJob,
+  retryCodeFix,
+  statusLabel,
+} from '../../engine/ai/codeFixService';
+import { getActiveOrgId } from '../../engine/platform/orgContext';
 
 export function AIChatPanel() {
   const app = useContext(AppContext);
   const {
     isOpen,
     preferVoiceOnOpen, clearPreferVoiceOnOpen,
-    messages, addMessage, settings, pageContext,
+    messages, addMessage, updateMessage, settings, pageContext,
     setPendingQuoteFields, setLastAcceptedFields,
     detectedTrades, setDetectedTrades,
     setActiveTradeId,
@@ -59,6 +67,8 @@ export function AIChatPanel() {
     setJobGroupId,
     pendingTask, setPendingTask, clearPendingTask,
   } = useAIAssistant();
+  const [trackedFixJobs, setTrackedFixJobs] = useState<string[]>([]);
+  const announcedFixStatusRef = useRef<Record<string, string>>({});
   const { tradeId, tradeName, setTradeOverride } = useResolvedTrade();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -354,9 +364,176 @@ export function AIChatPanel() {
     }
   };
 
+  const respondToFixOffer = useCallback(async (messageId: string, yes: boolean) => {
+    const msg = messages.find((m) => m.id === messageId);
+    const offer = msg?.fixOffer;
+    if (!offer || offer.resolved) return;
+
+    updateMessage(messageId, {
+      fixOffer: { ...offer, resolved: yes ? 'yes' : 'no' },
+    });
+    addMessage({ role: 'user', content: yes ? 'Yes' : 'No' });
+
+    if (!yes) {
+      try {
+        await dismissCodeFix(offer.jobId);
+      } catch {
+        // ignore
+      }
+      addMessage({
+        role: 'assistant',
+        content: 'OK — I won’t start a fix for that error. Say if you change your mind.',
+      });
+      return;
+    }
+
+    try {
+      const role = String(app?.user.role ?? agentContext.role);
+      const result = await enqueueCodeFix({
+        jobId: offer.jobId,
+        errorCode: offer.errorCode,
+        description: offer.description,
+        route: offer.route,
+        requesterRole: role === 'platform_owner' ? 'super_admin' : role,
+        requesterName: app?.user.name || 'Staff',
+        requesterUserId: app?.user.id,
+        orgId: getActiveOrgId() || undefined,
+      });
+      setTrackedFixJobs((prev) => (prev.includes(result.job.id) ? prev : [...prev, result.job.id]));
+      const queueNote =
+        typeof result.queuePosition === 'number' && result.queuePosition > 0
+          ? ` There are ${result.queuePosition} job(s) ahead of you.`
+          : '';
+      addMessage({
+        role: 'assistant',
+        content:
+          (result.message || 'Logged — starting a surgical fix.') +
+          queueNote +
+          (result.needsCursorApproval
+            ? '\n\nThis needs your approval in Cursor before a large change runs.'
+            : '\n\nI’ll update you here as it queues, runs, or fails.'),
+        fixJobId: result.job.id,
+      });
+      if (result.job.cursorAgentUrl) {
+        addMessage({
+          role: 'assistant',
+          content: `Cursor agent: ${result.job.cursorAgentUrl}`,
+          fixJobId: result.job.id,
+        });
+      }
+    } catch (err) {
+      addMessage({
+        role: 'assistant',
+        content: `Couldn’t start the fix: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+  }, [messages, updateMessage, addMessage, app?.user, agentContext.role]);
+
+  useEffect(() => {
+    if (trackedFixJobs.length === 0) return;
+    let cancelled = false;
+    const tick = async () => {
+      for (const jobId of trackedFixJobs) {
+        try {
+          const { job, queuePosition } = await getCodeFixJob(jobId);
+          if (cancelled) return;
+          const terminal = ['pr_open', 'merged', 'failed', 'cancelled', 'dismissed', 'awaiting_cursor_approval'];
+          if (job.status === 'queued') {
+            // soft status — only occasionally announce
+            if (queuePosition > 0 && job.attemptCount === 0) {
+              // skip spam
+            }
+          }
+          const already = announcedFixStatusRef.current[jobId];
+          if (already === job.status) continue;
+          if (job.status === 'failed' && job.alertedAt) {
+            announcedFixStatusRef.current[jobId] = job.status;
+            addMessage({
+              role: 'assistant',
+              content:
+                `**Fix failed** for \`${job.errorCode || 'error'}\`.\n` +
+                `${job.lastError || 'Unknown error'}\n\n` +
+                `Say **retry** or use Admin → AI Audit → Code fixes.`,
+              fixJobId: job.id,
+            });
+            setTrackedFixJobs((prev) => prev.filter((id) => id !== jobId));
+          } else if (job.status === 'pr_open') {
+            announcedFixStatusRef.current[jobId] = job.status;
+            addMessage({
+              role: 'assistant',
+              content:
+                `**Fix PR ready** for \`${job.errorCode || 'error'}\`.\n` +
+                (job.prUrl ? `PR: ${job.prUrl}\n` : '') +
+                (job.cursorAgentUrl ? `Agent: ${job.cursorAgentUrl}\n` : '') +
+                'Bugbot can review it next. Please merge when you’re happy.',
+              fixJobId: job.id,
+            });
+            setTrackedFixJobs((prev) => prev.filter((id) => id !== jobId));
+          } else if (job.status === 'awaiting_cursor_approval') {
+            announcedFixStatusRef.current[jobId] = job.status;
+            addMessage({
+              role: 'assistant',
+              content:
+                `This needs **your approval in Cursor** before I implement a wider change.\n` +
+                (job.cursorAgentUrl ? `Open: ${job.cursorAgentUrl}` : 'Open Cursor Agents dashboard.'),
+              fixJobId: job.id,
+            });
+            setTrackedFixJobs((prev) => prev.filter((id) => id !== jobId));
+          } else if (terminal.includes(job.status)) {
+            announcedFixStatusRef.current[jobId] = job.status;
+            setTrackedFixJobs((prev) => prev.filter((id) => id !== jobId));
+          }
+        } catch {
+          // ignore poll errors
+        }
+      }
+    };
+    const id = window.setInterval(() => void tick(), 8000);
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [trackedFixJobs, addMessage]);
+
   const handleSend = async (text?: string): Promise<string | undefined> => {
     const content = (text ?? input).trim();
     if (!content && photos.length === 0) return undefined;
+
+    // Yes/No for pending self-heal offers does not require OpenAI
+    const pendingOfferMsg = [...messages].reverse().find((m) => m.fixOffer && !m.fixOffer.resolved);
+    if (pendingOfferMsg?.fixOffer && /^(yes|y|yeah|yep|ok|okay|fix it|please fix)$/i.test(content)) {
+      setInput('');
+      await respondToFixOffer(pendingOfferMsg.id, true);
+      return 'Yes';
+    }
+    if (pendingOfferMsg?.fixOffer && /^(no|n|nope|cancel|dismiss)$/i.test(content)) {
+      setInput('');
+      await respondToFixOffer(pendingOfferMsg.id, false);
+      return 'No';
+    }
+    if (/^retry$/i.test(content) && trackedFixJobs.length === 0) {
+      const lastFailed = [...messages].reverse().find((m) => m.fixJobId);
+      if (lastFailed?.fixJobId) {
+        setInput('');
+        addMessage({ role: 'user', content: 'retry' });
+        try {
+          const { job } = await retryCodeFix(lastFailed.fixJobId);
+          setTrackedFixJobs((prev) => (prev.includes(job.id) ? prev : [...prev, job.id]));
+          addMessage({
+            role: 'assistant',
+            content: `Re-queued fix for \`${job.errorCode || 'error'}\` (${statusLabel(job.status)}).`,
+            fixJobId: job.id,
+          });
+        } catch (err) {
+          addMessage({
+            role: 'assistant',
+            content: `Retry failed: ${err instanceof Error ? err.message : String(err)}`,
+          });
+        }
+        return 'retry';
+      }
+    }
 
     if (!isChatConnected) {
       toast.error(connection.message ?? 'Chat is not connected to OpenAI.');
@@ -579,6 +756,29 @@ export function AIChatPanel() {
                 <ChatMarkdown content={m.content} />
               ) : (
                 m.content
+              )}
+              {m.fixOffer && !m.fixOffer.resolved && (
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium"
+                    onClick={() => void respondToFixOffer(m.id, true)}
+                  >
+                    Yes, fix it
+                  </button>
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs"
+                    onClick={() => void respondToFixOffer(m.id, false)}
+                  >
+                    No
+                  </button>
+                </div>
+              )}
+              {m.fixOffer?.resolved && (
+                <p className="mt-2 text-[11px] text-slate-500">
+                  You chose: {m.fixOffer.resolved === 'yes' ? 'Yes' : 'No'}
+                </p>
               )}
             </div>
           </div>

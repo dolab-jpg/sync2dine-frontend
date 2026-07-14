@@ -10,12 +10,25 @@ import {
   patchPanelPrefs,
 } from '../engine/ai/aiStudioStore';
 
+export interface ChatFixOffer {
+  jobId: string;
+  errorCode: string;
+  description: string;
+  route: string;
+  scope?: 'surgical' | 'needs_cursor_approval';
+  resolved?: 'yes' | 'no';
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
   suggestions?: Record<string, { value: unknown; confidence: number; reason?: string }>;
+  /** Self-heal Yes/No offer attached to this assistant message */
+  fixOffer?: ChatFixOffer;
+  /** Track an in-flight code-fix job for status updates */
+  fixJobId?: string;
 }
 
 export interface AISettings {
@@ -55,6 +68,7 @@ interface AIAssistantContextType {
   clearPreferVoiceOnOpen: () => void;
   messages: ChatMessage[];
   addMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  updateMessage: (id: string, patch: Partial<ChatMessage>) => void;
   clearMessages: () => void;
   settings: AISettings;
   updateSettings: (s: Partial<AISettings>) => void;
@@ -299,6 +313,10 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
     });
   }, []);
 
+  const updateMessage = useCallback((id: string, patch: Partial<ChatMessage>) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  }, []);
+
   const clearMessages = useCallback(() => {
     setMessages([]);
     try {
@@ -336,7 +354,7 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
   const value = useMemo<AIAssistantContextType>(() => ({
     isOpen, setIsOpen,
     preferVoiceOnOpen, requestVoiceStart, clearPreferVoiceOnOpen,
-    messages, addMessage, clearMessages,
+    messages, addMessage, updateMessage, clearMessages,
     settings, updateSettings,
     pendingQuoteFields, setPendingQuoteFields, clearPendingQuoteFields,
     lastAcceptedFields, setLastAcceptedFields,
@@ -352,7 +370,7 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
   }), [
     isOpen, setIsOpen,
     preferVoiceOnOpen, requestVoiceStart, clearPreferVoiceOnOpen,
-    messages, addMessage, clearMessages,
+    messages, addMessage, updateMessage, clearMessages,
     settings, updateSettings,
     pendingQuoteFields, setPendingQuoteFields, clearPendingQuoteFields,
     lastAcceptedFields, pageContext, setPageContext,
