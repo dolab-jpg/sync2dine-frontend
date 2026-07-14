@@ -7,10 +7,28 @@ export interface SelfHealErrorDetail {
   description: string;
   route?: string;
   status?: number;
+  /** Parsed OpenAI tool name when Invalid schema for function 'X' */
+  functionName?: string;
+  schemaError?: boolean;
 }
 
 const recentKeys = new Map<string, number>();
 const DEDUPE_MS = 60_000;
+
+const SCHEMA_FUNCTION_RE = /Invalid schema for function ['"]([^'"]+)['"]/i;
+const INVALID_FUNCTION_PARAMS_RE = /invalid_function_parameters/i;
+
+export function parseOpenAIToolSchemaError(bodyText: string): {
+  functionName?: string;
+  schemaError: boolean;
+} {
+  const fnMatch = bodyText.match(SCHEMA_FUNCTION_RE);
+  const schemaError = Boolean(fnMatch) || INVALID_FUNCTION_PARAMS_RE.test(bodyText);
+  return {
+    functionName: fnMatch?.[1],
+    schemaError,
+  };
+}
 
 export function emitSelfHealError(detail: SelfHealErrorDetail): void {
   if (typeof window === 'undefined') return;
@@ -39,18 +57,35 @@ export function installSelfHealFetchHook(): () => void {
         let bodyHint = '';
         try {
           const clone = res.clone();
-          const text = await clone.text();
-          bodyHint = text.slice(0, 200);
+          bodyHint = (await clone.text()).slice(0, 500);
         } catch {
           // ignore
         }
-        emitSelfHealError({
-          errorCode: `HTTP_${res.status}`,
-          description: bodyHint
+
+        const isOrchestrate = url.includes('/api/ai/orchestrate');
+        const parsed = parseOpenAIToolSchemaError(bodyHint);
+        const functionName = parsed.functionName;
+        const schemaError = parsed.schemaError || (isOrchestrate && res.status === 400 && /Invalid schema/i.test(bodyHint));
+
+        const errorCode = schemaError && functionName
+          ? `OPENAI_TOOL_SCHEMA:${functionName}`
+          : schemaError
+            ? 'OPENAI_TOOL_SCHEMA'
+            : `HTTP_${res.status}`;
+
+        const description = schemaError && functionName
+          ? `OpenAI rejected tool schema for function '${functionName}'. ${bodyHint || `HTTP ${res.status}`}`
+          : bodyHint
             ? `Request failed (${res.status}): ${bodyHint}`
-            : `Request failed with status ${res.status}`,
+            : `Request failed with status ${res.status}`;
+
+        emitSelfHealError({
+          errorCode,
+          description,
           route: window.location.pathname,
           status: res.status,
+          functionName,
+          schemaError,
         });
       }
     } catch {
