@@ -971,15 +971,24 @@ export default function App() {
 
   const handleLogout = () => {
     clearSessionUser();
-    setIsLoggedIn(false);
-    setUser({
-      id: '1',
-      name: 'John Smith',
-      email: 'john@bathrooms.com',
-      role: 'super_admin',
-    });
+    const finish = () => {
+      setIsLoggedIn(false);
+      setUser({
+        id: '1',
+        name: 'John Smith',
+        email: 'john@bathrooms.com',
+        role: 'super_admin',
+      });
+    };
     if (isSupabaseConfigured()) {
-      void import('../lib/supabase/client').then(({ getSupabase }) => getSupabase().auth.signOut());
+      // Sign out of Supabase BEFORE showing the login page, otherwise the
+      // login page's session check signs the same user straight back in.
+      void import('../lib/supabase/client')
+        .then(({ getSupabase }) => getSupabase().auth.signOut())
+        .catch(() => undefined)
+        .then(finish);
+    } else {
+      finish();
     }
   };
 
