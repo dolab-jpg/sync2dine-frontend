@@ -124,10 +124,10 @@ export default function Settings() {
         <p className="text-gray-600 mt-1 text-sm sm:text-base">Configure pricing rules, margins, and business settings</p>
       </div>
 
-      <Tabs defaultValue={user.role === 'super_admin' ? "pricing" : "business"} className="w-full">
+      <Tabs defaultValue={user.role === 'super_admin' || user.role === 'platform_owner' ? "pricing" : "business"} className="w-full">
         <div className="overflow-x-auto -mx-1 px-1 pb-1">
         <TabsList className="w-max min-w-full sm:w-full flex-nowrap sm:flex-wrap h-auto gap-1">
-          {user.role === 'super_admin' && (
+          {(user.role === 'super_admin' || user.role === 'platform_owner') && (
             <>
               <TabsTrigger value="pricing" className="min-h-10 shrink-0">Pricing</TabsTrigger>
               <TabsTrigger value="quote-stages" className="min-h-10 shrink-0">Stages</TabsTrigger>

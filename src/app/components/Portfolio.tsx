@@ -24,7 +24,7 @@ export default function Portfolio() {
   if (!context) return null;
 
   const { user } = context;
-  const isSuperAdmin = user.role === 'super_admin';
+  const isSuperAdmin = user.role === 'super_admin' || user.role === 'platform_owner';
   const trades = getAllTrades();
 
   const [selectedTradeId, setSelectedTradeId] = useState<TradeId>('bathroom');

@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -38,8 +37,8 @@ export default function Login({ onLogin }: LoginProps) {
   }, []);
 
   const roles = [
-    { value: 'platform_owner' as const, label: 'Platform Owner', icon: Building2, color: 'from-indigo-500 to-violet-600', description: 'Manage client companies, billing & tokens' },
-    { value: 'super_admin' as const, label: 'Super Admin', icon: Shield, color: 'from-red-500 to-red-600', description: 'Full system access, manage pricing, team & settings' },
+    { value: 'platform_owner' as const, label: 'Super Admin (controlling)', icon: Building2, color: 'from-indigo-500 to-violet-600', description: 'Same full CRM + create/control client companies' },
+    { value: 'super_admin' as const, label: 'Super Admin', icon: Shield, color: 'from-red-500 to-red-600', description: 'Full CRM for one company — pricing, team & settings' },
     { value: 'manager' as const, label: 'Manager', icon: Briefcase, color: 'from-blue-500 to-blue-600', description: 'View all jobs, manage customers & quotes' },
     { value: 'staff' as const, label: 'Sales Representative', icon: User, color: 'from-green-500 to-green-600', description: 'On-site surveys, quotes & customer visits' },
     { value: 'builder' as const, label: 'Builder', icon: Wrench, color: 'from-purple-500 to-purple-600', description: 'Job updates, task management & project progress' },
@@ -48,7 +47,7 @@ export default function Login({ onLogin }: LoginProps) {
   ];
 
   const demoUsers: Record<DemoRole, { id: string; name: string; email: string; role: DemoRole }> = {
-    platform_owner: { id: '0', name: 'Platform Owner', email: 'owner@tradepro.com', role: 'platform_owner' },
+    platform_owner: { id: '0', name: 'Super Admin', email: 'owner@tradepro.com', role: 'platform_owner' },
     super_admin: { id: '1', name: 'John Smith', email: 'john@bathroompro.com', role: 'super_admin' },
     manager: { id: '2', name: 'Sarah Johnson', email: 'sarah@bathroompro.com', role: 'manager' },
     staff: { id: '3', name: 'Mike Davis', email: 'mike@bathroompro.com', role: 'staff' },
@@ -139,9 +138,6 @@ export default function Login({ onLogin }: LoginProps) {
         <div className="text-center mb-6 sm:mb-8">
           <BrandLogo size="lg" showWordmark className="justify-center mb-3" />
           <p className="text-amber-100">Construction Estimation Platform</p>
-          <Link to="/platform/clients" className="text-sm text-indigo-300 hover:underline mt-2 inline-block">
-            Open Platform Clients CRM (no login required while testing)
-          </Link>
         </div>
 
         {DEMO_LOGIN_ENABLED && (

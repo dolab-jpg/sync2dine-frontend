@@ -34,7 +34,7 @@ export default function CostingDashboard() {
   if (!context) return null;
   const { user } = context;
 
-  const canView = user.role === 'super_admin' || user.role === 'manager';
+  const canView = user.role === 'super_admin' || user.role === 'platform_owner' || user.role === 'manager';
   if (!canView) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">

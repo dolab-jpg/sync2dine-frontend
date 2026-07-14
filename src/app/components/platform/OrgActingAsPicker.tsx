@@ -24,13 +24,14 @@ export default function OrgActingAsPicker() {
           const id = v === '__none__' ? '' : v;
           setActive(id);
           setActiveOrgId(id || null);
+          if (id) window.location.assign('/');
         }}
       >
         <SelectTrigger className="h-8 w-[140px] sm:w-[180px] text-xs bg-indigo-900 border-indigo-700 text-white">
           <SelectValue placeholder="Select client" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="__none__">Default (env key)</SelectItem>
+          <SelectItem value="__none__">Not acting as a client</SelectItem>
           {orgs.map(o => (
             <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
           ))}

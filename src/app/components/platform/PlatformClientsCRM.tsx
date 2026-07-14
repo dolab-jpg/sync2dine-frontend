@@ -30,6 +30,7 @@ import {
   type PlatformStats,
 } from '../../engine/platform/platformApi';
 import { setActiveOrgId } from '../../engine/platform/orgContext';
+import { useNavigate } from 'react-router';
 
 type ClientTab = 'all' | OrgStatus;
 
@@ -48,6 +49,7 @@ function statusBadgeVariant(status: OrgStatus): 'default' | 'secondary' | 'destr
 }
 
 export default function PlatformClientsCRM() {
+  const navigate = useNavigate();
   const [clients, setClients] = useState<PlatformOrganization[]>([]);
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,6 +58,7 @@ export default function PlatformClientsCRM() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selected, setSelected] = useState<PlatformOrganization | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const [form, setForm] = useState({
     name: '',
@@ -115,8 +118,13 @@ export default function PlatformClientsCRM() {
       toast.error('Company name and contact email are required');
       return;
     }
+    if (!form.adminPassword.trim() || form.adminPassword.trim().length < 8) {
+      toast.error('Main user password is required (min 8 characters)');
+      return;
+    }
+    setCreating(true);
     try {
-      const org = await createOrganization({
+      const result = await createOrganization({
         name: form.name,
         contactName: form.contactName || form.name,
         contactEmail: form.contactEmail,
@@ -127,11 +135,16 @@ export default function PlatformClientsCRM() {
         openaiApiKey: form.openaiApiKey,
         monthlyTokenCap: form.monthlyTokenCap ? Number(form.monthlyTokenCap) : undefined,
         notes: form.notes,
-        adminPassword: form.adminPassword || undefined,
+        adminPassword: form.adminPassword,
         createStripeSubscription: form.createStripe,
         sendInviteEmail: form.sendInvite,
       });
-      toast.success(`${org.name} provisioned`);
+      const org = result.organization;
+      const mainEmail = result.mainUserEmail || form.contactEmail.trim().toLowerCase();
+      toast.success(
+        `${org.name} ready — main Super Admin login: ${mainEmail}`,
+        { duration: 10_000 },
+      );
       setIsAddOpen(false);
       setForm({
         name: '', contactName: '', contactEmail: '', contactPhone: '', address: '',
@@ -141,6 +154,8 @@ export default function PlatformClientsCRM() {
       await reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create client');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -166,7 +181,8 @@ export default function PlatformClientsCRM() {
 
   const handleActAs = (org: PlatformOrganization) => {
     setActiveOrgId(org.id);
-    toast.success(`Acting as ${org.name} — AI usage will count against this client`);
+    toast.success(`Acting as ${org.name} — full CRM scoped to this company`);
+    navigate('/');
   };
 
   return (
@@ -250,7 +266,9 @@ export default function PlatformClientsCRM() {
                     Send invite email
                   </label>
                 </div>
-                <Button className="w-full mt-4" onClick={() => void handleCreate()}>Create client</Button>
+                <Button className="w-full mt-4" disabled={creating} onClick={() => void handleCreate()}>
+                  {creating ? 'Creating…' : 'Create client + main Super Admin'}
+                </Button>
               </DialogContent>
             </Dialog>
           </div>

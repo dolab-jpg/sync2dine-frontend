@@ -149,7 +149,7 @@ export default function CommunicationsHub() {
           <Badge variant="outline" className="gap-1">
             <MessageCircle className="w-3 h-3" /> WhatsApp: {whatsappStatus}
           </Badge>
-          {user.role === 'super_admin' && (
+          {(user.role === 'super_admin' || user.role === 'platform_owner') && (
             <Button variant="outline" size="sm" asChild>
               <Link to="/integrations"><Plug className="w-4 h-4 mr-1" /> Integrations</Link>
             </Button>

@@ -28,7 +28,7 @@ export default function TeamManagement() {
     password: ''
   });
 
-  if (user.role !== 'super_admin') {
+  if (user.role !== 'super_admin' && user.role !== 'platform_owner') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
         <Card className="w-96">

@@ -197,7 +197,7 @@ export default function BuilderManagement() {
   };
 
   // Only super admin and managers can access
-  if (user.role !== 'super_admin' && user.role !== 'manager') {
+  if (user.role !== 'super_admin' && user.role !== 'platform_owner' && user.role !== 'manager') {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <Card>

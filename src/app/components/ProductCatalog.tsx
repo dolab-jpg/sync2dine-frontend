@@ -18,7 +18,7 @@ export default function ProductCatalog() {
   const { user, products, addProduct, updateProduct, deleteProduct } = context;
 
   // CRITICAL: Only super_admin can access product catalog with pricing
-  if (user.role !== 'super_admin') {
+  if (user.role !== 'super_admin' && user.role !== 'platform_owner') {
     return (
       <div className="flex items-center justify-center min-h-screen p-6">
         <Card className="max-w-md">

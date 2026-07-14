@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { AddressMapLink } from './ui/AddressMapLink';
 import { getAllTrades } from '../config/trades';
 import type { TradeId } from '../config/types';
-import { getDueFollowUps } from '../engine/leads/leadService';
+import { getDueFollowUps, isLeadCustomer } from '../engine/leads/leadService';
 import { findPlanningApplicationsByCustomerId } from '../engine/planning/planningStore';
 import { stageLabel } from '../engine/planning/types';
 
@@ -26,7 +26,7 @@ type Lead = Customer & {
 };
 
 function toLead(c: Customer): Lead | null {
-  if (!c.source && c.status !== 'lead' && c.status !== 'quoted') return null;
+  if (!isLeadCustomer(c)) return null;
   return {
     ...c,
     source: c.source ?? 'website',
@@ -56,7 +56,7 @@ export default function ComprehensiveCRM() {
   if (!context) return null;
 
   const { user, customers, updateCustomer, addCustomer } = context;
-  const isSuperAdmin = user.role === 'super_admin';
+  const isSuperAdmin = user.role === 'super_admin' || user.role === 'platform_owner';
 
   const leads = useMemo(
     () => customers.map(toLead).filter((l): l is Lead => l !== null),

@@ -133,7 +133,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => user.role === 'super_admin' && navigate('/products')}>
+        <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => (user.role === 'super_admin' || user.role === 'platform_owner') && navigate('/products')}>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Products</CardTitle>
             <Package className="w-4 h-4 text-gray-400" />

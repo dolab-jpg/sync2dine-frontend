@@ -6,7 +6,9 @@ import {
   Landmark, Calculator, BadgeCheck, FileSignature, ScrollText, Building2, Plug, Package, Palette, CreditCard,
 } from 'lucide-react';
 import OrgActingAsPicker from './platform/OrgActingAsPicker';
-import { AppContext, canAccessAccounts } from '../App';
+import { AppContext, canAccessAccounts, hasSuperAdminAccess } from '../App';
+import { getActiveOrgId, setActiveOrgId } from '../engine/platform/orgContext';
+import { fetchOrganizations } from '../engine/platform/platformApi';
 import NotificationSystem from './NotificationSystem';
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
@@ -129,9 +131,30 @@ export default function AppShell({ children }: AppShellProps) {
   if (!context) return null;
   const { user, logout, recruitmentAccess, accountsAccess } = context;
 
+  const [actingAsName, setActingAsName] = useState<string | null>(null);
+  const activeOrgId = typeof window !== 'undefined' ? getActiveOrgId() : null;
+
+  useEffect(() => {
+    if (user.role !== 'platform_owner' || !activeOrgId) {
+      setActingAsName(null);
+      return;
+    }
+    let cancelled = false;
+    fetchOrganizations()
+      .then((orgs) => {
+        if (cancelled) return;
+        const match = orgs.find((o) => o.id === activeOrgId);
+        setActingAsName(match?.name ?? 'Selected company');
+      })
+      .catch(() => {
+        if (!cancelled) setActingAsName('Selected company');
+      });
+    return () => { cancelled = true; };
+  }, [user.role, activeOrgId, location.pathname]);
+
   const getRoleDisplayName = (role: string) => {
     const roleMap: Record<string, string> = {
-      platform_owner: 'Platform Owner',
+      platform_owner: 'Super Admin',
       super_admin: 'Super Admin',
       manager: 'Manager',
       staff: 'Staff',
@@ -193,7 +216,7 @@ export default function AppShell({ children }: AppShellProps) {
       ...(financeConnected
         ? [{ to: '/finance', icon: CreditCard, label: 'Finance' }]
         : []),
-      ...(user.role === 'super_admin' || user.role === 'manager'
+      ...(hasSuperAdminAccess(user.role) || user.role === 'manager'
         ? [{ to: '/approvals', icon: BadgeCheck, label: 'Approvals' }]
         : []),
       { to: '/contracts', icon: FileSignature, label: 'Contracts' },
@@ -205,9 +228,11 @@ export default function AppShell({ children }: AppShellProps) {
       { to: '/cyrus', icon: MessageCircle, label: 'Cyrus' },
       { to: '/calls', icon: Phone, label: 'Calls' },
       { to: '/portfolio', icon: Image, label: 'Portfolio' },
-      ...(user.role === 'super_admin'
+      ...(user.role === 'platform_owner'
+        ? [{ to: '/platform/clients', icon: Building2, label: 'Clients' }]
+        : []),
+      ...(hasSuperAdminAccess(user.role)
         ? [
-            { to: '/platform/clients', icon: Building2, label: 'Clients' },
             { to: '/products', icon: Package, label: 'Products' },
             { to: '/integrations', icon: Plug, label: 'Integrations' },
             { to: '/builder-management', icon: Wrench, label: 'Builders' },
@@ -402,7 +427,7 @@ export default function AppShell({ children }: AppShellProps) {
               </button>
             )}
             <NotificationSystem />
-            <OrgActingAsPicker />
+            {user.role === 'platform_owner' && <OrgActingAsPicker />}
             <div className="relative">
               <button
                 type="button"
@@ -438,6 +463,33 @@ export default function AppShell({ children }: AppShellProps) {
           </div>
         </header>
 
+        {user.role === 'platform_owner' && activeOrgId && (
+          <div className="shrink-0 px-3 sm:px-4 py-2 bg-indigo-950 text-indigo-50 text-sm flex flex-wrap items-center justify-between gap-2 border-b border-indigo-800">
+            <span>
+              Acting as <strong className="text-white">{actingAsName ?? 'company'}</strong> — same full CRM, scoped to this client
+            </span>
+            <div className="flex items-center gap-2">
+              <NavLink
+                to="/platform/clients"
+                className="underline text-indigo-200 hover:text-white text-xs sm:text-sm"
+              >
+                Clients
+              </NavLink>
+              <button
+                type="button"
+                className="rounded-md bg-white/15 hover:bg-white/25 px-3 py-1 text-xs sm:text-sm font-medium"
+                onClick={() => {
+                  setActiveOrgId(null);
+                  setActingAsName(null);
+                  window.location.assign('/platform/clients');
+                }}
+              >
+                Exit
+              </button>
+            </div>
+          </div>
+        )}
+
         <div ref={contentRowRef} className="flex-1 flex min-h-0 overflow-hidden relative">
           <main ref={mainRef} className="flex-1 overflow-x-hidden overflow-y-auto min-w-0 transition-[margin] duration-300">{children}</main>
           {aiSettings.enabled && aiSettings.showOverlay && aiOpen && (
@@ -466,6 +518,7 @@ export default function AppShell({ children }: AppShellProps) {
           )}
         </div>
       </div>
+    </div>
     </div>
   );
 }

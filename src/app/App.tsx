@@ -327,15 +327,20 @@ export const AppContext = React.createContext<AppContextType | null>(null);
 
 // Whether a user can access the Recruitment module, considering both role and
 // super-admin-granted permissions for sales/office staff and managers.
+/** Controlling Super Admin (platform_owner) has the same product access as company super_admin. */
+export function hasSuperAdminAccess(role: UserRole): boolean {
+  return role === 'super_admin' || role === 'platform_owner';
+}
+
 export function canAccessRecruitment(role: UserRole, access: RecruitmentAccess): boolean {
-  if (role === 'super_admin' || role === 'recruitment') return true;
+  if (hasSuperAdminAccess(role) || role === 'recruitment') return true;
   if (role === 'staff') return access.staff;
   if (role === 'manager') return access.manager;
   return false;
 }
 
 export function canAccessAccounts(role: UserRole, access: AccountsAccess): boolean {
-  if (role === 'super_admin') return true;
+  if (hasSuperAdminAccess(role)) return true;
   if (role === 'staff') return access.staff;
   if (role === 'manager') return access.manager;
   return false;
@@ -348,7 +353,13 @@ export function canCreateContract(quote: Pick<Quote, 'status'>): boolean {
 
 // Price approval is a human gate restricted to managers and super admins.
 export function canApproveQuotes(role: UserRole): boolean {
-  return role === 'super_admin' || role === 'manager';
+  return hasSuperAdminAccess(role) || role === 'manager';
+}
+
+function roleAllowed(userRole: UserRole, allowedRoles: UserRole[]): boolean {
+  if (allowedRoles.includes(userRole)) return true;
+  if (userRole === 'platform_owner' && allowedRoles.includes('super_admin')) return true;
+  return false;
 }
 
 // Protected Route Component for role-based access control
@@ -359,7 +370,7 @@ interface ProtectedRouteProps {
 }
 
 function ProtectedRoute({ element, allowedRoles, user }: ProtectedRouteProps): ReactElement {
-  if (!allowedRoles.includes(user.role)) {
+  if (!roleAllowed(user.role, allowedRoles)) {
     return <Navigate to="/" replace />;
   }
   return element;
@@ -988,19 +999,7 @@ export default function App() {
           <Route path="/contract/:token" element={<ContractSignPage />} />
           <Route path="/portal/:token" element={<CustomerPortal />} />
           <Route path="/planning-approve/:token" element={<PlanningCustomerApproval />} />
-          <Route path="/platform/clients" element={<PlatformClientsCRM />} />
           <Route path="*" element={<Login onLogin={handleLogin} />} />
-        </Routes>
-      </BrowserRouter>
-    );
-  }
-
-  if (user.role === 'platform_owner') {
-    return (
-      <BrowserRouter>
-        <Routes>
-          <Route path="/platform/clients" element={<PlatformClientsCRM />} />
-          <Route path="*" element={<Navigate to="/platform/clients" replace />} />
         </Routes>
       </BrowserRouter>
     );
@@ -1156,7 +1155,13 @@ export default function App() {
               <Route path="/planning-approve/:token" element={<PlanningCustomerApproval />} />
               <Route
                 path="/platform/clients"
-                element={<PlatformClientsCRM />}
+                element={
+                  <ProtectedRoute
+                    element={<PlatformClientsCRM />}
+                    allowedRoles={['platform_owner']}
+                    user={user}
+                  />
+                }
               />
               <Route
                 path="/ai-audit"

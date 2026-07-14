@@ -25,7 +25,7 @@ export default function ProductImportSystem() {
   if (!context) return null;
 
   const { products, addProduct, updateProduct, deleteProduct, user } = context;
-  const isSuperAdmin = user.role === 'super_admin';
+  const isSuperAdmin = user.role === 'super_admin' || user.role === 'platform_owner';
 
   const [importUrl, setImportUrl] = useState('');
   const [isImporting, setIsImporting] = useState(false);
