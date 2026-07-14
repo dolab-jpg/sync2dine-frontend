@@ -1,22 +1,19 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
+import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client';
+import { syncActiveOrgFromProfile } from '../../engine/platform/orgContext';
+import { integrationService } from '../../engine/integrations/integrationService';
+import { saveSessionUser } from '../../engine/auth/sessionStore';
 import { AuthLayout } from '../AuthLayout';
 import { AuthFormError } from '../components/AuthFormError';
 import { PasswordField } from '../components/PasswordField';
 import { SignupMode, SignupModeTabs } from '../components/SignupModeTabs';
 import { UsernameField, validateUsername, normalizeUsername } from '../components/UsernameField';
-
-const STAGE_PLACEHOLDER = 'Account creation comes in the next stage. This form is UI-only for now.';
-
-const MOCK_INVITE = {
-  orgName: 'Acme Bathrooms',
-  role: 'staff',
-  email: 'new.hire@acmebathrooms.com',
-};
+import { acceptInvite, fetchInvite, homePathForRole, registerOrg } from '../lib/authApi';
 
 function validatePasswordPair(password: string, confirm: string): string | null {
   if (!password) return 'Password is required.';
@@ -34,34 +31,90 @@ export default function SignupPage() {
   const [companyName, setCompanyName] = useState('');
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState(inviteFromUrl ? MOCK_INVITE.email : '');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [pasteToken, setPasteToken] = useState(inviteFromUrl);
+  const [inviteMeta, setInviteMeta] = useState<{
+    orgName: string;
+    role: string;
+    email: string;
+  } | null>(null);
   const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const inviteToken = inviteFromUrl || (mode === 'invite' ? pasteToken.trim() : '');
-  const hasInvite = Boolean(inviteToken) && inviteToken !== 'invalid';
+
+  useEffect(() => {
+    if (!inviteToken || inviteToken === 'invalid') {
+      setInviteMeta(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchInvite(inviteToken)
+      .then((inv) => {
+        if (cancelled) return;
+        setInviteMeta({ orgName: inv.orgName, role: inv.role, email: inv.email });
+        setEmail(inv.email);
+        setMode('invite');
+      })
+      .catch((err: Error) => {
+        if (!cancelled) {
+          setInviteMeta(null);
+          setError(err.message || 'Invalid invite');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteToken]);
 
   const title = useMemo(
     () => (mode === 'company' ? 'Create your company account' : 'Join your team'),
     [mode],
   );
 
-  const handleModeChange = (next: SignupMode) => {
-    setMode(next);
-    setError('');
-    setInfo('');
-    if (next === 'invite' && inviteFromUrl) {
-      setEmail(MOCK_INVITE.email);
+  const signInAfterCreate = async (userEmail: string, userPassword: string) => {
+    if (!isSupabaseConfigured()) {
+      navigate('/login');
+      return;
     }
+    const supabase = getSupabase();
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+      email: userEmail,
+      password: userPassword,
+    });
+    if (authError || !data.user) {
+      navigate('/login');
+      return;
+    }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, name, email, role, org_id')
+      .eq('id', data.user.id)
+      .single();
+    const role = (profile?.role ?? 'staff') as
+      | 'platform_owner'
+      | 'super_admin'
+      | 'manager'
+      | 'staff'
+      | 'builder'
+      | 'recruitment'
+      | 'customer';
+    saveSessionUser({
+      id: profile?.id ?? data.user.id,
+      name: profile?.name ?? name,
+      email: profile?.email ?? userEmail,
+      role,
+    });
+    await syncActiveOrgFromProfile();
+    await integrationService.initOrgOpenAIKey(role);
+    window.location.assign(homePathForRole(role));
   };
 
-  const handleCompanySubmit = (e: FormEvent) => {
+  const handleCompanySubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    setInfo('');
     if (!companyName.trim()) {
       setError('Company name is required.');
       return;
@@ -84,15 +137,27 @@ export default function SignupPage() {
       setError(pwError);
       return;
     }
-    void normalizeUsername(username);
-    setInfo(STAGE_PLACEHOLDER);
+    setLoading(true);
+    try {
+      await registerOrg({
+        companyName: companyName.trim(),
+        name: name.trim(),
+        username: normalizeUsername(username),
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      await signInAfterCreate(email.trim().toLowerCase(), password);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Signup failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleInviteSubmit = (e: FormEvent) => {
+  const handleInviteSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    setInfo('');
-    if (!hasInvite) {
+    if (!inviteToken || !inviteMeta) {
       setError('Paste a valid invite token to continue.');
       return;
     }
@@ -110,7 +175,20 @@ export default function SignupPage() {
       setError(pwError);
       return;
     }
-    setInfo(STAGE_PLACEHOLDER);
+    setLoading(true);
+    try {
+      const result = await acceptInvite({
+        token: inviteToken,
+        name: name.trim(),
+        username: normalizeUsername(username),
+        password,
+      });
+      await signInAfterCreate(result.user.email, password);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not join team');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const applyPastedToken = () => {
@@ -121,7 +199,6 @@ export default function SignupPage() {
     }
     navigate(`/signup?invite=${encodeURIComponent(token)}`);
     setMode('invite');
-    setEmail(token === 'invalid' ? '' : MOCK_INVITE.email);
     setError('');
   };
 
@@ -130,11 +207,11 @@ export default function SignupPage() {
       <Card className="shadow-2xl rounded-2xl border-0">
         <CardHeader className="bg-gradient-to-r from-slate-800 to-slate-900 text-white space-y-3">
           <CardTitle className="text-center text-2xl">{title}</CardTitle>
-          <SignupModeTabs mode={mode} onChange={handleModeChange} />
+          <SignupModeTabs mode={mode} onChange={setMode} />
         </CardHeader>
         <CardContent className="p-6 space-y-4">
           {mode === 'company' ? (
-            <form onSubmit={handleCompanySubmit} className="space-y-4">
+            <form onSubmit={(e) => void handleCompanySubmit(e)} className="space-y-4">
               <div>
                 <Label htmlFor="company-name">Company name</Label>
                 <Input
@@ -187,20 +264,13 @@ export default function SignupPage() {
                 placeholder="Confirm password"
               />
               <AuthFormError message={error} />
-              {info && <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">{info}</p>}
-              <Button type="submit" className="w-full py-6 text-lg">
-                Create company account
+              <Button type="submit" className="w-full py-6 text-lg" disabled={loading}>
+                {loading ? 'Creating…' : 'Create company account'}
               </Button>
-              <p className="text-sm text-center text-slate-600">
-                Joining a team?{' '}
-                <button type="button" className="text-amber-700 font-medium hover:underline" onClick={() => handleModeChange('invite')}>
-                  Use invite
-                </button>
-              </p>
             </form>
           ) : (
-            <form onSubmit={handleInviteSubmit} className="space-y-4">
-              {!hasInvite ? (
+            <form onSubmit={(e) => void handleInviteSubmit(e)} className="space-y-4">
+              {!inviteMeta ? (
                 <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-sm text-slate-700">Paste your invite token to join an existing company.</p>
                   <div className="flex gap-2">
@@ -217,10 +287,10 @@ export default function SignupPage() {
               ) : (
                 <div className="flex flex-wrap gap-2">
                   <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
-                    {MOCK_INVITE.orgName}
+                    {inviteMeta.orgName}
                   </span>
                   <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800 capitalize">
-                    Role: {MOCK_INVITE.role}
+                    Role: {inviteMeta.role}
                   </span>
                 </div>
               )}
@@ -241,14 +311,11 @@ export default function SignupPage() {
                 <Input
                   id="invite-email"
                   type="email"
-                  value={hasInvite ? MOCK_INVITE.email : email}
-                  readOnly={hasInvite}
+                  value={inviteMeta?.email ?? email}
+                  readOnly={Boolean(inviteMeta)}
                   onChange={(e) => setEmail(e.target.value)}
-                  className={`mt-1 ${hasInvite ? 'bg-slate-100 text-slate-600' : ''}`}
+                  className={`mt-1 ${inviteMeta ? 'bg-slate-100 text-slate-600' : ''}`}
                 />
-                {hasInvite && (
-                  <p className="text-xs text-slate-500 mt-1">Email is locked to this invite.</p>
-                )}
               </div>
               <PasswordField
                 id="invite-password"
@@ -266,12 +333,40 @@ export default function SignupPage() {
                 placeholder="Confirm password"
               />
               <AuthFormError message={error} />
-              {info && <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">{info}</p>}
-              <Button type="submit" className="w-full py-6 text-lg" disabled={!hasInvite}>
-                Join team
+              <Button type="submit" className="w-full py-6 text-lg" disabled={!inviteMeta || loading}>
+                {loading ? 'Joining…' : 'Join team'}
               </Button>
             </form>
           )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (!isSupabaseConfigured()) return;
+                void getSupabase().auth.signInWithOAuth({
+                  provider: 'google',
+                  options: { redirectTo: `${window.location.origin}/login` },
+                });
+              }}
+            >
+              Google
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (!isSupabaseConfigured()) return;
+                void getSupabase().auth.signInWithOAuth({
+                  provider: 'github',
+                  options: { redirectTo: `${window.location.origin}/login` },
+                });
+              }}
+            >
+              GitHub
+            </Button>
+          </div>
 
           <p className="text-sm text-center text-slate-600">
             Already have an account?{' '}

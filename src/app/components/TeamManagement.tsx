@@ -7,6 +7,11 @@ import { Label } from './ui/label';
 import { Switch } from './ui/switch';
 import { Users, Plus, Trash2, Edit2, Mail, Phone, Shield, UserPlus, Landmark } from 'lucide-react';
 import { testSalesStaff, testManagers } from '../data/testData';
+import { createInvite } from '../auth/lib/authApi';
+import { getSupabase, isSupabaseConfigured } from '../../lib/supabase/client';
+import { toast } from 'sonner';
+
+type InviteRole = 'manager' | 'staff' | 'builder' | 'recruitment' | 'customer';
 
 export default function TeamManagement() {
   const context = useContext(AppContext);
@@ -20,12 +25,12 @@ export default function TeamManagement() {
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [inviteUrl, setInviteUrl] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    role: 'staff' as 'manager' | 'staff',
+    role: 'staff' as InviteRole,
     phone: '',
-    password: ''
   });
 
   if (user.role !== 'super_admin' && user.role !== 'platform_owner') {
@@ -42,27 +47,52 @@ export default function TeamManagement() {
     );
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setInviteUrl('');
 
     if (editingId) {
       setTeamMembers(teamMembers.map(member =>
         member.id === editingId
-          ? { ...member, ...formData }
+          ? { ...member, name: formData.name, email: formData.email, role: formData.role as 'manager' | 'staff', phone: formData.phone }
           : member
       ));
-    } else {
-      const newMember = {
-        id: Date.now().toString(),
-        ...formData,
-        status: 'active' as const
-      };
-      setTeamMembers([...teamMembers, newMember]);
+      setFormData({ name: '', email: '', role: 'staff', phone: '' });
+      setShowForm(false);
+      setEditingId(null);
+      return;
     }
 
-    setFormData({ name: '', email: '', role: 'staff', phone: '', password: '' });
-    setShowForm(false);
-    setEditingId(null);
+    if (!isSupabaseConfigured()) {
+      toast.error('Supabase is required to send invites');
+      return;
+    }
+    try {
+      const { data } = await getSupabase().auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) {
+        toast.error('Sign in with a real account to invite teammates');
+        return;
+      }
+      const result = await createInvite({ email: formData.email.trim(), role: formData.role }, token);
+      setInviteUrl(result.invite.acceptUrl);
+      setTeamMembers([
+        ...teamMembers,
+        {
+          id: result.invite.id,
+          name: formData.name || formData.email,
+          email: formData.email,
+          role: (formData.role === 'manager' ? 'manager' : 'staff') as 'manager' | 'staff',
+          phone: formData.phone,
+          status: 'active' as const,
+        },
+      ]);
+      toast.success('Invite created — share the accept link with your teammate');
+      setFormData({ name: '', email: '', role: 'staff', phone: '' });
+      setEditingId(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not create invite');
+    }
   };
 
   const handleEdit = (member: typeof teamMembers[0]) => {
@@ -71,7 +101,6 @@ export default function TeamManagement() {
       email: member.email,
       role: member.role,
       phone: member.phone,
-      password: ''
     });
     setEditingId(member.id);
     setShowForm(true);
@@ -104,12 +133,13 @@ export default function TeamManagement() {
               onClick={() => {
                 setShowForm(!showForm);
                 setEditingId(null);
-                setFormData({ name: '', email: '', role: 'staff', phone: '', password: '' });
+                setFormData({ name: '', email: '', role: 'staff', phone: '' });
+                setInviteUrl('');
               }}
               className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white px-8 py-6 text-lg rounded-2xl shadow-lg"
             >
               <Plus className="w-6 h-6 mr-2" />
-              Add Team Member
+              Invite Team Member
             </Button>
           </div>
         </div>
@@ -118,16 +148,15 @@ export default function TeamManagement() {
           <Card className="mb-6 shadow-xl border-2 border-amber-500">
             <CardHeader>
               <CardTitle className="text-2xl">
-                {editingId ? 'Edit Team Member' : 'Add New Team Member'}
+                {editingId ? 'Edit Team Member' : 'Invite Team Member'}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <Label className="text-lg mb-2 block">Full Name</Label>
                     <Input
-                      required
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="John Smith"
@@ -151,7 +180,6 @@ export default function TeamManagement() {
                     <Label className="text-lg mb-2 block">Phone Number</Label>
                     <Input
                       type="tel"
-                      required
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                       placeholder="07700 900000"
@@ -163,42 +191,44 @@ export default function TeamManagement() {
                     <Label className="text-lg mb-2 block">Role</Label>
                     <select
                       value={formData.role}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value as 'manager' | 'staff' })}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value as InviteRole })}
                       className="w-full h-14 px-4 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
                     >
                       <option value="staff">Staff</option>
                       <option value="manager">Manager</option>
+                      <option value="builder">Builder</option>
+                      <option value="recruitment">Recruitment</option>
+                      <option value="customer">Customer</option>
                     </select>
                   </div>
-
-                  <div>
-                    <Label className="text-lg mb-2 block">
-                      {editingId ? 'New Password (leave blank to keep current)' : 'Password'}
-                    </Label>
-                    <Input
-                      type="password"
-                      required={!editingId}
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      placeholder="••••••••"
-                      className="h-14 text-lg"
-                    />
-                  </div>
                 </div>
+
+                {!editingId && (
+                  <p className="text-sm text-slate-600 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    An invite link will be created. Your teammate sets their own password when they accept.
+                  </p>
+                )}
+
+                {inviteUrl && (
+                  <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm break-all">
+                    <strong>Invite link:</strong> {inviteUrl}
+                  </div>
+                )}
 
                 <div className="flex gap-4">
                   <Button
                     type="submit"
                     className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-8 py-6 text-lg rounded-xl"
                   >
-                    {editingId ? 'Update Member' : 'Add Member'}
+                    {editingId ? 'Update Member' : 'Send Invite'}
                   </Button>
                   <Button
                     type="button"
                     onClick={() => {
                       setShowForm(false);
                       setEditingId(null);
-                      setFormData({ name: '', email: '', role: 'staff', phone: '', password: '' });
+                      setInviteUrl('');
+                      setFormData({ name: '', email: '', role: 'staff', phone: '' });
                     }}
                     className="bg-gray-500 hover:bg-gray-600 text-white px-8 py-6 text-lg rounded-xl"
                   >

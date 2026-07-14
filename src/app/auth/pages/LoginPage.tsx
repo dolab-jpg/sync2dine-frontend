@@ -1,14 +1,19 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { User, Briefcase, Wrench, Users, UserCheck, Building2, Shield, ChevronDown, ChevronUp } from 'lucide-react';
 import { parseDemoRoleFromUrl } from '../../engine/auth/sessionStore';
+import { syncActiveOrgFromProfile } from '../../engine/platform/orgContext';
+import { integrationService } from '../../engine/integrations/integrationService';
+import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client';
 import { AuthLayout } from '../AuthLayout';
 import { AuthFormError } from '../components/AuthFormError';
 import { PasswordField } from '../components/PasswordField';
+import { SeedAccountsPanel, SEED_PASSWORD, type SeedAccount } from '../components/SeedAccountsPanel';
+import { homePathForRole, resolveUsername } from '../lib/authApi';
 
 interface LoginProps {
   onLogin: (user: {
@@ -21,24 +26,75 @@ interface LoginProps {
 
 type DemoRole = LoginProps['onLogin'] extends (u: infer U) => void ? U['role'] : never;
 
-const DEMO_LOGIN_ENABLED = import.meta.env.VITE_DEMO_LOGIN !== 'false';
-
-const STAGE_PLACEHOLDER = 'Sign-in with credentials comes in the next stage. Use Developer demo below for now.';
+const DEMO_LOGIN_ENABLED = import.meta.env.VITE_DEMO_LOGIN === 'true';
 
 export default function LoginPage({ onLogin }: LoginProps) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const next = searchParams.get('next');
+
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [selectedRole, setSelectedRole] = useState<DemoRole>(() => parseDemoRoleFromUrl() ?? 'staff');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
   const [inviteToken, setInviteToken] = useState('');
-  const [demoOpen, setDemoOpen] = useState(DEMO_LOGIN_ENABLED);
+  const [demoOpen, setDemoOpen] = useState(false);
 
   useEffect(() => {
     const urlRole = parseDemoRoleFromUrl();
     if (urlRole) setSelectedRole(urlRole);
+  }, []);
+
+  // OAuth / existing Supabase session return
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabase = getSupabase();
+        const { data } = await supabase.auth.getSession();
+        if (cancelled || !data.session?.user) return;
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, name, email, role, org_id, username')
+          .eq('id', data.session.user.id)
+          .maybeSingle();
+        if (!profile) {
+          navigate('/signup', { replace: true });
+          return;
+        }
+        if (!profile.org_id && profile.role !== 'platform_owner') {
+          navigate('/signup', { replace: true });
+          return;
+        }
+        const role = (profile.role ?? 'staff') as DemoRole;
+        await syncActiveOrgFromProfile();
+        await integrationService.initOrgOpenAIKey(role);
+        onLogin({
+          id: profile.id,
+          name: profile.name || data.session.user.email?.split('@')[0] || 'User',
+          email: profile.email || data.session.user.email || '',
+          role,
+        });
+        // OAuth first-time: force username on profile if missing
+        if (!profile.username) {
+          navigate('/profile?complete=1', { replace: true });
+          return;
+        }
+        const dest =
+          next && next.startsWith('/') && !next.startsWith('//')
+            ? next
+            : homePathForRole(role);
+        navigate(dest, { replace: true });
+      } catch {
+        /* stay on login */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const roles = [
@@ -61,10 +117,25 @@ export default function LoginPage({ onLogin }: LoginProps) {
     customer: { id: '6', name: 'Amanda Peterson', email: 'amanda.peterson@email.com', role: 'customer' },
   };
 
-  const handleCredentialSubmit = (e: FormEvent) => {
+  const finishLogin = async (user: {
+    id: string;
+    name: string;
+    email: string;
+    role: DemoRole;
+  }) => {
+    await syncActiveOrgFromProfile();
+    await integrationService.initOrgOpenAIKey(user.role);
+    onLogin(user);
+    const dest =
+      next && next.startsWith('/') && !next.startsWith('//')
+        ? next
+        : homePathForRole(user.role);
+    navigate(dest, { replace: true });
+  };
+
+  const handleCredentialSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    setInfo('');
     if (!identifier.trim()) {
       setError('Email or username is required.');
       return;
@@ -73,28 +144,83 @@ export default function LoginPage({ onLogin }: LoginProps) {
       setError('Password is required.');
       return;
     }
-    setInfo(STAGE_PLACEHOLDER);
+    if (!isSupabaseConfigured()) {
+      setError('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      let email = identifier.trim();
+      if (!email.includes('@')) {
+        email = await resolveUsername(email);
+      }
+      const supabase = getSupabase();
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (authError || !data.user) {
+        setError('Invalid email/username or password.');
+        return;
+      }
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, name, email, role, org_id, username')
+        .eq('id', data.user.id)
+        .single();
+      const role = (profile?.role ?? 'staff') as DemoRole;
+      await finishLogin({
+        id: profile?.id ?? data.user.id,
+        name: profile?.name ?? data.user.email?.split('@')[0] ?? 'User',
+        email: profile?.email ?? data.user.email ?? email,
+        role,
+      });
+    } catch {
+      setError('Invalid email/username or password.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleOAuth = async (provider: 'google' | 'github') => {
+    if (!isSupabaseConfigured()) {
+      setError('Supabase is not configured.');
+      return;
+    }
+    setError('');
+    const supabase = getSupabase();
+    const redirectTo = `${window.location.origin}/login${next ? `?next=${encodeURIComponent(next)}` : ''}`;
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo },
+    });
+    if (oauthError) setError(oauthError.message);
   };
 
   const handleDemoLogin = () => {
     if (isLoading || !DEMO_LOGIN_ENABLED) return;
     setIsLoading(true);
     setError('');
-    setInfo('');
     setTimeout(() => {
-      onLogin(demoUsers[selectedRole]);
-      setIsLoading(false);
+      void finishLogin(demoUsers[selectedRole]).finally(() => setIsLoading(false));
     }, 300);
   };
 
+  const fillSeedAccount = (account: SeedAccount) => {
+    setIdentifier(account.email);
+    setPassword(SEED_PASSWORD);
+    setError('');
+  };
+
   return (
-    <AuthLayout wide={DEMO_LOGIN_ENABLED && demoOpen}>
+    <AuthLayout wide>
       <Card className="shadow-2xl rounded-2xl border-0">
         <CardHeader className="bg-gradient-to-r from-slate-800 to-slate-900 text-white">
           <CardTitle className="text-center text-2xl">Sign in to TradePro</CardTitle>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
-          <form onSubmit={handleCredentialSubmit} className="space-y-4">
+          <form onSubmit={(e) => void handleCredentialSubmit(e)} className="space-y-4">
             <div>
               <Label htmlFor="login-identifier">Email or username</Label>
               <Input
@@ -115,11 +241,19 @@ export default function LoginPage({ onLogin }: LoginProps) {
               autoComplete="current-password"
             />
             <AuthFormError message={error} />
-            {info && <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">{info}</p>}
-            <Button type="submit" className="w-full py-6 text-lg">
-              Sign in
+            <Button type="submit" className="w-full py-6 text-lg" disabled={isLoading}>
+              {isLoading ? 'Signing in...' : 'Sign in'}
             </Button>
           </form>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Button type="button" variant="outline" onClick={() => void handleOAuth('google')}>
+              Continue with Google
+            </Button>
+            <Button type="button" variant="outline" onClick={() => void handleOAuth('github')}>
+              Continue with GitHub
+            </Button>
+          </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <Link to="/forgot-password" className="text-amber-700 hover:text-amber-900 font-medium">
@@ -151,12 +285,11 @@ export default function LoginPage({ onLogin }: LoginProps) {
                 Open
               </Button>
             </div>
-            <Link to="/invite/demo" className="text-sm text-slate-500 hover:text-slate-700 underline">
-              Preview invite page
-            </Link>
           </div>
         </CardContent>
       </Card>
+
+      <SeedAccountsPanel onFill={fillSeedAccount} />
 
       {DEMO_LOGIN_ENABLED && (
         <div className="mt-6">
@@ -191,9 +324,6 @@ export default function LoginPage({ onLogin }: LoginProps) {
                     </button>
                   );
                 })}
-              </div>
-              <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 text-sm text-blue-900">
-                <strong>Testing mode:</strong> pick a role and continue without credentials. Real credential login ships in a later stage.
               </div>
               <Button onClick={handleDemoLogin} disabled={isLoading} className="w-full py-6 text-lg">
                 {isLoading

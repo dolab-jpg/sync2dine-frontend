@@ -1,14 +1,13 @@
-import { FormEvent, useContext, useState } from 'react';
-import { Link } from 'react-router';
+import { FormEvent, useContext, useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import { AppContext } from '../../App';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
+import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client';
 import { AuthFormError } from '../components/AuthFormError';
-import { UsernameField, validateUsername } from '../components/UsernameField';
-
-const STAGE_PLACEHOLDER = 'Profile save comes in the next stage. Changes stay on this screen only.';
+import { UsernameField, validateUsername, normalizeUsername } from '../components/UsernameField';
 
 function roleLabel(role: string): string {
   return role.replace(/_/g, ' ');
@@ -17,13 +16,39 @@ function roleLabel(role: string): string {
 export default function ProfilePage() {
   const context = useContext(AppContext);
   const user = context?.user;
+  const [searchParams] = useSearchParams();
+  const needsComplete = searchParams.get('complete') === '1';
 
   const [name, setName] = useState(user?.name ?? '');
-  const [username, setUsername] = useState(
-    user?.email?.split('@')[0]?.toLowerCase().replace(/[^a-z0-9._-]/g, '') || 'user',
-  );
+  const [username, setUsername] = useState('');
+  const [orgName, setOrgName] = useState('your company');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user || !isSupabaseConfigured()) return;
+    void (async () => {
+      const supabase = getSupabase();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('name, username, org_id')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (profile) {
+        setName(profile.name || user.name);
+        setUsername(profile.username || '');
+        if (profile.org_id) {
+          const { data: org } = await supabase
+            .from('organizations')
+            .select('name')
+            .eq('id', profile.org_id)
+            .maybeSingle();
+          if (org?.name) setOrgName(org.name);
+        }
+      }
+    })();
+  }, [user]);
 
   if (!user) {
     return (
@@ -33,7 +58,7 @@ export default function ProfilePage() {
     );
   }
 
-  const handleSave = (e: FormEvent) => {
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setInfo('');
@@ -46,7 +71,28 @@ export default function ProfilePage() {
       setError(usernameError);
       return;
     }
-    setInfo(STAGE_PLACEHOLDER);
+    if (!isSupabaseConfigured()) {
+      setError('Supabase is not configured.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const supabase = getSupabase();
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          name: name.trim(),
+          username: normalizeUsername(username),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+      if (updateError) throw updateError;
+      setInfo('Profile saved.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save profile');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -54,6 +100,11 @@ export default function ProfilePage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Account</h1>
         <p className="text-sm text-slate-600 mt-1">Your personal profile for TradePro.</p>
+        {needsComplete && (
+          <p className="mt-2 text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            Finish signing up: choose a username so you can sign in with it next time.
+          </p>
+        )}
       </div>
 
       <Card className="rounded-2xl shadow-sm border-slate-200">
@@ -61,7 +112,7 @@ export default function ProfilePage() {
           <CardTitle>Profile</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSave} className="space-y-4">
+          <form onSubmit={(e) => void handleSave(e)} className="space-y-4">
             <div>
               <Label htmlFor="profile-name">Name</Label>
               <Input
@@ -82,15 +133,17 @@ export default function ProfilePage() {
                 Role: {roleLabel(user.role)}
               </span>
               <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
-                Org: your company
+                Org: {orgName}
               </span>
             </div>
             <AuthFormError message={error} />
             {info && (
-              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">{info}</p>
+              <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg p-3">{info}</p>
             )}
             <div className="flex flex-wrap gap-3">
-              <Button type="submit">Save profile</Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? 'Saving…' : 'Save profile'}
+              </Button>
               <Button type="button" variant="outline" asChild>
                 <Link to="/profile/password">Change password</Link>
               </Button>
