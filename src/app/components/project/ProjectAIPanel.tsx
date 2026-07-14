@@ -62,7 +62,7 @@ export function ProjectAIPanel({ project, userName, onUpdate }: Props) {
       userName: app.user.name,
       role: staffRole,
       scope: `project:${project.id}`,
-      route: `/project/${project.id}`,
+      route: `/projects/${project.id}`,
       role_message: role,
       content,
     });

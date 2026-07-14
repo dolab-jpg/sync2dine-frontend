@@ -1,5 +1,5 @@
-import { useState, useContext, useEffect, useRef, useMemo } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router';
+import { useState, useContext, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Link, useNavigate, useLocation, useParams, useSearchParams } from 'react-router';
 import { AppContext } from '../App';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -11,15 +11,22 @@ import { Switch } from './ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
+import {
   Calendar, Clock, MapPin, DollarSign, MessageSquare, Image as ImageIcon,
   CheckCircle2, AlertCircle, Send, ChevronLeft, ChevronRight, Eye, FileText,
-  Hammer, TrendingUp, BarChart3, Users, Briefcase, Camera, Video, X, FolderKanban, ShieldCheck
+  Hammer, TrendingUp, BarChart3, Users, Briefcase, Camera, Video, X, FolderKanban, ShieldCheck,
+  ChevronDown
 } from 'lucide-react';
 import { AddressMapLink } from './ui/AddressMapLink';
 import { toast } from 'sonner';
 import { messagingHub } from '../engine/messaging/messagingHub';
 import { testBuilders } from '../data/testData';
-import { loadProjects, loadProjectsAsync, saveProjects, updateProject, syncToServer, subscribeProjectsCache } from '../engine/project/projectStore';
+import { loadProjects, loadProjectsAsync, saveProjects, updateProject, syncToServer, subscribeProjectsCache, getProject } from '../engine/project/projectStore';
 import type { UnifiedProject, PaymentStage, Invoice, PaymentStageStatus } from '../engine/project/types';
 import { generateInvoicePdf } from '../engine/messaging/pdfGenerator';
 import { sendReceiptForStage as sendStageReceipt, autoSendReceiptAfterMarkPaid } from '../engine/banking/paymentReceiptService';
@@ -33,9 +40,33 @@ import ProjectSnaggingTab from './project/ProjectSnaggingTab';
 import { ProjectCommsPanel } from './project/ProjectCommsPanel';
 import { ProjectTeamTab } from './project/ProjectTeamTab';
 import { DailyPlanCard } from './project/DailyPlanCard';
+import { ProjectActionStrip } from './project/ProjectActionStrip';
+import { applyProposedAction } from '../engine/projectAi/projectAiService';
 import { findPlanningApplicationByProjectId } from '../engine/planning/planningStore';
 import { stageLabel } from '../engine/planning/types';
 import { applyDerivedStatus } from '../engine/project/projectStatusService';
+
+const STAFF_PRIMARY_TABS = ['overview', 'plan', 'files', 'messages', 'ai'] as const;
+const STAFF_MORE_TABS = ['team', 'snagging', 'design', 'payments', 'builder-payment'] as const;
+const CUSTOMER_TABS = ['messages', 'overview', 'design', 'payments', 'invoices'] as const;
+const ALL_PROJECT_TABS = [
+  ...STAFF_PRIMARY_TABS,
+  ...STAFF_MORE_TABS,
+  'invoices',
+] as const;
+type ProjectTab = (typeof ALL_PROJECT_TABS)[number];
+
+function isProjectTab(value: string | null | undefined): value is ProjectTab {
+  return !!value && (ALL_PROJECT_TABS as readonly string[]).includes(value);
+}
+
+const MORE_TAB_LABELS: Record<(typeof STAFF_MORE_TABS)[number], string> = {
+  team: 'Team',
+  snagging: 'Snagging',
+  design: 'Design',
+  payments: 'Payments',
+  'builder-payment': 'Builder Pay',
+};
 
 // Enhanced Project Interfaces
 export interface DesignItem {
@@ -103,12 +134,49 @@ export default function BuilderProjectManagement() {
   const { user, customers } = context;
   const navigate = useNavigate();
   const location = useLocation();
+  const { projectId: routeProjectId } = useParams<{ projectId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const projectsBasePath = location.pathname.startsWith('/builder-projects')
+    ? '/builder-projects'
+    : '/projects';
 
   // Available builders - imported from test data
   const [builders] = useState(testBuilders);
 
   // Hydrated from local cache first, then refreshed after Supabase/async load
   const [projects, setProjects] = useState<BuilderProject[]>(() => loadProjects() as unknown as BuilderProject[]);
+  const [selectedProject, setSelectedProject] = useState<BuilderProject | null>(null);
+  const [filesSubView, setFilesSubView] = useState<'photos' | 'docs'>('photos');
+  const messagesThreadRef = useRef<HTMLDivElement>(null);
+
+  const defaultTab = (user.role === 'customer' ? 'messages' : 'overview') as ProjectTab;
+  const activeTab: ProjectTab = (() => {
+    const raw = searchParams.get('tab');
+    if (user.role === 'customer') {
+      if (raw && (CUSTOMER_TABS as readonly string[]).includes(raw)) return raw as ProjectTab;
+      return 'messages';
+    }
+    if (isProjectTab(raw)) return raw;
+    return 'overview';
+  })();
+  const isMoreTabActive = (STAFF_MORE_TABS as readonly string[]).includes(activeTab);
+
+  const setActiveTab = useCallback((tab: ProjectTab) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const selectProject = useCallback((project: BuilderProject, tab?: ProjectTab) => {
+    const nextTab = tab ?? (isProjectTab(searchParams.get('tab')) ? (searchParams.get('tab') as ProjectTab) : defaultTab);
+    navigate(`${projectsBasePath}/${project.id}?tab=${nextTab}`);
+  }, [defaultTab, navigate, projectsBasePath, searchParams]);
+
+  const clearSelectedProject = useCallback(() => {
+    navigate(projectsBasePath);
+  }, [navigate, projectsBasePath]);
 
   const persistProjects = (next: BuilderProject[]) => {
     saveProjects(next as unknown as UnifiedProject[]);
@@ -122,6 +190,35 @@ export default function BuilderProjectManagement() {
     if (selectedProject?.id === updated.id) {
       setSelectedProject(updated as unknown as BuilderProject);
     }
+  };
+
+  const applyAiAction = (actionId: string) => {
+    if (!selectedProject) return;
+    const full = getProject(selectedProject.id);
+    const action = full?.aiActions.find((a) => a.id === actionId);
+    if (!full || !action) return;
+    applyProposedAction(
+      full.id,
+      action.action,
+      action.output as Record<string, unknown>,
+      user.name,
+      actionId,
+    );
+    const refreshed = getProject(full.id);
+    if (refreshed) refreshProject(refreshed);
+    toast.success('AI action applied');
+  };
+
+  const dismissAiAction = (actionId: string) => {
+    if (!selectedProject) return;
+    const full = getProject(selectedProject.id);
+    if (!full) return;
+    const aiActions = full.aiActions.map((a) =>
+      a.id === actionId ? { ...a, status: 'rejected' as const } : a,
+    );
+    const updated = updateProject(full.id, { aiActions });
+    if (updated) refreshProject(updated);
+    toast.message('AI action dismissed');
   };
 
   useEffect(() => {
@@ -139,12 +236,25 @@ export default function BuilderProjectManagement() {
     };
   }, []);
 
+  // Deep-link: /projects/:projectId or location.state.projectId
   useEffect(() => {
-    const projectId = (location.state as { projectId?: string } | null)?.projectId;
-    if (!projectId) return;
-    const match = projects.find((p) => p.id === projectId);
-    if (match) setSelectedProject(match);
-  }, [location.state, projects]);
+    const fromState = (location.state as { projectId?: string } | null)?.projectId;
+    const targetId = routeProjectId ?? fromState;
+    if (!targetId) return;
+    const match = projects.find((p) => p.id === targetId);
+    if (!match) return;
+    setSelectedProject(match);
+    if (fromState && !routeProjectId) {
+      navigate(`${projectsBasePath}/${match.id}?tab=${activeTab}`, { replace: true, state: {} });
+    }
+  }, [routeProjectId, location.state, projects, projectsBasePath, navigate, activeTab]);
+
+  // Clear selection when navigating to bare /projects without id
+  useEffect(() => {
+    if (!routeProjectId && (location.pathname === '/projects' || location.pathname === '/builder-projects')) {
+      setSelectedProject(null);
+    }
+  }, [routeProjectId, location.pathname]);
 
   // Set initial month - May 2026 for customer to see Amanda's project, or current date for others
   const getInitialMonth = () => {
@@ -155,7 +265,6 @@ export default function BuilderProjectManagement() {
   };
 
   const [currentMonth, setCurrentMonth] = useState(getInitialMonth());
-  const [selectedProject, setSelectedProject] = useState<BuilderProject | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [view, setView] = useState<'calendar' | 'list'>('calendar');
@@ -339,10 +448,10 @@ export default function BuilderProjectManagement() {
 
   // Auto-select project for customers with only one project
   useEffect(() => {
-    if (user.role === 'customer' && builderProjects.length === 1 && !selectedProject) {
-      setSelectedProject(builderProjects[0]);
+    if (user.role === 'customer' && builderProjects.length === 1 && !routeProjectId) {
+      selectProject(builderProjects[0]);
     }
-  }, [user.role, builderProjects, selectedProject]);
+  }, [user.role, builderProjects, routeProjectId, selectProject]);
 
   // Calendar helper functions
   const getDaysInMonth = (date: Date) => {
@@ -662,7 +771,7 @@ export default function BuilderProjectManagement() {
               </div>
 
               <Button
-                onClick={() => setSelectedProject(builderProjects[0])}
+                onClick={() => selectProject(builderProjects[0])}
                 className="w-full mt-3 bg-blue-600 hover:bg-blue-700 touch-manipulation h-10"
               >
                 View Full Project Details
@@ -727,7 +836,7 @@ export default function BuilderProjectManagement() {
                       return (
                         <button
                           key={project.id}
-                          onClick={() => setSelectedProject(project)}
+                          onClick={() => selectProject(project)}
                           className="w-full text-left transition-all active:opacity-70 sm:hover:opacity-80 group touch-manipulation cursor-pointer"
                         >
                           <div
@@ -778,7 +887,7 @@ export default function BuilderProjectManagement() {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {statusProjects.map(project => (
-                <Card key={project.id} className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setSelectedProject(project)}>
+                <Card key={project.id} className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => selectProject(project)}>
                   <CardHeader>
                     <div className="flex justify-between items-start">
                       <div>
@@ -834,7 +943,7 @@ export default function BuilderProjectManagement() {
   );
 
   // Role-based access check
-  if (user.role !== 'builder' && user.role !== 'super_admin' && user.role !== 'manager' && user.role !== 'staff' && user.role !== 'customer') {
+  if (user.role !== 'builder' && user.role !== 'super_admin' && user.role !== 'platform_owner' && user.role !== 'manager' && user.role !== 'staff' && user.role !== 'customer') {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <Card>
@@ -963,17 +1072,13 @@ export default function BuilderProjectManagement() {
             {selectedProject ? (
               <>
                 {/* Project Header */}
-                <div
-                  className="border-b border-slate-200/60 p-3 sm:p-4 bg-gradient-to-r from-slate-50/90 to-white/95"
-                  onDoubleClick={() => setSelectedProject(null)}
-                  title="Double-tap to close project"
-                >
+                <div className="border-b border-slate-200/60 p-3 sm:p-4 bg-gradient-to-r from-slate-50/90 to-white/95">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <Button
                           variant="ghost"
-                          onClick={() => setSelectedProject(null)}
+                          onClick={clearSelectedProject}
                           className="lg:hidden -ml-2 min-h-11 min-w-11 opacity-70 hover:opacity-100"
                         >
                           <ChevronLeft className="w-4 h-4" />
@@ -992,7 +1097,7 @@ export default function BuilderProjectManagement() {
                         {(user.role === 'builder' || user.role === 'staff' || user.role === 'manager' || user.role === 'super_admin') && (
                           <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
                             <Link
-                              to={`/building-control?projectId=${selectedProject.id}&tradeId=${selectedProject.tradeId ?? 'bathroom'}`}
+                              to={`/building-control?projectId=${selectedProject.id}&tradeId=${selectedProject.tradeId ?? 'bathroom'}&returnTo=${encodeURIComponent(`${projectsBasePath}/${selectedProject.id}?tab=${activeTab}`)}`}
                             >
                               <ShieldCheck className="w-3 h-3 mr-1" />
                               Ask about compliance
@@ -1003,9 +1108,9 @@ export default function BuilderProjectManagement() {
                     </div>
                     <Button
                       variant="ghost"
-                      onClick={() => setSelectedProject(null)}
+                      onClick={clearSelectedProject}
                       className="hidden lg:flex -mr-2 min-h-11 min-w-11 opacity-40 hover:opacity-100"
-                      title="Close (or double-tap header)"
+                      title="Close project"
                     >
                       <X className="w-4 h-4" />
                     </Button>
@@ -1036,37 +1141,98 @@ export default function BuilderProjectManagement() {
 
                 {/* Project Details Content */}
                 <div className="flex-1 overflow-y-auto">
-                  <Tabs defaultValue={user.role === 'customer' ? 'messages' : 'overview'} className="h-full flex flex-col">
-                    <div className="border-b border-slate-200 px-2 sm:px-3 lg:px-4 overflow-x-auto scrollbar-thin">
-                      <TabsList className={`inline-flex w-max min-w-full h-auto p-1 gap-0.5 bg-transparent text-xs sm:text-sm ${user.role === 'customer' ? '' : ''}`}>
-                <TabsTrigger value="overview" className="shrink-0 px-3 sm:px-4 whitespace-nowrap">Overview</TabsTrigger>
-                {user.role !== 'customer' && <TabsTrigger value="plan" className="shrink-0 px-3 sm:px-4 whitespace-nowrap">Plan</TabsTrigger>}
-                {user.role !== 'customer' && <TabsTrigger value="photos" className="shrink-0 px-3 sm:px-4 whitespace-nowrap">Photos</TabsTrigger>}
-                {user.role !== 'customer' && <TabsTrigger value="documents" className="shrink-0 px-3 sm:px-4 whitespace-nowrap">Docs</TabsTrigger>}
-                {user.role !== 'customer' && <TabsTrigger value="ai" className="shrink-0 px-3 sm:px-4 whitespace-nowrap">AI</TabsTrigger>}
-                {user.role !== 'customer' && <TabsTrigger value="comms" className="shrink-0 px-3 sm:px-4 whitespace-nowrap">Comms</TabsTrigger>}
-                {user.role !== 'customer' && <TabsTrigger value="team" className="shrink-0 px-3 sm:px-4 whitespace-nowrap">Team</TabsTrigger>}
-                {user.role !== 'customer' && <TabsTrigger value="snagging" className="shrink-0 px-3 sm:px-4 whitespace-nowrap">Snagging</TabsTrigger>}
-                <TabsTrigger value="design" className="shrink-0 px-3 sm:px-4 whitespace-nowrap">
-                  Design
-                </TabsTrigger>
-                <TabsTrigger value="messages" className="shrink-0 px-3 sm:px-4 whitespace-nowrap relative">
-                  Messages
-                  {selectedProject.messages.length > 0 && (
-                    <span className="ml-1 inline-flex items-center justify-center min-w-5 h-5 text-xs font-bold text-white bg-blue-600 rounded-full px-1">
-                      {selectedProject.messages.length}
-                    </span>
-                  )}
-                </TabsTrigger>
-                {user.role === 'customer' && <TabsTrigger value="payments" className="shrink-0 px-3 sm:px-4 whitespace-nowrap">Pay</TabsTrigger>}
-                {user.role === 'customer' && <TabsTrigger value="invoices" className="shrink-0 px-3 sm:px-4 whitespace-nowrap">Invoice</TabsTrigger>}
-                {user.role !== 'customer' && <TabsTrigger value="payments" className="shrink-0 px-3 sm:px-4 whitespace-nowrap">Payments</TabsTrigger>}
-                {user.role !== 'customer' && <TabsTrigger value="builder-payment" className="shrink-0 px-3 sm:px-4 whitespace-nowrap">Builder Pay</TabsTrigger>}
+                  <Tabs
+                    value={activeTab}
+                    onValueChange={(value) => {
+                      if (isProjectTab(value)) setActiveTab(value);
+                    }}
+                    className="h-full flex flex-col"
+                  >
+                    <div className="border-b border-slate-200 px-2 sm:px-3 lg:px-4">
+                      <TabsList className="flex w-full h-auto p-1 gap-0.5 bg-transparent text-xs sm:text-sm flex-wrap justify-start">
+                        {user.role === 'customer' ? (
+                          <>
+                            {(CUSTOMER_TABS as readonly ProjectTab[]).map((tab) => (
+                              <TabsTrigger
+                                key={tab}
+                                value={tab}
+                                className="shrink-0 px-3 sm:px-4 whitespace-nowrap rounded-none border-b-2 border-transparent data-[state=active]:border-slate-900 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:font-semibold"
+                              >
+                                {tab === 'messages' ? (
+                                  <span className="relative inline-flex items-center">
+                                    Messages
+                                    {selectedProject.messages.length > 0 && (
+                                      <span className="ml-1 inline-flex items-center justify-center min-w-5 h-5 text-xs font-bold text-white bg-blue-600 rounded-full px-1">
+                                        {selectedProject.messages.length}
+                                      </span>
+                                    )}
+                                  </span>
+                                ) : tab === 'payments' ? 'Pay' : tab === 'invoices' ? 'Invoice' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                              </TabsTrigger>
+                            ))}
+                          </>
+                        ) : (
+                          <>
+                            {STAFF_PRIMARY_TABS.map((tab) => (
+                              <TabsTrigger
+                                key={tab}
+                                value={tab}
+                                className="shrink-0 px-3 sm:px-4 whitespace-nowrap rounded-none border-b-2 border-transparent data-[state=active]:border-slate-900 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:font-semibold"
+                              >
+                                {tab === 'messages' ? (
+                                  <span className="relative inline-flex items-center">
+                                    Messages
+                                    {selectedProject.messages.length > 0 && (
+                                      <span className="ml-1 inline-flex items-center justify-center min-w-5 h-5 text-xs font-bold text-white bg-blue-600 rounded-full px-1">
+                                        {selectedProject.messages.length}
+                                      </span>
+                                    )}
+                                  </span>
+                                ) : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                              </TabsTrigger>
+                            ))}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className={`shrink-0 h-8 px-3 rounded-none border-b-2 ${
+                                    isMoreTabActive
+                                      ? 'border-slate-900 font-semibold text-slate-900'
+                                      : 'border-transparent text-slate-600'
+                                  }`}
+                                >
+                                  {isMoreTabActive ? MORE_TAB_LABELS[activeTab as (typeof STAFF_MORE_TABS)[number]] : 'More'}
+                                  <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-70" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {STAFF_MORE_TABS.map((tab) => (
+                                  <DropdownMenuItem
+                                    key={tab}
+                                    onClick={() => setActiveTab(tab)}
+                                    className={activeTab === tab ? 'font-semibold' : undefined}
+                                  >
+                                    {MORE_TAB_LABELS[tab]}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </>
+                        )}
                       </TabsList>
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-3 sm:p-4">
               <TabsContent value="overview" className="space-y-3 sm:space-y-4 mt-0">
+                {selectedProject && user.role !== 'customer' && (
+                  <ProjectActionStrip
+                    actions={(getProject(selectedProject.id)?.aiActions ?? []).filter((a) => a.status === 'proposed')}
+                    onApply={applyAiAction}
+                    onDismiss={dismissAiAction}
+                  />
+                )}
                 {selectedProject && (
                   <DailyPlanCard project={selectedProject as unknown as UnifiedProject} />
                 )}
@@ -1298,41 +1464,50 @@ export default function BuilderProjectManagement() {
                 )}
               </TabsContent>
 
-              <TabsContent value="messages" className="mt-0 h-full flex flex-col">
-                <div className="flex flex-col h-full">
+              <TabsContent value="messages" className="mt-0 h-full flex flex-col space-y-4">
+                <div className="flex flex-col">
                   {/* Conversation Participants */}
-                  <div className="mb-3 p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border-2 border-blue-200">
+                  <div className="mb-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
-                        <MessageSquare className="w-4 h-4 text-blue-600" />
-                        <p className="text-xs sm:text-sm font-semibold text-blue-900">Active Conversation</p>
+                        <MessageSquare className="w-4 h-4 text-slate-700" />
+                        <p className="text-xs sm:text-sm font-semibold text-slate-900">Project conversation</p>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <div className="flex items-center gap-1 px-2 py-1 bg-white rounded-full border border-blue-300">
+                        <div className="flex items-center gap-1 px-2 py-1 bg-white rounded-full border border-slate-200">
                           <div className="w-2 h-2 rounded-full bg-green-500"></div>
                           <span className="text-xs font-medium text-slate-700">{selectedProject.customerName}</span>
                         </div>
                         {selectedProject.assignedBuilder && (
-                          <div className="flex items-center gap-1 px-2 py-1 bg-white rounded-full border border-blue-300">
+                          <div className="flex items-center gap-1 px-2 py-1 bg-white rounded-full border border-slate-200">
                             <div className="w-2 h-2 rounded-full bg-amber-500"></div>
                             <span className="text-xs font-medium text-slate-700">{selectedProject.assignedBuilder}</span>
                           </div>
                         )}
-                        <div className="flex items-center gap-1 px-2 py-1 bg-white rounded-full border border-blue-300">
+                        <div className="flex items-center gap-1 px-2 py-1 bg-white rounded-full border border-slate-200">
                           <div className="w-2 h-2 rounded-full bg-blue-500"></div>
                           <span className="text-xs font-medium text-slate-700">Office Team</span>
                         </div>
                       </div>
                     </div>
-                    {user.role === 'customer' && (
-                      <p className="text-xs text-blue-800 mt-2">
-                        💬 Direct line to your project team • Messages sent via email • Response within 4 hours
+                    {user.role === 'customer' ? (
+                      <p className="text-xs text-slate-600 mt-2">
+                        Direct line to your project team. Messages are emailed to the office.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-600 mt-2">
+                        Chat with the customer and builder here. Portal link and WhatsApp settings are below.
                       </p>
                     )}
                   </div>
 
-                  <div className="flex-1 bg-slate-50 rounded-lg p-2 sm:p-3 overflow-y-auto space-y-2 mb-3">
-                    {selectedProject.messages.map(msg => {
+                  <div ref={messagesThreadRef} className="flex-1 min-h-[200px] max-h-[360px] bg-slate-50 rounded-lg p-2 sm:p-3 overflow-y-auto space-y-2 mb-3">
+                    {selectedProject.messages.length === 0 ? (
+                      <p className="text-sm text-slate-500 py-6 text-center">
+                        No messages yet. Send one below, or copy the customer portal link to share.
+                      </p>
+                    ) : (
+                      selectedProject.messages.map(msg => {
                       const isMyMessage = msg.from === user.name;
                       return (
                       <div key={msg.id} className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
@@ -1348,10 +1523,10 @@ export default function BuilderProjectManagement() {
                           <div className="flex items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
                             <p className="text-[10px] sm:text-xs font-bold">{msg.from}</p>
                             <Badge variant="secondary" className="text-[8px] sm:text-xs h-4 sm:h-5">
-                              {msg.fromRole === 'office' || msg.fromRole === 'admin' ? '🏢 Office' :
-                               msg.fromRole === 'builder' ? '👷 Builder' : '👤 Customer'}
+                              {msg.fromRole === 'office' || msg.fromRole === 'admin' ? 'Office' :
+                               msg.fromRole === 'builder' ? 'Builder' : 'Customer'}
                             </Badge>
-                            {msg.emailSent && <Badge variant="secondary" className="text-[8px] sm:text-xs h-4 sm:h-5">📧 Emailed</Badge>}
+                            {msg.emailSent && <Badge variant="secondary" className="text-[8px] sm:text-xs h-4 sm:h-5">Emailed</Badge>}
                             {msg.channel && msg.channel !== 'app' && (
                               <Badge variant="secondary" className="text-[8px] sm:text-xs h-4 sm:h-5">
                                 {msg.channel === 'whatsapp' ? 'WhatsApp' : msg.channel}
@@ -1387,7 +1562,8 @@ export default function BuilderProjectManagement() {
                         </div>
                       </div>
                       );
-                    })}
+                    })
+                    )}
                   </div>
 
                   {/* Attachments Preview */}
@@ -1457,11 +1633,23 @@ export default function BuilderProjectManagement() {
                     </div>
                     {user.role === 'customer' && (
                       <p className="text-xs text-slate-600 px-1">
-                        💡 Your message will be sent to your builder and our office team via email
+                        Your message will be sent to your builder and our office team via email
                       </p>
                     )}
                   </div>
                 </div>
+
+                {user.role !== 'customer' && selectedProject && (
+                  <div className="pt-2 border-t border-slate-200">
+                    <ProjectCommsPanel
+                      project={selectedProject as unknown as UnifiedProject}
+                      contacts={getContactsForCustomer(selectedProject.customerId)}
+                      onUpdate={refreshProject}
+                      compact
+                      onFocusThread={() => messagesThreadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}
+                    />
+                  </div>
+                )}
               </TabsContent>
 
               {/* Customer Payment Stages Tab - Shown to ALL users - Mobile Responsive */}
@@ -1815,50 +2003,66 @@ export default function BuilderProjectManagement() {
 
               {user.role !== 'customer' && selectedProject && (
                 <>
-                  <TabsContent value="plan" className="space-y-3 mt-0 p-2 sm:p-4">
+                  <TabsContent value="plan" className="space-y-3 mt-0">
                     <ProjectPlanTab
                       project={selectedProject as unknown as UnifiedProject}
                       onUpdate={refreshProject}
                       createdBy={user.name}
                     />
                   </TabsContent>
-                  <TabsContent value="photos" className="space-y-3 mt-0 p-2 sm:p-4">
-                    <ProjectPhotosTab
-                      project={selectedProject as unknown as UnifiedProject}
-                      uploadedBy={user.name}
-                      userRole={user.role}
-                      onUpdate={refreshProject}
-                    />
+                  <TabsContent value="files" className="space-y-3 mt-0">
+                    <div className="flex gap-1 p-1 bg-slate-100 rounded-lg w-fit">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={filesSubView === 'photos' ? 'default' : 'ghost'}
+                        className="h-8"
+                        onClick={() => setFilesSubView('photos')}
+                      >
+                        <Camera className="w-3.5 h-3.5 mr-1" />
+                        Photos
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={filesSubView === 'docs' ? 'default' : 'ghost'}
+                        className="h-8"
+                        onClick={() => setFilesSubView('docs')}
+                      >
+                        <FileText className="w-3.5 h-3.5 mr-1" />
+                        Docs
+                      </Button>
+                    </div>
+                    {filesSubView === 'photos' ? (
+                      <ProjectPhotosTab
+                        project={selectedProject as unknown as UnifiedProject}
+                        uploadedBy={user.name}
+                        userRole={user.role}
+                        onUpdate={refreshProject}
+                      />
+                    ) : (
+                      <ProjectDocumentsTab
+                        project={selectedProject as unknown as UnifiedProject}
+                        customerPhone={customers.find(c => c.id === selectedProject.customerId)?.phone}
+                        customerWhatsappOptIn={customers.find(c => c.id === selectedProject.customerId)?.whatsappOptIn}
+                        onUpdate={refreshProject}
+                      />
+                    )}
                   </TabsContent>
-                  <TabsContent value="documents" className="space-y-3 mt-0 p-2 sm:p-4">
-                    <ProjectDocumentsTab
-                      project={selectedProject as unknown as UnifiedProject}
-                      customerPhone={customers.find(c => c.id === selectedProject.customerId)?.phone}
-                      customerWhatsappOptIn={customers.find(c => c.id === selectedProject.customerId)?.whatsappOptIn}
-                      onUpdate={refreshProject}
-                    />
-                  </TabsContent>
-                  <TabsContent value="ai" className="space-y-3 mt-0 p-2 sm:p-4">
+                  <TabsContent value="ai" className="space-y-3 mt-0">
                     <ProjectAIPanel
                       project={selectedProject as unknown as UnifiedProject}
                       userName={user.name}
                       onUpdate={refreshProject}
                     />
                   </TabsContent>
-                  <TabsContent value="comms" className="space-y-3 mt-0 p-2 sm:p-4">
-                    <ProjectCommsPanel
-                      project={selectedProject as unknown as UnifiedProject}
-                      contacts={getContactsForCustomer(selectedProject.customerId)}
-                      onUpdate={refreshProject}
-                    />
-                  </TabsContent>
-                  <TabsContent value="snagging" className="space-y-3 mt-0 p-2 sm:p-4">
+                  <TabsContent value="snagging" className="space-y-3 mt-0">
                     <ProjectSnaggingTab
                       project={selectedProject as unknown as UnifiedProject}
                       onUpdate={refreshProject}
                     />
                   </TabsContent>
-                  <TabsContent value="team" className="space-y-3 mt-0 p-2 sm:p-4">
+                  <TabsContent value="team" className="space-y-3 mt-0">
                     <ProjectTeamTab
                       project={selectedProject as unknown as UnifiedProject}
                       onUpdate={refreshProject}

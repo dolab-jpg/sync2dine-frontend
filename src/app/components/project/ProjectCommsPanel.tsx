@@ -14,9 +14,12 @@ interface Props {
   project: UnifiedProject;
   contacts: CustomerContact[];
   onUpdate: (project: UnifiedProject) => void;
+  /** Tighter spacing when embedded under the Messages thread */
+  compact?: boolean;
+  onFocusThread?: () => void;
 }
 
-export function ProjectCommsPanel({ project, contacts, onUpdate }: Props) {
+export function ProjectCommsPanel({ project, contacts, onUpdate, compact, onFocusThread }: Props) {
   const [creating, setCreating] = useState(false);
   const portalUrl = `${window.location.origin}/portal/${project.portalToken}`;
 
@@ -78,12 +81,19 @@ export function ProjectCommsPanel({ project, contacts, onUpdate }: Props) {
   };
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-2">
+    <div className={compact ? 'space-y-3' : 'space-y-4'}>
+      <div>
+        <h3 className="text-sm font-semibold text-slate-900 mb-1">Share &amp; channels</h3>
+        <p className="text-xs text-slate-500 mb-2">
+          Customer portal for unlimited chat and files. WhatsApp is optional.
+        </p>
+      </div>
+
+      <Card className={compact ? 'shadow-none' : undefined}>
+        <CardHeader className="pb-2 pt-3">
           <CardTitle className="text-sm">Communication mode</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-2 pt-0">
           <Select value={project.whatsappMode} onValueChange={v => setMode(v as WhatsAppMode)}>
             <SelectTrigger>
               <SelectValue />
@@ -95,18 +105,18 @@ export function ProjectCommsPanel({ project, contacts, onUpdate }: Props) {
             </SelectContent>
           </Select>
           <p className="text-xs text-slate-500">
-            Portal gives unlimited conversation and files. WhatsApp group requires Meta Groups API (OBA/tier).
+            Portal gives unlimited conversation and files. WhatsApp group requires Meta Groups API.
           </p>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-2">
+      <Card className={compact ? 'shadow-none' : undefined}>
+        <CardHeader className="pb-2 pt-3">
           <CardTitle className="text-sm flex items-center gap-2">
             <Link2 className="w-4 h-4" /> Customer portal
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
           <p className="text-xs break-all text-slate-600 mb-2">{portalUrl}</p>
           <Button size="sm" variant="outline" onClick={copyPortal}>
             <Copy className="w-3 h-3 mr-1" /> Copy link
@@ -115,13 +125,13 @@ export function ProjectCommsPanel({ project, contacts, onUpdate }: Props) {
       </Card>
 
       {project.whatsappMode === 'group' && (
-        <Card>
-          <CardHeader className="pb-2">
+        <Card className={compact ? 'shadow-none' : undefined}>
+          <CardHeader className="pb-2 pt-3">
             <CardTitle className="text-sm flex items-center gap-2">
               <Users className="w-4 h-4" /> WhatsApp group
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-2 pt-0">
             {project.whatsappGroup ? (
               <>
                 <Label className="text-xs">Status: {project.whatsappGroup.status}</Label>
@@ -136,12 +146,16 @@ export function ProjectCommsPanel({ project, contacts, onUpdate }: Props) {
               </Button>
             )}
             <p className="text-xs text-slate-500">Contacts on this project:</p>
-            {contacts.map(c => (
-              <div key={c.id} className="text-xs flex justify-between">
-                <span>{c.name} ({c.role})</span>
-                <span>{c.phone}</span>
-              </div>
-            ))}
+            {contacts.length === 0 ? (
+              <p className="text-xs text-slate-400">No contacts yet.</p>
+            ) : (
+              contacts.map(c => (
+                <div key={c.id} className="text-xs flex justify-between">
+                  <span>{c.name} ({c.role})</span>
+                  <span>{c.phone}</span>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       )}
@@ -152,7 +166,7 @@ export function ProjectCommsPanel({ project, contacts, onUpdate }: Props) {
         </div>
       )}
 
-      <ProjectTimeline project={project} />
+      <ProjectTimeline project={project} onMessageClick={onFocusThread} />
     </div>
   );
 }

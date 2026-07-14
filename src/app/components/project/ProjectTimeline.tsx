@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import type { UnifiedProject } from '../../engine/project/types';
@@ -8,10 +9,12 @@ interface TimelineEntry {
   source: string;
   label: string;
   body: string;
+  kind: 'message' | 'other';
 }
 
 interface Props {
   project: UnifiedProject;
+  onMessageClick?: () => void;
 }
 
 function isVisionAssessment(action: UnifiedProject['aiActions'][number]): boolean {
@@ -37,7 +40,8 @@ function summariseAiAction(action: UnifiedProject['aiActions'][number]): string 
   return `Approved by ${action.approvedBy ?? 'staff'}`;
 }
 
-export function ProjectTimeline({ project }: Props) {
+export function ProjectTimeline({ project, onMessageClick }: Props) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const entries: TimelineEntry[] = [];
 
   for (const msg of project.messages) {
@@ -51,6 +55,7 @@ export function ProjectTimeline({ project }: Props) {
       source: channel === 'whatsapp' ? 'WhatsApp' : channel === 'portal' ? 'Portal' : channel === 'email' ? 'Email' : 'App',
       label: contact && contact !== msg.from ? `${msg.from} (${contact})` : msg.from,
       body: text,
+      kind: 'message',
     });
   }
 
@@ -64,6 +69,7 @@ export function ProjectTimeline({ project }: Props) {
       source: visionAssessment ? 'AI Vision' : 'AI',
       label: visionAssessment ? `Vision assessment · ${action.action}` : `Channel AI · ${action.action}`,
       body: executed || summariseAiAction(action),
+      kind: 'other',
     });
   }
 
@@ -75,7 +81,8 @@ export function ProjectTimeline({ project }: Props) {
       at: comm.createdAt,
       source,
       label: comm.builderName,
-      body: `${comm.subject}: ${comm.body.slice(0, 80)}${comm.priceQuoted ? ` (£${comm.priceQuoted})` : ''}`,
+      body: `${comm.subject}: ${comm.body}${comm.priceQuoted ? ` (£${comm.priceQuoted})` : ''}`,
+      kind: 'other',
     });
   }
 
@@ -86,6 +93,7 @@ export function ProjectTimeline({ project }: Props) {
       source: 'Change order',
       label: order.title,
       body: `Proposed £${order.amount.toLocaleString('en-GB')} · ${order.status.replace('_', ' ')}`,
+      kind: 'other',
     });
 
     if (order.customerDecisionAt) {
@@ -95,6 +103,7 @@ export function ProjectTimeline({ project }: Props) {
         source: 'Change order',
         label: order.title,
         body: `Customer ${order.status.replace('_', ' ')}${order.customerDecisionBy ? ` by ${order.customerDecisionBy}` : ''}`,
+        kind: 'other',
       });
     }
   }
@@ -102,27 +111,47 @@ export function ProjectTimeline({ project }: Props) {
   entries.sort((a, b) => b.at.localeCompare(a.at));
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Unified timeline</CardTitle>
+    <Card className="shadow-none">
+      <CardHeader className="pb-2 pt-3">
+        <CardTitle className="text-sm">Activity</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-0">
         {entries.length === 0 ? (
-          <p className="text-sm text-slate-500">No activity yet across app, portal, WhatsApp, and AI.</p>
+          <p className="text-sm text-slate-500">
+            No activity yet. Send a message above or copy the portal link to get started.
+          </p>
         ) : (
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {entries.slice(0, 30).map(e => (
-              <div key={e.id} className="p-2 border rounded text-sm">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <Badge variant="outline" className="text-[10px]">{e.source}</Badge>
-                  <span className="font-medium text-xs">{e.label}</span>
-                  <span className="text-[10px] text-slate-400 ml-auto">
-                    {new Date(e.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-600 line-clamp-2">{e.body}</p>
-              </div>
-            ))}
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {entries.slice(0, 30).map(e => {
+              const expanded = expandedId === e.id;
+              return (
+                <button
+                  key={e.id}
+                  type="button"
+                  className={`w-full text-left p-2 border rounded text-sm transition-colors hover:bg-slate-50 ${
+                    expanded ? 'bg-slate-50 border-slate-300' : 'bg-white'
+                  }`}
+                  onClick={() => {
+                    setExpandedId(expanded ? null : e.id);
+                    if (e.kind === 'message') onMessageClick?.();
+                  }}
+                >
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <Badge variant="outline" className="text-[10px]">{e.source}</Badge>
+                    <span className="font-medium text-xs">{e.label}</span>
+                    <span className="text-[10px] text-slate-400 ml-auto">
+                      {new Date(e.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className={`text-xs text-slate-600 whitespace-pre-wrap ${expanded ? '' : 'line-clamp-2'}`}>
+                    {e.body || '—'}
+                  </p>
+                  {!expanded && e.body.length > 120 && (
+                    <span className="text-[10px] text-slate-400 mt-0.5 inline-block">Tap to expand</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
       </CardContent>

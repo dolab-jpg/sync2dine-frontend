@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
-import { ShieldCheck, Plus, History, X } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router';
+import { ShieldCheck, Plus, History, X, ArrowLeft } from 'lucide-react';
 import { AppContext } from '../../App';
 import { BCDocLibrary } from './BCDocLibrary';
 import { BCInquiryPanel } from './BCInquiryPanel';
@@ -38,6 +38,10 @@ export default function BuildingControlHub() {
 
   const user = context?.user;
   const canReview = user?.role === 'super_admin' || user?.role === 'manager';
+  const returnToRaw = searchParams.get('returnTo');
+  const returnTo = returnToRaw && returnToRaw.startsWith('/') && !returnToRaw.startsWith('//')
+    ? returnToRaw
+    : null;
 
   useEffect(() => {
     return subscribeBCInquiries(setInquiries);
@@ -168,6 +172,14 @@ export default function BuildingControlHub() {
     <div className="h-full overflow-y-auto p-4 md:p-6 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
+          {returnTo && (
+            <Button variant="ghost" size="sm" className="mb-2 -ml-2 h-8 text-slate-600" asChild>
+              <Link to={returnTo}>
+                <ArrowLeft className="w-4 h-4 mr-1" />
+                Back to project
+              </Link>
+            </Button>
+          )}
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <ShieldCheck className="w-7 h-7 text-blue-600" />
             Building Control
