@@ -69,7 +69,7 @@ export const integrationService = {
 
   updateIntegration(
     id: IntegrationId,
-    updates: Partial<Pick<IntegrationInstanceState, 'enabled' | 'mockMode' | 'values' | 'status'>>
+    updates: Partial<Pick<IntegrationInstanceState, 'enabled' | 'mockMode' | 'values' | 'status' | 'lastTestedAt' | 'lastTestError'>>
   ): void {
     const store = loadIntegrationsStore();
     store.integrations[id] = { ...store.integrations[id], ...updates };

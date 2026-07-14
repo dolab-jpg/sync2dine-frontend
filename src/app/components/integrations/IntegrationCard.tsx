@@ -59,7 +59,7 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
     onUpdate();
 
     if (hasCredentials && definition.id === 'openai') {
-      toast.success('OpenAI settings saved — live mode enabled');
+      toast.success('OpenAI key saved for the whole company — staff, builders, and customers will use it');
     } else if (hasCredentials) {
       toast.success(`${definition.name} settings saved — live mode enabled`);
     } else {

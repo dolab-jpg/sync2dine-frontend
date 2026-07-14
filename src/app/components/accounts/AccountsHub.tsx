@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../ui/chart';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Pie, PieChart, Cell } from 'recharts';
-import { loadProjects } from '../../engine/project/projectStore';
+import { loadProjects, loadProjectsAsync, subscribeProjectsCache } from '../../engine/project/projectStore';
 import { getPortfolioProfit } from '../../engine/costing/profitCalculator';
 import type { UnifiedProject } from '../../engine/project/types';
 import {
@@ -92,6 +92,8 @@ export default function AccountsHub() {
 
   useEffect(() => {
     void initBankingStore().finally(refreshLocal);
+    void loadProjectsAsync().then(refreshLocal);
+    return subscribeProjectsCache(() => refreshLocal());
   }, []);
 
   const portfolio = useMemo(() => getPortfolioProfit(projects), [projects]);

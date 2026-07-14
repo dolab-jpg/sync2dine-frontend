@@ -1,4 +1,4 @@
-import { FormEvent, useContext, useMemo, useState } from 'react';
+import { FormEvent, useContext, useEffect, useMemo, useState } from 'react';
 import { AppContext } from '../App';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -9,7 +9,7 @@ import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { CheckCircle2, Clock, Plus, ShieldCheck, User, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { loadProjects, updateProject, syncToServer } from '../engine/project/projectStore';
+import { loadProjects, loadProjectsAsync, subscribeProjectsCache, updateProject, syncToServer } from '../engine/project/projectStore';
 import type { ChangeOrder, UnifiedProject } from '../engine/project/types';
 import { approveChangeOrderForCustomer } from '../engine/projectAi/projectAiService';
 import { notifyCustomerChangeOrder } from '../engine/ai/foremanExecutor';
@@ -32,7 +32,7 @@ export default function ChangeOrders() {
   const context = useContext(AppContext);
   if (!context) return null;
 
-  const { user } = context;
+  const { user, customers } = context;
   const [projects, setProjects] = useState<UnifiedProject[]>(() => loadProjects());
   const [showForm, setShowForm] = useState(false);
   const [newOrder, setNewOrder] = useState({
@@ -46,11 +46,29 @@ export default function ChangeOrders() {
 
   const refreshProjects = () => setProjects(loadProjects());
 
-  const editableProjects = useMemo(() => (
-    user.role === 'customer'
-      ? projects.filter((project) => project.customerName === user.name)
-      : projects
-  ), [projects, user.name, user.role]);
+  useEffect(() => {
+    void loadProjectsAsync().then(refreshProjects);
+    return subscribeProjectsCache(refreshProjects);
+  }, []);
+
+  const editableProjects = useMemo(() => {
+    if (user.role !== 'customer') return projects;
+    const email = (user.email || '').trim().toLowerCase();
+    const linkedIds = new Set(
+      customers
+        .filter((c) => {
+          const crmEmail = (c.email || '').trim().toLowerCase();
+          return Boolean((email && crmEmail && crmEmail === email) || c.id === user.id);
+        })
+        .map((c) => c.id)
+    );
+    const nameNorm = (user.name || '').trim().toLowerCase();
+    return projects.filter((project) => {
+      if (project.customerId && linkedIds.has(project.customerId)) return true;
+      if (nameNorm && (project.customerName || '').trim().toLowerCase() === nameNorm) return true;
+      return false;
+    });
+  }, [projects, user.name, user.email, user.id, user.role, customers]);
 
   const rows = useMemo<ChangeOrderRow[]>(() => {
     return editableProjects.flatMap((project) => (

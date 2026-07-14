@@ -19,7 +19,7 @@ import { AddressMapLink } from './ui/AddressMapLink';
 import { toast } from 'sonner';
 import { messagingHub } from '../engine/messaging/messagingHub';
 import { testBuilders } from '../data/testData';
-import { loadProjects, saveProjects, updateProject, syncToServer } from '../engine/project/projectStore';
+import { loadProjects, loadProjectsAsync, saveProjects, updateProject, syncToServer, subscribeProjectsCache } from '../engine/project/projectStore';
 import type { UnifiedProject, PaymentStage, Invoice, PaymentStageStatus } from '../engine/project/types';
 import { generateInvoicePdf } from '../engine/messaging/pdfGenerator';
 import { sendReceiptForStage as sendStageReceipt, autoSendReceiptAfterMarkPaid } from '../engine/banking/paymentReceiptService';
@@ -107,7 +107,7 @@ export default function BuilderProjectManagement() {
   // Available builders - imported from test data
   const [builders] = useState(testBuilders);
 
-  // Test data - imported from testData.ts with comprehensive realistic projects
+  // Hydrated from local cache first, then refreshed after Supabase/async load
   const [projects, setProjects] = useState<BuilderProject[]>(() => loadProjects() as unknown as BuilderProject[]);
 
   const persistProjects = (next: BuilderProject[]) => {
@@ -125,7 +125,18 @@ export default function BuilderProjectManagement() {
   };
 
   useEffect(() => {
+    let cancelled = false;
+    void loadProjectsAsync().then((list) => {
+      if (!cancelled) setProjects(list as unknown as BuilderProject[]);
+    });
+    const unsub = subscribeProjectsCache((list) => {
+      setProjects(list as unknown as BuilderProject[]);
+    });
     syncToServer();
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, []);
 
   useEffect(() => {
@@ -302,10 +313,29 @@ export default function BuilderProjectManagement() {
       return projects.filter(p => p.assignedBuilder === user.name);
     }
     if (user.role === 'customer') {
-      return projects.filter(p => p.customerName === user.name).map(filterProjectForCustomer);
+      const email = (user.email || '').trim().toLowerCase();
+      const linkedCustomerIds = new Set(
+        customers
+          .filter((c) => {
+            const crmEmail = (c.email || '').trim().toLowerCase();
+            return Boolean(
+              (email && crmEmail && crmEmail === email)
+              || c.id === user.id
+            );
+          })
+          .map((c) => c.id)
+      );
+      const nameNorm = (user.name || '').trim().toLowerCase();
+      return projects
+        .filter((p) => {
+          if (p.customerId && linkedCustomerIds.has(p.customerId)) return true;
+          if (nameNorm && (p.customerName || '').trim().toLowerCase() === nameNorm) return true;
+          return false;
+        })
+        .map(filterProjectForCustomer);
     }
     return projects;
-  }, [user.role, user.name, projects]);
+  }, [user.role, user.name, user.email, user.id, customers, projects]);
 
   // Auto-select project for customers with only one project
   useEffect(() => {

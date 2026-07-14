@@ -69,7 +69,8 @@ import ConversationAudit from './components/aiStudio/ConversationAudit';
 import CallCenter from './components/CallCenter/CallCenter';
 import AppShell from './components/AppShell';
 import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
-import { installApiFetchInterceptor } from './engine/platform/orgContext';
+import { installApiFetchInterceptor, syncActiveOrgFromProfile } from './engine/platform/orgContext';
+import { integrationService } from './engine/integrations/integrationService';
 import { Toaster } from './components/ui/sonner';
 import { OnlineStatusBanner } from './components/OnlineStatusBanner';
 import { requestNativeNotifications } from './bridge/nativeBridge';
@@ -384,6 +385,8 @@ export default function App() {
       if (stored) {
         setUser(stored);
         setIsLoggedIn(true);
+        await syncActiveOrgFromProfile();
+        void integrationService.initOrgOpenAIKey(stored.role);
         return;
       }
 
@@ -408,6 +411,8 @@ export default function App() {
               saveSessionUser(restored);
               setUser(restored);
               setIsLoggedIn(true);
+              await syncActiveOrgFromProfile();
+              void integrationService.initOrgOpenAIKey(restored.role);
             }
           }
         } catch {
@@ -610,6 +615,7 @@ export default function App() {
     void loadProjectsAsync();
     void initBankingStore();
     void initCompanyProfile();
+    void integrationService.initOrgOpenAIKey();
     const unsub = initProjectsRealtime();
     void import('./engine/data/supabaseStore').then(async ({ isSupabaseConfigured, loadCustomersFromSupabase, loadQuotesFromSupabase, loadProductsFromSupabase, loadPricingRulesFromSupabase }) => {
       if (!isSupabaseConfigured()) return;

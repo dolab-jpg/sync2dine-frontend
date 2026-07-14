@@ -12,6 +12,26 @@ const WA_SESSIONS_KEY = 'whatsappSessions';
 
 let supabaseProjectsCache: UnifiedProject[] | null = null;
 
+type ProjectsListener = (projects: UnifiedProject[]) => void;
+const projectsListeners = new Set<ProjectsListener>();
+
+function notifyProjectsListeners(): void {
+  const snapshot = loadProjects();
+  projectsListeners.forEach((fn) => {
+    try {
+      fn(snapshot);
+    } catch {
+      // ignore listener errors
+    }
+  });
+}
+
+/** Subscribe to project list changes (async Supabase load, saves, realtime). */
+export function subscribeProjectsCache(listener: ProjectsListener): () => void {
+  projectsListeners.add(listener);
+  return () => projectsListeners.delete(listener);
+}
+
 function normalizeAssignedContractors(value: unknown): AssignedContractor[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -155,30 +175,39 @@ export async function loadProjectsAsync(): Promise<UnifiedProject[]> {
         if (!useCloudPersistence()) {
           writeLocalJson(PROJECTS_KEY, supabaseProjectsCache);
         }
+        notifyProjectsListeners();
         return supabaseProjectsCache;
       }
       if (useCloudPersistence()) {
         supabaseProjectsCache = [];
+        notifyProjectsListeners();
         return [];
       }
     }
   } catch {
     // fall back to localStorage
   }
-  return loadProjects();
+  const local = loadProjects();
+  notifyProjectsListeners();
+  return local;
 }
 
 export function initProjectsRealtime(): () => void {
+  let unsubscribeRemote: (() => void) | undefined;
   void import('../data/supabaseStore').then(({ isSupabaseConfigured, subscribeProjects }) => {
     if (!isSupabaseConfigured()) return;
-    return subscribeProjects((projects) => {
+    unsubscribeRemote = subscribeProjects((projects) => {
       supabaseProjectsCache = projects.map(migrateProject);
       if (!useCloudPersistence()) {
         writeLocalJson(PROJECTS_KEY, supabaseProjectsCache);
       }
+      notifyProjectsListeners();
     });
   }).catch(() => {});
-  return () => { supabaseProjectsCache = null; };
+  return () => {
+    unsubscribeRemote?.();
+    supabaseProjectsCache = null;
+  };
 }
 
 export function saveProjects(projects: UnifiedProject[]): void {
@@ -186,6 +215,7 @@ export function saveProjects(projects: UnifiedProject[]): void {
   if (!useCloudPersistence()) {
     writeLocalJson(PROJECTS_KEY, projects);
   }
+  notifyProjectsListeners();
   void import('../data/supabaseStore').then(({ isSupabaseConfigured, saveAllProjectsToSupabase }) => {
     if (isSupabaseConfigured()) return saveAllProjectsToSupabase(projects);
   }).catch(() => {});

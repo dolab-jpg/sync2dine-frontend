@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { AddressMapLink } from './ui/AddressMapLink';
 import { PhotoCapture } from './AI/PhotoCapture';
-import { loadProjects } from '../engine/project/projectStore';
+import { loadProjects, loadProjectsAsync, subscribeProjectsCache } from '../engine/project/projectStore';
 import { loadBuilders } from '../engine/builder/builderStore';
 import {
   clockIn, clockOut, getActiveClockIn, createCostEntryFromReceipt,
@@ -86,7 +86,10 @@ export default function BuilderDashboard() {
   }, [user.name]);
 
   useEffect(() => {
+    void loadProjectsAsync().then(() => refreshProjects());
+    const unsub = subscribeProjectsCache(() => refreshProjects());
     refreshProjects();
+    return unsub;
   }, [refreshProjects]);
 
   useEffect(() => {

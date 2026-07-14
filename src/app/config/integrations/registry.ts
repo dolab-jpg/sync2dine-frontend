@@ -4,7 +4,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   {
     id: 'openai',
     name: 'OpenAI',
-    description: 'TradePro AI, Cyrus bot, CRM chat summaries, photo estimation, and TTS',
+    description: 'Company-wide AI key — once saved by Super Admin, all staff, builders, and customers use it',
     category: 'ai',
     docsUrl: 'https://platform.openai.com/docs',
     fields: [

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { User, Briefcase, Wrench, Users, UserCheck, Building2, Shield } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
 import { syncActiveOrgFromProfile } from '../engine/platform/orgContext';
+import { integrationService } from '../engine/integrations/integrationService';
 import { getSupabase, isSupabaseConfigured } from '../../lib/supabase/client';
 import { parseDemoRoleFromUrl } from '../engine/auth/sessionStore';
 
@@ -70,12 +71,14 @@ export default function Login({ onLogin }: LoginProps) {
         .single();
 
       await syncActiveOrgFromProfile();
+      const role = (profile?.role ?? 'staff') as DemoRole;
+      void integrationService.initOrgOpenAIKey(role);
 
       onLogin({
         id: profile?.id ?? data.user.id,
         name: profile?.name ?? data.user.email?.split('@')[0] ?? 'User',
         email: profile?.email ?? data.user.email ?? email,
-        role: (profile?.role ?? 'staff') as DemoRole,
+        role,
       });
       return true;
     } catch {
