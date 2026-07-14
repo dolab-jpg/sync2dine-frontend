@@ -1,5 +1,17 @@
 import type { TradeConfig } from '../types';
-import { additionsStage, baseSurveySections, countStage, customerStage, DEFAULT_SITE_UPLIFTS, productPickerStage, siteConditionsStage, summaryStage } from './shared';
+import {
+  additionsStage,
+  composeSurveySections,
+  countStage,
+  customerStage,
+  DEFAULT_SITE_UPLIFTS,
+  productPickerStage,
+  siteConditionsStage,
+  summaryStage,
+  SURVEY_CONDITION,
+  SURVEY_YES_NO,
+  SURVEY_YES_NO_UNKNOWN,
+} from './shared';
 
 const additions = [
   { id: 'powerflush', name: 'Power Flush', price: 450 },
@@ -54,7 +66,72 @@ export const plumbingConfig: TradeConfig = {
     { id: 'plumbing', label: 'Plumbing', categories: ['pipe', 'valve', 'tap'] },
   ],
   pricingCategories: ['labour', 'plumbing', 'prep', 'feature'],
-  surveySections: baseSurveySections(),
+  surveySections: composeSurveySections(
+    [
+      {
+        id: 'heating',
+        title: 'Heating system',
+        fields: [
+          {
+            key: 'existingBoiler',
+            label: 'Existing boiler type',
+            type: 'select',
+            options: [
+              { value: 'combi', label: 'Combi' },
+              { value: 'system', label: 'System' },
+              { value: 'regular', label: 'Regular / heat-only' },
+              { value: 'none', label: 'None / electric' },
+              { value: 'unknown', label: 'Unknown' },
+            ],
+          },
+          {
+            key: 'boilerLocation',
+            label: 'Boiler location change required?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 450 },
+            riskWeight: 12,
+          },
+          {
+            key: 'flueAccess',
+            label: 'Flue termination access OK?',
+            type: 'select',
+            options: SURVEY_YES_NO_UNKNOWN,
+            costAdjustment: { no: 380 },
+            riskWeight: 14,
+          },
+          {
+            key: 'radiatorCount',
+            label: 'Approx. radiator count',
+            type: 'number',
+            min: 0,
+            max: 30,
+          },
+          {
+            key: 'pipeworkCondition',
+            label: 'Visible pipework condition',
+            type: 'select',
+            options: SURVEY_CONDITION,
+            costAdjustment: { poor: 500 },
+            riskWeight: 12,
+          },
+          {
+            key: 'systemAge',
+            label: 'System / boiler age',
+            type: 'select',
+            options: [
+              { value: 'under10', label: 'Under 10 years' },
+              { value: '10to20', label: '10–20 years' },
+              { value: 'over20', label: 'Over 20 years / unknown' },
+            ],
+            costAdjustment: { over20: 200 },
+            riskWeight: 8,
+          },
+        ],
+      },
+    ],
+    { includeHeight: false, photoLabel: 'Boiler and pipework' },
+  ),
   labourRules: [
     { key: 'labourDays', description: 'Plumbing labour', rateType: 'per_day', baseRate: 300, formula: 'ceil(radiators/3)+2', dependsOn: ['radiators'] },
   ],

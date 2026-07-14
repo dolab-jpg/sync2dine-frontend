@@ -1,5 +1,15 @@
 import type { TradeConfig } from '../types';
-import { additionsStage, baseSurveySections, countStage, customerStage, DEFAULT_SITE_UPLIFTS, siteConditionsStage, summaryStage } from './shared';
+import {
+  additionsStage,
+  composeSurveySections,
+  countStage,
+  customerStage,
+  DEFAULT_SITE_UPLIFTS,
+  siteConditionsStage,
+  summaryStage,
+  SURVEY_YES_NO,
+  SURVEY_YES_NO_UNKNOWN,
+} from './shared';
 
 const additions = [
   { id: 'rcd-upgrade', name: 'RCD Protection Upgrade', price: 350 },
@@ -51,23 +61,75 @@ export const electricalConfig: TradeConfig = {
     { id: 'electrical', label: 'Electrical', categories: ['consumer-unit', 'socket', 'switch', 'lighting', 'cable'] },
   ],
   pricingCategories: ['labour', 'electrical', 'prep', 'certification'],
-  surveySections: [
-    ...baseSurveySections(),
-    {
-      id: 'electrical',
-      title: 'Electrical Condition',
-      fields: [
-        { key: 'consumerUnit', label: 'Consumer Unit Age', type: 'select', options: [
-          { value: 'modern', label: 'Modern (< 10 years)' },
-          { value: 'old', label: 'Old fuse board' },
-          { value: 'unknown', label: 'Unknown' },
-        ], costAdjustment: { old: 650 } },
-        { key: 'rcdProtection', label: 'RCD Protection', type: 'select', options: [
-          { value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }, { value: 'partial', label: 'Partial' },
-        ], costAdjustment: { no: 350, partial: 200 } },
-      ],
-    },
-  ],
+  surveySections: composeSurveySections(
+    [
+      {
+        id: 'electrical',
+        title: 'Electrical condition',
+        fields: [
+          {
+            key: 'consumerUnit',
+            label: 'Consumer unit age',
+            type: 'select',
+            options: [
+              { value: 'modern', label: 'Modern (< 10 years)' },
+              { value: 'old', label: 'Old fuse board' },
+              { value: 'unknown', label: 'Unknown' },
+            ],
+            costAdjustment: { old: 650 },
+            riskWeight: 16,
+          },
+          {
+            key: 'rcdProtection',
+            label: 'RCD protection',
+            type: 'select',
+            options: [
+              { value: 'yes', label: 'Yes' },
+              { value: 'no', label: 'No' },
+              { value: 'partial', label: 'Partial' },
+            ],
+            costAdjustment: { no: 350, partial: 200 },
+            riskWeight: 12,
+          },
+          {
+            key: 'earthing',
+            label: 'Earthing / bonding appear adequate?',
+            type: 'select',
+            options: SURVEY_YES_NO_UNKNOWN,
+            costAdjustment: { no: 280 },
+            riskWeight: 10,
+          },
+          {
+            key: 'propertyAge',
+            label: 'Property wiring era',
+            type: 'select',
+            options: [
+              { value: 'new', label: 'Post-2000' },
+              { value: '80s90s', label: '1980s–90s' },
+              { value: 'pre80', label: 'Pre-1980 / unknown' },
+            ],
+            costAdjustment: { pre80: 400 },
+            riskWeight: 14,
+          },
+          {
+            key: 'wallsOpen',
+            label: 'Can walls/ceilings be opened for cable runs?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { no: 350 },
+            riskWeight: 10,
+          },
+          {
+            key: 'eicrStatus',
+            label: 'Recent EICR available?',
+            type: 'select',
+            options: SURVEY_YES_NO_UNKNOWN,
+          },
+        ],
+      },
+    ],
+    { includeHeight: false, photoLabel: 'Consumer unit and existing electrics' },
+  ),
   labourRules: [
     { key: 'labourDays', description: 'Electrical labour', rateType: 'per_day', baseRate: 320, formula: 'rooms*1.5+1', dependsOn: ['rooms'] },
   ],

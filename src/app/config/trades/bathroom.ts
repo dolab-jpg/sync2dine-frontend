@@ -1,7 +1,7 @@
 import type { TradeConfig } from '../types';
 import {
   additionsStage,
-  baseSurveySections,
+  composeSurveySections,
   customerStage,
   DEFAULT_SITE_UPLIFTS,
   finishPickerStage,
@@ -9,6 +9,9 @@ import {
   productPickerStage,
   siteConditionsStage,
   summaryStage,
+  SURVEY_CONDITION,
+  SURVEY_YES_NO,
+  SURVEY_YES_NO_UNKNOWN,
 } from './shared';
 
 const finishOptions = [
@@ -60,18 +63,41 @@ export const bathroomConfig: TradeConfig = {
     { id: 'finishes', label: 'Finishes', categories: ['tile', 'finish'] },
   ],
   pricingCategories: ['labour', 'finish', 'prep', 'electrical', 'plumbing', 'feature'],
-  surveySections: [
-    ...baseSurveySections(),
-    {
-      id: 'plumbing',
-      title: 'Plumbing',
-      fields: [
-        { key: 'fixturesMoving', label: 'Moving Fixtures?', type: 'select', options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }], costAdjustment: { yes: 800 } },
-        { key: 'waterPressure', label: 'Water Pressure', type: 'select', options: [{ value: 'good', label: 'Good' }, { value: 'average', label: 'Average' }, { value: 'poor', label: 'Poor' }] },
-        { key: 'waterproofing', label: 'Existing Waterproofing', type: 'select', options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }, { value: 'unknown', label: 'Unknown' }], costAdjustment: { no: 450 } },
-      ],
-    },
-  ],
+  surveySections: composeSurveySections(
+    [
+      {
+        id: 'condition',
+        title: 'Room condition',
+        fields: [
+          { key: 'floorLevel', label: 'Floor level', type: 'select', options: [{ value: 'level', label: 'Level' }, { value: 'slight', label: 'Slightly uneven' }, { value: 'very', label: 'Very uneven' }], costAdjustment: { slight: 150, very: 400 }, riskWeight: 12 },
+          { key: 'floorType', label: 'Floor construction', type: 'select', options: [{ value: 'concrete', label: 'Concrete' }, { value: 'timber', label: 'Timber joists' }] },
+          { key: 'wallType', label: 'Wall type', type: 'select', options: [{ value: 'solid', label: 'Solid' }, { value: 'stud', label: 'Stud partition' }, { value: 'mixed', label: 'Mixed' }] },
+          { key: 'dampMould', label: 'Damp / mould present?', type: 'select', options: SURVEY_YES_NO, costAdjustment: { yes: 350 }, riskWeight: 15 },
+        ],
+      },
+      {
+        id: 'plumbing',
+        title: 'Plumbing',
+        fields: [
+          { key: 'fixturesMoving', label: 'Moving fixtures / waste positions?', type: 'select', options: SURVEY_YES_NO, costAdjustment: { yes: 800 }, riskWeight: 18 },
+          { key: 'waterPressure', label: 'Water pressure', type: 'select', options: [{ value: 'good', label: 'Good' }, { value: 'average', label: 'Average' }, { value: 'poor', label: 'Poor' }], costAdjustment: { poor: 200 }, riskWeight: 8 },
+          { key: 'systemType', label: 'Heating / hot water system', type: 'select', options: [{ value: 'combi', label: 'Combi' }, { value: 'gravity', label: 'Gravity / tank' }, { value: 'unvented', label: 'Unvented' }, { value: 'unknown', label: 'Unknown' }] },
+          { key: 'pipeCondition', label: 'Visible pipe condition', type: 'select', options: SURVEY_CONDITION, costAdjustment: { poor: 300 }, riskWeight: 10 },
+          { key: 'waterproofing', label: 'Existing waterproofing / tanking', type: 'select', options: SURVEY_YES_NO_UNKNOWN, costAdjustment: { no: 450 }, riskWeight: 14 },
+        ],
+      },
+      {
+        id: 'electrical-bath',
+        title: 'Electrical (bathroom)',
+        fields: [
+          { key: 'extractorFan', label: 'Extractor fan present?', type: 'select', options: SURVEY_YES_NO, costAdjustment: { no: 180 }, riskWeight: 5 },
+          { key: 'lightingCondition', label: 'Lighting condition', type: 'select', options: SURVEY_CONDITION },
+          { key: 'cuCapacity', label: 'Spare consumer-unit capacity?', type: 'select', options: SURVEY_YES_NO_UNKNOWN, costAdjustment: { no: 250 }, riskWeight: 8 },
+        ],
+      },
+    ],
+    { photoLabel: 'Current bathroom condition' },
+  ),
   labourRules: [
     { key: 'labourDays', description: 'Installation labour', rateType: 'per_day', baseRate: 250, formula: 'ceil(area/5)+2', dependsOn: ['area'] },
     { key: 'materials', description: 'Materials & first fix', rateType: 'per_sqm', baseRate: 25, dependsOn: ['area'] },

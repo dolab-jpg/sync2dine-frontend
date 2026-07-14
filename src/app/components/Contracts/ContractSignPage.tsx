@@ -10,6 +10,7 @@ import { FileSignature, CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
 import SignaturePad from './SignaturePad';
 import { signContractOnServer } from '../../engine/contracts/contractApi';
 import type { ContractPublicView } from '../../engine/contracts/types';
+import { applySignedCloseFromToken } from '../../engine/contracts/contractSignEffects';
 
 const gbp = (n: number) => `£${n.toLocaleString('en-GB', { maximumFractionDigits: 0 })}`;
 
@@ -24,6 +25,7 @@ export default function ContractSignPage() {
   const [submitting, setSubmitting] = useState(false);
   const [signed, setSigned] = useState(false);
   const [depositAmount, setDepositAmount] = useState(0);
+  const [portalToken, setPortalToken] = useState<string | null>(null);
 
   const loadContract = useCallback(async () => {
     if (!token) {
@@ -83,7 +85,11 @@ export default function ContractSignPage() {
       return;
     }
     setSigned(true);
-    setDepositAmount(result.depositAmount ?? contract?.depositAmount ?? 0);
+    const close = applySignedCloseFromToken(token, {
+      depositAmount: result.depositAmount ?? contract?.depositAmount ?? 0,
+    });
+    setDepositAmount(close.depositAmount || result.depositAmount || contract?.depositAmount || 0);
+    if (close.portalToken) setPortalToken(close.portalToken);
     void loadContract();
   };
 
@@ -121,12 +127,18 @@ export default function ContractSignPage() {
                 Thank you, {contract.customerName}. Your contract has been signed successfully.
               </p>
               {depositAmount > 0 && (
-                <div className="bg-indigo-50 rounded-lg p-4 text-left">
-                  <p className="font-medium text-indigo-900">Deposit due</p>
+                <div className="bg-indigo-50 rounded-lg p-4 text-left space-y-3">
+                  <p className="font-medium text-indigo-900">Booking deposit due</p>
                   <p className="text-2xl font-bold text-indigo-700 mt-1">{gbp(depositAmount)}</p>
-                  <p className="text-sm text-indigo-800 mt-2">
-                    Our team will be in touch with payment details shortly.
+                  <p className="text-sm text-indigo-800">
+                    Pay your deposit in the customer portal to confirm your booking. Bank transfer
+                    details are shown there — or confirm with your salesperson if paying in person.
                   </p>
+                  {portalToken && (
+                    <Button asChild className="w-full bg-indigo-600 hover:bg-indigo-700">
+                      <a href={`/portal/${portalToken}`}>Pay deposit in portal</a>
+                    </Button>
+                  )}
                 </div>
               )}
             </CardContent>

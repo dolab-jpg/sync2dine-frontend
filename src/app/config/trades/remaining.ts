@@ -1,7 +1,7 @@
 import type { TradeConfig } from '../types';
 import {
   additionsStage,
-  baseSurveySections,
+  composeSurveySections,
   countStage,
   customerStage,
   DEFAULT_SITE_UPLIFTS,
@@ -10,6 +10,9 @@ import {
   productPickerStage,
   siteConditionsStage,
   summaryStage,
+  SURVEY_CONDITION,
+  SURVEY_YES_NO,
+  SURVEY_YES_NO_UNKNOWN,
 } from './shared';
 
 export const flooringConfig: TradeConfig = {
@@ -56,7 +59,58 @@ export const flooringConfig: TradeConfig = {
   ],
   productCategoryGroups: [{ id: 'flooring', label: 'Flooring', categories: ['carpet', 'laminate', 'lvt', 'tile', 'underlay', 'trim'] }],
   pricingCategories: ['labour', 'finish', 'prep'],
-  surveySections: baseSurveySections(),
+  surveySections: composeSurveySections(
+    [
+      {
+        id: 'subfloor',
+        title: 'Subfloor & rooms',
+        fields: [
+          {
+            key: 'subfloor',
+            label: 'Subfloor condition',
+            type: 'select',
+            options: [
+              { value: 'good', label: 'Good — direct lay' },
+              { value: 'level', label: 'Needs levelling' },
+              { value: 'replace', label: 'Board replacement' },
+            ],
+            costAdjustment: { level: 200, replace: 450 },
+            riskWeight: 12,
+          },
+          { key: 'rooms', label: 'Number of rooms', type: 'number', min: 1, max: 20, required: true },
+          {
+            key: 'existingFloor',
+            label: 'Existing floor type',
+            type: 'select',
+            options: [
+              { value: 'carpet', label: 'Carpet' },
+              { value: 'laminate', label: 'Laminate / wood' },
+              { value: 'tile', label: 'Tile' },
+              { value: 'vinyl', label: 'Vinyl' },
+              { value: 'concrete', label: 'Bare concrete' },
+            ],
+          },
+          {
+            key: 'stairsIncluded',
+            label: 'Stairs included?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 450 },
+            riskWeight: 8,
+          },
+          {
+            key: 'furnitureMove',
+            label: 'Furniture move required?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 200 },
+            riskWeight: 5,
+          },
+        ],
+      },
+    ],
+    { includeHeight: false, photoLabel: 'Floors and thresholds' },
+  ),
   labourRules: [
     { key: 'labourDays', description: 'Flooring labour', rateType: 'per_day', baseRate: 200, formula: 'ceil(area/20)+1', dependsOn: ['area'] },
     { key: 'materials', description: 'Adhesives & underlay', rateType: 'per_sqm', baseRate: 12, dependsOn: ['area'] },
@@ -126,7 +180,58 @@ export const paintingConfig: TradeConfig = {
   ],
   productCategoryGroups: [{ id: 'paint', label: 'Paint & Paper', categories: ['paint', 'wallpaper', 'primer'] }],
   pricingCategories: ['labour', 'finish', 'prep'],
-  surveySections: baseSurveySections(),
+  surveySections: composeSurveySections(
+    [
+      {
+        id: 'decorate',
+        title: 'Decoration scope',
+        fields: [
+          { key: 'rooms', label: 'Rooms in scope', type: 'number', min: 1, max: 30, required: true },
+          {
+            key: 'interiorExterior',
+            label: 'Interior / exterior',
+            type: 'select',
+            options: [
+              { value: 'interior', label: 'Interior only' },
+              { value: 'exterior', label: 'Exterior only' },
+              { value: 'both', label: 'Both' },
+            ],
+            costAdjustment: { exterior: 300, both: 400 },
+            riskWeight: 8,
+          },
+          {
+            key: 'prepLevel',
+            label: 'Surface prep needed',
+            type: 'select',
+            options: [
+              { value: 'light', label: 'Light' },
+              { value: 'medium', label: 'Medium (fill / sand)' },
+              { value: 'heavy', label: 'Heavy (strip / repair)' },
+            ],
+            costAdjustment: { medium: 180, heavy: 450 },
+            riskWeight: 12,
+          },
+          {
+            key: 'wallpaper',
+            label: 'Wallpaper hanging / stripping?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 250 },
+            riskWeight: 6,
+          },
+          {
+            key: 'ceilingHeight',
+            label: 'High ceilings / stairwell?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 200 },
+            riskWeight: 8,
+          },
+        ],
+      },
+    ],
+    { photoLabel: 'Rooms to decorate' },
+  ),
   labourRules: [
     { key: 'labourDays', description: 'Decorating labour', rateType: 'per_day', baseRate: 180, formula: 'ceil(area/25)+rooms*0.5', dependsOn: ['area', 'rooms'] },
   ],
@@ -181,7 +286,52 @@ export const plasteringConfig: TradeConfig = {
   ],
   productCategoryGroups: [{ id: 'plaster', label: 'Plastering', categories: ['plaster', 'board', 'bead', 'mesh'] }],
   pricingCategories: ['labour', 'finish', 'prep'],
-  surveySections: baseSurveySections(),
+  surveySections: composeSurveySections(
+    [
+      {
+        id: 'plaster',
+        title: 'Plastering scope',
+        fields: [
+          {
+            key: 'workType',
+            label: 'Work type',
+            type: 'select',
+            options: [
+              { value: 'skim', label: 'Skim existing' },
+              { value: 'board', label: 'Board & skim' },
+              { value: 'repair', label: 'Patch / repair' },
+              { value: 'dotdash', label: 'Dot & dab' },
+            ],
+          },
+          {
+            key: 'substrate',
+            label: 'Substrate condition',
+            type: 'select',
+            options: SURVEY_CONDITION,
+            costAdjustment: { poor: 280 },
+            riskWeight: 12,
+          },
+          {
+            key: 'dampIssues',
+            label: 'Damp / salt issues?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 400 },
+            riskWeight: 16,
+          },
+          {
+            key: 'ceilingsIncluded',
+            label: 'Ceilings included?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 220 },
+            riskWeight: 6,
+          },
+        ],
+      },
+    ],
+    { photoLabel: 'Walls and substrate' },
+  ),
   labourRules: [
     { key: 'labourDays', description: 'Plastering labour', rateType: 'per_day', baseRate: 220, formula: 'ceil(area/30)+1', dependsOn: ['area'] },
   ],
@@ -251,7 +401,66 @@ export const extensionsConfig: TradeConfig = {
   ],
   productCategoryGroups: [{ id: 'building', label: 'Building', categories: ['structure', 'window', 'door', 'insulation', 'roof'] }],
   pricingCategories: ['labour', 'prep', 'feature', 'structural'],
-  surveySections: baseSurveySections(),
+  surveySections: composeSurveySections(
+    [
+      {
+        id: 'extension',
+        title: 'Extension survey',
+        fields: [
+          {
+            key: 'storeys',
+            label: 'Proposed storeys',
+            type: 'select',
+            options: [
+              { value: 'single', label: 'Single storey' },
+              { value: 'double', label: 'Two storey' },
+              { value: 'wrap', label: 'Wrap-around / complex' },
+            ],
+            costAdjustment: { double: 2000, wrap: 3500 },
+            riskWeight: 14,
+          },
+          {
+            key: 'planningStatus',
+            label: 'Planning / permitted development status',
+            type: 'select',
+            options: [
+              { value: 'approved', label: 'Approved' },
+              { value: 'pd', label: 'Permitted development' },
+              { value: 'needed', label: 'Application needed' },
+              { value: 'unknown', label: 'Unknown' },
+            ],
+            costAdjustment: { needed: 800 },
+            riskWeight: 12,
+          },
+          {
+            key: 'groundCondition',
+            label: 'Ground / foundation concerns?',
+            type: 'select',
+            options: SURVEY_YES_NO_UNKNOWN,
+            costAdjustment: { yes: 1500 },
+            riskWeight: 18,
+          },
+          {
+            key: 'partyWall',
+            label: 'Party wall likely?',
+            type: 'select',
+            options: SURVEY_YES_NO_UNKNOWN,
+            costAdjustment: { yes: 900 },
+            riskWeight: 10,
+          },
+          {
+            key: 'drainage',
+            label: 'Drainage / sewers crossing plot?',
+            type: 'select',
+            options: SURVEY_YES_NO_UNKNOWN,
+            costAdjustment: { yes: 1200 },
+            riskWeight: 14,
+          },
+        ],
+      },
+    ],
+    { includeHeight: false, photoLabel: 'Proposed build area' },
+  ),
   labourRules: [
     { key: 'labourDays', description: 'Building labour', rateType: 'per_day', baseRate: 350, formula: 'ceil(area/8)+10', dependsOn: ['area'] },
     { key: 'materials', description: 'Build materials', rateType: 'per_sqm', baseRate: 85, dependsOn: ['area'] },
@@ -317,7 +526,50 @@ export const windowsConfig: TradeConfig = {
   ],
   productCategoryGroups: [{ id: 'glazing', label: 'Glazing', categories: ['window', 'door', 'conservatory'] }],
   pricingCategories: ['labour', 'finish', 'prep'],
-  surveySections: baseSurveySections(),
+  surveySections: composeSurveySections(
+    [
+      {
+        id: 'glazing',
+        title: 'Windows & doors',
+        fields: [
+          { key: 'unitCount', label: 'Number of openings', type: 'number', min: 1, max: 40, required: true },
+          {
+            key: 'frameCondition',
+            label: 'Existing frame / reveal condition',
+            type: 'select',
+            options: SURVEY_CONDITION,
+            costAdjustment: { poor: 320 },
+            riskWeight: 10,
+          },
+          {
+            key: 'upperFloors',
+            label: 'Upper-floor units requiring access?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 280 },
+            riskWeight: 10,
+          },
+          {
+            key: 'bayOrSpecial',
+            label: 'Bay / shaped / conservatory?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 450 },
+            riskWeight: 12,
+          },
+          {
+            key: 'lintelsOk',
+            label: 'Lintels appear sound?',
+            type: 'select',
+            options: SURVEY_YES_NO_UNKNOWN,
+            costAdjustment: { no: 600 },
+            riskWeight: 14,
+          },
+        ],
+      },
+    ],
+    { includeHeight: false, photoLabel: 'Windows and openings' },
+  ),
   labourRules: [
     { key: 'labourDays', description: 'Fitting labour', rateType: 'per_item', baseRate: 180, dependsOn: ['windows'] },
   ],
@@ -382,7 +634,68 @@ export const loftConfig: TradeConfig = {
   ],
   productCategoryGroups: [{ id: 'loft', label: 'Loft', categories: ['insulation', 'stair', 'window', 'plaster'] }],
   pricingCategories: ['labour', 'structural', 'prep', 'feature'],
-  surveySections: baseSurveySections(),
+  surveySections: composeSurveySections(
+    [
+      {
+        id: 'loft',
+        title: 'Loft conversion survey',
+        fields: [
+          {
+            key: 'conversionType',
+            label: 'Likely conversion type',
+            type: 'select',
+            options: [
+              { value: 'velux', label: 'Velux / roof lights' },
+              { value: 'dormer', label: 'Dormer' },
+              { value: 'hip', label: 'Hip-to-gable' },
+              { value: 'mansard', label: 'Mansard' },
+              { value: 'unknown', label: 'Unknown / advise' },
+            ],
+          },
+          {
+            key: 'headHeight',
+            label: 'Adequate head height?',
+            type: 'select',
+            options: SURVEY_YES_NO_UNKNOWN,
+            costAdjustment: { no: 2000 },
+            riskWeight: 16,
+          },
+          {
+            key: 'joistStrength',
+            label: 'Joists appear suitable / need strengthening?',
+            type: 'select',
+            options: [
+              { value: 'ok', label: 'Look OK' },
+              { value: 'strengthen', label: 'Likely strengthen' },
+              { value: 'unknown', label: 'Unknown' },
+            ],
+            costAdjustment: { strengthen: 1800 },
+            riskWeight: 14,
+          },
+          {
+            key: 'stairSpace',
+            label: 'Stair void available on floor below?',
+            type: 'select',
+            options: SURVEY_YES_NO_UNKNOWN,
+            costAdjustment: { no: 2500 },
+            riskWeight: 18,
+          },
+          {
+            key: 'planningLoft',
+            label: 'Planning / PD known?',
+            type: 'select',
+            options: [
+              { value: 'approved', label: 'Approved' },
+              { value: 'pd', label: 'PD likely' },
+              { value: 'needed', label: 'Application needed' },
+              { value: 'unknown', label: 'Unknown' },
+            ],
+          },
+        ],
+      },
+    ],
+    { includeHeight: true, photoLabel: 'Loft space and roof' },
+  ),
   labourRules: [
     { key: 'labourDays', description: 'Loft conversion labour', rateType: 'per_day', baseRate: 320, formula: 'ceil(area/6)+15', dependsOn: ['area'] },
   ],
@@ -446,7 +759,65 @@ export const landscapingConfig: TradeConfig = {
   ],
   productCategoryGroups: [{ id: 'landscape', label: 'Landscaping', categories: ['paving', 'fencing', 'decking', 'plant', 'drainage'] }],
   pricingCategories: ['labour', 'finish', 'prep', 'feature'],
-  surveySections: baseSurveySections(),
+  surveySections: composeSurveySections(
+    [
+      {
+        id: 'landscape',
+        title: 'Landscaping survey',
+        fields: [
+          {
+            key: 'groundType',
+            label: 'Ground / surface type',
+            type: 'select',
+            options: [
+              { value: 'soil', label: 'Soil / lawn' },
+              { value: 'hardcore', label: 'Hardcore / rubble' },
+              { value: 'existing-pave', label: 'Existing paving' },
+              { value: 'sloped', label: 'Sloped / retained' },
+            ],
+            costAdjustment: { hardcore: 250, sloped: 800 },
+            riskWeight: 12,
+          },
+          {
+            key: 'drainageIssues',
+            label: 'Standing water / drainage issues?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 450 },
+            riskWeight: 14,
+          },
+          {
+            key: 'accessMachinery',
+            label: 'Machinery / wheelbarrow access?',
+            type: 'select',
+            options: [
+              { value: 'easy', label: 'Easy' },
+              { value: 'side', label: 'Side gate only' },
+              { value: 'difficult', label: 'Difficult / over house' },
+            ],
+            costAdjustment: { side: 150, difficult: 500 },
+            riskWeight: 10,
+          },
+          {
+            key: 'fencingBoundary',
+            label: 'Boundary / fencing works?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 300 },
+            riskWeight: 5,
+          },
+          {
+            key: 'utilities',
+            label: 'Known underground utilities?',
+            type: 'select',
+            options: SURVEY_YES_NO_UNKNOWN,
+            riskWeight: 8,
+          },
+        ],
+      },
+    ],
+    { includeHeight: false, photoLabel: 'Garden and access' },
+  ),
   labourRules: [
     { key: 'labourDays', description: 'Landscaping labour', rateType: 'per_day', baseRate: 220, formula: 'ceil(area/12)+2', dependsOn: ['area'] },
     { key: 'materials', description: 'Hard landscaping materials', rateType: 'per_sqm', baseRate: 22, dependsOn: ['area'] },

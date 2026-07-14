@@ -184,7 +184,18 @@ export default function BookingSystem() {
     toast.success('Appointment booked successfully!');
 
     setTimeout(() => {
-      navigate('/site-survey');
+      navigate('/site-survey', {
+        state: {
+          customer: {
+            id: customer.id,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            address: customer.address,
+            interestedTrades: customer.interestedTrades,
+          },
+        },
+      });
     }, 1500);
   };
 

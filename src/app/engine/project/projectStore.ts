@@ -235,13 +235,29 @@ export function updateProject(id: string, updates: Partial<UnifiedProject>): Uni
 }
 
 export function createProjectFromQuote(
-  quote: { id: string; customerId: string; customerName: string; total: number; tradeId?: string; tradeName?: string; lines?: Array<{ description: string; total: number }> },
+  quote: {
+    id: string;
+    customerId: string;
+    customerName: string;
+    total: number;
+    tradeId?: string;
+    tradeName?: string;
+    lines?: Array<{ description: string; total: number }>;
+    bookingDeposit?: number;
+  },
   customer: { email: string; address: string; phone: string }
 ): UnifiedProject {
   const id = `P${Date.now()}`;
-  const deposit = Math.round(quote.total * 0.25);
-  const progress = Math.round(quote.total * 0.5);
-  const completion = quote.total - deposit - progress;
+  const deposit =
+    quote.bookingDeposit && quote.bookingDeposit > 0
+      ? Math.min(Math.round(quote.bookingDeposit), quote.total)
+      : Math.round(quote.total * 0.25);
+  const remainder = Math.max(0, quote.total - deposit);
+  const progress = Math.round(remainder * 0.6);
+  const completion = remainder - progress;
+  const depositPct = quote.total > 0 ? Math.round((deposit / quote.total) * 100) : 25;
+  const progressPct = quote.total > 0 ? Math.round((progress / quote.total) * 100) : 50;
+  const completionPct = Math.max(0, 100 - depositPct - progressPct);
   const start = new Date();
   const finish = new Date(Date.now() + 21 * 86400000);
   const project: UnifiedProject = {
@@ -268,9 +284,9 @@ export function createProjectFromQuote(
     ],
     tasks: [],
     paymentStages: [
-      { id: 'PS1', name: 'Deposit', percentage: 25, amount: deposit, status: 'due', dueDate: start.toISOString().split('T')[0] },
-      { id: 'PS2', name: 'Progress', percentage: 50, amount: progress, status: 'pending' },
-      { id: 'PS3', name: 'Completion', percentage: 25, amount: completion, status: 'pending', notes: 'On sign-off' },
+      { id: 'PS1', name: 'Deposit', percentage: depositPct, amount: deposit, status: 'due', dueDate: start.toISOString().split('T')[0] },
+      { id: 'PS2', name: 'Progress', percentage: progressPct, amount: progress, status: 'pending' },
+      { id: 'PS3', name: 'Completion', percentage: completionPct, amount: completion, status: 'pending', notes: 'On sign-off' },
     ],
     builderPayments: [],
     invoices: [],

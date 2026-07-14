@@ -6,8 +6,14 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Textarea } from '../ui/textarea';
-import { BadgeCheck, X, ExternalLink, FileSignature, ClipboardCheck } from 'lucide-react';
+import { BadgeCheck, X, ExternalLink, FileSignature, ClipboardCheck, Send } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  createContractDraftFromQuote,
+  resolveBookingDeposit,
+  sendPricePack,
+} from '../../engine/salesCloseFlow';
+import type { WizardAnswers } from '../../config/types';
 
 const fmt = (n: number) => `£${n.toLocaleString('en-GB', { maximumFractionDigits: 0 })}`;
 
@@ -15,9 +21,10 @@ export default function ApprovalsQueue() {
   const context = useContext(AppContext);
   const [edits, setEdits] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   if (!context) return null;
-  const { quotes, updateQuote, user } = context;
+  const { quotes, updateQuote, user, customers } = context;
 
   const pending = quotes.filter((q) => q.status === 'awaiting_approval');
   const recentlyHandled = quotes
@@ -27,6 +34,7 @@ export default function ApprovalsQueue() {
 
   const approve = (quote: Quote) => {
     const total = edits[quote.id] ?? quote.total;
+    const deposit = resolveBookingDeposit(total, quote.wizardAnswers as WizardAnswers | undefined);
     updateQuote(quote.id, {
       status: 'approved',
       total,
@@ -38,7 +46,41 @@ export default function ApprovalsQueue() {
         originalTotal: quote.approval?.originalTotal ?? quote.total,
       },
     });
-    toast.success(`Approved quote for ${quote.customerName} at ${fmt(total)}`);
+    try {
+      createContractDraftFromQuote({ ...quote, total, status: 'approved' }, deposit);
+      toast.success(`Approved ${quote.customerName} at ${fmt(total)} — contract draft ready`);
+    } catch {
+      toast.success(`Approved quote for ${quote.customerName} at ${fmt(total)}`);
+    }
+  };
+
+  const sendPack = async (quote: Quote) => {
+    const customer = customers.find((c) => c.id === quote.customerId);
+    if (!customer) {
+      toast.error('Customer not found for this quote');
+      return;
+    }
+    if (!customer.email && !customer.phone) {
+      toast.error('Customer needs an email or phone to receive the pack');
+      return;
+    }
+    setSendingId(quote.id);
+    try {
+      const approved: Quote = { ...quote, status: 'approved', total: edits[quote.id] ?? quote.total };
+      const result = await sendPricePack({
+        quote: approved,
+        customer,
+        userName: user.name,
+      });
+      if (!result.success) {
+        toast.error(result.error ?? 'Failed to send');
+        return;
+      }
+      updateQuote(quote.id, { status: 'sent', total: approved.total });
+      toast.success(result.mock ? 'Pack prepared (mock messaging)' : 'Price pack sent to customer');
+    } finally {
+      setSendingId(null);
+    }
   };
 
   const reject = (quote: Quote) => {
@@ -168,9 +210,19 @@ export default function ApprovalsQueue() {
                   <div className="flex items-center gap-2">
                     <Badge variant={quote.status === 'approved' ? 'default' : 'outline'}>{quote.status}</Badge>
                     {quote.status === 'approved' && (
-                      <Button size="sm" variant="outline" asChild>
-                        <Link to="/contracts"><FileSignature className="w-4 h-4 mr-1" /> Contract</Link>
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700"
+                          disabled={sendingId === quote.id}
+                          onClick={() => sendPack(quote)}
+                        >
+                          <Send className="w-4 h-4 mr-1" /> Send pack
+                        </Button>
+                        <Button size="sm" variant="outline" asChild>
+                          <Link to="/contracts"><FileSignature className="w-4 h-4 mr-1" /> Contracts</Link>
+                        </Button>
+                      </>
                     )}
                   </div>
                 </CardContent>

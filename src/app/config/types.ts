@@ -66,15 +66,21 @@ export interface CategoryGroup {
 export interface SurveyField {
   key: string;
   label: string;
-  type: 'select' | 'text' | 'number' | 'textarea';
+  type: 'select' | 'text' | 'number' | 'textarea' | 'toggle';
   options?: FieldOption[];
   riskWeight?: number;
   costAdjustment?: Record<string, number>;
+  required?: boolean;
+  min?: number;
+  max?: number;
+  unit?: string;
+  description?: string;
 }
 
 export interface SurveySection {
   id: string;
   title: string;
+  description?: string;
   fields: SurveyField[];
 }
 

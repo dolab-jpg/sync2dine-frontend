@@ -64,33 +64,41 @@ export default function QuotesList() {
 
   const handleSendQuote = async (quote: Quote) => {
     if (sendingId) return;
+    if (!quote.customerId) {
+      toast.error('This quote has no customer — open the quote wizard and select a customer first');
+      return;
+    }
+    const customer = customers.find(c => c.id === quote.customerId);
+    if (!customer) {
+      toast.error('Customer not found for this quote');
+      return;
+    }
+    if (!customer.email && !customer.phone) {
+      toast.error('Customer needs an email or phone number to receive the quote');
+      return;
+    }
     setSendingId(quote.id);
     try {
       updateQuote(quote.id, { status: 'sent' });
-      const customer = customers.find(c => c.id === quote.customerId);
-      if (customer) {
-        const vars = buildQuoteVariables(customer, quote, undefined, quote.discount);
-        const result = await messagingHub.send({
-          channels: ['email', 'whatsapp'],
-          to: {
-            email: customer.email,
-            phone: customer.phone,
-            customerId: customer.id,
-            customerName: customer.name,
-          },
-          subject: renderTemplate('Your Quote from {COMPANY_NAME}', vars),
-          body: renderTemplate(
-            `Dear {CUSTOMER_NAME},\n\nYour quote for £{QUOTE_TOTAL} is ready. Valid until {QUOTE_EXPIRY}.\n\nChat with Cyrus on WhatsApp for questions.`,
-            vars
-          ),
-          eventType: 'quote_sent',
-          templateId: 'quote_ready',
-        }, customer);
-        const mode = result.logs[0]?.status === 'mock' ? ' (mock)' : '';
-        toast.success(`Quote sent to ${quote.customerName}${mode}`);
-      } else {
-        toast.success(`Quote sent to ${quote.customerName}`);
-      }
+      const vars = buildQuoteVariables(customer, quote, undefined, quote.discount);
+      const result = await messagingHub.send({
+        channels: ['email', 'whatsapp'],
+        to: {
+          email: customer.email,
+          phone: customer.phone,
+          customerId: customer.id,
+          customerName: customer.name,
+        },
+        subject: renderTemplate('Your Quote from {COMPANY_NAME}', vars),
+        body: renderTemplate(
+          `Dear {CUSTOMER_NAME},\n\nYour quote for £{QUOTE_TOTAL} is ready. Valid until {QUOTE_EXPIRY}.\n\nChat with Cyrus on WhatsApp for questions.`,
+          vars
+        ),
+        eventType: 'quote_sent',
+        templateId: 'quote_ready',
+      }, customer);
+      const mode = result.logs[0]?.status === 'mock' ? ' (mock)' : '';
+      toast.success(`Quote sent to ${quote.customerName}${mode}`);
       if (selectedQuote?.id === quote.id) {
         setSelectedQuote({ ...quote, status: 'sent' });
       }

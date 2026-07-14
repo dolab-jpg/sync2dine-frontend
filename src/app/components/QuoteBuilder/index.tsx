@@ -3,7 +3,7 @@ import { AppContext } from '../../App';
 import { useParams, useNavigate, useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
-import { ChevronLeft, ChevronRight, Check, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, Sparkles, Send, ClipboardCheck, FileEdit } from 'lucide-react';
 import { toast } from 'sonner';
 import { getTrade, isValidTradeId } from '../../config/trades';
 import type { TradeId, WizardAnswers } from '../../config/types';
@@ -14,6 +14,16 @@ import { SummaryStep } from './SummaryStep';
 import { TradeSelectorStep } from './TradeSelectorStep';
 import { useAIAssistant } from '../../context/AIAssistantContext';
 import { useResolvedTrade } from '../../hooks/useResolvedTrade';
+import {
+  clearSurveyPrefill,
+  loadSurveyPrefill,
+  type SurveyQuotePrefill,
+} from '../../engine/surveyScorer';
+import {
+  needsManagerApproval,
+  resolveBookingDeposit,
+  sendPricePack,
+} from '../../engine/salesCloseFlow';
 
 export default function QuoteBuilder() {
   const context = useContext(AppContext);
@@ -23,7 +33,10 @@ export default function QuoteBuilder() {
   const ai = useAIAssistant();
   const { tradeId: resolvedTradeId } = useResolvedTrade();
   const autoNavigated = useRef(false);
+  const surveyPrefillApplied = useRef(false);
   const [showManualTradePicker, setShowManualTradePicker] = useState(false);
+  const [surveyPrefill, setSurveyPrefill] = useState<SurveyQuotePrefill | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const [tradeId, setTradeId] = useState<TradeId | null>(
     routeTradeId && isValidTradeId(routeTradeId) ? routeTradeId : null
@@ -42,12 +55,12 @@ export default function QuoteBuilder() {
   });
 
   if (!context) return null;
-  const { customers, products, pricingRules, addQuote } = context;
+  const { customers, products, pricingRules, addQuote, updateQuote, user } = context;
 
   const trade = tradeId ? getTrade(tradeId) : null;
   const showTradeSelector = !tradeId;
   const stages = trade?.wizardStages ?? [];
-  const summaryIndex = stages.findIndex(s => s.id === 'summary');
+  const summaryIndex = stages.findIndex((s) => s.id === 'summary');
   const isSummary = trade && currentStage === summaryIndex;
 
   const totals = useMemo(() => {
@@ -55,11 +68,20 @@ export default function QuoteBuilder() {
     return calculateQuote(trade.id, answers, products, pricingRules);
   }, [trade, answers, products, pricingRules]);
 
+  const gateNeeded = useMemo(() => {
+    if (!totals) return false;
+    return needsManagerApproval({
+      total: totals.total,
+      discountPct: Number(answers.discount) || 0,
+      surveyRiskScore: surveyPrefill?.riskScore,
+    });
+  }, [totals, answers.discount, surveyPrefill?.riskScore]);
+
   useEffect(() => {
     if (customerId) {
-      const customer = customers.find(c => c.id === customerId);
+      const customer = customers.find((c) => c.id === customerId);
       if (customer) {
-        setAnswers(prev => ({ ...prev, customerId, customerName: customer.name }));
+        setAnswers((prev) => ({ ...prev, customerId, customerName: customer.name }));
       }
     }
   }, [customerId, customers]);
@@ -67,10 +89,45 @@ export default function QuoteBuilder() {
   useEffect(() => {
     const prefill = searchParams.get('prefill');
     if (prefill === 'ai' && ai.pendingQuoteFields) {
-      setAnswers(prev => ({ ...prev, ...ai.pendingQuoteFields }));
+      setAnswers((prev) => ({ ...prev, ...ai.pendingQuoteFields }));
       ai.clearPendingQuoteFields();
     }
   }, [searchParams, ai]);
+
+  useEffect(() => {
+    if (surveyPrefillApplied.current) return;
+    if (searchParams.get('prefill') !== 'survey') return;
+    const data = loadSurveyPrefill();
+    if (!data) return;
+    surveyPrefillApplied.current = true;
+    setSurveyPrefill(data);
+
+    const activeTrade =
+      (routeTradeId && isValidTradeId(routeTradeId) ? routeTradeId : null) ??
+      data.tradeIds[0] ??
+      null;
+    const tradeAnswers = activeTrade ? (data.answersByTrade[activeTrade] ?? {}) : {};
+    const parking = tradeAnswers.parking ?? tradeAnswers.access;
+
+    setAnswers((prev) => ({
+      ...prev,
+      customerId: data.customerId || prev.customerId,
+      ...tradeAnswers,
+      access: parking ?? prev.access,
+      floorLocation: tradeAnswers.floorLocation ?? prev.floorLocation,
+      surveyRiskScore: data.riskScore,
+    }));
+
+    try {
+      sessionStorage.setItem('pendingJobGroupId', data.jobGroupId);
+      sessionStorage.setItem(
+        'pendingSurveyTradeIds',
+        JSON.stringify(data.tradeIds),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [searchParams, routeTradeId]);
 
   useEffect(() => {
     if (routeTradeId && isValidTradeId(routeTradeId)) {
@@ -80,8 +137,8 @@ export default function QuoteBuilder() {
     if (routeTradeId && !isValidTradeId(routeTradeId)) {
       const legacyCustomer = customers.find((c) => c.id === routeTradeId);
       if (legacyCustomer) {
-        const trade = legacyCustomer.interestedTrades?.[0] ?? 'bathroom';
-        navigate(`/quote/${trade}/${legacyCustomer.id}`, { replace: true });
+        const nextTrade = legacyCustomer.interestedTrades?.[0] ?? 'bathroom';
+        navigate(`/quote/${nextTrade}/${legacyCustomer.id}`, { replace: true });
       }
     }
   }, [routeTradeId, customers, navigate]);
@@ -93,64 +150,177 @@ export default function QuoteBuilder() {
       setTradeId(resolvedTradeId);
       const t = getTrade(resolvedTradeId);
       navigate(`/quote/${resolvedTradeId}/${customerId || ''}`.replace(/\/$/, ''), { replace: true });
-      setAnswers(prev => ({ ...prev, labourRate: t.defaultLabourRate ?? 250 }));
+      setAnswers((prev) => ({ ...prev, labourRate: t.defaultLabourRate ?? 250 }));
     }
   }, [resolvedTradeId, tradeId, customerId, navigate]);
 
-  const handleComplete = () => {
-    if (!trade || !totals) return;
-    const customer = customers.find(c => c.id === String(answers.customerId));
-    if (!customer) {
-      toast.error('Please select a customer');
-      return;
-    }
+  /** When switching trade within a survey multi-trade loop, merge that trade's survey answers. */
+  useEffect(() => {
+    if (!tradeId || !surveyPrefill) return;
+    const tradeAnswers = surveyPrefill.answersByTrade[tradeId];
+    if (!tradeAnswers) return;
+    setAnswers((prev) => ({
+      ...prev,
+      ...tradeAnswers,
+      access: tradeAnswers.parking ?? tradeAnswers.access ?? prev.access,
+      customerId: surveyPrefill.customerId || prev.customerId,
+      labourRate: getTrade(tradeId).defaultLabourRate ?? prev.labourRate,
+    }));
+  }, [tradeId, surveyPrefill]);
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
-
-    let groupId = ai.jobGroupId;
+  const resolveJobGroupId = (): string | undefined => {
+    let groupId = ai.jobGroupId ?? surveyPrefill?.jobGroupId;
     if (!groupId) {
       try {
         groupId = sessionStorage.getItem('pendingJobGroupId') ?? undefined;
-        if (groupId) sessionStorage.removeItem('pendingJobGroupId');
       } catch {
-        // ignore
+        /* ignore */
       }
     }
+    return groupId ?? undefined;
+  };
 
-    addQuote({
-      tradeId: trade.id,
-      tradeName: trade.name,
-      customerId: customer.id,
-      customerName: customer.name,
-      expiresAt: expiresAt.toISOString(),
-      items: totals.items,
-      labour: totals.labour,
-      extras: totals.extras,
-      discount: Number(answers.discount) || 0,
-      total: totals.total,
-      status: 'draft',
-      wizardAnswers: answers,
-      aiAcceptedFields: ai.lastAcceptedFields,
-      jobGroupId: groupId ?? undefined,
+  const remainingSurveyTrades = (currentTrade: TradeId): TradeId[] => {
+    let ids: TradeId[] = surveyPrefill?.tradeIds ?? [];
+    if (!ids.length) {
+      try {
+        const raw = sessionStorage.getItem('pendingSurveyTradeIds');
+        if (raw) ids = JSON.parse(raw) as TradeId[];
+      } catch {
+        /* ignore */
+      }
+    }
+    const customer = customers.find((c) => c.id === String(answers.customerId));
+    const interested = customer?.interestedTrades ?? [];
+    const pool = ids.length ? ids : interested;
+    return pool.filter((tid) => tid !== currentTrade);
+  };
+
+  const offerNextTrade = (customerIdForNav: string, currentTrade: TradeId) => {
+    const remaining = remainingSurveyTrades(currentTrade);
+    if (remaining.length === 0) {
+      clearSurveyPrefill();
+      try {
+        sessionStorage.removeItem('pendingSurveyTradeIds');
+        sessionStorage.removeItem('pendingJobGroupId');
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    const next = remaining[0];
+    const nextTrade = getTrade(next);
+    toast(`Next trade quote: ${nextTrade.name}`, {
+      action: {
+        label: 'Open',
+        onClick: () =>
+          navigate(
+            `/quote/${next}/${customerIdForNav}${surveyPrefill ? '?prefill=survey' : ''}`,
+          ),
+      },
+      duration: 10000,
+    });
+  };
+
+  const buildQuotePayload = (status: 'draft' | 'awaiting_approval' | 'sent' | 'approved') => {
+    if (!trade || !totals) return null;
+    const customer = customers.find((c) => c.id === String(answers.customerId));
+    if (!customer) {
+      toast.error('Please select a customer');
+      return null;
+    }
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+    const deposit = resolveBookingDeposit(totals.total, {
+      ...answers,
+      bookingDeposit: Number(answers.bookingDeposit) || Math.round(totals.total * 0.25),
     });
 
-    toast.success('Quote created successfully!');
+    return {
+      customer,
+      deposit,
+      payload: {
+        tradeId: trade.id,
+        tradeName: trade.name,
+        customerId: customer.id,
+        customerName: customer.name,
+        expiresAt: expiresAt.toISOString(),
+        items: totals.items,
+        labour: totals.labour,
+        extras: totals.extras,
+        discount: Number(answers.discount) || 0,
+        total: totals.total,
+        status,
+        wizardAnswers: { ...answers, bookingDeposit: deposit },
+        aiAcceptedFields: ai.lastAcceptedFields,
+        jobGroupId: resolveJobGroupId(),
+        approval:
+          status === 'awaiting_approval'
+            ? { state: 'pending' as const, originalTotal: totals.total }
+            : status === 'approved'
+              ? {
+                  state: 'approved' as const,
+                  by: 'auto',
+                  at: new Date().toISOString(),
+                  originalTotal: totals.total,
+                  note: 'Below approval threshold',
+                }
+              : undefined,
+      },
+    };
+  };
 
-    const interested = customer.interestedTrades ?? [];
-    const remaining = interested.filter(tid => tid !== trade.id);
-    if (remaining.length > 0) {
-      const nextTrade = getTrade(remaining[0]);
-      toast(`Start next quote: ${nextTrade.name}?`, {
-        action: {
-          label: 'Open',
-          onClick: () => navigate(`/quote/${remaining[0]}/${customer.id}`),
-        },
-        duration: 8000,
-      });
-    }
-
+  const handleSaveDraft = () => {
+    const built = buildQuotePayload('draft');
+    if (!built || !trade) return;
+    addQuote(built.payload);
+    toast.success('Quote saved as draft');
+    offerNextTrade(built.customer.id, trade.id);
     navigate('/quotes');
+  };
+
+  const handleSubmitForApproval = () => {
+    const built = buildQuotePayload('awaiting_approval');
+    if (!built || !trade) return;
+    addQuote(built.payload);
+    toast.success('Submitted for senior manager approval');
+    offerNextTrade(built.customer.id, trade.id);
+    navigate('/approvals');
+  };
+
+  const handleSendPricePack = async () => {
+    if (!trade || !totals) return;
+    setBusy(true);
+    try {
+      const status = gateNeeded ? 'awaiting_approval' : 'approved';
+      if (gateNeeded) {
+        handleSubmitForApproval();
+        return;
+      }
+      const built = buildQuotePayload(status);
+      if (!built) return;
+      const quote = addQuote({ ...built.payload, status: 'sent' });
+      const result = await sendPricePack({
+        quote,
+        customer: built.customer,
+        userName: user.name,
+        depositAmount: built.deposit,
+      });
+      if (!result.success) {
+        updateQuote(quote.id, { status: 'approved' });
+        toast.error(result.error ?? 'Could not send to customer');
+        return;
+      }
+      toast.success(
+        result.mock
+          ? 'Price pack ready (messaging in mock mode) — contract link created'
+          : 'Price pack sent to customer for signature',
+      );
+      offerNextTrade(built.customer.id, trade.id);
+      navigate('/quotes');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const totalStages = showTradeSelector ? 1 : stages.length;
@@ -167,6 +337,17 @@ export default function QuoteBuilder() {
             <CardTitle className="text-3xl font-bold">
               {showTradeSelector ? 'New Quote' : `${trade?.name} Quote — ${stageTitle}`}
             </CardTitle>
+            {surveyPrefill && (
+              <p className="text-amber-200 text-sm mt-2">
+                Prefilling from site survey
+                {surveyPrefill.tradeIds.length > 1
+                  ? ` (${surveyPrefill.tradeIds.length} trades)`
+                  : ''}
+                {surveyPrefill.riskScore != null
+                  ? ` · risk ${surveyPrefill.riskScore}`
+                  : ''}
+              </p>
+            )}
           </CardHeader>
           <CardContent className="p-8 min-h-[500px]">
             {showTradeSelector && !showManualTradePicker && (
@@ -191,12 +372,12 @@ export default function QuoteBuilder() {
             {showTradeSelector && showManualTradePicker && (
               <TradeSelectorStep
                 selected={tradeId ?? undefined}
-                onSelect={id => {
+                onSelect={(id) => {
                   setTradeId(id);
                   setCurrentStage(0);
                   const t = getTrade(id);
                   navigate(`/quote/${id}/${customerId || ''}`.replace(/\/$/, ''), { replace: true });
-                  setAnswers(prev => ({ ...prev, labourRate: t.defaultLabourRate ?? 250 }));
+                  setAnswers((prev) => ({ ...prev, labourRate: t.defaultLabourRate ?? 250 }));
                 }}
               />
             )}
@@ -211,25 +392,81 @@ export default function QuoteBuilder() {
               />
             )}
             {trade && isSummary && totals && (
-              <SummaryStep answers={answers} totals={totals} onChange={setAnswers} />
+              <SummaryStep
+                answers={answers}
+                totals={totals}
+                onChange={setAnswers}
+                needsApproval={gateNeeded}
+                surveyRiskScore={surveyPrefill?.riskScore}
+              />
             )}
           </CardContent>
         </Card>
 
-        <div className="flex gap-4 mt-6 mb-24">
+        <div className="flex flex-wrap gap-3 mt-6 mb-28">
           {!showTradeSelector && currentStage > 0 && (
-            <Button onClick={() => setCurrentStage(currentStage - 1)} size="lg" className="flex-1 text-xl py-8 rounded-2xl bg-slate-700 hover:bg-slate-800">
-              <ChevronLeft className="w-6 h-6 mr-2" /> Previous
+            <Button
+              onClick={() => setCurrentStage(currentStage - 1)}
+              size="lg"
+              className="flex-1 min-w-[140px] text-lg py-6 rounded-2xl bg-slate-700 hover:bg-slate-800"
+            >
+              <ChevronLeft className="w-5 h-5 mr-2" /> Previous
             </Button>
           )}
           {showTradeSelector ? null : currentStage < stages.length - 1 ? (
-            <Button onClick={() => setCurrentStage(currentStage + 1)} size="lg" className="flex-1 text-xl py-8 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600">
-              Next <ChevronRight className="w-6 h-6 ml-2" />
+            <Button
+              onClick={() => setCurrentStage(currentStage + 1)}
+              size="lg"
+              className="flex-1 min-w-[140px] text-lg py-6 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600"
+            >
+              Next <ChevronRight className="w-5 h-5 ml-2" />
             </Button>
           ) : (
-            <Button onClick={handleComplete} size="lg" className="flex-1 text-xl py-8 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600">
-              <Check className="w-6 h-6 mr-2" /> Create Quote
-            </Button>
+            <>
+              <Button
+                onClick={handleSaveDraft}
+                size="lg"
+                variant="outline"
+                className="flex-1 min-w-[140px] text-lg py-6 rounded-2xl bg-white"
+                disabled={busy}
+              >
+                <Check className="w-5 h-5 mr-2" /> Save draft
+              </Button>
+              {gateNeeded ? (
+                <Button
+                  onClick={handleSubmitForApproval}
+                  size="lg"
+                  className="flex-1 min-w-[160px] text-lg py-6 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600"
+                  disabled={busy}
+                >
+                  <ClipboardCheck className="w-5 h-5 mr-2" /> Submit for approval
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSendPricePack}
+                  size="lg"
+                  className="flex-1 min-w-[160px] text-lg py-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600"
+                  disabled={busy}
+                >
+                  <Send className="w-5 h-5 mr-2" /> Send price pack
+                </Button>
+              )}
+              <Button
+                onClick={() =>
+                  navigate(
+                    `/quote-lines/${answers.customerId || ''}${tradeId ? `?tradeId=${tradeId}` : ''}`.replace(
+                      /\/$/,
+                      '',
+                    ),
+                  )
+                }
+                size="lg"
+                variant="ghost"
+                className="text-white/80"
+              >
+                <FileEdit className="w-4 h-4 mr-2" /> Line editor
+              </Button>
+            </>
           )}
         </div>
 
@@ -242,7 +479,9 @@ export default function QuoteBuilder() {
               </div>
               <div className="text-right">
                 <p className="text-sm opacity-75">{trade.name}</p>
-                <p className="text-lg font-bold text-amber-400">{String(answers.customerName) || 'No customer'}</p>
+                <p className="text-lg font-bold text-amber-400">
+                  {String(answers.customerName) || 'No customer'}
+                </p>
               </div>
             </div>
           </div>

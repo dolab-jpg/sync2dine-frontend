@@ -68,6 +68,7 @@ export default function ComprehensiveCRM() {
   const handleScheduleVisit = () => {
     if (!selectedLead) return;
     updateCustomer(selectedLead.id, { lastContact: new Date().toISOString() });
+    const full = customers.find((c) => c.id === selectedLead.id);
     navigate('/site-survey', {
       state: {
         customer: {
@@ -76,6 +77,7 @@ export default function ComprehensiveCRM() {
           email: selectedLead.email,
           phone: selectedLead.phone,
           address: selectedLead.address,
+          interestedTrades: full?.interestedTrades ?? (selectedLead.tradeId ? [selectedLead.tradeId] : []),
         },
       },
     });

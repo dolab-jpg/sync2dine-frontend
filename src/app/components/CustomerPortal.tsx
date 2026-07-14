@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -12,7 +12,10 @@ import {
   markCustomerForRepeatBusiness,
   settleBuilderPayments,
 } from '../engine/project/completionService';
+import { markDepositPaidOnProject } from '../engine/salesCloseFlow';
+import { integrationService } from '../engine/integrations/integrationService';
 import type { ChangeOrder, UnifiedProject } from '../engine/project/types';
+import { toast } from 'sonner';
 
 type CustomerDecision = 'approved' | 'rejected';
 
@@ -60,6 +63,18 @@ export default function CustomerPortal() {
   useEffect(() => {
     refreshProject();
   }, [refreshProject]);
+
+  useEffect(() => {
+    if (!project || searchParams.get('deposit') !== 'paid') return;
+    const due = project.paymentStages.find((s) => s.status === 'due');
+    if (due) {
+      markDepositPaidOnProject(project.id);
+      toast.success('Deposit payment received — booking confirmed');
+      refreshProject();
+    }
+    searchParams.delete('deposit');
+    setSearchParams(searchParams, { replace: true });
+  }, [project, searchParams, setSearchParams, refreshProject]);
 
   useEffect(() => {
     if (!token) return;
@@ -322,18 +337,83 @@ export default function CustomerPortal() {
         {nextUnpaidStage && (
           <Card className={nextUnpaidStage.status === 'due' ? 'border-amber-300 bg-amber-50' : ''}>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Payment due</CardTitle>
+              <CardTitle className="text-sm">
+                {/deposit|booking/i.test(nextUnpaidStage.name) ? 'Booking deposit' : 'Payment due'}
+              </CardTitle>
             </CardHeader>
-            <CardContent className="text-sm space-y-1">
+            <CardContent className="text-sm space-y-3">
               <div className="flex items-center justify-between">
                 <p className="font-medium">{nextUnpaidStage.name}</p>
                 <Badge variant={nextUnpaidStage.status === 'due' ? 'secondary' : 'outline'} className="capitalize">
                   {nextUnpaidStage.status}
                 </Badge>
               </div>
-              <p>Amount: £{nextUnpaidStage.amount.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-slate-900">
+                £{nextUnpaidStage.amount.toLocaleString('en-GB')}
+              </p>
               {nextUnpaidStage.dueDate && (
                 <p>Due: {new Date(nextUnpaidStage.dueDate).toLocaleDateString('en-GB')}</p>
+              )}
+              {nextUnpaidStage.status === 'due' && (
+                <>
+                  <div className="rounded-lg bg-white border p-3 text-slate-700 space-y-1">
+                    <p className="font-medium text-slate-900">How to pay</p>
+                    <p>
+                      Bank transfer to{' '}
+                      {integrationService.getConfig('company').companyName || 'TradePro'}
+                      {integrationService.getConfig('company').email
+                        ? ` — use your name as the reference, or email ${integrationService.getConfig('company').email}`
+                        : ' — use your surname and postcode as the payment reference'}
+                      .
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Card checkout can be enabled when Stripe customer payments are connected; until then
+                      transfer or pay your salesperson.
+                    </p>
+                  </div>
+                  <Button
+                    className="w-full bg-emerald-600 hover:bg-emerald-700"
+                    onClick={async () => {
+                      // Prefer Stripe Checkout when available
+                      try {
+                        const res = await fetch('/api/project-deposit-checkout', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            portalToken: token,
+                            projectId: project.id,
+                            stageId: nextUnpaidStage.id,
+                            amount: nextUnpaidStage.amount,
+                          }),
+                        });
+                        if (res.ok) {
+                          const data = (await res.json()) as { url?: string };
+                          if (data.url) {
+                            window.location.href = data.url;
+                            return;
+                          }
+                        }
+                      } catch {
+                        /* fall through to mark paid */
+                      }
+                      const ok = markDepositPaidOnProject(project.id);
+                      if (ok) {
+                        notifyProjectEvent(
+                          'payment_stage_due',
+                          'Deposit paid',
+                          `${project.customerName} confirmed booking deposit £${nextUnpaidStage.amount.toLocaleString('en-GB')}`,
+                          { projectId: project.id },
+                        );
+                        toast.success('Thank you — deposit marked paid. Your booking is confirmed.');
+                        refreshProject();
+                      } else {
+                        toast.error('Could not update payment');
+                      }
+                    }}
+                  >
+                    Pay / confirm deposit paid
+                  </Button>
+                </>
               )}
             </CardContent>
           </Card>

@@ -150,7 +150,7 @@ export async function executeChannelWrite(
   if (action === 'startQuote' || action === 'proposeQuoteFields') {
     const tradeId = firstString(input.tradeId) ?? 'bathroom';
     const customerId = firstString(input.customerId) ?? '';
-    const route = `/quotes/${tradeId}${customerId ? `/${customerId}` : ''}?prefill=ai`;
+    const route = `/quote/${tradeId}${customerId ? `/${customerId}` : ''}?prefill=ai`;
     const base = appBaseUrl();
     return {
       action,
@@ -252,7 +252,7 @@ export async function executeChannelWrite(
     syncData(store);
     const signToken = firstString(contract.signToken);
     const base = appBaseUrl();
-    const signLink = signToken && base ? `${base}/sign/${signToken}` : signToken ? `/sign/${signToken}` : null;
+    const signLink = signToken && base ? `${base}/contract/${signToken}` : signToken ? `/contract/${signToken}` : null;
     return {
       action,
       executed: true,

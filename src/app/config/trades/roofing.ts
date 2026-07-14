@@ -1,5 +1,17 @@
 import type { TradeConfig } from '../types';
-import { additionsStage, baseSurveySections, customerStage, DEFAULT_SITE_UPLIFTS, finishPickerStage, measurementStage, siteConditionsStage, summaryStage } from './shared';
+import {
+  additionsStage,
+  composeSurveySections,
+  customerStage,
+  DEFAULT_SITE_UPLIFTS,
+  finishPickerStage,
+  measurementStage,
+  siteConditionsStage,
+  summaryStage,
+  SURVEY_CONDITION,
+  SURVEY_YES_NO,
+  SURVEY_YES_NO_UNKNOWN,
+} from './shared';
 
 const finishOptions = [
   { value: 'concrete-tile', label: 'Concrete Tiles', price: 55 },
@@ -52,7 +64,71 @@ export const roofingConfig: TradeConfig = {
   ],
   productCategoryGroups: [{ id: 'roofing', label: 'Roofing', categories: ['tile', 'slate', 'membrane', 'gutter', 'fascia'] }],
   pricingCategories: ['labour', 'finish', 'prep', 'feature'],
-  surveySections: baseSurveySections(),
+  surveySections: composeSurveySections(
+    [
+      {
+        id: 'roof',
+        title: 'Roof condition',
+        fields: [
+          {
+            key: 'roofType',
+            label: 'Roof type',
+            type: 'select',
+            options: [
+              { value: 'pitched', label: 'Pitched' },
+              { value: 'flat', label: 'Flat' },
+              { value: 'mixed', label: 'Mixed' },
+            ],
+          },
+          {
+            key: 'coveringCondition',
+            label: 'Covering condition',
+            type: 'select',
+            options: SURVEY_CONDITION,
+            costAdjustment: { poor: 400 },
+            riskWeight: 12,
+          },
+          {
+            key: 'leaks',
+            label: 'Active leaks / water ingress?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 350 },
+            riskWeight: 16,
+          },
+          {
+            key: 'scaffoldingNeeded',
+            label: 'Full scaffolding likely?',
+            type: 'select',
+            options: SURVEY_YES_NO_UNKNOWN,
+            costAdjustment: { yes: 1200 },
+            riskWeight: 10,
+          },
+          {
+            key: 'storeys',
+            label: 'Building storeys',
+            type: 'select',
+            options: [
+              { value: '1', label: 'Bungalow / 1 storey' },
+              { value: '2', label: '2 storey' },
+              { value: '3plus', label: '3+ storey' },
+            ],
+            costAdjustment: { '3plus': 500 },
+            riskWeight: 12,
+          },
+          {
+            key: 'chimneyPresent',
+            label: 'Chimney / abutment works?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 400 },
+            riskWeight: 8,
+          },
+        ],
+      },
+    ],
+    { includeHeight: false, photoLabel: 'Roof elevations and defects' },
+  ),
   labourRules: [
     { key: 'labourDays', description: 'Roofing labour', rateType: 'per_day', baseRate: 280, formula: 'ceil(area/15)+2', dependsOn: ['area'] },
     { key: 'materials', description: 'Roofing materials', rateType: 'per_sqm', baseRate: 18, dependsOn: ['area'] },

@@ -1,5 +1,18 @@
 import type { TradeConfig } from '../types';
-import { additionsStage, baseSurveySections, customerStage, DEFAULT_SITE_UPLIFTS, finishPickerStage, measurementStage, productPickerStage, siteConditionsStage, summaryStage } from './shared';
+import {
+  additionsStage,
+  composeSurveySections,
+  customerStage,
+  DEFAULT_SITE_UPLIFTS,
+  finishPickerStage,
+  measurementStage,
+  productPickerStage,
+  siteConditionsStage,
+  summaryStage,
+  SURVEY_CONDITION,
+  SURVEY_YES_NO,
+  SURVEY_YES_NO_UNKNOWN,
+} from './shared';
 
 const finishOptions = [
   { value: 'laminate', label: 'Laminate Worktop', price: 45 },
@@ -49,7 +62,55 @@ export const kitchenConfig: TradeConfig = {
     { id: 'worktops', label: 'Worktops', categories: ['worktop', 'splashback'] },
   ],
   pricingCategories: ['labour', 'finish', 'prep', 'electrical', 'plumbing', 'feature'],
-  surveySections: baseSurveySections(),
+  surveySections: composeSurveySections(
+    [
+      {
+        id: 'layout',
+        title: 'Kitchen layout',
+        fields: [
+          {
+            key: 'layoutType',
+            label: 'Layout',
+            type: 'select',
+            options: [
+              { value: 'galley', label: 'Galley' },
+              { value: 'l', label: 'L-shape' },
+              { value: 'u', label: 'U-shape' },
+              { value: 'island', label: 'With island' },
+              { value: 'other', label: 'Other' },
+            ],
+          },
+          {
+            key: 'wallsMoving',
+            label: 'Walls / openings changing?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 1200 },
+            riskWeight: 18,
+          },
+          {
+            key: 'servicesMoving',
+            label: 'Sink / gas / electric positions moving?',
+            type: 'select',
+            options: SURVEY_YES_NO,
+            costAdjustment: { yes: 650 },
+            riskWeight: 14,
+          },
+        ],
+      },
+      {
+        id: 'services',
+        title: 'Services',
+        fields: [
+          { key: 'gasPresent', label: 'Gas supply present?', type: 'select', options: SURVEY_YES_NO_UNKNOWN },
+          { key: 'extractorDuct', label: 'Extractor ducting viable?', type: 'select', options: SURVEY_YES_NO_UNKNOWN, costAdjustment: { no: 280 }, riskWeight: 8 },
+          { key: 'floorLevel', label: 'Floor level for units', type: 'select', options: SURVEY_CONDITION, costAdjustment: { poor: 350 }, riskWeight: 10 },
+          { key: 'wallCondition', label: 'Wall / tile condition for new units', type: 'select', options: SURVEY_CONDITION, costAdjustment: { poor: 250 }, riskWeight: 8 },
+        ],
+      },
+    ],
+    { photoLabel: 'Current kitchen' },
+  ),
   labourRules: [
     { key: 'labourDays', description: 'Kitchen installation', rateType: 'per_day', baseRate: 280, formula: 'ceil(area/4)+3', dependsOn: ['area'] },
     { key: 'materials', description: 'Fixings & materials', rateType: 'per_sqm', baseRate: 35, dependsOn: ['area'] },

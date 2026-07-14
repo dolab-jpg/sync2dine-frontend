@@ -2,14 +2,27 @@ import type { QuoteCalculationResult } from '../../config/types';
 import type { WizardAnswers } from '../../config/types';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { AlertTriangle, Send } from 'lucide-react';
+import {
+  APPROVAL_DISCOUNT_THRESHOLD,
+  APPROVAL_TOTAL_THRESHOLD,
+} from '../../engine/salesCloseFlow';
 
 interface SummaryStepProps {
   answers: WizardAnswers;
   totals: QuoteCalculationResult;
   onChange: (answers: WizardAnswers) => void;
+  needsApproval?: boolean;
+  surveyRiskScore?: number;
 }
 
-export function SummaryStep({ answers, totals, onChange }: SummaryStepProps) {
+export function SummaryStep({
+  answers,
+  totals,
+  onChange,
+  needsApproval,
+  surveyRiskScore,
+}: SummaryStepProps) {
   const area = Number(answers.area) || 0;
   const labourDays = Number(answers.labourDays) || 0;
 
@@ -19,6 +32,30 @@ export function SummaryStep({ answers, totals, onChange }: SummaryStepProps) {
         <p className="text-2xl mb-2 opacity-90">Total Project Cost</p>
         <p className="text-7xl font-bold">£{totals.total.toFixed(0)}</p>
       </div>
+
+      {needsApproval ? (
+        <div className="flex gap-3 p-4 rounded-2xl border-2 border-amber-400 bg-amber-50 text-amber-950">
+          <AlertTriangle className="w-6 h-6 shrink-0" />
+          <div className="text-sm">
+            <p className="font-bold">Senior approval required before sending</p>
+            <p className="mt-1">
+              Triggers when total ≥ £{APPROVAL_TOTAL_THRESHOLD.toLocaleString('en-GB')}, discount &gt;{' '}
+              {APPROVAL_DISCOUNT_THRESHOLD}%
+              {surveyRiskScore != null ? `, or survey risk is high (${surveyRiskScore})` : ''}.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex gap-3 p-4 rounded-2xl border-2 border-emerald-300 bg-emerald-50 text-emerald-950">
+          <Send className="w-6 h-6 shrink-0" />
+          <div className="text-sm">
+            <p className="font-bold">Ready to send price pack</p>
+            <p className="mt-1">
+              Customer will get the quote total and a contract link to sign, then pay the booking deposit.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl space-y-4">
         <h3 className="text-2xl font-bold text-slate-800 mb-4">Breakdown</h3>

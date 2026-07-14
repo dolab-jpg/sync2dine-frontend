@@ -6,6 +6,7 @@ import CustomerManagement from './components/CustomerManagement';
 import BathroomDesigner from './components/BathroomDesigner';
 import ProductCatalog from './components/ProductCatalog';
 import QuoteBuilder from './components/QuoteBuilder';
+import QuoteLineBuilder from './components/QuoteLineBuilder';
 import { AIAssistantProvider } from './context/AIAssistantContext';
 import { allTradeProducts, tradePricingRules } from './data/tradeProducts';
 import type { TradeId } from './config/types';
@@ -310,7 +311,7 @@ export interface AppContextType {
   addProduct: (product: Omit<Product, 'id' | 'sellPrice'>) => void;
   updateProduct: (id: string, product: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
-  addQuote: (quote: Omit<Quote, 'id' | 'createdAt'>) => void;
+  addQuote: (quote: Omit<Quote, 'id' | 'createdAt'>) => Quote;
   updateQuote: (id: string, quote: Partial<Quote>) => void;
   deleteQuote: (id: string) => void;
   addPricingRule: (rule: Omit<PricingRule, 'id'>) => void;
@@ -650,6 +651,28 @@ export default function App() {
     return unsub;
   }, []);
 
+  // Refresh from localStorage when contract sign closes a deal in another view
+  useEffect(() => {
+    const onQuotes = () => {
+      try {
+        const saved = localStorage.getItem('quotes');
+        if (saved) setQuotes(migrateQuotes(JSON.parse(saved)));
+      } catch { /* ignore */ }
+    };
+    const onCustomers = () => {
+      try {
+        const saved = localStorage.getItem('customers');
+        if (saved) setCustomers(mergeCrmLeads(migrateCustomers(JSON.parse(saved))));
+      } catch { /* ignore */ }
+    };
+    window.addEventListener('tradepro:quotes-updated', onQuotes);
+    window.addEventListener('tradepro:customers-updated', onCustomers);
+    return () => {
+      window.removeEventListener('tradepro:quotes-updated', onQuotes);
+      window.removeEventListener('tradepro:customers-updated', onCustomers);
+    };
+  }, []);
+
   // Persist — Supabase when configured; localStorage only in offline dev
   useEffect(() => {
     if (useCloudPersistence()) {
@@ -755,9 +778,9 @@ export default function App() {
     setProducts(products.filter(p => p.id !== id));
   };
 
-  const addQuote = (quote: Omit<Quote, 'id' | 'createdAt'>) => {
+  const addQuote = (quote: Omit<Quote, 'id' | 'createdAt'>): Quote => {
     const lines = quote.lines?.length ? quote.lines : migrateQuoteToLines(quote as Quote);
-    const newQuote = {
+    const newQuote: Quote = {
       ...quote,
       lines,
       id: Date.now().toString(),
@@ -771,6 +794,7 @@ export default function App() {
         return prev.map((c) => (c.id === quote.customerId ? { ...c, ...patch } : c));
       });
     }
+    return newQuote;
   };
 
   const updateQuote = (id: string, updates: Partial<Quote>) => {
@@ -1043,6 +1067,10 @@ export default function App() {
               <Route
                 path="/quote/:tradeId?/:customerId?"
                 element={<ProtectedRoute element={<QuoteBuilder />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/quote-lines/:customerId?"
+                element={<ProtectedRoute element={<QuoteLineBuilder />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route
                 path="/ai-estimate/:tradeId?/:customerId?"

@@ -93,30 +93,104 @@ export function countStage(key: string, label: string, description: string, min 
   };
 }
 
-export function baseSurveySections(): SurveySection[] {
+const YES_NO: FieldOption[] = [
+  { value: 'yes', label: 'Yes' },
+  { value: 'no', label: 'No' },
+];
+
+const YES_NO_UNKNOWN: FieldOption[] = [
+  ...YES_NO,
+  { value: 'unknown', label: 'Unknown' },
+];
+
+const CONDITION_OPTIONS: FieldOption[] = [
+  { value: 'good', label: 'Good' },
+  { value: 'fair', label: 'Fair' },
+  { value: 'poor', label: 'Poor' },
+];
+
+/** Shared measurements + access used across trades. Trade-specific sections append after these. */
+export function baseSurveySections(opts?: { includeHeight?: boolean }): SurveySection[] {
+  const includeHeight = opts?.includeHeight !== false;
   return [
     {
       id: 'measurements',
       title: 'Measurements',
+      description: 'Record approximate sizes for quoting',
       fields: [
-        { key: 'length', label: 'Length (m)', type: 'number' },
-        { key: 'width', label: 'Width (m)', type: 'number' },
-        { key: 'height', label: 'Height (m)', type: 'number' },
+        { key: 'length', label: 'Length (m)', type: 'number', min: 0.5, max: 100, unit: 'm', required: true },
+        { key: 'width', label: 'Width (m)', type: 'number', min: 0.5, max: 100, unit: 'm', required: true },
+        ...(includeHeight
+          ? [{ key: 'height', label: 'Height (m)', type: 'number' as const, min: 1.5, max: 8, unit: 'm' }]
+          : []),
       ],
     },
     {
       id: 'access',
-      title: 'Access',
+      title: 'Access & Site',
+      description: 'Access constraints affect labour and logistics',
       fields: [
-        { key: 'floorLocation', label: 'Floor Location', type: 'select', options: SITE_ACCESS_OPTIONS },
-        { key: 'parking', label: 'Parking', type: 'select', options: PARKING_OPTIONS },
+        { key: 'floorLocation', label: 'Floor / level', type: 'select', options: SITE_ACCESS_OPTIONS, required: true },
+        { key: 'parking', label: 'Parking & vehicle access', type: 'select', options: PARKING_OPTIONS, required: true, costAdjustment: { limited: 150, difficult: 300 }, riskWeight: 8 },
+        {
+          key: 'wasteAccess',
+          label: 'Waste / skip access',
+          type: 'select',
+          options: [
+            { value: 'easy', label: 'Easy — driveway/front' },
+            { value: 'restricted', label: 'Restricted' },
+            { value: 'none', label: 'No skip space' },
+          ],
+          costAdjustment: { restricted: 120, none: 250 },
+          riskWeight: 6,
+        },
+        {
+          key: 'occupantPresent',
+          label: 'Property occupied during works?',
+          type: 'select',
+          options: YES_NO,
+        },
       ],
     },
-    {
-      id: 'notes',
-      title: 'Notes',
-      fields: [{ key: 'additionalNotes', label: 'Additional Notes', type: 'textarea' }],
-    },
+  ];
+}
+
+export function surveyNotesSection(): SurveySection {
+  return {
+    id: 'notes',
+    title: 'Notes',
+    description: 'Anything else that affects price or programme',
+    fields: [{ key: 'additionalNotes', label: 'Additional notes', type: 'textarea' }],
+  };
+}
+
+export function surveyPhotosHintSection(label = 'Current site condition'): SurveySection {
+  return {
+    id: 'photos',
+    title: 'Photos',
+    description: `Capture ${label.toLowerCase()} for the quote and approval pack`,
+    fields: [
+      {
+        key: 'photoNotes',
+        label: 'Photo / condition notes',
+        type: 'textarea',
+        description: 'List what was photographed or key defects visible',
+      },
+    ],
+  };
+}
+
+export const SURVEY_YES_NO = YES_NO;
+export const SURVEY_YES_NO_UNKNOWN = YES_NO_UNKNOWN;
+export const SURVEY_CONDITION = CONDITION_OPTIONS;
+
+/** Compose trade survey: base + trade sections + photos + notes */
+export function composeSurveySections(tradeSections: SurveySection[], opts?: { includeHeight?: boolean; photoLabel?: string }): SurveySection[] {
+  return [
+    ...baseSurveySections({ includeHeight: opts?.includeHeight }),
+    ...tradeSections,
+    surveyPhotosHintSection(opts?.photoLabel),
+    surveyNotesSection(),
   ];
 }
 

@@ -18,11 +18,12 @@ import { renderTemplate, buildQuoteVariables } from '../engine/messaging/templat
 import { generateQuotePdfStub } from '../engine/messaging/pdfGenerator';
 import type { MessageChannel } from '../engine/messaging/types';
 
-export default function QuoteBuilder() {
+export default function QuoteLineBuilder() {
   const context = useContext(AppContext);
-  const { customerId, tradeId: routeTradeId } = useParams();
+  const { customerId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const routeTradeId = searchParams.get('tradeId') ?? undefined;
 
   if (!context) return null;
 
@@ -102,7 +103,14 @@ export default function QuoteBuilder() {
   const confirmSendQuote = async () => {
     if (!selectedCustomerId) return;
     const customer = customers.find(c => c.id === selectedCustomerId);
-    if (!customer) return;
+    if (!customer) {
+      toast.error('Customer not found');
+      return;
+    }
+    if (!customer.email && !customer.phone) {
+      toast.error('Customer needs an email or phone to receive the quote');
+      return;
+    }
 
     const quoteData = buildQuotePayload('sent');
     addQuote(quoteData);
