@@ -86,10 +86,10 @@ export default function ChangeOrders() {
       .filter((row) => (
         user.role !== 'customer'
           ? true
-          : row.customerName === user.name && row.order.status !== 'proposed'
+          : row.order.status !== 'proposed'
       ))
       .sort((a, b) => new Date(b.order.createdAt).getTime() - new Date(a.order.createdAt).getTime())
-  ), [rows, user.name, user.role]);
+  ), [rows, user.role]);
 
   const proposedCount = visibleRows.filter((row) => row.order.status === 'proposed').length;
   const pendingCustomerCount = visibleRows.filter((row) => row.order.status === 'pending_customer').length;
@@ -186,6 +186,54 @@ export default function ChangeOrders() {
       return;
     }
     toast.success('Change order rejected.');
+    refreshProjects();
+    void syncToServer();
+  };
+
+  const handleCustomerDecision = (projectId: string, changeOrderId: string, decision: 'approved' | 'rejected') => {
+    if (user.role !== 'customer') return;
+    const project = projects.find((item) => item.id === projectId);
+    if (!project?.changeOrders) return;
+    const selectedOrder = project.changeOrders.find((order) => order.id === changeOrderId);
+    if (!selectedOrder || selectedOrder.status !== 'pending_customer') return;
+
+    const now = new Date().toISOString();
+    const isApproved = decision === 'approved';
+    const nextPaymentStages = isApproved
+      ? [
+          ...project.paymentStages,
+          {
+            id: `PS_CO_${Date.now()}`,
+            name: `Change order - ${selectedOrder.title}`,
+            percentage: 0,
+            amount: selectedOrder.amount,
+            status: 'pending' as const,
+            notes: 'Added automatically after approved change order',
+          },
+        ]
+      : project.paymentStages;
+
+    const updated = updateProject(projectId, {
+      changeOrders: project.changeOrders.map((order) =>
+        order.id === changeOrderId
+          ? {
+              ...order,
+              status: decision,
+              customerDecisionAt: now,
+              customerDecisionBy: user.name,
+            }
+          : order
+      ),
+      totalCustomerCost: isApproved
+        ? project.totalCustomerCost + selectedOrder.amount
+        : project.totalCustomerCost,
+      paymentStages: nextPaymentStages,
+    });
+    if (!updated) {
+      toast.error(`Could not ${decision === 'approved' ? 'approve' : 'reject'} change order.`);
+      return;
+    }
+    toast.success(decision === 'approved' ? 'Change order approved.' : 'Change order rejected.');
     refreshProjects();
     void syncToServer();
   };
@@ -378,7 +426,23 @@ export default function ChangeOrders() {
                     </Button>
                   </div>
                 )}
-                {order.status === 'pending_customer' && (
+                {order.status === 'pending_customer' && user.role === 'customer' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm text-amber-700 flex items-center gap-2 mr-2">
+                      <Clock className="w-4 h-4" />
+                      Please approve or reject this change.
+                    </p>
+                    <Button size="sm" onClick={() => handleCustomerDecision(projectId, order.id, 'approved')}>
+                      <CheckCircle2 className="w-4 h-4 mr-1" />
+                      Approve
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => handleCustomerDecision(projectId, order.id, 'rejected')}>
+                      <XCircle className="w-4 h-4 mr-1" />
+                      Reject
+                    </Button>
+                  </div>
+                )}
+                {order.status === 'pending_customer' && user.role !== 'customer' && (
                   <p className="text-sm text-amber-700 flex items-center gap-2">
                     <Clock className="w-4 h-4" />
                     Customer decision pending.
