@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { Button } from '../../components/ui/button';
 
 interface PasswordFieldProps {
   id?: string;
@@ -38,19 +37,18 @@ export function PasswordField({
           placeholder={placeholder}
           autoComplete={autoComplete}
           disabled={disabled}
-          className="pr-10"
+          className="pr-11"
         />
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="sm"
-          className="absolute right-0 top-0 h-full px-3 text-slate-500 hover:text-slate-800"
+          disabled={disabled}
+          className="absolute inset-y-0 right-0 z-10 flex w-11 items-center justify-center rounded-r-md text-slate-500 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60 disabled:opacity-50"
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? 'Hide password' : 'Show password'}
-          tabIndex={-1}
+          aria-pressed={visible}
         >
-          {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </Button>
+          {visible ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
+        </button>
       </div>
     </div>
   );

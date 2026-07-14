@@ -15,7 +15,11 @@ export async function resolveUsername(username: string): Promise<string> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username }),
   });
-  const data = await parseJson<{ email: string }>(res);
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error || `Could not resolve username (${res.status})`);
+  }
+  const data = (await res.json()) as { email: string };
   return data.email;
 }
 

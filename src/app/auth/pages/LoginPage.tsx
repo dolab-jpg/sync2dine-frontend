@@ -12,7 +12,7 @@ import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client'
 import { AuthLayout } from '../AuthLayout';
 import { AuthFormError } from '../components/AuthFormError';
 import { PasswordField } from '../components/PasswordField';
-import { SeedAccountsPanel, SEED_PASSWORD, type SeedAccount } from '../components/SeedAccountsPanel';
+import { SeedAccountsPanel, SEED_PASSWORD, SEED_ACCOUNTS, type SeedAccount } from '../components/SeedAccountsPanel';
 import { homePathForRole, resolveUsername } from '../lib/authApi';
 
 interface LoginProps {
@@ -77,16 +77,16 @@ export default function LoginPage({ onLogin }: LoginProps) {
           email: profile.email || data.session.user.email || '',
           role,
         });
-        // OAuth first-time: force username on profile if missing
+        // App remounts BrowserRouter on login — use full navigation
         if (!profile.username) {
-          navigate('/profile?complete=1', { replace: true });
+          window.location.assign('/profile?complete=1');
           return;
         }
         const dest =
           next && next.startsWith('/') && !next.startsWith('//')
             ? next
             : homePathForRole(role);
-        navigate(dest, { replace: true });
+        window.location.assign(dest);
       } catch {
         /* stay on login */
       }
@@ -126,11 +126,12 @@ export default function LoginPage({ onLogin }: LoginProps) {
     await syncActiveOrgFromProfile();
     await integrationService.initOrgOpenAIKey(user.role);
     onLogin(user);
+    // App remounts a new BrowserRouter on login — use full navigation, not react-router navigate
     const dest =
       next && next.startsWith('/') && !next.startsWith('//')
         ? next
         : homePathForRole(user.role);
-    navigate(dest, { replace: true });
+    window.location.assign(dest);
   };
 
   const handleCredentialSubmit = async (e: FormEvent) => {
@@ -153,7 +154,22 @@ export default function LoginPage({ onLogin }: LoginProps) {
     try {
       let email = identifier.trim();
       if (!email.includes('@')) {
-        email = await resolveUsername(email);
+        try {
+          email = await resolveUsername(email);
+        } catch (resolveErr) {
+          // Seed/dev fallback when API is down — map known usernames to emails
+          const seed = SEED_ACCOUNTS.find((a) => a.username === email.toLowerCase());
+          if (seed) {
+            email = seed.email;
+          } else {
+            setError(
+              resolveErr instanceof Error
+                ? `${resolveErr.message} (Tip: use the email from Test accounts, or start the API on port 3001.)`
+                : 'Could not resolve username. Use the email from Test accounts.',
+            );
+            return;
+          }
+        }
       }
       const supabase = getSupabase();
       const { data, error: authError } = await supabase.auth.signInWithPassword({
@@ -161,14 +177,18 @@ export default function LoginPage({ onLogin }: LoginProps) {
         password,
       });
       if (authError || !data.user) {
-        setError('Invalid email/username or password.');
+        setError(authError?.message || 'Invalid email/username or password.');
         return;
       }
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('id, name, email, role, org_id, username')
         .eq('id', data.user.id)
-        .single();
+        .maybeSingle();
+      if (profileError) {
+        setError(profileError.message);
+        return;
+      }
       const role = (profile?.role ?? 'staff') as DemoRole;
       await finishLogin({
         id: profile?.id ?? data.user.id,
@@ -176,8 +196,8 @@ export default function LoginPage({ onLogin }: LoginProps) {
         email: profile?.email ?? data.user.email ?? email,
         role,
       });
-    } catch {
-      setError('Invalid email/username or password.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign-in failed.');
     } finally {
       setIsLoading(false);
     }
