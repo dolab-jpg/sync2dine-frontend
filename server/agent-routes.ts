@@ -3,12 +3,14 @@ import {
   deletePhoneLine,
   getAgentSettings,
   getAgentStatusSnapshot,
+  getPhoneLineByAssignedUserId,
   getPhoneLineById,
   listPhoneLines,
   lookupContactByPhone,
   maskPhoneLine,
   savePhoneLine,
   updateAgentSettings,
+  type PhoneLinePurpose,
 } from './data-store';
 import {
   getChatterboxConfig,
@@ -21,6 +23,25 @@ import {
   testLineConnection,
   unregisterLine,
 } from './telephony/lineRegistry';
+import { authenticateRequest } from './auth';
+
+function resolveUserIdFromRequest(req: IncomingMessage): string | null {
+  const auth = authenticateRequest(req);
+  if (auth?.userId) return auth.userId;
+  const header = req.headers['x-user-id'];
+  if (typeof header === 'string' && header.trim()) return header.trim();
+  return null;
+}
+
+function parsePurpose(value: unknown, fallback: PhoneLinePurpose = 'staff'): PhoneLinePurpose {
+  return value === 'aria' ? 'aria' : value === 'staff' ? 'staff' : fallback;
+}
+
+function parseAssignedUserId(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value === 'string') return value.trim() || null;
+  return undefined;
+}
 
 const OPENAI_TTS_VOICES = [
   { id: 'fable', name: 'Fable (OpenAI)', provider: 'openai' },
@@ -253,6 +274,21 @@ async function handleGetLines(_req: IncomingMessage, res: ServerResponse) {
   });
 }
 
+async function handleGetMyLine(req: IncomingMessage, res: ServerResponse) {
+  const userId = resolveUserIdFromRequest(req);
+  if (!userId) {
+    sendJson(res, 401, { error: 'User id required (Authorization or X-User-Id)' });
+    return;
+  }
+  const line = getPhoneLineByAssignedUserId(userId);
+  if (!line) {
+    sendJson(res, 404, { error: 'No softphone line assigned to this user' });
+    return;
+  }
+  // Owner receives real SIP password for JsSIP register (never returned on list endpoints).
+  sendJson(res, 200, { line });
+}
+
 async function handlePostLine(req: IncomingMessage, res: ServerResponse) {
   const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
   const label = String(body.label ?? '').trim();
@@ -270,6 +306,8 @@ async function handlePostLine(req: IncomingMessage, res: ServerResponse) {
     did,
     sipDomain: typeof body.sipDomain === 'string' ? body.sipDomain : undefined,
     enabled: body.enabled !== false,
+    assignedUserId: parseAssignedUserId(body.assignedUserId),
+    purpose: parsePurpose(body.purpose, 'staff'),
   });
   sendJson(res, 200, { line: maskPhoneLine(line) });
 }
@@ -284,6 +322,7 @@ async function handlePatchLine(req: IncomingMessage, res: ServerResponse, lineId
   const sipPassword = typeof body.sipPassword === 'string' && body.sipPassword && body.sipPassword !== '••••••'
     ? body.sipPassword
     : existing.sipPassword;
+  const assignedParsed = parseAssignedUserId(body.assignedUserId);
   const line = savePhoneLine({
     id: lineId,
     label: typeof body.label === 'string' ? body.label : existing.label,
@@ -293,6 +332,8 @@ async function handlePatchLine(req: IncomingMessage, res: ServerResponse, lineId
     did: typeof body.did === 'string' ? body.did : existing.did,
     enabled: typeof body.enabled === 'boolean' ? body.enabled : existing.enabled,
     status: existing.status,
+    assignedUserId: assignedParsed !== undefined ? assignedParsed : existing.assignedUserId,
+    purpose: body.purpose !== undefined ? parsePurpose(body.purpose, existing.purpose ?? 'staff') : existing.purpose,
   });
   if (body.enabled === false) {
     await unregisterLine(lineId);
@@ -368,6 +409,10 @@ export async function handleAgentRoutes(
   }
   if (pathname === '/api/agent/lines' && req.method === 'POST') {
     await handlePostLine(req, res);
+    return true;
+  }
+  if (pathname === '/api/agent/lines/mine' && req.method === 'GET') {
+    await handleGetMyLine(req, res);
     return true;
   }
   if (pathname === '/api/agent/lines/register-all' && req.method === 'POST') {

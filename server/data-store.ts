@@ -100,6 +100,8 @@ export interface PendingConfirmationRecord {
 
 export type PhoneLineStatus = 'disconnected' | 'registering' | 'registered' | 'error';
 
+export type PhoneLinePurpose = 'staff' | 'aria';
+
 export interface PhoneLine {
   id: string;
   label: string;
@@ -112,6 +114,10 @@ export interface PhoneLine {
   lastError?: string;
   registeredAt?: string;
   updatedAt: string;
+  /** Profile / platform user id that owns this softphone extension */
+  assignedUserId?: string;
+  /** staff = human softphone; aria = AI bridge registration */
+  purpose?: PhoneLinePurpose;
 }
 
 export interface AgentSettings {
@@ -228,7 +234,7 @@ function migrateLegacySoho66Line(data: SyncedData): void {
     label: 'Line 1 (migrated)',
     sipUsername: username,
     sipPassword: password,
-    sipDomain: process.env.SOHO66_SIP_DOMAIN?.trim() || 'sip.soho66.com',
+    sipDomain: process.env.SOHO66_SIP_DOMAIN?.trim() || 'sip.soho66.co.uk',
     did: did ?? '',
     enabled: true,
     status: 'disconnected',
@@ -611,23 +617,42 @@ export function resolvePhoneLineByDid(did: string): PhoneLine | undefined {
   return getDataStore().phoneLines.find(l => normalizePhone(l.did) === normalized && l.enabled);
 }
 
-export function savePhoneLine(input: Partial<PhoneLine> & { label: string; sipUsername: string; sipPassword: string; did: string }): PhoneLine {
+export function savePhoneLine(
+  input: Partial<PhoneLine> & {
+    label: string;
+    sipUsername: string;
+    sipPassword: string;
+    did: string;
+    assignedUserId?: string | null;
+  },
+): PhoneLine {
   const store = getDataStore();
   const now = new Date().toISOString();
   const id = input.id ?? `line-${Date.now()}`;
   const existing = store.phoneLines.findIndex(l => l.id === id);
+  const prev = existing >= 0 ? store.phoneLines[existing] : undefined;
+  const assignedUserId =
+    input.assignedUserId === null || input.assignedUserId === ''
+      ? undefined
+      : (typeof input.assignedUserId === 'string' ? input.assignedUserId.trim() : undefined) || prev?.assignedUserId;
+  const purpose: PhoneLinePurpose =
+    input.purpose === 'aria' || input.purpose === 'staff'
+      ? input.purpose
+      : (prev?.purpose ?? 'staff');
   const record: PhoneLine = {
     id,
     label: input.label,
     sipUsername: input.sipUsername,
     sipPassword: input.sipPassword,
-    sipDomain: input.sipDomain?.trim() || 'sip.soho66.com',
+    sipDomain: input.sipDomain?.trim() || 'sip.soho66.co.uk',
     did: input.did,
     enabled: input.enabled !== false,
-    status: input.status ?? (existing >= 0 ? store.phoneLines[existing].status : 'disconnected'),
+    status: input.status ?? (prev?.status ?? 'disconnected'),
     lastError: input.lastError,
     registeredAt: input.registeredAt,
     updatedAt: now,
+    assignedUserId,
+    purpose,
   };
   if (existing >= 0) {
     store.phoneLines[existing] = { ...store.phoneLines[existing], ...record };
@@ -636,6 +661,14 @@ export function savePhoneLine(input: Partial<PhoneLine> & { label: string; sipUs
   }
   syncData(store);
   return store.phoneLines.find(l => l.id === id)!;
+}
+
+export function getPhoneLineByAssignedUserId(userId: string): PhoneLine | undefined {
+  const id = userId?.trim();
+  if (!id) return undefined;
+  return getDataStore().phoneLines.find(
+    l => l.enabled && l.assignedUserId === id && (l.purpose ?? 'staff') === 'staff',
+  );
 }
 
 export function deletePhoneLine(id: string): boolean {

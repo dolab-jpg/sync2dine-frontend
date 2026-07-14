@@ -17,7 +17,8 @@ import { integrationService } from '../engine/integrations/integrationService';
 import { toast } from 'sonner';
 import { getAllTrades } from '../config/trades';
 import { useAIAssistant } from '../context/AIAssistantContext';
-import { StaffPhoneRegistration } from './Settings/StaffPhoneRegistration';
+import { StaffPhoneRegistration } from './settings/StaffPhoneRegistration';
+import { StaffSoftphones } from './settings/StaffSoftphones';
 import { canManageCompanySettings } from '../engine/ai/rolePermissions';
 import type { AgentRole } from '../engine/ai/agentContext';
 
@@ -539,6 +540,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="team" className="space-y-6">
+          <StaffSoftphones />
           <StaffPhoneRegistration />
           <Card>
             <CardHeader>

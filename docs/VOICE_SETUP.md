@@ -97,6 +97,16 @@ The bridge POSTs inbound speech events to `{webhookBaseUrl}/webhooks/voice/inbou
 
 Legacy single-line env vars (`SOHO66_SIP_USERNAME`, etc.) auto-migrate to one line on first server start.
 
+## 5b. Staff softphones (per-person Soho66 SIP)
+
+Human softphones are separate from Aria:
+
+1. **Settings → Team → Staff Softphones** — assign SIP username, password, domain (`sip.soho66.co.uk`), DID, and user id.
+2. **Calls → Soft Phone** — each logged-in user loads `GET /api/agent/lines/mine` (password returned only for the assigned owner) and registers via JsSIP.
+3. Flutter (`tradepro-mobile`) opens `/calls?tab=softphone` on navigate / FCM `type=incoming_call`.
+
+**WSS note (tested Jul 2026):** `wss://ws.soho66.co.uk/ws` redirects to the marketing site and does not complete a SIP WebSocket session. Classic Soho66 phones register to `sip.soho66.co.uk:8060`. For in-app browser ring, either use Soho66 VOIS, or put a SIP-over-WSS gateway / Jambonz in front. Staff lines use `purpose: 'staff'` and are **not** registered to the Aria bridge (`register-all` is `purpose: 'aria'` only).
+
 ## Architecture
 
 ```

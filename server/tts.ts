@@ -121,13 +121,14 @@ export function resolveTtsTextFromCall(callId: string): string | null {
 
 export function buildAgentTtsUrl(
   webhookBase: string,
-  params: { text?: string; callId?: string; voiceId?: string },
+  params: { text?: string; callId?: string; voiceId?: string; format?: string },
 ): string {
   const base = webhookBase.replace(/\/$/, '');
   const url = new URL(`${base}/api/agent/tts`);
   if (params.text) url.searchParams.set('text', params.text);
   if (params.callId) url.searchParams.set('callId', params.callId);
   if (params.voiceId) url.searchParams.set('voiceId', params.voiceId);
+  if (params.format) url.searchParams.set('format', params.format);
   return url.toString();
 }
 

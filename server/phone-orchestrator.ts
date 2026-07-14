@@ -113,6 +113,7 @@ export async function handlePhoneTurn(body: PhoneOrchestratorRequest): Promise<{
     : 'Sales, construction, and office roles';
 
   const orchestratorBody: OrchestratorRequest = {
+    orgId: getRequestOrgId(),
     messages,
     orchestratorMode: 'phone',
     systemPrompt: buildAriaSystemPrompt({

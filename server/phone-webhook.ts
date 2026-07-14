@@ -3,10 +3,12 @@ import {
   appendCallTurn,
   computeCallDurationSec,
   computeCallSentiment,
+  DEFAULT_ORG_ID,
   getCallById,
   getCallByProviderId,
   getDataStore,
   getProjectById,
+  getRequestOrgId,
   isAfterHours,
   isAgentActive,
   resolveCandidateByPhone,
@@ -17,7 +19,9 @@ import {
   setRequestOrgId,
   updateOutboundJob,
 } from './data-store';
-import { getOrganizationByPhoneDid } from './organizations';
+import { resolveOrgIdForRequest } from './auth';
+import { OpenAIConnectionError } from './openai-connection';
+import { getOrganizationByPhoneDid, listOrganizations } from './organizations';
 import { handlePhoneTurn } from './phone-orchestrator';
 import {
   getTelephonyProvider,
@@ -66,9 +70,18 @@ function headersToRecord(req: IncomingMessage): Record<string, string> {
   return headers;
 }
 
+function resolvePhoneOrgId(toDid: string): string {
+  const byDid = getOrganizationByPhoneDid(toDid);
+  if (byDid?.id) return byDid.id;
+  const current = getRequestOrgId();
+  if (current && current !== DEFAULT_ORG_ID && current !== 'default') return current;
+  const orgs = listOrganizations();
+  const withKey = orgs.find(o => Boolean(o.openaiApiKeyEncrypted));
+  return withKey?.id ?? orgs[0]?.id ?? DEFAULT_ORG_ID;
+}
+
 function getOrCreateCall(event: CallEvent): Record<string, unknown> {
-  const org = getOrganizationByPhoneDid(event.to);
-  setRequestOrgId(org?.id ?? 'default');
+  setRequestOrgId(resolvePhoneOrgId(event.to));
 
   const existing = getCallById(event.callId) ?? getCallByProviderId(event.providerCallId ?? '');
   if (existing) return existing;
@@ -434,26 +447,44 @@ export async function handleCallDetailApi(_req: IncomingMessage, res: ServerResp
 }
 
 export async function handleMockCallApi(req: IncomingMessage, res: ServerResponse) {
-  const body = JSON.parse(await readBody(req));
-  const { from, speech, callId: existingCallId } = body;
+  let body: { from?: string; speech?: string; callId?: string; orgId?: string; to?: string } = {};
+  try {
+    body = JSON.parse(await readBody(req));
+  } catch {
+    sendJson(res, 400, { error: 'Invalid JSON' });
+    return;
+  }
+
+  const headerOrgId = resolveOrgIdForRequest(req, body);
+  if (headerOrgId) setRequestOrgId(headerOrgId);
+
+  const { from, speech, callId: existingCallId, to } = body;
   const callId = existingCallId ?? `mock-${Date.now()}`;
 
   const event: CallEvent = {
     type: speech ? 'speech_turn' : 'call_started',
     callId,
     from: String(from ?? '447700900123'),
-    to: '442012345678',
+    to: String(to ?? '442012345678'),
     direction: 'inbound',
     speechResult: speech ? String(speech) : undefined,
   };
 
-  const response = await processCallTurn(event, speech ? String(speech) : undefined);
-
-  sendJson(res, 200, {
-    callId,
-    ...response,
-    call: getCallById(callId),
-  });
+  try {
+    const response = await processCallTurn(event, speech ? String(speech) : undefined);
+    sendJson(res, 200, {
+      callId,
+      ...response,
+      call: getCallById(callId),
+    });
+  } catch (err) {
+    if (err instanceof OpenAIConnectionError) {
+      sendJson(res, 503, { error: err.message, code: err.code });
+      return;
+    }
+    const message = err instanceof Error ? err.message : 'Mock call failed';
+    sendJson(res, 500, { error: message });
+  }
 }
 
 export async function handlePhoneRoutes(

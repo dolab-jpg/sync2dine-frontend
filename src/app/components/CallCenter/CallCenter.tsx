@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -92,6 +92,8 @@ export interface PhoneLine {
   status: 'disconnected' | 'registering' | 'registered' | 'error';
   lastError?: string;
   registeredAt?: string;
+  assignedUserId?: string;
+  purpose?: 'staff' | 'aria';
 }
 
 interface VoiceOption {
@@ -169,6 +171,14 @@ function formatDuration(sec?: number): string {
 
 export default function CallCenter() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialTab = useMemo(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'softphone' || tab === 'lines' || tab === 'test' || tab === 'outbound' || tab === 'dashboard') {
+      return tab;
+    }
+    return 'dashboard';
+  }, [searchParams]);
 
   const [isActive, setIsActive] = useState(true);
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
@@ -206,8 +216,10 @@ export default function CallCenter() {
     label: '',
     sipUsername: '',
     sipPassword: '',
-    sipDomain: 'sip.soho66.com',
+    sipDomain: 'sip.soho66.co.uk',
     did: '',
+    assignedUserId: '',
+    purpose: 'staff' as 'staff' | 'aria',
   });
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
 
@@ -434,8 +446,12 @@ export default function CallCenter() {
   }
 
   async function savePhoneLine() {
-    if (!lineForm.label.trim() || !lineForm.sipUsername.trim() || !lineForm.sipPassword.trim() || !lineForm.did.trim()) {
-      toast.error('Fill in label, SIP username, password, and DID');
+    if (!lineForm.label.trim() || !lineForm.sipUsername.trim() || !lineForm.did.trim()) {
+      toast.error('Fill in label, SIP username, and DID');
+      return;
+    }
+    if (!editingLineId && !lineForm.sipPassword.trim()) {
+      toast.error('SIP password is required for new lines');
       return;
     }
     setLinesLoading(true);
@@ -445,12 +461,16 @@ export default function CallCenter() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(lineForm),
+        body: JSON.stringify({
+          ...lineForm,
+          assignedUserId: lineForm.assignedUserId.trim() || null,
+          purpose: lineForm.purpose,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to save line');
       toast.success(editingLineId ? 'Line updated' : 'Line added');
-      setLineForm({ label: '', sipUsername: '', sipPassword: '', sipDomain: 'sip.soho66.com', did: '' });
+      setLineForm({ label: '', sipUsername: '', sipPassword: '', sipDomain: 'sip.soho66.co.uk', did: '', assignedUserId: '', purpose: 'staff' });
       setEditingLineId(null);
       fetchLines();
     } catch (err) {
@@ -503,8 +523,10 @@ export default function CallCenter() {
       label: line.label,
       sipUsername: line.sipUsername,
       sipPassword: line.sipPassword === '••••••' ? '' : line.sipPassword,
-      sipDomain: line.sipDomain,
+      sipDomain: line.sipDomain || 'sip.soho66.co.uk',
       did: line.did,
+      assignedUserId: line.assignedUserId ?? '',
+      purpose: line.purpose === 'aria' ? 'aria' : 'staff',
     });
   }
 
@@ -637,7 +659,7 @@ export default function CallCenter() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="dashboard">
+      <Tabs defaultValue={initialTab} key={initialTab}>
         <TabsList>
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="lines">Phone Lines</TabsTrigger>
@@ -842,7 +864,7 @@ export default function CallCenter() {
                     Soho66 Phone Lines
                   </CardTitle>
                   <CardDescription>
-                    Register multiple SIP extensions at once. Bridge: {bridgeUrl || 'Set SOHO66_SIP_BRIDGE_URL in .env.local'}
+                    Aria AI lines only register with the bridge. Staff softphones use Calls → Soft Phone. Bridge: {bridgeUrl || 'Set SOHO66_SIP_BRIDGE_URL in .env.local'}
                   </CardDescription>
                 </div>
                 <Button onClick={registerAllLines} disabled={registeringLines || phoneLines.length === 0}>
@@ -860,6 +882,10 @@ export default function CallCenter() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-900">{line.label}</p>
                     <p className="text-sm text-slate-600">{line.sipUsername}@{line.sipDomain} · {formatPhone(line.did)}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {(line.purpose ?? 'staff') === 'aria' ? 'Aria AI' : 'Staff softphone'}
+                      {line.assignedUserId ? ` · user ${line.assignedUserId}` : ''}
+                    </p>
                     {line.lastError && <p className="text-xs text-red-600 mt-1">{line.lastError}</p>}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -902,7 +928,26 @@ export default function CallCenter() {
                 </div>
                 <div>
                   <Label>SIP Domain</Label>
-                  <Input value={lineForm.sipDomain} onChange={e => setLineForm(f => ({ ...f, sipDomain: e.target.value }))} placeholder="sip.soho66.com" />
+                  <Input value={lineForm.sipDomain} onChange={e => setLineForm(f => ({ ...f, sipDomain: e.target.value }))} placeholder="sip.soho66.co.uk" />
+                </div>
+                <div>
+                  <Label>Purpose</Label>
+                  <select
+                    className="mt-1 w-full border rounded-md h-10 px-3 text-sm"
+                    value={lineForm.purpose}
+                    onChange={e => setLineForm(f => ({ ...f, purpose: e.target.value as 'staff' | 'aria' }))}
+                  >
+                    <option value="staff">Staff softphone</option>
+                    <option value="aria">Aria AI (bridge)</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Assigned user ID (optional)</Label>
+                  <Input
+                    value={lineForm.assignedUserId}
+                    onChange={e => setLineForm(f => ({ ...f, assignedUserId: e.target.value }))}
+                    placeholder="Profile / user id"
+                  />
                 </div>
               </div>
               <div className="flex gap-2">
@@ -911,7 +956,7 @@ export default function CallCenter() {
                   {editingLineId ? 'Update line' : 'Add line'}
                 </Button>
                 {editingLineId && (
-                  <Button variant="outline" onClick={() => { setEditingLineId(null); setLineForm({ label: '', sipUsername: '', sipPassword: '', sipDomain: 'sip.soho66.com', did: '' }); }}>
+                  <Button variant="outline" onClick={() => { setEditingLineId(null); setLineForm({ label: '', sipUsername: '', sipPassword: '', sipDomain: 'sip.soho66.co.uk', did: '', assignedUserId: '', purpose: 'staff' }); }}>
                     Cancel
                   </Button>
                 )}
@@ -924,10 +969,12 @@ export default function CallCenter() {
           <Card>
             <CardHeader>
               <CardTitle>Soft Phone (JsSIP)</CardTitle>
-              <CardDescription>Log in with a SIP extension and make or receive calls in the browser.</CardDescription>
+              <CardDescription>
+                Registers your assigned Soho66 extension. Incoming calls ring until you answer or reject.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <SoftPhonePanel lines={phoneLines} />
+              <SoftPhonePanel />
             </CardContent>
           </Card>
         </TabsContent>

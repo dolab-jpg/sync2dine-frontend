@@ -89,3 +89,18 @@ export async function registerDeviceTokenIfNative(userId?: string): Promise<void
   // Token registration is handled by Flutter → API directly when push is enabled.
   void userId;
 }
+
+/** Ask Flutter shell to navigate to Soft Phone (also used for incoming-call wake). */
+export async function openNativeSoftPhone(): Promise<void> {
+  if (!isNativeBridgeAvailable()) {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/calls?tab=softphone';
+    }
+    return;
+  }
+  try {
+    await window.TradeProNative!.navigate('/calls?tab=softphone');
+  } catch {
+    window.location.href = '/calls?tab=softphone';
+  }
+}
