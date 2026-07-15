@@ -26,6 +26,11 @@ export interface ChatMergeAction {
   resolved?: boolean;
 }
 
+export interface ChatStatusAction {
+  label: string;
+  href: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -38,6 +43,8 @@ export interface ChatMessage {
   fixJobId?: string;
   /** Approve & merge button when a PR is ready */
   mergeAction?: ChatMergeAction;
+  /** Always-visible control (e.g. Open Code fixes) while a job is in flight */
+  statusAction?: ChatStatusAction;
 }
 
 export interface AISettings {

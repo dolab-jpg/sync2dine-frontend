@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { decryptSecret, encryptSecret } from './crypto';
-import { BDIDDIES_HOME_ORG_ID, BDIDDIES_COMPANY } from './home-org';
+import { BDIDDIES_HOME_ORG_ID, BDIDDIES_HOME_ORG_LEGACY_ID, BDIDDIES_COMPANY, getHomeOrgId } from './home-org';
 import { setCompanySettings } from './conversation-store';
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), 'data');
@@ -85,13 +85,23 @@ export function listOrganizations(): Organization[] {
   );
 }
 
-/** Seed Builder Diddies as the platform home org if missing. */
+/** Seed Builder Diddies as the platform home org if missing. Migrates legacy "bdiddies" slug → uuid. */
 export function ensureBdiddiesHomeOrg(): Organization {
   if (memoryOrgs.length === 0) memoryOrgs = loadFromDisk();
-  const existing = memoryOrgs.find((o) => o.id === BDIDDIES_HOME_ORG_ID);
+  const homeId = getHomeOrgId();
+
+  const legacy = memoryOrgs.find((o) => o.id === BDIDDIES_HOME_ORG_LEGACY_ID);
+  if (legacy && homeId !== BDIDDIES_HOME_ORG_LEGACY_ID) {
+    memoryOrgs = memoryOrgs.map((o) =>
+      o.id === BDIDDIES_HOME_ORG_LEGACY_ID ? { ...o, id: homeId, name: BDIDDIES_COMPANY.companyName } : o,
+    );
+    persist();
+  }
+
+  const existing = memoryOrgs.find((o) => o.id === homeId || o.id === BDIDDIES_HOME_ORG_ID);
   if (existing) {
     try {
-      setCompanySettings(BDIDDIES_HOME_ORG_ID, {
+      setCompanySettings(existing.id, {
         companyName: BDIDDIES_COMPANY.companyName,
         website: BDIDDIES_COMPANY.website,
       });
@@ -102,7 +112,7 @@ export function ensureBdiddiesHomeOrg(): Organization {
   }
   const now = new Date().toISOString();
   const org: Organization = {
-    id: BDIDDIES_HOME_ORG_ID,
+    id: homeId,
     name: BDIDDIES_COMPANY.companyName,
     contactName: 'Platform Owner',
     contactEmail: BDIDDIES_COMPANY.email,
@@ -118,7 +128,7 @@ export function ensureBdiddiesHomeOrg(): Organization {
   memoryOrgs = [org, ...memoryOrgs];
   persist();
   try {
-    setCompanySettings(BDIDDIES_HOME_ORG_ID, {
+    setCompanySettings(homeId, {
       companyName: BDIDDIES_COMPANY.companyName,
       website: BDIDDIES_COMPANY.website,
     });

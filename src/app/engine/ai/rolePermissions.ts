@@ -295,6 +295,6 @@ export function canManageCompanySettings(role: AgentRole): boolean {
 
 export function canViewAudit(role: AgentRole): boolean {
   const roles = loadAIStudioConfig().auditRoles;
-  if (roles?.length) return roles.includes(role);
-  return role === 'super_admin' || role === 'manager';
+  if (roles?.length) return roles.includes(role) || (role as string) === 'platform_owner';
+  return role === 'super_admin' || role === 'manager' || (role as string) === 'platform_owner';
 }

@@ -42,24 +42,31 @@ export async function getCurrentProfile() {
  * Resolve org for data reads/writes.
  * platform_owner has profiles.org_id = null; when acting as (or on home org),
  * prefer localStorage activeOrgId so Supabase queries match Node X-Org-Id.
+ * Never returns the legacy "bdiddies" slug — Supabase org_id columns are uuid.
  */
 export async function getOrgId(): Promise<string | null> {
+  const { sanitizeOrgId, getHomeOrgId } = await import('../../app/engine/platform/homeOrg');
   try {
-    const active = localStorage.getItem('activeOrgId')?.trim();
-    if (active) return active;
+    const active = sanitizeOrgId(localStorage.getItem('activeOrgId'));
+    if (active) {
+      if (localStorage.getItem('activeOrgId')?.trim() !== active) {
+        localStorage.setItem('activeOrgId', active);
+      }
+      return active;
+    }
   } catch {
     // ignore
   }
   const profile = await getCurrentProfile();
-  if (profile?.org_id) return profile.org_id;
-  // platform_owner with no acting-as → B-Diddies home
+  if (profile?.org_id && sanitizeOrgId(profile.org_id)) return sanitizeOrgId(profile.org_id);
   if (profile?.role === 'platform_owner') {
+    const home = getHomeOrgId();
     try {
-      localStorage.setItem('activeOrgId', 'bdiddies');
+      localStorage.setItem('activeOrgId', home);
     } catch {
       // ignore
     }
-    return 'bdiddies';
+    return home;
   }
   return null;
 }

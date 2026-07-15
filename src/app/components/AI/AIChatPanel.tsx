@@ -419,8 +419,12 @@ export function AIChatPanel() {
           queueNote +
           (result.needsCursorApproval
             ? '\n\nThis needs your approval in Cursor before a large change runs.'
-            : '\n\nI\'ll update you here as it queues, runs, or fails. When the PR is ready, tap **Approve & merge**.'),
+            : '\n\nI\'ll update you as it queues, runs, or fails. Use **Open Code fixes** below to track it — **Approve & merge** only appears after a real GitHub PR is ready.'),
         fixJobId: result.job.id,
+        statusAction: {
+          label: 'Open Code fixes',
+          href: '/ai-audit?tab=code_fixes',
+        },
       });
       if (result.job.cursorAgentUrl) {
         addMessage({
@@ -436,6 +440,15 @@ export function AIChatPanel() {
       });
     }
   }, [messages, updateMessage, addMessage, app?.user, agentContext.role, trackFixJob]);
+
+  // Rehydrate in-flight fix jobs after refresh so Approve can still surface
+  useEffect(() => {
+    for (const m of messages) {
+      if (m.fixJobId && !m.mergeAction?.resolved && !m.mergeAction?.prUrl) {
+        trackFixJob(m.fixJobId);
+      }
+    }
+  }, [messages, trackFixJob]);
 
   useEffect(() => {
     if (trackedFixJobs.length === 0) return;
@@ -506,8 +519,21 @@ export function AIChatPanel() {
             announcedFixStatusRef.current[jobId] = statusKey;
             untrackFixJob(jobId);
           }
-        } catch {
-          // ignore poll errors
+        } catch (err) {
+          const key = `poll_error:${jobId}`;
+          if (announcedFixStatusRef.current[jobId] === key) continue;
+          announcedFixStatusRef.current[jobId] = key;
+          addMessage({
+            role: 'assistant',
+            content:
+              `Couldn’t check fix status (${err instanceof Error ? err.message : 'network error'}).\n` +
+              `Open **AI Audit → Code fixes** to continue.`,
+            fixJobId: jobId,
+            statusAction: {
+              label: 'Open Code fixes',
+              href: '/ai-audit?tab=code_fixes',
+            },
+          });
         }
       }
     };
@@ -869,6 +895,17 @@ export function AIChatPanel() {
                 <p className="mt-2 text-[11px] text-slate-500">
                   Merge approved
                 </p>
+              )}
+              {m.statusAction && !m.mergeAction?.prUrl && (
+                <div className="mt-3 flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-lg border border-amber-400 bg-amber-50 text-amber-900 text-xs font-medium"
+                    onClick={() => navigate(m.statusAction!.href)}
+                  >
+                    {m.statusAction.label}
+                  </button>
+                </div>
               )}
             </div>
           </div>

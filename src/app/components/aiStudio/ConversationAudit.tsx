@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from 'react';
-import { Navigate } from 'react-router';
+import { Navigate, useSearchParams } from 'react-router';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -20,7 +20,9 @@ type AuditTab = 'conversations' | 'code_fixes';
 
 export default function ConversationAudit() {
   const app = useContext(AppContext);
-  const [tab, setTab] = useState<AuditTab>('conversations');
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') === 'code_fixes' ? 'code_fixes' : 'conversations';
+  const [tab, setTab] = useState<AuditTab>(initialTab);
   const [threads, setThreads] = useState<Awaited<ReturnType<typeof fetchConversationThreads>>['threads']>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ConversationLogEntry[]>([]);

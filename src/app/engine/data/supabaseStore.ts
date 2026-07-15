@@ -1,25 +1,25 @@
-/**
- * Supabase data access layer — replaces localStorage + /api/data/sync when configured.
- */
 import { getSupabase, isSupabaseConfigured, getOrgId } from '../../../lib/supabase/client';
 import type { UnifiedProject } from '../project/types';
 import type { CustomerContact } from '../project/types';
-import { BDIDDIES_HOME_ORG_ID } from '../platform/homeOrg';
+import { getHomeOrgId, isOrgUuid, sanitizeOrgId } from '../platform/homeOrg';
 import { getActiveOrgId } from '../platform/orgContext';
 
-async function resolveOrg(): Promise<string> {
-  const active = getActiveOrgId();
+async function resolveOrg(): Promise<string | null> {
+  const active = sanitizeOrgId(getActiveOrgId());
   if (active) return active;
-  const orgId = await getOrgId();
-  return orgId ?? BDIDDIES_HOME_ORG_ID;
+  const orgId = sanitizeOrgId(await getOrgId());
+  if (orgId) return orgId;
+  const home = getHomeOrgId();
+  return isOrgUuid(home) ? home : null;
 }
 
 // ── Projects ──
 
 export async function loadProjectsFromSupabase(): Promise<UnifiedProject[]> {
   if (!isSupabaseConfigured()) return [];
-  const supabase = getSupabase();
   const orgId = await resolveOrg();
+  if (!orgId) return [];
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from('projects')
     .select('id, status, customer_id, quote_id, portal_token, data')
@@ -37,8 +37,9 @@ export async function loadProjectsFromSupabase(): Promise<UnifiedProject[]> {
 
 export async function saveProjectToSupabase(project: UnifiedProject): Promise<void> {
   if (!isSupabaseConfigured()) return;
-  const supabase = getSupabase();
   const orgId = await resolveOrg();
+  if (!orgId) return;
+  const supabase = getSupabase();
   const { id, status, customerId, quoteId, portalToken, ...rest } = project as UnifiedProject & Record<string, unknown>;
   await supabase.from('projects').upsert({
     id: String(id),
@@ -74,8 +75,9 @@ export function subscribeProjects(callback: (projects: UnifiedProject[]) => void
 
 async function loadEntities<T>(table: string): Promise<T[]> {
   if (!isSupabaseConfigured()) return [];
-  const supabase = getSupabase();
   const orgId = await resolveOrg();
+  if (!orgId) return [];
+  const supabase = getSupabase();
   const { data, error } = await supabase.from(table).select('id, data').eq('org_id', orgId);
   if (error || !data) return [];
   return data.map(r => ({ id: r.id, ...(r.data as Record<string, unknown>) })) as T[];
@@ -83,8 +85,9 @@ async function loadEntities<T>(table: string): Promise<T[]> {
 
 async function saveEntities(table: string, items: Array<Record<string, unknown>>): Promise<void> {
   if (!isSupabaseConfigured() || !items.length) return;
-  const supabase = getSupabase();
   const orgId = await resolveOrg();
+  if (!orgId) return;
+  const supabase = getSupabase();
   const payload = items.map(item => {
     const { id, ...rest } = item;
     return { id: String(id), org_id: orgId, data: rest, updated_at: new Date().toISOString() };
@@ -116,8 +119,9 @@ export const saveBankTransactionsToSupabase = (items: Record<string, unknown>[])
 
 async function deleteEntity(table: string, id: string): Promise<void> {
   if (!isSupabaseConfigured()) return;
-  const supabase = getSupabase();
   const orgId = await resolveOrg();
+  if (!orgId) return;
+  const supabase = getSupabase();
   await supabase.from(table).delete().eq('org_id', orgId).eq('id', String(id));
 }
 
@@ -139,8 +143,9 @@ export async function deletePricingRuleFromSupabase(id: string): Promise<void> {
 
 export async function deleteProjectFromSupabase(id: string): Promise<void> {
   if (!isSupabaseConfigured()) return;
-  const supabase = getSupabase();
   const orgId = await resolveOrg();
+  if (!orgId) return;
+  const supabase = getSupabase();
   await supabase.from('projects').delete().eq('org_id', orgId).eq('id', String(id));
 }
 
@@ -153,8 +158,9 @@ export async function uploadFileToStorage(
   contentType?: string,
 ): Promise<string | null> {
   if (!isSupabaseConfigured()) return null;
-  const supabase = getSupabase();
   const orgId = await resolveOrg();
+  if (!orgId) return null;
+  const supabase = getSupabase();
   const fullPath = `${orgId}/${path}`;
   const { error } = await supabase.storage.from(bucket).upload(fullPath, file, {
     upsert: true,
@@ -170,8 +176,9 @@ export async function uploadFileToStorage(
 
 export async function getSignedFileUrl(bucket: string, path: string): Promise<string | null> {
   if (!isSupabaseConfigured()) return null;
-  const supabase = getSupabase();
   const orgId = await resolveOrg();
+  if (!orgId) return null;
+  const supabase = getSupabase();
   const fullPath = `${orgId}/${path}`;
   const { data, error } = await supabase.storage.from(bucket).createSignedUrl(fullPath, 3600);
   if (error) return null;
@@ -183,8 +190,9 @@ export async function saveProjectFileMetadata(
   file: { id: string; storagePath: string; filename: string; mimeType: string; source?: string; uploadedBy?: string; caption?: string; takenAt?: string; messageId?: string; taskId?: string; bucket?: string },
 ): Promise<void> {
   if (!isSupabaseConfigured()) return;
-  const supabase = getSupabase();
   const orgId = await resolveOrg();
+  if (!orgId) return;
+  const supabase = getSupabase();
   await supabase.from('project_files').upsert({
     id: file.id,
     org_id: orgId,

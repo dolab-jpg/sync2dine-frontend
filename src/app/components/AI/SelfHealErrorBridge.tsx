@@ -157,9 +157,13 @@ export function SelfHealErrorBridge() {
                 `${schemaIntro}**Auto-fixing** \`${result.job.errorCode || 'error'}\` on **${result.job.route || 'this page'}**.\n\n` +
                 `${result.job.description}\n\n` +
                 (result.message || 'Logged — in the fix queue.') +
-                '\n\nI\'ll post the PR here for you to **Approve & merge**. You can also use **AI Audit → Code fixes**.' +
+                '\n\nI\'ll update you when the Cursor agent finishes. Use **Open Code fixes** below to track progress — an **Approve & merge** button will appear here only after a real GitHub PR URL is ready.' +
                 cursorNote,
               fixJobId: result.job.id,
+              statusAction: {
+                label: 'Open Code fixes',
+                href: '/ai-audit?tab=code_fixes',
+              },
             });
             return;
           }

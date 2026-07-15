@@ -1,4 +1,5 @@
 import { getSupabase, isSupabaseConfigured, getCurrentProfile, getOrgId } from '../../../lib/supabase/client';
+import { getHomeOrgId, isOrgUuid, sanitizeOrgId } from './homeOrg';
 
 const ACTIVE_ORG_KEY = 'activeOrgId';
 const AUTH_TOKEN_KEY = 'authToken';
@@ -7,7 +8,17 @@ let orgResolveInFlight: Promise<string | null> | null = null;
 
 export function getActiveOrgId(): string | null {
   try {
-    return localStorage.getItem(ACTIVE_ORG_KEY);
+    const raw = localStorage.getItem(ACTIVE_ORG_KEY);
+    const sanitized = sanitizeOrgId(raw);
+    if (raw && !sanitized) {
+      // Clear poisoned legacy slug (e.g. "bdiddies") so Supabase stops 500ing
+      localStorage.removeItem(ACTIVE_ORG_KEY);
+      return null;
+    }
+    if (raw && sanitized && raw.trim() !== sanitized) {
+      localStorage.setItem(ACTIVE_ORG_KEY, sanitized);
+    }
+    return sanitized;
   } catch {
     return null;
   }
@@ -15,7 +26,8 @@ export function getActiveOrgId(): string | null {
 
 export function setActiveOrgId(orgId: string | null): void {
   try {
-    if (orgId) localStorage.setItem(ACTIVE_ORG_KEY, orgId);
+    const sanitized = sanitizeOrgId(orgId);
+    if (sanitized) localStorage.setItem(ACTIVE_ORG_KEY, sanitized);
     else localStorage.removeItem(ACTIVE_ORG_KEY);
   } catch {
     // ignore
@@ -65,20 +77,21 @@ export async function ensureActiveOrgId(): Promise<string | null> {
       try {
         if (isSupabaseConfigured()) {
           const profile = await getCurrentProfile();
-          if (profile?.org_id) {
-            setActiveOrgId(profile.org_id);
-            return profile.org_id;
+          if (isOrgUuid(profile?.org_id)) {
+            setActiveOrgId(profile!.org_id as string);
+            return profile!.org_id as string;
           }
-          // platform_owner with no home membership → Builder Diddies home org
+          // platform_owner with no home membership → configured home org uuid
           if (profile?.role === 'platform_owner') {
-            const { BDIDDIES_HOME_ORG_ID } = await import('./homeOrg');
-            setActiveOrgId(BDIDDIES_HOME_ORG_ID);
-            return BDIDDIES_HOME_ORG_ID;
+            const home = getHomeOrgId();
+            setActiveOrgId(home);
+            return home;
           }
         }
         const orgId = await getOrgId();
-        if (orgId) setActiveOrgId(orgId);
-        return orgId;
+        const sanitized = sanitizeOrgId(orgId);
+        if (sanitized) setActiveOrgId(sanitized);
+        return sanitized;
       } catch {
         return null;
       } finally {
@@ -108,13 +121,11 @@ export function installApiFetchInterceptor(): () => void {
       if (!orgId && !headers.has('X-Org-Id')) {
         orgId = await ensureActiveOrgId();
       }
-      // Always send an org id — platform_owner defaults to B-Diddies home, not generic "default".
       if (!orgId) {
-        const { BDIDDIES_HOME_ORG_ID } = await import('./homeOrg');
-        orgId = BDIDDIES_HOME_ORG_ID;
+        orgId = getHomeOrgId();
       }
       const token = await getSupabaseAccessToken();
-      if (!headers.has('X-Org-Id')) headers.set('X-Org-Id', orgId);
+      if (!headers.has('X-Org-Id') && isOrgUuid(orgId)) headers.set('X-Org-Id', orgId);
       if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
       return original(input, { ...init, headers });
     }
@@ -127,14 +138,15 @@ export function installApiFetchInterceptor(): () => void {
 
 export async function syncActiveOrgFromProfile(): Promise<void> {
   if (!isSupabaseConfigured()) return;
+  // Always scrub a poisoned legacy value first
+  getActiveOrgId();
   const profile = await getCurrentProfile();
-  if (profile?.org_id) {
-    setActiveOrgId(profile.org_id);
+  if (isOrgUuid(profile?.org_id)) {
+    setActiveOrgId(profile!.org_id as string);
     return;
   }
-  // platform_owner: keep existing acting-as if set; otherwise seed B-Diddies home
+  // platform_owner: keep existing acting-as if set; otherwise seed home uuid
   if (profile?.role === 'platform_owner' && !getActiveOrgId()) {
-    const { BDIDDIES_HOME_ORG_ID } = await import('./homeOrg');
-    setActiveOrgId(BDIDDIES_HOME_ORG_ID);
+    setActiveOrgId(getHomeOrgId());
   }
 }
