@@ -28,10 +28,10 @@ RewriteRule . /index.html [L]
 # hashed assets in /assets are safe to cache forever.
 <IfModule mod_headers.c>
   <Files "index.html">
-    Header set Cache-Control "no-cache, must-revalidate"
+    Header set Cache-Control "no-cache"
   </Files>
-  <FilesMatch "\.(js|css|woff2?)$">
-    Header set Cache-Control "public, max-age=31536000, immutable"
+  <FilesMatch "\.(js|css|woff2)$">
+    Header set Cache-Control "public, max-age=31536000"
   </FilesMatch>
 </IfModule>
 EOF
@@ -52,9 +52,11 @@ EOF
   chmod 600 "$ENV_FILE"
 fi
 
-chown -R bdiddies:psacln "$APPDIR" "$DOCROOT"
+chown -R bdiddies:psacln "$APPDIR"
 # Docroot must be readable by the web server group used by Plesk.
-chown bdiddies:psaserv "$DOCROOT" 2>/dev/null || true
+chown -R bdiddies:psaserv "$DOCROOT"
+# Tarball extracted from /tmp lands as user_tmp_t; Apache needs httpd_sys_content_t.
+restorecon -Rv "$APPDIR" "$DOCROOT" >/dev/null 2>&1 || true
 
 echo "== npm install (prod deps + tsx) =="
 cd "$APPDIR"
