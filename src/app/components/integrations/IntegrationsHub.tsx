@@ -10,6 +10,7 @@ import type { IntegrationCategory, IntegrationsStoreData } from '../../config/in
 import { integrationService } from '../../engine/integrations/integrationService';
 import { getIntegrationValues } from '../../engine/integrations/integrationsStore';
 import { IntegrationCard } from './IntegrationCard';
+import { WhatsAppWebPanel } from './WhatsAppWebPanel';
 import { AppContext } from '../../App';
 import { simulateInboundWhatsApp } from '../../engine/cyrus/cyrusChatService';
 import { toast } from 'sonner';
@@ -154,10 +155,7 @@ export default function IntegrationsHub() {
         </span>
       </div>
 
-      <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-900">
-        <strong>WhatsApp Groups API:</strong> Project group chats (max 8 participants, invite-only) require Meta Official Business Account
-        and eligible messaging tier. Configure WhatsApp below, then use Projects → Comms tab to create a group per project.
-      </div>
+      <WhatsAppWebPanel />
 
       <Card>
         <CardContent className="p-4 space-y-3">
