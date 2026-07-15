@@ -5,8 +5,7 @@ import {
 } from 'lucide-react';
 import { AppContext } from '../../App';
 import { Button } from '../ui/button';
-import { useVoiceInput } from '../../hooks/useVoiceInput';
-import { useVoiceOutput } from '../../hooks/useVoiceOutput';
+import { useCynthiaVapiVoice } from '../../hooks/useCynthiaVapiVoice';
 import { sendOrchestratorMessage, type CopilotAction } from '../../engine/ai/orchestratorService';
 import {
   processToolActions,
@@ -170,13 +169,52 @@ export default function CynthiaHome() {
 
   useEffect(() => {
     void reloadThread();
-    const id = window.setInterval(() => { void reloadThread(); }, 8000);
+    // Faster polling while waiting for a highlighted card; otherwise 8s
+    const intervalMs = highlightCardId ? 2500 : 8000;
+    const id = window.setInterval(() => { void reloadThread(); }, intervalMs);
     return () => window.clearInterval(id);
+  }, [reloadThread, highlightCardId]);
+
+  // Refetch immediately when deep-link card changes
+  useEffect(() => {
+    if (!highlightCardId) return;
+    void reloadThread();
+  }, [highlightCardId, reloadThread]);
+
+  // Foreground / visibility refresh for APK push arrivals
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void reloadThread();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', onVis);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', onVis);
+    };
   }, [reloadThread]);
 
   useEffect(() => {
+    if (!highlightCardId || !bubbles.length) {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+      return;
+    }
+    const el = document.querySelector(`[data-cynthia-card="${highlightCardId}"]`);
+    if (el instanceof HTMLElement) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const t = window.setTimeout(() => {
+        try {
+          const url = new URL(window.location.href);
+          if (url.searchParams.get('card') === highlightCardId) {
+            url.searchParams.delete('card');
+            window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+          }
+        } catch { /* ignore */ }
+      }, 2500);
+      return () => window.clearTimeout(t);
+    }
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [bubbles, toolResults, sending]);
+  }, [bubbles, toolResults, sending, highlightCardId]);
 
   const ingestConsumed = useRef(false);
   useEffect(() => {
@@ -187,20 +225,37 @@ export default function CynthiaHome() {
     toast.message(`${name} ready`, { description: 'Shared content loaded — send to process.' });
   }, [ingestText, name]);
 
-  const onVoice = useCallback((text: string) => {
-    if (text) setComposer((prev) => (prev ? `${prev} ${text}` : text));
-  }, []);
   const {
-    isListening,
-    isTranscribing,
-    startListening,
-    stopListening,
-    isSupported,
-    isNative,
-  } = useVoiceInput(onVoice, {
-    onError: (message) => toast.error(message),
+    status: vapiStatus,
+    isActive: vapiActive,
+    toggle: toggleVapi,
+    error: vapiError,
+  } = useCynthiaVapiVoice({
+    userId,
+    onTranscript: (role, text) => {
+      setBubbles((prev) => [
+        ...prev,
+        {
+          id: `vapi_${role}_${Date.now()}`,
+          kind: 'text',
+          role: role === 'assistant' ? 'assistant' : 'user',
+          content: text,
+          ts: new Date().toISOString(),
+        },
+      ]);
+      void postCynthiaMessage(userId, {
+        role: role === 'assistant' ? 'assistant' : 'user',
+        content: text,
+        source: 'voice',
+      });
+      if (role === 'assistant') void reloadThread();
+    },
+    onStatusMessage: (message) => toast.message(message),
   });
-  const { speak } = useVoiceOutput();
+
+  useEffect(() => {
+    if (vapiError) toast.error(vapiError);
+  }, [vapiError]);
 
   const handleToolOutputs = async (executed: ToolExecutionResult[]) => {
     for (const r of executed) {
@@ -338,8 +393,6 @@ export default function CynthiaHome() {
       ]);
       void postCynthiaMessage(userId, { role: 'assistant', content: reply, source: 'cynthia' });
       void reloadThread();
-
-      if (source === 'voice') void speak(reply, 'auto');
     } catch (err) {
       const msg = err instanceof Error ? err.message : `${name} could not process that.`;
       toast.error(msg);
@@ -401,7 +454,17 @@ export default function CynthiaHome() {
         <CynthiaAvatar name={name} sizeClass="h-10 w-10" className="ring-2 ring-white/25" />
         <div className="min-w-0 flex-1">
           <p className="font-semibold leading-tight">{name}</p>
-          <p className="text-[11px] text-emerald-100 truncate">Runs the whole operation · chat first</p>
+          <p className="text-[11px] text-emerald-100 truncate">
+            {vapiActive
+              ? vapiStatus === 'speaking'
+                ? 'Speaking…'
+                : vapiStatus === 'pin_required'
+                  ? 'Say your 4-digit PIN'
+                  : vapiStatus === 'connecting'
+                    ? 'Connecting voice…'
+                    : 'Listening…'
+              : 'Runs the whole operation · chat first'}
+          </p>
         </div>
         <Button
           type="button"
@@ -428,7 +491,7 @@ export default function CynthiaHome() {
         {bubbles.map((b) => {
           if (b.kind === 'card' && b.message.card) {
             return (
-              <div key={b.id} className="flex justify-start">
+              <div key={b.id} className="flex justify-start" data-cynthia-card={b.message.card.id}>
                 <StaffActionCard
                   card={b.message.card}
                   highlight={highlightCardId === b.message.card.id}
@@ -595,63 +658,29 @@ export default function CynthiaHome() {
             }
           }}
         />
-        {isSupported ? (
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            disabled={isTranscribing || sending}
-            className={`shrink-0 rounded-full ${isListening || isTranscribing ? 'bg-red-100 text-red-600' : ''}`}
-            title={isNative ? 'Hold to speak' : 'Voice input'}
-            onClick={() => {
-              if (isNative) return;
-              if (isListening) void stopListening();
-              else void startListening();
-            }}
-            onPointerDown={(e) => {
-              if (!isNative) return;
-              e.preventDefault();
-              void startListening();
-            }}
-            onPointerUp={() => {
-              if (!isNative) return;
-              void stopListening();
-            }}
-            onPointerLeave={() => {
-              if (!isNative || !isListening) return;
-              void stopListening();
-            }}
-            onPointerCancel={() => {
-              if (!isNative || !isListening) return;
-              void stopListening();
-            }}
-          >
-            {isTranscribing ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : isListening ? (
-              <MicOff className="h-5 w-5" />
-            ) : (
-              <Mic className="h-5 w-5 text-slate-600" />
-            )}
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="shrink-0 rounded-full opacity-50"
-            title="Voice not available"
-            onClick={() => toast.error('Voice input is not supported here — type your message instead')}
-          >
-            <Mic className="h-5 w-5 text-slate-400" />
-          </Button>
-        )}
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          disabled={sending || vapiStatus === 'connecting'}
+          className={`shrink-0 rounded-full ${vapiActive ? 'bg-red-100 text-red-600' : ''}`}
+          title={vapiActive ? 'End Cynthia voice' : 'Talk to Cynthia (same phone voice)'}
+          onClick={() => { void toggleVapi(); }}
+        >
+          {vapiStatus === 'connecting' ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : vapiActive ? (
+            <MicOff className="h-5 w-5" />
+          ) : (
+            <Mic className="h-5 w-5 text-slate-600" />
+          )}
+        </Button>
         <Button
           type="button"
           size="icon"
           className="shrink-0 rounded-full bg-[#075e54] hover:bg-[#064e46]"
           disabled={sending || !composer.trim()}
-          onClick={() => void runSend(composer, isListening || isTranscribing ? 'voice' : 'cynthia')}
+          onClick={() => void runSend(composer, 'cynthia')}
         >
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>

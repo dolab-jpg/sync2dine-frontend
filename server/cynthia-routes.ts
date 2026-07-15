@@ -34,20 +34,20 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
-function orgFrom(req: IncomingMessage): string {
+function orgFrom(req: IncomingMessage, body?: Record<string, unknown>): string {
   const h = req.headers['x-org-id'];
   if (typeof h === 'string' && h.trim()) return h.trim();
+  if (typeof body?.orgId === 'string' && body.orgId.trim()) return body.orgId.trim();
   return DEFAULT_ORG_ID;
 }
 
-function userFrom(body: Record<string, unknown>, req: IncomingMessage): string {
+function userFrom(body: Record<string, unknown>, req: IncomingMessage): string | null {
   const h = req.headers['x-user-id'];
   if (typeof h === 'string' && h.trim()) return h.trim();
   if (typeof body.userId === 'string' && body.userId.trim()) return body.userId.trim();
-  return 'default-staff';
+  return null;
 }
 
-/** Best-effort FCM wake — uses backend push if available via HTTP, otherwise logs. */
 async function notifyStaffPush(opts: {
   orgId: string;
   userId: string;
@@ -60,9 +60,15 @@ async function notifyStaffPush(opts: {
     if (!apiBase) return;
     await fetch(`${apiBase.replace(/\/$/, '')}/api/push/notify`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Org-Id': opts.orgId },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Org-Id': opts.orgId,
+        'X-User-Id': opts.userId,
+        'X-User-Role': 'staff',
+      },
       body: JSON.stringify({
         userId: opts.userId,
+        orgId: opts.orgId,
         title: opts.title,
         body: opts.body,
         data: { route: `/cynthia?card=${opts.cardId}`, type: 'cynthia_card' },
@@ -83,16 +89,25 @@ export async function handleCynthiaRoutes(
   if (pathname === '/api/cynthia/thread' && req.method === 'GET') {
     const orgId = orgFrom(req);
     const url = new URL(req.url || '/', 'http://localhost');
-    const userId = url.searchParams.get('userId') || 'default-staff';
+    const headerUser = typeof req.headers['x-user-id'] === 'string' ? req.headers['x-user-id'].trim() : '';
+    const userId = headerUser || url.searchParams.get('userId') || '';
+    if (!userId || userId === 'default-staff') {
+      sendJson(res, 401, { error: 'Authenticated userId required', code: 'staff_not_resolved' });
+      return true;
+    }
     const thread = getStaffThread(orgId, userId);
     sendJson(res, 200, { thread });
     return true;
   }
 
   if (pathname === '/api/cynthia/thread' && req.method === 'POST') {
-    const orgId = orgFrom(req);
     const body = (await readJsonBody(req)) as Record<string, unknown>;
+    const orgId = orgFrom(req, body);
     const userId = userFrom(body, req);
+    if (!userId) {
+      sendJson(res, 401, { error: 'Authenticated userId required', code: 'staff_not_resolved' });
+      return true;
+    }
     const artifact = body.artifact && typeof body.artifact === 'object'
       ? (body.artifact as {
           type: 'pdf' | 'report';
@@ -115,14 +130,19 @@ export async function handleCynthiaRoutes(
   if (pathname === '/api/cynthia/cards' && req.method === 'GET') {
     const orgId = orgFrom(req);
     const url = new URL(req.url || '/', 'http://localhost');
-    const userId = url.searchParams.get('userId') || 'default-staff';
+    const headerUser = typeof req.headers['x-user-id'] === 'string' ? req.headers['x-user-id'].trim() : '';
+    const userId = headerUser || url.searchParams.get('userId') || '';
+    if (!userId || userId === 'default-staff') {
+      sendJson(res, 401, { error: 'Authenticated userId required', code: 'staff_not_resolved' });
+      return true;
+    }
     sendJson(res, 200, { cards: listRecentCards(orgId, userId) });
     return true;
   }
 
   if (pathname === '/api/cynthia/send-card' && req.method === 'POST') {
-    const orgId = orgFrom(req);
     const body = (await readJsonBody(req)) as Record<string, unknown>;
+    const orgId = orgFrom(req, body);
     const userId = resolveStaffUserId({
       userId:
         typeof body.userId === 'string'
@@ -133,6 +153,10 @@ export async function handleCynthiaRoutes(
       staffPhone: typeof body.staffPhone === 'string' ? body.staffPhone : undefined,
       orgId,
     });
+    if (!userId) {
+      sendJson(res, 422, { ok: false, error: 'Could not resolve staff recipient', code: 'staff_not_resolved' });
+      return true;
+    }
 
     const amount = body.amount != null ? Number(body.amount) : undefined;
     const card = pushStaffCard(orgId, userId, {
@@ -186,13 +210,16 @@ export function sendToStaffCynthiaInternal(input: {
   projectId?: string;
   customerId?: string;
   source?: CynthiaStaffCard['source'];
-}): { ok: boolean; card: CynthiaStaffCard; userId: string; route: string } {
-  const orgId = input.orgId || 'default';
+}): { ok: boolean; card?: CynthiaStaffCard; userId?: string; route?: string; error?: string; code?: string } {
+  const orgId = input.orgId || DEFAULT_ORG_ID;
   const userId = resolveStaffUserId({
     userId: input.userId,
     staffPhone: input.staffPhone,
     orgId,
   });
+  if (!userId) {
+    return { ok: false, error: 'Could not resolve staff recipient', code: 'staff_not_resolved' };
+  }
   const card = pushStaffCard(orgId, userId, {
     title: input.title,
     customerName: input.customerName,

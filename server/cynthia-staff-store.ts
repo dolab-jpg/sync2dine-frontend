@@ -162,23 +162,33 @@ function buildDefaultActions(
   return actions;
 }
 
-/** Resolve staff userId for push — prefer explicit, else first team member matching phone, else 'default'. */
+/**
+ * Resolve staff userId for Cynthia cards — fail-closed.
+ * Never falls back to first-admin or default-staff.
+ */
 export function resolveStaffUserId(opts: {
   userId?: string;
   staffPhone?: string;
   orgId?: string;
-}): string {
-  if (opts.userId?.trim()) return opts.userId.trim();
-  const store = getDataStore();
-  const team = Array.isArray(store.teamMembers) ? store.teamMembers : [];
-  if (opts.staffPhone) {
-    const digits = opts.staffPhone.replace(/\D/g, '');
-    const match = team.find((m) => String(m.phone ?? '').replace(/\D/g, '').endsWith(digits.slice(-10)));
-    if (match?.userId) return String(match.userId);
+}): string | null {
+  const explicit = opts.userId?.trim();
+  if (explicit) {
+    if (explicit === 'default-staff' || explicit === 'default') return null;
+    return explicit.length >= 8 ? explicit : null;
   }
-  const staff = team.find((m) => m.role === 'super_admin' || m.role === 'manager' || m.role === 'staff');
-  if (staff?.userId) return String(staff.userId);
-  return 'default-staff';
+  if (opts.staffPhone) {
+    const store = getDataStore();
+    const team = Array.isArray(store.teamMembers) ? store.teamMembers : [];
+    const digits = opts.staffPhone.replace(/\D/g, '');
+    if (digits.length >= 10) {
+      const matches = team.filter((m) => {
+        const p = String(m.phone ?? '').replace(/\D/g, '');
+        return p && (p === digits || p.endsWith(digits.slice(-10)) || digits.endsWith(p.slice(-10)));
+      });
+      if (matches.length === 1 && matches[0]?.userId) return String(matches[0].userId);
+    }
+  }
+  return null;
 }
 
 export function listRecentCards(orgId: string, userId: string, limit = 20): CynthiaStaffCard[] {

@@ -28,6 +28,7 @@ export interface TradeProNativeApi {
   startVoiceRecording: () => Promise<NativeVoiceResult>;
   stopVoiceRecording: () => Promise<NativeVoiceResult>;
   requestNotifications: () => Promise<{ ok: boolean; error?: string; dryRun?: boolean }>;
+  registerPushSession?: (opts: { userId?: string; orgId?: string }) => Promise<{ ok: boolean; error?: string }>;
   navigate: (route: string) => Promise<{ ok: boolean }>;
   /** Syncs the Flutter shell UI locale with the web profile language. */
   setPreferredLanguage?: (lang: string) => Promise<{ ok: boolean; lang?: string; error?: string }>;
@@ -82,14 +83,18 @@ export async function requestNativeNotifications(): Promise<void> {
 }
 
 /** Register push token with backend when native shell provides one. */
-export async function registerDeviceTokenIfNative(userId?: string): Promise<void> {
+export async function registerDeviceTokenIfNative(userId?: string, orgId?: string): Promise<void> {
   if (!isNativeBridgeAvailable()) return;
-  const result = await window.TradeProNative!.requestNotifications();
-  if (!result.ok || result.dryRun) return;
-  const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? '';
-  if (!apiBase) return;
-  // Token registration is handled by Flutter → API directly when push is enabled.
-  void userId;
+  try {
+    const register = window.TradeProNative!.registerPushSession;
+    if (typeof register === 'function') {
+      await register({ userId, orgId });
+      return;
+    }
+    await window.TradeProNative!.requestNotifications();
+  } catch {
+    // Permission denied or Firebase not configured — non-fatal
+  }
 }
 
 /** Ask Flutter shell to navigate to Soft Phone (also used for incoming-call wake). */

@@ -81,7 +81,7 @@ import { installApiFetchInterceptor, syncActiveOrgFromProfile } from './engine/p
 import { integrationService } from './engine/integrations/integrationService';
 import { Toaster } from './components/ui/sonner';
 import { OnlineStatusBanner } from './components/OnlineStatusBanner';
-import { requestNativeNotifications } from './bridge/nativeBridge';
+import { requestNativeNotifications, registerDeviceTokenIfNative } from './bridge/nativeBridge';
 import {
   saveSessionUser,
   loadSessionUser,
@@ -969,6 +969,11 @@ export default function App() {
     setUser(userData);
     setIsLoggedIn(true);
     saveSessionUser(userData);
+    let orgId: string | undefined;
+    try {
+      orgId = localStorage.getItem('tradepro_active_org_id') || localStorage.getItem('activeOrgId') || undefined;
+    } catch { /* ignore */ }
+    void registerDeviceTokenIfNative(userData.id, orgId);
     void requestNativeNotifications();
   };
 
