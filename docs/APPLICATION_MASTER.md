@@ -52,12 +52,12 @@ flowchart LR
 
 | Repo | Local path | Remote | Branch | Local HEAD = `origin/master` |
 |------|------------|--------|--------|------------------------------|
-| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | see tip below (updated on Cynthia unify push) |
-| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | see tip below (updated on Cynthia unify push) |
+| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 9f36243` (tip may include follow-up for this table) |
+| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 2249837` |
 
-**Frontend tip commit:** *(filled after push — Cynthia unified channels + Vapi-only phone branding)*
+**Frontend tip commit:** `9f36243` — Unify Cynthia across staff/web/phone channels; Vapi-only phone branding; `cynthia-widget.js`; Call Centre Cynthia copy.
 
-**Backend tip commit:** *(filled after push — Cynthia phone prompts, Vapi-only gates, no sip-bridge rollback)*
+**Backend tip commit:** `2249837` — Cynthia phone prompts; Vapi-only gates; no sip-bridge rollback; VAPI_SIP.md + sip-bridge README updated.
 
 **Ship note (2026-07-15 Cynthia unify):** Cyrus + Aria collapsed into **Cynthia channels** (§4.1). Phone AI is Vapi-only; `/api/cyrus/*` + `cyrus-widget.js` remain transport aliases; new embeds use `cynthia-widget.js`.
 
