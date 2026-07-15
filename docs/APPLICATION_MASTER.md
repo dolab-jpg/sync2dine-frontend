@@ -1,19 +1,19 @@
-# TradePro / Builder Diddies — Application Master Audit
+﻿# TradePro / Builder Diddies â€” Application Master Audit
 
 **Audit date:** 2026-07-15 (evening UK)  
-**Method:** Code walk → live probes → then cross-check existing docs (never the reverse).  
+**Method:** Code walk â†’ live probes â†’ then cross-check existing docs (never the reverse).  
 **Purpose:** Single place to open before searching the codebase. Update markers when shipping.
 
 ---
 
 ## How to use this document
 
-1. Start here for “what exists / where / is it live?”
-2. **§§1–15** = infrastructure layers + maps. **§§16–22** = deep-dives (voice, tools, WhatsApp, setup books).
-3. **§§23–25 (Part C)** = coverage matrix + Feature Location Atlas + API catalogue.
-4. **§§27–28 (Part D)** = Flutter / mobile + how-it-works for former gaps (additive).
+1. Start here for â€œwhat exists / where / is it live?â€
+2. **Â§Â§1â€“15** = infrastructure layers + maps. **Â§Â§16â€“22** = deep-dives (voice, tools, WhatsApp, setup books).
+3. **Â§Â§23â€“25 (Part C)** = coverage matrix + Feature Location Atlas + API catalogue.
+4. **Â§Â§27â€“28 (Part D)** = Flutter / mobile + how-it-works for former gaps (additive).
 5. Status markers are authoritative for this audit date; re-probe VPS/Supabase after major deploys.
-6. When you add a feature: update §23 matrix, §24 atlas row, and §25 API line in the same session.
+6. When you add a feature: update Â§23 matrix, Â§24 atlas row, and Â§25 API line in the same session.
 
 ### Status markers
 
@@ -25,12 +25,12 @@
 | `GITHUB_ONLY` | On `origin/master` (or local+GH) but **not** on VPS and/or not on Supabase |
 | `VPS_ONLY` | Present on VPS but missing from local/`origin/master` (rare drift) |
 | `SUPABASE_ONLY` | Present in cloud schema but missing from local migrations (rare drift) |
-| `PLANNED` | Registry stub / “future” wording only |
+| `PLANNED` | Registry stub / â€œfutureâ€ wording only |
 | `DO_NOT_SHIP` | Local scratch, session data, secrets, Playwright artifacts |
 
 ---
 
-## 1. Three layers — verified now
+## 1. Three layers â€” verified now
 
 Pushing GitHub alone never refreshes the live site. Migrations never deploy the SPA or Node API.
 
@@ -48,37 +48,37 @@ flowchart LR
   vps -->|API_service_role| supabase
 ```
 
-### 1A — GitHub
+### 1A â€” GitHub
 
 | Repo | Local path | Remote | Branch | Local HEAD = `origin/master` |
 |------|------------|--------|--------|------------------------------|
 | Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 9f36243` (tip may include follow-up for this table) |
 | Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 2249837` |
 
-**Frontend tip commit:** `9f36243` — Unify Cynthia across staff/web/phone channels; Vapi-only phone branding; `cynthia-widget.js`; Call Centre Cynthia copy.
+**Frontend tip commit:** `1258bc4` (feature `9f36243`) â€” Unify Cynthia across staff/web/phone channels; Vapi-only phone branding; `cynthia-widget.js`; Call Centre Cynthia copy.
 
-**Backend tip commit:** `2249837` — Cynthia phone prompts; Vapi-only gates; no sip-bridge rollback; VAPI_SIP.md + sip-bridge README updated.
+**Backend tip commit:** `2249837` â€” Cynthia phone prompts; Vapi-only gates; no sip-bridge rollback; VAPI_SIP.md + sip-bridge README updated.
 
-**Ship note (2026-07-15 Cynthia unify):** Cyrus + Aria collapsed into **Cynthia channels** (§4.1). Phone AI is Vapi-only; `/api/cyrus/*` + `cyrus-widget.js` remain transport aliases; new embeds use `cynthia-widget.js`.
+**Ship note (2026-07-15 Cynthia unify):** Cyrus + Aria collapsed into **Cynthia channels** (Â§4.1). Phone AI is Vapi-only; `/api/cyrus/*` + `cyrus-widget.js` remain transport aliases; new embeds use `cynthia-widget.js`.
 
 **DO_NOT_SHIP:** `.cursor/local/*.py`, `debug-login.png`, `playwright-report/`, `test-results/`, backend `server/data/*`, `_patch_*.cjs`, `_tmp_*.cjs`, `tmp-aria-lizzie.mp3`.
 
-### 1B — VPS (`https://app.b-diddies.com`)
+### 1B â€” VPS (`https://app.b-diddies.com`)
 
-Host SSH: `vps` → `mail.all1house.com`.
+Host SSH: `vps` â†’ `mail.all1house.com`.
 
 | Check | Result |
 |-------|--------|
 | SPA docroot | `/var/www/vhosts/b-diddies.com/app.b-diddies.com/` |
 | Live bundles | `assets/index-CET7sGhh.js` + `assets/index-CEERq7t0.css` |
 | Local `dist/` | **Same hashes** (built ~2026-07-15 20:38 UTC) |
-| Title in live HTML | Builder Diddies — Construction Estimation Platform |
+| Title in live HTML | Builder Diddies â€” Construction Estimation Platform |
 | API unit | `tradepro-api` = **active** |
 | API WorkingDirectory | `/var/www/vhosts/b-diddies.com/tradepro-backend` |
-| API process | Node 24 + `tsx` → `server/index.ts` (**canonical backend**, not frontend `server/`) |
+| API process | Node 24 + `tsx` â†’ `server/index.ts` (**canonical backend**, not frontend `server/`) |
 | VPS backend git SHA | `13f3c71` = local = `origin/master` |
 | Env file | `/etc/tradepro-api.env` (key names only listed below) |
-| Also on disk | `tradepro-app/` frontend tree; `httpdocs/` marketing site — **SPA users hit `app.b-diddies.com`** |
+| Also on disk | `tradepro-app/` frontend tree; `httpdocs/` marketing site â€” **SPA users hit `app.b-diddies.com`** |
 
 **HTTP smoke (2026-07-15 evening):**
 
@@ -89,27 +89,27 @@ Host SSH: `vps` → `mail.all1house.com`.
 | `GET /api/ai/code-fix` | 200 | Self-heal path present |
 | `GET /api/org/staff/list` | 200 | Org/staff |
 | `GET /api/auth/me` | 401 | Auth gate |
-| `GET /api/whatsapp-web/status` | **200** | Was 404 on earlier audit — **now LIVE** |
-| `GET /api/whatsapp-web/qr` | **200** | Was 404 — **now LIVE** |
+| `GET /api/whatsapp-web/status` | **200** | Was 404 on earlier audit â€” **now LIVE** |
+| `GET /api/whatsapp-web/qr` | **200** | Was 404 â€” **now LIVE** |
 | `GET /api/agent-activity` | 401 | Route present, auth required |
 | `GET /webhooks/vapi` | 405 | Webhook wired |
 | `GET /webhooks/whatsapp` | 403 | Meta webhook path exists |
-| `GET /api/vapi/web-session` | 404 | GET unused — use POST |
+| `GET /api/vapi/web-session` | 404 | GET unused â€” use POST |
 | `POST /api/vapi/web-session` | 401 | Route present, auth/session required |
 | `GET /api/vapi/health` | 200 | Vapi health OK |
 
-**Env key names on VPS** (values not recorded): `PORT`, `APP_BASE_URL`, `INTEGRATIONS_MOCK_MODE`, `JWT_SECRET`, `ORG_ENCRYPTION_KEY`, `SUPABASE_*`, `OPENAI_API_KEY`, `CURSOR_API_KEY`, `VOICE_PROVIDER`, `TELEPHONY_PROVIDER`, `VAPI_*`, `ELEVENLABS_*`, `SOHO66_*`, `VOICE_*`, `HOME_ORG_ID`, `DEFAULT_ORG_ID`, `GITHUB_TOKEN`, `WEBHOOK_BASE_URL`, …
+**Env key names on VPS** (values not recorded): `PORT`, `APP_BASE_URL`, `INTEGRATIONS_MOCK_MODE`, `JWT_SECRET`, `ORG_ENCRYPTION_KEY`, `SUPABASE_*`, `OPENAI_API_KEY`, `CURSOR_API_KEY`, `VOICE_PROVIDER`, `TELEPHONY_PROVIDER`, `VAPI_*`, `ELEVENLABS_*`, `SOHO66_*`, `VOICE_*`, `HOME_ORG_ID`, `DEFAULT_ORG_ID`, `GITHUB_TOKEN`, `WEBHOOK_BASE_URL`, â€¦
 
-### 1C — Supabase cloud
+### 1C â€” Supabase cloud
 
 | Item | Result |
 |------|--------|
 | Project ref | `nqdiigfrbxyurpfbufxu` |
 | Local migrations | **14** SQL files in `tradepro-backend/supabase/migrations/` |
-| Remote migrations | **14** — **exact match** (Management API + `schema_migrations` query) |
+| Remote migrations | **14** â€” **exact match** (Management API + `schema_migrations` query) |
 | Edge functions (repo) | `platform-orgs`, `stripe-webhook`, `contract-portal` |
 
-Remote versions: `202607090001` … `202607090008`, `202607110001`, `202607140001`, `202607140002`, `202607150001`, `202607160001`, `202607160002`.
+Remote versions: `202607090001` â€¦ `202607090008`, `202607110001`, `202607140001`, `202607140002`, `202607150001`, `202607160001`, `202607160002`.
 
 ---
 
@@ -118,11 +118,11 @@ Remote versions: `202607090001` … `202607090008`, `202607110001`, `20260714000
 | Surface | Role | Canonical home |
 |---------|------|----------------|
 | React SPA | UI, routing, client engines | Frontend repo `src/` |
-| Vite proxy (dev) | `/api/*`, `/webhooks/*` → backend `:3001` | `vite.ai-plugin.ts` |
+| Vite proxy (dev) | `/api/*`, `/webhooks/*` â†’ backend `:3001` | `vite.ai-plugin.ts` |
 | Node companion | AI, voice, WhatsApp, mailbox, Stripe, auth helpers | **tradepro-backend** `server/` |
-| Frontend `server/` | Old companion copy | **`LEGACY`** — not what VPS runs; do not treat as SoT |
+| Frontend `server/` | Old companion copy | **`LEGACY`** â€” not what VPS runs; do not treat as SoT |
 | Supabase | Auth, Postgres, Storage, Edge Functions | tradepro-backend `supabase/` |
-| SIP bridge | Unsupported for Cynthia phone AI (historical only) | tradepro-backend `sip-bridge/` — do not use for AI answering |
+| SIP bridge | Unsupported for Cynthia phone AI (historical only) | tradepro-backend `sip-bridge/` â€” do not use for AI answering |
 
 **Dev ports:** frontend **5174**, backend **3001**. Cynthia phone AI uses Vapi (no local sip-bridge).
 
@@ -132,9 +132,9 @@ Remote versions: `202607090001` … `202607090008`, `202607110001`, `20260714000
 
 | Role | Local path | GitHub | Production surface |
 |------|------------|--------|--------------------|
-| Frontend (SPA) | `c:\Users\dolab\Downloads\Bathroom Sales Estimation Platform` | `dolab-jpg/tradepro-frontend` → `master` | VPS `.../app.b-diddies.com/` |
-| Backend (API + migrations) | `c:\Users\dolab\Downloads\tradepro-backend` | `dolab-jpg/tradepro-backend` → `master` | VPS `.../tradepro-backend/` + systemd `tradepro-api` |
-| Mobile (Flutter WebView) | `c:\Users\dolab\Downloads\tradepro-mobile` | `dolab-jpg/tradepro-mobile` → `master` @ `f674a522` | APK/iOS loads `https://app.b-diddies.com` — **§27** |
+| Frontend (SPA) | `c:\Users\dolab\Downloads\Bathroom Sales Estimation Platform` | `dolab-jpg/tradepro-frontend` â†’ `master` | VPS `.../app.b-diddies.com/` |
+| Backend (API + migrations) | `c:\Users\dolab\Downloads\tradepro-backend` | `dolab-jpg/tradepro-backend` â†’ `master` | VPS `.../tradepro-backend/` + systemd `tradepro-api` |
+| Mobile (Flutter WebView) | `c:\Users\dolab\Downloads\tradepro-mobile` | `dolab-jpg/tradepro-mobile` â†’ `master` @ `f674a522` | APK/iOS loads `https://app.b-diddies.com` â€” **Â§27** |
 | Database / Auth | (migrations in backend repo) | via Supabase cloud | Project ref `nqdiigfrbxyurpfbufxu` |
 
 GitHub account: **dolab-jpg**. Auth via Windows Credential Manager (`git:https://github.com`).
@@ -177,16 +177,16 @@ Source: `src/app/App.tsx`.
 | `/site-survey` | Site survey | staff+ | `SiteSurvey` | LIVE |
 | `/communications`, `/email` | Comms hub | staff+ | `CommunicationsHub` | LIVE |
 | `/cynthia`, `/cynthia/ingest` | Cynthia home | staff+ | `CynthiaHome` | LIVE |
-| `/cyrus` | Redirect | — | → `/cynthia` | LIVE |
+| `/cyrus` | Redirect | â€” | â†’ `/cynthia` | LIVE |
 | `/cyrus/legacy` | Cynthia website/portal threads (legacy inbox UI) | staff+ | `CyrusConversations` | LEGACY UI |
 | `/calls` | Call Centre (Cynthia phone) | staff+ | `CallCenter` | LIVE |
-| `/agent` | Redirect | — | → `/calls` | LIVE |
+| `/agent` | Redirect | â€” | â†’ `/calls` | LIVE |
 | `/integrations` | Integrations hub | super_admin | `IntegrationsHub` | LIVE |
 | `/settings` | Settings | super_admin | `Settings` | LIVE |
 | `/team` | Team | super_admin | `TeamManagement` | LIVE |
 | `/sales` | Sales | super_admin | `SalesManagement` | LIVE |
 | `/projects`, `/projects/:projectId` | Projects | (open to authed) | `BuilderProjectManagement` | LIVE |
-| `/builder-projects`… | Alias | — | same | LIVE |
+| `/builder-projects`â€¦ | Alias | â€” | same | LIVE |
 | `/builder` | Builder dashboard | builder | `BuilderDashboard` | LIVE |
 | `/builder-management` | Builder mgmt | super_admin, manager | `BuilderManagement` | LIVE |
 | `/costing` | Costing | super_admin, manager | `CostingDashboard` | LIVE |
@@ -233,11 +233,11 @@ Source: `src/app/App.tsx`.
 | `recruitment/` | Recruitment store | PARTIAL |
 | `storage/` | File storage abstraction | LIVE |
 | `team/` | Team snapshot | LIVE |
-| Top-level | `aiChatService`, `aiEstimationService`, `quoteCalculator`, `salesCloseFlow`, `staffAiService`, … | LIVE |
+| Top-level | `aiChatService`, `aiEstimationService`, `quoteCalculator`, `salesCloseFlow`, `staffAiService`, â€¦ | LIVE |
 
 ### 3.4 Component clusters (`src/app/components/`)
 
-`accounts`, `AI`, `aiStudio`, `Approvals`, `buildingControl`, `CallCenter`, `Contracts`, `Cynthia`, `integrations`, `JobPricing`, `mailbox`, `planning`, `platform`, `project`, `QuoteBuilder`, `settings`, `ui` (+ many top-level screens: CRM, Dashboard, Settings, …).
+`accounts`, `AI`, `aiStudio`, `Approvals`, `buildingControl`, `CallCenter`, `Contracts`, `Cynthia`, `integrations`, `JobPricing`, `mailbox`, `planning`, `platform`, `project`, `QuoteBuilder`, `settings`, `ui` (+ many top-level screens: CRM, Dashboard, Settings, â€¦).
 
 ### 3.5 Trades config
 
@@ -249,7 +249,7 @@ Locales: `en`, `es`, `pl`, `ru`, `uk`, `zh`, `fa`, `sq` under `src/app/i18n/`.
 
 ### 3.7 Frontend env (browser-safe)
 
-From `.env.example` — only these belong in this repo for runtime:
+From `.env.example` â€” only these belong in this repo for runtime:
 
 | Variable | Purpose |
 |----------|---------|
@@ -270,18 +270,18 @@ Dev: Vite proxies `/api/*` and `/webhooks/*` via `vite.ai-plugin.ts` to `VITE_AP
 
 | Agent | Audience / channels | Entry | Code | Status |
 |-------|---------------------|-------|------|--------|
-| **Cynthia** | Company AI — staff/ops, website widget/portal/WhatsApp, phone | `/cynthia` + overlay; `cynthia-widget.js` / `cyrus-widget.js` + `/api/cyrus/*` (transport aliases); `/calls` + Vapi | `components/Cynthia/`, `components/AI/`, `engine/cynthia/`, `engine/cyrus/`, persona `engine/ai/personas/cyrus.ts`, Call Centre + backend `phone-brain` / Vapi | LIVE |
+| **Cynthia** | Company AI â€” staff/ops, website widget/portal/WhatsApp, phone | `/cynthia` + overlay; `cynthia-widget.js` / `cyrus-widget.js` + `/api/cyrus/*` (transport aliases); `/calls` + Vapi | `components/Cynthia/`, `components/AI/`, `engine/cynthia/`, `engine/cyrus/`, persona `engine/ai/personas/cyrus.ts`, Call Centre + backend `phone-brain` / Vapi | LIVE |
 | **UK Foreman** | Field/builder mode | orchestrator mode | `personas/ukForeman.ts`, `foremanExecutor.ts` | LIVE |
 
-Cynthia is one agent with three delivery channels (not three agents). Internal mode strings `staff` / `cyrus` / `phone` and API path `/api/cyrus/*` remain as transport aliases. Phone AI is **Vapi only** (`VOICE_PROVIDER=vapi`) — no sip-bridge rollback.
+Cynthia is one agent with three delivery channels (not three agents). Internal mode strings `staff` / `cyrus` / `phone` and API path `/api/cyrus/*` remain as transport aliases. Phone AI is **Vapi only** (`VOICE_PROVIDER=vapi`) â€” no sip-bridge rollback.
 
 ### 4.2 Core AI modules
 
 | File | Role |
 |------|------|
 | `engine/ai/toolRuntime.ts` | Primary tool execution |
-| `engine/ai/gapToolRuntime.ts` | Gap-closing tools (invoice PDF, send quote, SMS, WhatsApp media, …) |
-| `engine/ai/toolAliases.ts` | Legacy name → canonical (`saveCustomer`→`linkCustomer`, `navigate`→`navigateTo`, …) |
+| `engine/ai/gapToolRuntime.ts` | Gap-closing tools (invoice PDF, send quote, SMS, WhatsApp media, â€¦) |
+| `engine/ai/toolAliases.ts` | Legacy name â†’ canonical (`saveCustomer`â†’`linkCustomer`, `navigate`â†’`navigateTo`, â€¦) |
 | `engine/ai/toolFacadeClient.ts` | Optional server facade (`AI_TOOL_FACADE`) |
 | `engine/ai/actionPolicy.ts` / `actionExecutor.ts` | Policy + execution |
 | `engine/ai/rolePermissions.ts` | Role buckets for tools |
@@ -292,16 +292,16 @@ Cynthia is one agent with three delivery channels (not three agents). Internal m
 
 ### 4.3 Tools (summary)
 
-Full named lists, role buckets, phone PIN registry, facade ops, and policy tiers: **§17**.  
+Full named lists, role buckets, phone PIN registry, facade ops, and policy tiers: **Â§17**.  
 Gap tools (25), orchestrator packs, and Call Centre phone tools are all documented there.
 
 ### 4.4 Chat UI
 
-`components/AI/`: `AIChatPanel`, `AIAssistantOverlay`, `ChatComposer`, `CynthiaActivityPanel`, `ToolResultPanel`, `VoiceInputButton`, `SelfHealErrorBridge`, …  
+`components/AI/`: `AIChatPanel`, `AIAssistantOverlay`, `ChatComposer`, `CynthiaActivityPanel`, `ToolResultPanel`, `VoiceInputButton`, `SelfHealErrorBridge`, â€¦  
 Context: `context/AIAssistantContext.tsx`.  
-Studio: `components/aiStudio/` (`ConversationAudit`, `CodeFixesAudit`, …).
+Studio: `components/aiStudio/` (`ConversationAudit`, `CodeFixesAudit`, â€¦).
 
-Voice / WhatsApp / mailbox / Stripe / Cynthia channel setup deep-dives: **§§16, 18–20**.
+Voice / WhatsApp / mailbox / Stripe / Cynthia channel setup deep-dives: **Â§Â§16, 18â€“20**.
 
 ---
 
@@ -311,7 +311,7 @@ Voice / WhatsApp / mailbox / Stripe / Cynthia channel setup deep-dives: **§§16
 
 Source: `tradepro-backend/server/index.ts` (first match wins):
 
-WhatsApp Meta → Phone → Vapi → Agent → Projects → Building control → AI Studio → Conversation audit → Banking → Mailbox → Package updates → Messages → Price research → Contracts → Stripe → Auth → Org OpenAI key → Platform → Leads → Cynthia web (`/api/cyrus`) → Cynthia staff → Channels → Agent credentials → Push → **WhatsApp Web** → Gap APIs → Agent activity → `/api/ai/*` proxy → 404.
+WhatsApp Meta â†’ Phone â†’ Vapi â†’ Agent â†’ Projects â†’ Building control â†’ AI Studio â†’ Conversation audit â†’ Banking â†’ Mailbox â†’ Package updates â†’ Messages â†’ Price research â†’ Contracts â†’ Stripe â†’ Auth â†’ Org OpenAI key â†’ Platform â†’ Leads â†’ Cynthia web (`/api/cyrus`) â†’ Cynthia staff â†’ Channels â†’ Agent credentials â†’ Push â†’ **WhatsApp Web** â†’ Gap APIs â†’ Agent activity â†’ `/api/ai/*` proxy â†’ 404.
 
 ### 5.2 Route groups (canonical)
 
@@ -354,7 +354,7 @@ WhatsApp Meta → Phone → Vapi → Agent → Projects → Building control →
 
 ### 5.5 SIP bridge
 
-`sip-bridge/` — historical only; unsupported for Cynthia phone AI. See `docs/VAPI_SIP.md` in backend repo for the Vapi path.
+`sip-bridge/` â€” historical only; unsupported for Cynthia phone AI. See `docs/VAPI_SIP.md` in backend repo for the Vapi path.
 
 ### 5.6 Frontend `server/` (legacy)
 
@@ -387,9 +387,9 @@ Migrations are the schema source of truth (all **14** applied remotely).
 | Profile columns (later migrations) | `username`, `preferred_language` |
 
 Many CRM/ops rows use `data jsonb` blobs keyed by `org_id`.  
-`profiles.id` → `auth.users`. RLS in `202607090006_rls.sql`; storage in `202607090007_storage.sql`.
+`profiles.id` â†’ `auth.users`. RLS in `202607090006_rls.sql`; storage in `202607090007_storage.sql`.
 
-**Type sync:** frontend `npm run sync:types` copies `tradepro-backend/shared/database.types.ts` → `src/lib/supabase/types.ts`.
+**Type sync:** frontend `npm run sync:types` copies `tradepro-backend/shared/database.types.ts` â†’ `src/lib/supabase/types.ts`.
 
 ---
 
@@ -400,7 +400,7 @@ Source: `src/app/config/integrations/registry.ts` + backend/VPS wiring.
 | ID | Category | Status | Notes |
 |----|----------|--------|-------|
 | `openai` | AI | LIVE | Company AI Brain; org key sync |
-| `whatsapp` | Messaging | LIVE | WhatsApp Web QR — API **200** on VPS |
+| `whatsapp` | Messaging | LIVE | WhatsApp Web QR â€” API **200** on VPS |
 | `email_smtp` | Messaging | LIVE | SMTP send |
 | `email_oauth` | Messaging | LIVE | Gmail/Outlook/Yahoo IMAP OAuth |
 | `email_resend` | Messaging | PARTIAL | Config UI; confirm provider path when used |
@@ -413,7 +413,7 @@ Source: `src/app/config/integrations/registry.ts` + backend/VPS wiring.
 | `voice_telephony` | Messaging | LIVE | Cynthia phone / Soho66 + Vapi (`VOICE_PROVIDER=vapi` on VPS; no rollback) |
 | `chatterbox_tts` | AI | PARTIAL | Optional cloned TTS |
 | `storage` | Files | LIVE | Default Supabase Storage; local = offline fallback only |
-| `xero` | Accounting | PLANNED | Marked “future” in registry |
+| `xero` | Accounting | PLANNED | Marked â€œfutureâ€ in registry |
 | `open_banking` | Banking | PARTIAL | Default mock provider |
 | `price_research` | AI | LIVE / PARTIAL | OpenAI web / Tavily / Serper |
 | `company` | General | LIVE | Company profile for Cynthia/PDFs |
@@ -442,9 +442,9 @@ Values are never stored in this doc. Names only.
 
 | Variable | Where | Notes |
 |----------|-------|-------|
-| `VITE_API_BASE_URL` | `.env.local` / prod build env | Dev → `http://localhost:3001`; prod often empty (same-origin `/api`) |
+| `VITE_API_BASE_URL` | `.env.local` / prod build env | Dev â†’ `http://localhost:3001`; prod often empty (same-origin `/api`) |
 | `VITE_SUPABASE_URL` | same | Supabase HTTPS URL |
-| `VITE_SUPABASE_ANON_KEY` | same | Anon only — never service role |
+| `VITE_SUPABASE_ANON_KEY` | same | Anon only â€” never service role |
 | `VITE_DEMO_LOGIN` | same | `false` in production |
 
 Client: `src/lib/supabase/client.ts`.
@@ -466,8 +466,8 @@ Configure in `tradepro-backend/.env` locally and `/etc/tradepro-api.env` on VPS.
 
 | File | Purpose |
 |------|---------|
-| `.cursor/local/deploy.env` | `SUPABASE_ACCESS_TOKEN`, project ref, optional keys for agent deploy — **never commit** |
-| Backend `server/data/.wwebjs_auth/` | WhatsApp Web session — **never commit / never scp wholesale** |
+| `.cursor/local/deploy.env` | `SUPABASE_ACCESS_TOKEN`, project ref, optional keys for agent deploy â€” **never commit** |
+| Backend `server/data/.wwebjs_auth/` | WhatsApp Web session â€” **never commit / never scp wholesale** |
 
 ### 9.4 Re-probe note
 
@@ -479,10 +479,10 @@ Re-verified 2026-07-15 evening (second pass): VPS smoke still `200` health / Wha
 
 | Layer | Location | Status |
 |-------|----------|--------|
-| Unit (Vitest) | `tests/unit/*.test.ts` — agentActivity, toolAliases, toolFacadeClient, selfHealClassify, nativeBridge, i18nLanguages | LIVE |
-| Auth e2e (Playwright) | `tests/auth/*` — login, signup-org, oauth, password, invite, profile, lockdown | LIVE |
+| Unit (Vitest) | `tests/unit/*.test.ts` â€” agentActivity, toolAliases, toolFacadeClient, selfHealClassify, nativeBridge, i18nLanguages | LIVE |
+| Auth e2e (Playwright) | `tests/auth/*` â€” login, signup-org, oauth, password, invite, profile, lockdown | LIVE |
 | Visual | `tests/visual/responsive.spec.ts`, `mobile-shell.spec.ts` | LIVE |
-| CI | `.github/workflows/frontend-tests.yml` — Playwright Chromium + `test:bridge` + `test:responsive` | LIVE |
+| CI | `.github/workflows/frontend-tests.yml` â€” Playwright Chromium + `test:bridge` + `test:responsive` | LIVE |
 
 Scripts: `npm run test:bridge`, `test:responsive`. Dev server port **5174**.
 
@@ -494,8 +494,8 @@ Scripts: `npm run test:bridge`, `test:responsive`. Dev server port **5174**.
 |------|--------|
 | 1 | Land commits on GitHub `master` (both repos as needed) |
 | 2 | Build frontend with production env (`.env.production.local`) |
-| 3 | Deploy SPA only: `scripts/deploy-spa.sh` (SSH host `vps`) → `/var/www/vhosts/b-diddies.com/app.b-diddies.com/` — group `psaserv`; careful `.htaccess` quoting. **Never** copy into marketing `httpdocs/`. |
-| 4 | Leave `tradepro-api` on **tradepro-backend** (do not run full `deploy-vps.sh` — it rewires API to legacy `tradepro-app`) |
+| 3 | Deploy SPA only: `scripts/deploy-spa.sh` (SSH host `vps`) â†’ `/var/www/vhosts/b-diddies.com/app.b-diddies.com/` â€” group `psaserv`; careful `.htaccess` quoting. **Never** copy into marketing `httpdocs/`. |
+| 4 | Leave `tradepro-api` on **tradepro-backend** (do not run full `deploy-vps.sh` â€” it rewires API to legacy `tradepro-app`) |
 | 5 | Push Supabase migrations via MCP / `npm run supabase:push` from backend |
 
 Local SPA publish recipe (`.env.production.local` present):
@@ -508,20 +508,20 @@ scp scripts/deploy-spa.sh vps:/tmp/deploy-spa.sh
 ssh vps "sudo bash /tmp/deploy-spa.sh"
 ```
 
-Historical point-in-time checks: [archive/DEPLOYMENT_AUDIT_2026-07-15.md](./archive/DEPLOYMENT_AUDIT_2026-07-15.md) — archived (DRIFT); prefer §1 of this file.
+Historical point-in-time checks: [archive/DEPLOYMENT_AUDIT_2026-07-15.md](./archive/DEPLOYMENT_AUDIT_2026-07-15.md) â€” archived (DRIFT); prefer Â§1 of this file.
 
 ---
 
 ## 12. Known gaps and traps (current)
 
-1. **Frontend `server/` is LEGACY** — VPS API is tradepro-backend. Do not “fix prod” only in frontend `server/`.
+1. **Frontend `server/` is LEGACY** â€” VPS API is tradepro-backend. Do not â€œfix prodâ€ only in frontend `server/`.
 2. **WhatsApp Web gap from morning deploy audit is CLOSED** on API (routes return 200). Still verify QR login in a real browser after credentials/session.
-3. **`GET /api/vapi/web-session` → 404** is normal; clients must **POST** (returns 401 without auth).
-4. **Recruitment / Accounts** routes are flag-gated → mark work as PARTIAL unless flags enabled for the org.
+3. **`GET /api/vapi/web-session` â†’ 404** is normal; clients must **POST** (returns 401 without auth).
+4. **Recruitment / Accounts** routes are flag-gated â†’ mark work as PARTIAL unless flags enabled for the org.
 5. **Xero** is PLANNED. **Open banking** defaults to mock.
-6. **Dual auth** (Supabase + legacy JWT) — prefer Supabase session for app work.
-7. **Local JSON companion** — Node may cache under `server/data/*.json` beside Supabase (WhatsApp/Cynthia threads, mailbox, etc.). Never commit those files. **MongoDB removed** — cloud DB is Supabase only.
-8. **Marketing `httpdocs` vs SPA `app.b-diddies.com`** — different trees; deploy SPA with `scripts/deploy-spa.sh` to the app docroot only (never apex `httpdocs/`).
+6. **Dual auth** (Supabase + legacy JWT) â€” prefer Supabase session for app work.
+7. **Local JSON companion** â€” Node may cache under `server/data/*.json` beside Supabase (WhatsApp/Cynthia threads, mailbox, etc.). Never commit those files. **MongoDB removed** â€” cloud DB is Supabase only.
+8. **Marketing `httpdocs` vs SPA `app.b-diddies.com`** â€” different trees; deploy SPA with `scripts/deploy-spa.sh` to the app docroot only (never apex `httpdocs/`).
 
 ---
 
@@ -529,16 +529,16 @@ Historical point-in-time checks: [archive/DEPLOYMENT_AUDIT_2026-07-15.md](./arch
 
 | Document | Prior role | Verdict |
 |----------|------------|---------|
-| [archive/DEPLOYMENT_AUDIT_2026-07-15.md](./archive/DEPLOYMENT_AUDIT_2026-07-15.md) | Local↔GitHub↔VPS↔Supabase snapshot | **Archived (DRIFT)** — historical only; prefer §1 |
-| [archive/BACKEND_DEPS.md](./archive/BACKEND_DEPS.md) | Routes expected from backend | **Archived (STALE framing)** — prefer §5 + §25 |
-| [CYRUS_GO_LIVE.md](./CYRUS_GO_LIVE.md) | OpenAI / Cynthia / WhatsApp checklist | Ops checklist — use for go-live steps; wiring details may lag WhatsApp Web-first model |
+| [archive/DEPLOYMENT_AUDIT_2026-07-15.md](./archive/DEPLOYMENT_AUDIT_2026-07-15.md) | Localâ†”GitHubâ†”VPSâ†”Supabase snapshot | **Archived (DRIFT)** â€” historical only; prefer Â§1 |
+| [archive/BACKEND_DEPS.md](./archive/BACKEND_DEPS.md) | Routes expected from backend | **Archived (STALE framing)** â€” prefer Â§5 + Â§25 |
+| [CYRUS_GO_LIVE.md](./CYRUS_GO_LIVE.md) | OpenAI / Cynthia / WhatsApp checklist | Ops checklist â€” use for go-live steps; wiring details may lag WhatsApp Web-first model |
 | [WHATSAPP_GO_LIVE.md](./WHATSAPP_GO_LIVE.md) | Meta WABA checklist | Still useful for Meta Cloud; Web.js path is now primary UI integration |
 | [VOICE_SETUP.md](./VOICE_SETUP.md) | Cynthia phone / Vapi / Soho66 | Ops checklist; production is Vapi-only (no sip-bridge rollback) |
-| [CASA_MAILBOX_CHECKLIST.md](./CASA_MAILBOX_CHECKLIST.md) | Gmail OAuth / CASA | Ops checklist — link only |
+| [CASA_MAILBOX_CHECKLIST.md](./CASA_MAILBOX_CHECKLIST.md) | Gmail OAuth / CASA | Ops checklist â€” link only |
 | [RESPONSIVE_AUDIT.md](./RESPONSIVE_AUDIT.md) + `docs/responsive-audit/` | Responsive QA | Separate QA artifact |
 | [README.md](../README.md) | Quick start | MATCH for ports/env; points here for full inventory |
 | Backend `README.md` | Backend quick start | MATCH for structure; points here for full inventory |
-| Frontend `server/README.md` | Says backend moved | MATCH — reinforce LEGACY |
+| Frontend `server/README.md` | Says backend moved | MATCH â€” reinforce LEGACY |
 
 ---
 
@@ -548,19 +548,19 @@ After any of the following, update this file:
 
 | Change | Update section |
 |--------|----------------|
-| New SPA route | §3.2 |
-| New engine module | §3.3 |
-| New integration ID | §7 |
-| New agent/tool | §4 + §17 |
-| Voice / telephony change | §16 |
-| WhatsApp change | §18 |
-| Mailbox / Stripe / Cynthia web channels | §19–20 |
-| New API mount | §5 |
-| New migration / table | §1C + §6 |
-| Env / secrets key added | §9 + relevant deep-dive |
-| Deploy to VPS | §1B + §21 |
-| Push migrations | §1C |
-| GitHub ship | §1A SHAs |
+| New SPA route | Â§3.2 |
+| New engine module | Â§3.3 |
+| New integration ID | Â§7 |
+| New agent/tool | Â§4 + Â§17 |
+| Voice / telephony change | Â§16 |
+| WhatsApp change | Â§18 |
+| Mailbox / Stripe / Cynthia web channels | Â§19â€“20 |
+| New API mount | Â§5 |
+| New migration / table | Â§1C + Â§6 |
+| Env / secrets key added | Â§9 + relevant deep-dive |
+| Deploy to VPS | Â§1B + Â§21 |
+| Push migrations | Â§1C |
+| GitHub ship | Â§1A SHAs |
 
 Re-run light probes:
 
@@ -579,29 +579,29 @@ curl.exe -sS -o NUL -w "%{http_code}" https://app.b-diddies.com/api/whatsapp-web
 
 ---
 
-## 15. Quick “where is X?”
+## 15. Quick â€œwhere is X?â€
 
 | Question | Answer |
 |----------|--------|
-| Production UI | `https://app.b-diddies.com` → VPS `.../app.b-diddies.com/` |
-| Production API | Same host `/api`, `/webhooks` → systemd `tradepro-api` in **tradepro-backend** |
+| Production UI | `https://app.b-diddies.com` â†’ VPS `.../app.b-diddies.com/` |
+| Production API | Same host `/api`, `/webhooks` â†’ systemd `tradepro-api` in **tradepro-backend** |
 | Database / Auth | Supabase project `nqdiigfrbxyurpfbufxu` |
 | Frontend source | GitHub `dolab-jpg/tradepro-frontend` |
 | Backend source | GitHub `dolab-jpg/tradepro-backend` |
 | Cynthia UI | `/cynthia` + `components/AI/*` |
-| Call Centre | `/calls` — full voice setup **§16** |
-| WhatsApp QR | `/integrations` → WhatsApp Web — **§18** |
-| All AI tools | **§17** |
-| Mailbox / Stripe / Cynthia web | **§19–20** |
-| Integrations UI | `/integrations` (super_admin) — field map **§20** |
+| Call Centre | `/calls` â€” full voice setup **Â§16** |
+| WhatsApp QR | `/integrations` â†’ WhatsApp Web â€” **Â§18** |
+| All AI tools | **Â§17** |
+| Mailbox / Stripe / Cynthia web | **Â§19â€“20** |
+| Integrations UI | `/integrations` (super_admin) â€” field map **Â§20** |
 | Schema | `tradepro-backend/supabase/migrations/` |
-| Deploy scripts | Frontend `scripts/deploy-spa.sh` (preferred), legacy `deploy-vps.sh`, `deploy-nginx.sh`, `supabase-deploy.ps1` — **§21** |
-| Flutter mobile | `tradepro-mobile` WebView shell — **§27** |
-| How thin features work | Seed login, settings, tabs, cloud persist — **§28** |
+| Deploy scripts | Frontend `scripts/deploy-spa.sh` (preferred), legacy `deploy-vps.sh`, `deploy-nginx.sh`, `supabase-deploy.ps1` â€” **Â§21** |
+| Flutter mobile | `tradepro-mobile` WebView shell â€” **Â§27** |
+| How thin features work | Seed login, settings, tabs, cloud persist â€” **Â§28** |
 
 ---
 
-# Part B — Feature & setup deep-dives
+# Part B â€” Feature & setup deep-dives
 
 ---
 
@@ -609,15 +609,15 @@ curl.exe -sS -o NUL -w "%{http_code}" https://app.b-diddies.com/api/whatsapp-web
 
 **Status:** LIVE (Vapi path on VPS). Softphone WSS and Chatterbox = PARTIAL. Frontend `server/` = LEGACY for this surface.
 
-**Ops docs:** [VOICE_SETUP.md](./VOICE_SETUP.md) · sibling backend `tradepro-backend/docs/VAPI_SIP.md`
+**Ops docs:** [VOICE_SETUP.md](./VOICE_SETUP.md) Â· sibling backend `tradepro-backend/docs/VAPI_SIP.md`
 
 **Policy:** Cynthia phone AI is **Vapi only**. `VOICE_PROVIDER=local_realtime` / `soho66` / sip-bridge AI answering are **unsupported** and fail closed. `tradepro-backend/sip-bridge/` is historical only.
 
 ### 16.1 Architecture
 
 ```
-Caller ↔ Soho66 SIP ↔ Vapi (media) ↔ POST /webhooks/vapi ↔ Cynthia phone-brain + phone tools
-Browser Cynthia mic → POST /api/vapi/web-session → @vapi-ai/web
+Caller â†” Soho66 SIP â†” Vapi (media) â†” POST /webhooks/vapi â†” Cynthia phone-brain + phone tools
+Browser Cynthia mic â†’ POST /api/vapi/web-session â†’ @vapi-ai/web
 ```
 
 Required: `VOICE_PROVIDER=vapi`.
@@ -626,19 +626,19 @@ Required: `VOICE_PROVIDER=vapi`.
 
 1. On API host set `VOICE_PROVIDER=vapi`, `VAPI_*`, `ELEVENLABS_*`, `SOHO66_*` (trunk), `WEBHOOK_BASE_URL` / `VAPI_WEBHOOK_BASE_URL`, `OPENAI_API_KEY`.
 2. Public HTTPS API (prod: `https://app.b-diddies.com`).
-3. From tradepro-backend: `npm run vapi:setup` (`scripts/setup-vapi-soho66.ts`) — writes `VAPI_PHONE_NUMBER_ID` / `VAPI_SIP_CREDENTIAL_ID`.
-4. Restart `tradepro-api`. Confirm `GET /api/vapi/health` → 200; `POST /api/vapi/web-session` responds (auth).
-5. Call Centre `/calls` → live status (labeled Cynthia); optional mock tab for UI tests only.
+3. From tradepro-backend: `npm run vapi:setup` (`scripts/setup-vapi-soho66.ts`) â€” writes `VAPI_PHONE_NUMBER_ID` / `VAPI_SIP_CREDENTIAL_ID`.
+4. Restart `tradepro-api`. Confirm `GET /api/vapi/health` â†’ 200; `POST /api/vapi/web-session` responds (auth).
+5. Call Centre `/calls` â†’ live status (labeled Cynthia); optional mock tab for UI tests only.
 6. Optional: `IVR_ENABLED=1`; Chatterbox WAV for cloned TTS; Twilio only if explicitly chosen (`TELEPHONY_PROVIDER=twilio`).
 
-### 16.3 Env keys (API host — never frontend Vite)
+### 16.3 Env keys (API host â€” never frontend Vite)
 
 | Group | Keys |
 |-------|------|
 | Provider | `VOICE_PROVIDER=vapi` (required), `TELEPHONY_PROVIDER` |
 | Vapi | `VAPI_PRIVATE_KEY`, `VAPI_PUBLIC_KEY`, `VAPI_REGION`, `VAPI_WEBHOOK_BASE_URL`, `VAPI_SERVER_SECRET`, `VAPI_PHONE_NUMBER_ID`, `VAPI_SIP_CREDENTIAL_ID`, `VAPI_ASSISTANT_ID`, `VAPI_ELEVENLABS_VOICE_ID`, `VAPI_LLM_MODEL` |
 | ElevenLabs | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` |
-| Soho66 trunk | `SOHO66_SIP_*`, `SOHO66_FROM_NUMBER` (feed Vapi SIP — not local sip-bridge AI) |
+| Soho66 trunk | `SOHO66_SIP_*`, `SOHO66_FROM_NUMBER` (feed Vapi SIP â€” not local sip-bridge AI) |
 | Ops | `VOICE_TRANSFER_NUMBER`, `VOICE_WEBHOOK_VERIFY_TOKEN`, `VOICE_AFTER_HOURS`, `VOICE_BUSINESS_HOURS_*` |
 | Chatterbox | `CHATTERBOX_BASE_URL`, `CHATTERBOX_API_KEY`, `CHATTERBOX_TTS_PATH` |
 | Gates | `ALLOW_TELEPHONY_MOCK`, `FAIL_CLOSED`, `IVR_ENABLED`, `WEBHOOK_BASE_URL`, `APP_BASE_URL` |
@@ -659,7 +659,7 @@ Frontend registry cards `voice_telephony` / `chatterbox_tts` store UI overrides;
 | GET/PATCH | `/api/agent/settings`, `/api/agent/transfer-numbers` | Cynthia phone settings |
 | GET | `/api/agent/status` | Live status |
 | GET/POST | `/api/agent/voices`, `/api/agent/tts`, POST `/api/agent/stt` | Voices / TTS / STT |
-| CRUD | `/api/agent/lines`, `…/mine`, `…/register-all`, `…/:id`, `…/:id/test` | SIP lines (`purpose: aria` = Cynthia AI compat) |
+| CRUD | `/api/agent/lines`, `â€¦/mine`, `â€¦/register-all`, `â€¦/:id`, `â€¦/:id/test` | SIP lines (`purpose: aria` = Cynthia AI compat) |
 | POST | `/api/org/staff/register-phone`, `/api/org/staff/phone-pin` | Staff phone PIN |
 | POST | `/api/concierge/outbound` | Queue outbound |
 | GET | `/api/contacts/lookup` | Caller match |
@@ -670,8 +670,8 @@ Frontend registry cards `voice_telephony` / `chatterbox_tts` store UI overrides;
 
 | Route / UI | Component | Notes |
 |------------|-----------|-------|
-| `/calls` | `CallCenter/CallCenter.tsx` | Call Centre — Cynthia; tabs: dashboard, lines, test, softphone, outbound (`?tab=`) |
-| Softphone tab | `CallCenter/SoftPhonePanel.tsx` | JsSIP → `wss://ws.{domain}/ws` — **PARTIAL** (Soho66 public WSS often broken) |
+| `/calls` | `CallCenter/CallCenter.tsx` | Call Centre â€” Cynthia; tabs: dashboard, lines, test, softphone, outbound (`?tab=`) |
+| Softphone tab | `CallCenter/SoftPhonePanel.tsx` | JsSIP â†’ `wss://ws.{domain}/ws` â€” **PARTIAL** (Soho66 public WSS often broken) |
 | `/cynthia` mic | `hooks/useCynthiaVapiVoice.ts` | Uses `/api/vapi/web-session` |
 | Settings | `settings/StaffSoftphones.tsx`, `StaffPhoneRegistration.tsx` | SIP assign + PIN |
 | Integrations | `voice_telephony`, `chatterbox_tts` cards | Cynthia phone branding |
@@ -682,8 +682,8 @@ Frontend registry cards `voice_telephony` / `chatterbox_tts` store UI overrides;
 |------|--------|
 | Softphone JsSIP WSS | PARTIAL |
 | Chatterbox TTS | PARTIAL (needs `CHATTERBOX_*` + WAV) |
-| Mock calls | Intentional — blocked in prod unless `ALLOW_TELEPHONY_MOCK` |
-| Outbound worker URL mismatch | Worker may call `/api/phone/outbound` while live route is `/api/calls/outbound` — treat queue as PARTIAL until confirmed |
+| Mock calls | Intentional â€” blocked in prod unless `ALLOW_TELEPHONY_MOCK` |
+| Outbound worker URL mismatch | Worker may call `/api/phone/outbound` while live route is `/api/calls/outbound` â€” treat queue as PARTIAL until confirmed |
 
 ---
 
@@ -703,7 +703,7 @@ Frontend registry cards `voice_telephony` / `chatterbox_tts` store UI overrides;
 | `navigate` | `navigateTo` |
 | `draftClientReceipt` | `sendClientReceipt` |
 
-### 17.2 Gap tools (25) — all named
+### 17.2 Gap tools (25) â€” all named
 
 | Wave | Tools | Confirm? |
 |------|-------|----------|
@@ -737,7 +737,7 @@ Frontend registry cards `voice_telephony` / `chatterbox_tts` store UI overrides;
 
 ### 17.5 Building control tools (4)
 
-`searchBuildingRegs`, `proposeComplianceActions`, `citeSource`, `draftBcEmailReply` — handler `building-control-handler.ts` (not main orchestrator packs).
+`searchBuildingRegs`, `proposeComplianceActions`, `citeSource`, `draftBcEmailReply` â€” handler `building-control-handler.ts` (not main orchestrator packs).
 
 ### 17.6 Orchestrator modes
 
@@ -774,7 +774,7 @@ Frontend registry cards `voice_telephony` / `chatterbox_tts` store UI overrides;
 | PLANNING | all 17 planning tools |
 | Always | `readData`, `writeData`; `requestCodeFix` for staff/manager/super_admin/builder |
 
-**Roles:** customer → self-service; staff → most ops **without** APPROVALS/COSTING_ADMIN/MANAGER_INSIGHTS; manager/super_admin → full; builder → foreman+costing; recruitment → sales+recruitment+phone; agent → self-service+phone+recruitment.
+**Roles:** customer â†’ self-service; staff â†’ most ops **without** APPROVALS/COSTING_ADMIN/MANAGER_INSIGHTS; manager/super_admin â†’ full; builder â†’ foreman+costing; recruitment â†’ sales+recruitment+phone; agent â†’ self-service+phone+recruitment.
 
 **Caveat:** `tradepro-backend/server/role-permissions.ts` is **slimmer** than frontend engine (gap/email allowlists lag). Prefer frontend engine for product truth; sync backend when shipping phone/orchestrator gates.
 
@@ -790,7 +790,7 @@ Autonomy levels: `assist` / `balanced` / `autopilot` (clarify question counts).
 
 ### 17.9 Phone / PIN action registry
 
-Source: `server/action-registry.ts` → `PHONE_ACTION_REGISTRY` (both repos; prod = backend).
+Source: `server/action-registry.ts` â†’ `PHONE_ACTION_REGISTRY` (both repos; prod = backend).
 
 | Tool | PIN | Confirm | Risk |
 |------|-----|---------|------|
@@ -824,11 +824,11 @@ Source: `server/action-registry.ts` → `PHONE_ACTION_REGISTRY` (both repos; pro
 
 ### 17.10 AI tool facade (12 names)
 
-When `AI_TOOL_FACADE=true` (backend): web modes `staff`/`project`/`foreman`/`planning` only — **not** phone/customer/cyrus.
+When `AI_TOOL_FACADE=true` (backend): web modes `staff`/`project`/`foreman`/`planning` only â€” **not** phone/customer/cyrus.
 
-| Facade | Operations → canonical (examples) |
+| Facade | Operations â†’ canonical (examples) |
 |--------|-----------------------------------|
-| `searchRecords` | customers/projects/quotes/leads/emails → search*; snapshot/team/profit/cost |
+| `searchRecords` | customers/projects/quotes/leads/emails â†’ search*; snapshot/team/profit/cost |
 | `manageCustomer` | link, updateLead, logFollowUp, merge |
 | `manageQuote` | detectTrades through archive/priceSmallJob/submitApproval |
 | `managePricing` | approve/reject/paymentSchedule |
@@ -853,19 +853,19 @@ Frontend mirror: `toolFacadeClient.ts`.
 
 **Status:** LIVE on VPS (QR API 200; backend runs WWeb client). Meta Cloud = fallback / templates / groups.
 
-**Ops docs:** [WHATSAPP_GO_LIVE.md](./WHATSAPP_GO_LIVE.md) · [CYRUS_GO_LIVE.md](./CYRUS_GO_LIVE.md)
+**Ops docs:** [WHATSAPP_GO_LIVE.md](./WHATSAPP_GO_LIVE.md) Â· [CYRUS_GO_LIVE.md](./CYRUS_GO_LIVE.md)
 
-### 18.1 Path A — WhatsApp Web.js (primary)
+### 18.1 Path A â€” WhatsApp Web.js (primary)
 
 | Piece | Path |
 |-------|------|
 | Client | `tradepro-backend/server/whatsapp-web-client.ts` |
 | Routes | `tradepro-backend/server/whatsapp-web-routes.ts` |
-| Boot | `server/index.ts` → `initWWebClient()` on listen |
+| Boot | `server/index.ts` â†’ `initWWebClient()` on listen |
 | Dep | `whatsapp-web.js` in **backend** `package.json` only |
-| Session | `tradepro-backend/server/data/.wwebjs_auth/` — **DO_NOT_SHIP** / never wholesale scp |
+| Session | `tradepro-backend/server/data/.wwebjs_auth/` â€” **DO_NOT_SHIP** / never wholesale scp |
 | UI | `components/integrations/WhatsAppWebPanel.tsx` in Integrations hub |
-| Registry | `whatsapp` — field `cyrusDisplayName` only |
+| Registry | `whatsapp` â€” field `cyrusDisplayName` only |
 
 | Method | Path |
 |--------|------|
@@ -876,27 +876,27 @@ Frontend mirror: `toolFacadeClient.ts`.
 | GET | `/api/whatsapp-web/read-receipts`[`/:chatId`] |
 | POST | `/api/whatsapp-web/send` |
 
-**Setup:** open `/integrations` → WhatsApp Web → scan QR → status `ready`. Confirm `GET /api/whatsapp-web/status` on prod. Keep `INTEGRATIONS_MOCK_MODE=false`.
+**Setup:** open `/integrations` â†’ WhatsApp Web â†’ scan QR â†’ status `ready`. Confirm `GET /api/whatsapp-web/status` on prod. Keep `INTEGRATIONS_MOCK_MODE=false`.
 
-### 18.2 Path B — Meta Cloud API (fallback)
+### 18.2 Path B â€” Meta Cloud API (fallback)
 
 | Piece | Detail |
 |-------|--------|
 | Handler | `server/whatsapp-webhook.ts` (both repos; prod = backend) |
 | Webhook | `GET/POST /webhooks/whatsapp` |
-| Hub send | `POST /api/messages/send` — prefers WWeb if ready, else Meta |
-| Groups | `POST /api/projects/:id/whatsapp-group`, `…/invite` |
+| Hub send | `POST /api/messages/send` â€” prefers WWeb if ready, else Meta |
+| Groups | `POST /api/projects/:id/whatsapp-group`, `â€¦/invite` |
 | Env | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `META_APP_SECRET`, optional `WHATSAPP_VOICE_REPLY` |
 
 ### 18.3 Inbound pipeline
 
 ```
 WWeb message OR Meta webhook
-  → channel-inbound-handler.ts
-  → channel-router.ts (staff / customer / unknown)
-  → orchestrator-handler.ts (Cynthia tools — staff / web / phone modes)
-  → channel-action-executor / channel-writes
-  → reply via sendWWeb* or Meta Graph
+  â†’ channel-inbound-handler.ts
+  â†’ channel-router.ts (staff / customer / unknown)
+  â†’ orchestrator-handler.ts (Cynthia tools â€” staff / web / phone modes)
+  â†’ channel-action-executor / channel-writes
+  â†’ reply via sendWWeb* or Meta Graph
 ```
 
 Also: frontend `engine/messaging/messagingHub.ts` + `whatsappProvider.ts`; UI `/communications`, `/cyrus/legacy`, project `ProjectCommsPanel`.
@@ -905,10 +905,10 @@ Also: frontend `engine/messaging/messagingHub.ts` + `whatsappProvider.ts`; UI `/
 
 | Item | Status |
 |------|--------|
-| Frontend `server/` has no WWeb | LEGACY — do not use as prod API |
-| `whatsappProvider` mock if Meta token missing | Can falsely stay mock even when WWeb ready — watch client sends |
-| Concierge WhatsApp outbound | Returns note only — PARTIAL |
-| Project WhatsApp groups | Meta Groups; UI can create mock — PARTIAL |
+| Frontend `server/` has no WWeb | LEGACY â€” do not use as prod API |
+| `whatsappProvider` mock if Meta token missing | Can falsely stay mock even when WWeb ready â€” watch client sends |
+| Concierge WhatsApp outbound | Returns note only â€” PARTIAL |
+| Project WhatsApp groups | Meta Groups; UI can create mock â€” PARTIAL |
 
 ---
 
@@ -918,8 +918,8 @@ Also: frontend `engine/messaging/messagingHub.ts` + `whatsappProvider.ts`; UI `/
 
 | | |
 |---|---|
-| **Status** | LIVE code+poller; CASA production verification PARTIAL — see [CASA_MAILBOX_CHECKLIST.md](./CASA_MAILBOX_CHECKLIST.md) |
-| **UI** | Settings → Email & Inbox; `/communications`; Integrations → `email_oauth` / `email_smtp` |
+| **Status** | LIVE code+poller; CASA production verification PARTIAL â€” see [CASA_MAILBOX_CHECKLIST.md](./CASA_MAILBOX_CHECKLIST.md) |
+| **UI** | Settings â†’ Email & Inbox; `/communications`; Integrations â†’ `email_oauth` / `email_smtp` |
 | **API** | `/api/mailbox/connect`, `/callback`, `/connections`, `/sync`, `/messages`, `/send`, `/search`; `POST /webhooks/gmail`, `/webhooks/outlook` |
 | **Env** | `TOKEN_ENCRYPTION_KEY`, `MAILBOX_OAUTH_REDIRECT_BASE`, `MAILBOX_POLL_INTERVAL_MS`, `GOOGLE_OAUTH_*`, `MICROSOFT_OAUTH_*`, `YAHOO_OAUTH_*`, optional `NYLAS_*` |
 | **Worker** | `startMailboxPoller()` on API listen |
@@ -929,7 +929,7 @@ Also: frontend `engine/messaging/messagingHub.ts` + `whatsappProvider.ts`; UI `/
 | | |
 |---|---|
 | **Status** | LIVE when secrets set; refunds/subs stub without key |
-| **UI** | `/platform/clients` checkout; `/contracts` Collect deposit; `/finance`; Integrations → Stripe |
+| **UI** | `/platform/clients` checkout; `/contracts` Collect deposit; `/finance`; Integrations â†’ Stripe |
 | **API** | `/api/stripe/webhook`; `/api/platform/organizations/:id/stripe-checkout`; `/api/project-deposit-checkout`; `/api/contract-stage-checkout`; `/api/stripe/refund`; `/api/stripe/manage-subscription`; Edge `stripe-webhook` |
 | **Env** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER/PRO/ENTERPRISE` |
 
@@ -937,11 +937,11 @@ Also: frontend `engine/messaging/messagingHub.ts` + `whatsappProvider.ts`; UI `/
 
 | | |
 |---|---|
-| **Status** | LIVE — Cynthia identity; `cyrus` paths are transport aliases |
+| **Status** | LIVE â€” Cynthia identity; `cyrus` paths are transport aliases |
 | **Asset** | `public/cynthia-widget.js` (preferred); `public/cyrus-widget.js` kept for existing embeds |
 | **UI** | Company Profile in Integrations (embed snippet); portal `/portal/:token` Ask Cynthia; `/cyrus/legacy` staff inbox |
 | **API** | `/api/cyrus/embed-snippet`, `company-settings`, `/api/cyrus/web` (+ poll), threads/reply/ask/handoff, `/api/cyrus/portal*` , `/api/ai/cyrus` |
-| **Setup** | OpenAI live; Company `website` for CORS origins; `APP_BASE_URL`; `INTEGRATIONS_MOCK_MODE=false` — [CYRUS_GO_LIVE.md](./CYRUS_GO_LIVE.md) |
+| **Setup** | OpenAI live; Company `website` for CORS origins; `APP_BASE_URL`; `INTEGRATIONS_MOCK_MODE=false` â€” [CYRUS_GO_LIVE.md](./CYRUS_GO_LIVE.md) |
 
 ### 19.4 Cynthia staff chat + ingest
 
@@ -950,7 +950,7 @@ Also: frontend `engine/messaging/messagingHub.ts` + `whatsappProvider.ts`; UI `/
 | **Status** | LIVE |
 | **UI** | `/cynthia`, `/cynthia/ingest?text=`, `?card=`; AI overlay; activity panel |
 | **API** | `/api/cynthia/thread` GET/POST; `/api/cynthia/cards`; `/api/cynthia/send-card` (+ push) |
-| **Tools** | CYNTHIA_OPS + full staff packs — §17 |
+| **Tools** | CYNTHIA_OPS + full staff packs â€” Â§17 |
 
 ### 19.5 Platform multi-tenant
 
@@ -965,10 +965,10 @@ Also: frontend `engine/messaging/messagingHub.ts` + `whatsappProvider.ts`; UI `/
 
 | | |
 |---|---|
-| **Status** | LIVE UI+AI; planning persistence often JSON — ops PARTIAL vs Supabase-primary |
+| **Status** | LIVE UI+AI; planning persistence often JSON â€” ops PARTIAL vs Supabase-primary |
 | **UI** | `/building-control`; `/planning`, `/planning/:id`; `/planning-approve/:token` |
 | **API** | `/api/building-control/registry`, `check-updates`, `approve`; `/api/ai/building-control`; `/api/ai/planning` |
-| **Tools** | BC 4 + Planning 17 — §17.4–17.5 |
+| **Tools** | BC 4 + Planning 17 â€” Â§17.4â€“17.5 |
 | **Data** | BC registry under `server/data/building-control/`; Supabase `planning_applications` |
 
 ### 19.7 Contracts + signing
@@ -984,7 +984,7 @@ Also: frontend `engine/messaging/messagingHub.ts` + `whatsappProvider.ts`; UI `/
 
 | | |
 |---|---|
-| **Status** | PARTIAL — register/notify wired; FCM dry-run without Firebase |
+| **Status** | PARTIAL â€” register/notify wired; FCM dry-run without Firebase |
 | **API** | `POST /api/push/register`, `/api/push/notify`, `GET /api/push/tokens` |
 | **Env** | `FIREBASE_SERVER_KEY`, `INTERNAL_PUSH_SECRET` (or `VAPI_SERVER_SECRET`) |
 
@@ -1004,7 +1004,7 @@ Also: frontend `engine/messaging/messagingHub.ts` + `whatsappProvider.ts`; UI `/
 | | |
 |---|---|
 | **Status** | LIVE with OpenAI web; Tavily/Serper need keys |
-| **UI** | `/price-job`; Integrations → Price Research |
+| **UI** | `/price-job`; Integrations â†’ Price Research |
 | **API** | `POST /api/ai/price-research` |
 | **Env** | `PRICE_RESEARCH_PROVIDER`, `PRICE_RESEARCH_API_KEY`, `PRICE_RESEARCH_REGION` |
 
@@ -1021,13 +1021,13 @@ Also: frontend `engine/messaging/messagingHub.ts` + `whatsappProvider.ts`; UI `/
 | | |
 |---|---|
 | **Status** | LIVE |
-| **UI** | AI Studio Language packs; staff preferred language; i18n locales §3.6 |
+| **UI** | AI Studio Language packs; staff preferred language; i18n locales Â§3.6 |
 | **API** | `GET/PUT /api/language-packs`; `POST /api/translate/detect|to-english|from-english` |
 | **Data** | `language-packs.json`; profile `preferred_language` |
 
 ---
 
-## 20. Integrations hub — fields by id
+## 20. Integrations hub â€” fields by id
 
 Source: `src/app/config/integrations/registry.ts`. UI: `/integrations` (super_admin).
 
@@ -1062,11 +1062,11 @@ Also: global `INTEGRATIONS_MOCK_MODE` and per-integration mock toggles in `integ
 
 | Script | Role |
 |--------|------|
-| `deploy-spa.sh` | **Preferred** — unpack `dist/` → Plesk `app.b-diddies.com` docroot + `.htaccess`; guards against marketing `httpdocs`; does not touch `tradepro-api` |
-| `deploy-vps.sh` | **Legacy/full** — also rewires systemd API to `tradepro-app` (do not use for routine UI deploys) |
-| `deploy-nginx.sh` | nginx proxy `/api` `/webhooks` `/health` → `:3001` |
-| `auto-ssl-app.sh` | Let’s Encrypt helper |
-| `supabase-deploy.ps1` | Load deploy.env → backend supabase link/push |
+| `deploy-spa.sh` | **Preferred** â€” unpack `dist/` â†’ Plesk `app.b-diddies.com` docroot + `.htaccess`; guards against marketing `httpdocs`; does not touch `tradepro-api` |
+| `deploy-vps.sh` | **Legacy/full** â€” also rewires systemd API to `tradepro-app` (do not use for routine UI deploys) |
+| `deploy-nginx.sh` | nginx proxy `/api` `/webhooks` `/health` â†’ `:3001` |
+| `auto-ssl-app.sh` | Letâ€™s Encrypt helper |
+| `supabase-deploy.ps1` | Load deploy.env â†’ backend supabase link/push |
 | `audit-wiring.mjs` | Tool wiring audit vs role/orchestrator |
 | `verify-generic-ai.mjs` | dataPolicy / safety confirm checks |
 | `soho66-smoke-call.cjs` | SIP REGISTER + INVITE smoke |
@@ -1081,7 +1081,7 @@ Also: global `INTEGRATIONS_MOCK_MODE` and per-integration mock toggles in `integ
 | `setup-vapi-soho66.ts` | Provision Vapi + Soho66 (`npm run vapi:setup`) |
 | `smoke-phone-pin-crm.ts`, `smoke-seed-login.ts` | Smoke |
 | `migrate-to-supabase.ts`, `gen-types.ts` | Schema / types |
-| `seed-real-accounts.ts`, `create-sample-invite.ts`, … | Seed/ops |
+| `seed-real-accounts.ts`, `create-sample-invite.ts`, â€¦ | Seed/ops |
 
 ---
 
@@ -1094,12 +1094,12 @@ Also: global `INTEGRATIONS_MOCK_MODE` and per-integration mock toggles in `integ
 | [WHATSAPP_GO_LIVE.md](./WHATSAPP_GO_LIVE.md) | Meta WABA checklist |
 | [CYRUS_GO_LIVE.md](./CYRUS_GO_LIVE.md) | Cynthia website widget + WhatsApp go-live |
 | [CASA_MAILBOX_CHECKLIST.md](./CASA_MAILBOX_CHECKLIST.md) | Gmail OAuth / CASA production |
-| [archive/BACKEND_DEPS.md](./archive/BACKEND_DEPS.md) | Archived — prefer §5 + §25 |
+| [archive/BACKEND_DEPS.md](./archive/BACKEND_DEPS.md) | Archived â€” prefer Â§5 + Â§25 |
 | [RESPONSIVE_AUDIT.md](./RESPONSIVE_AUDIT.md) | Responsive QA |
 
 ---
 
-# Part C — Coverage gaps, locations, API catalogue
+# Part C â€” Coverage gaps, locations, API catalogue
 
 Cross-checked against a full walk of `App.tsx`, `AppShell` nav, `src/app/components/**`, `src/app/engine/**`, and `tradepro-backend/server/**` (2026-07-15).
 
@@ -1107,98 +1107,98 @@ Cross-checked against a full walk of `App.tsx`, `AppShell` nav, `src/app/compone
 
 ## 23. Done vs not done (coverage matrix)
 
-Legend: **DONE** = detailed in this MD · **THIN** = mentioned only (routes table / one line) · **MISSING** = product surface exists in code but not documented here yet · **ORPHAN** = code exists, no route.
+Legend: **DONE** = detailed in this MD Â· **THIN** = mentioned only (routes table / one line) Â· **MISSING** = product surface exists in code but not documented here yet Â· **ORPHAN** = code exists, no route.
 
 ### 23.1 Product features
 
-| Feature | Code exists | Doc coverage | Primary § |
+| Feature | Code exists | Doc coverage | Primary Â§ |
 |---------|-------------|--------------|-----------|
-| Three layers (GitHub/VPS/Supabase) | — | DONE | §1 |
-| Auth login/signup/invite/password/profile | YES | THIN | §3.1, §8 — needs location rows |
-| Demo seed accounts on login | YES | DONE | §28.1 |
-| AppShell role nav + bottom nav | YES | DONE | §15, §24.A, §28 |
-| Org acting-as picker | YES | DONE | §19.5, §24.A |
-| In-app notifications bell | YES | DONE | §28.2 |
-| Online status banner | YES | DONE | §28.2 |
-| Staff AI overlay (docked, not just `/cynthia`) | YES | THIN | §4.4 |
-| Cynthia home + ingest + cards | YES | DONE | §4, §19.4 |
-| Cynthia activity feed | YES | THIN | §4.2 |
-| Self-heal / code-fix | YES | DONE | §19.9 |
-| Cursor paste credentials | YES | THIN | §3.1 |
-| Dashboard | YES | THIN | §3.2 |
-| CRM pipeline | YES | THIN | §3.2 |
-| Customers + contacts + preferredLanguage | YES | THIN | §3.2 |
-| Sales management | YES | THIN | §3.2 |
-| Quotes list + sales close gates | YES | DONE | §3.2, §24.B |
-| Multi-trade Quote Builder wizard | YES | DONE | §28.8 |
-| Quote line builder + PDF | YES | DONE | §3.2, §24.B |
-| Job pricing (small jobs + photos/vision) | YES | DONE | §19.10, §24.B |
-| Approvals queue | YES | DONE | §3.2 |
-| Product catalog | YES | DONE | §3.2 |
-| Product import system | YES (orphan) | ORPHAN | §28.14 — no `App.tsx` route |
-| Bathroom designer | YES | THIN | §3.2 |
-| AI design render | YES | THIN | §3.2 |
-| Trade configs (12 trades) + 3 playbooks | YES | THIN | §3.5 |
-| Site survey | YES | DONE | §3.2, §24.I |
-| Booking + calendar | YES | DONE | §3.2, §24.I |
-| Finance application (Stripe-gated) | YES | DONE | §3.2, §19.2 |
-| Communications hub (all tabs) | YES | DONE | §28.9 |
-| Lead inbox | YES | DONE | §18, §19.1, §28.9 |
-| Mailbox OAuth / IMAP | YES | DONE | §19.1 |
-| Legacy EmailSystem | YES (orphan) | ORPHAN | §28.14 |
-| WhatsApp Web + Meta | YES | DONE | §18 |
-| Cynthia website widget + portal chat | YES | DONE | §19.3 |
-| Cynthia website threads (legacy inbox UI) | YES | THIN | §3.2 |
-| Call Centre / Cynthia phone / Vapi / softphone | YES | DONE | §16 |
-| Staff softphones + phone PIN registration | YES | THIN | §16.6 |
-| UK Foreman persona | YES | THIN | §4.1, §17 |
-| Project mgmt (all tabs) | YES | DONE | §28.10 |
-| Project AI panel | YES | DONE | §28.3 |
-| Builder dashboard | YES | DONE | §3.2, §24.D |
-| Builder management (office) | YES | DONE | §3.2, §24.D |
-| Change orders | YES | DONE | §3.2, §24.D |
-| Customer portal (token) | YES | DONE | §3.1, §24.D |
-| Contracts + public sign | YES | DONE | §19.7 |
-| Planning hub/detail/customer approve | YES | DONE | §19.6, §24.G |
-| Building control hub + AI Studio BC docs | YES | DONE | §19.6, §28.4 |
-| Costing dashboard | YES | DONE | §3.2, §24.H |
-| Accounts hub (bank/income/receipts) | YES | DONE | §28.11 (flag-gated) |
-| Recruitment CRM (all tabs) | YES | DONE | §28.11 (flag-gated) |
-| Team management + access flags | YES | DONE | §3.2, §28.5 team tab |
-| Platform clients CRM | YES | DONE | §19.5 |
-| Portfolio / gallery | YES | DONE | §3.2, §24.H |
-| Settings hub (Pricing/Stages/AI/API/Email/Import/Business/Team) | YES | DONE | §28.5 |
-| AI Studio (humour, commands, knowledge, autonomy) | YES | DONE | §28.4 |
-| Language packs panel | YES | DONE | §19.12, §28.4 |
-| Conversation audit + code fixes UI | YES | DONE | §19.9 |
-| Import/export data packs | YES | DONE | §28.6 |
-| Company profile + logo + embed snippet | YES | DONE | §20 |
-| Full AI tools list | YES | DONE | §17 |
-| Integrations field map | YES | DONE | §20 |
-| Cloud persist / Supabase store | YES | DONE | §28.13 |
-| PM scheduler background | YES | DONE | §28.7 |
-| Native bridge / push | YES | DONE | §27, §19.8 |
-| Flutter WebView shell | YES (sibling repo) | DONE | §27 |
-| Auth signup modes | YES | DONE | §28.12 |
-| i18n locales | YES | DONE | §3.6, §27 locale bridge |
+| Three layers (GitHub/VPS/Supabase) | â€” | DONE | Â§1 |
+| Auth login/signup/invite/password/profile | YES | THIN | Â§3.1, Â§8 â€” needs location rows |
+| Demo seed accounts on login | YES | DONE | Â§28.1 |
+| AppShell role nav + bottom nav | YES | DONE | Â§15, Â§24.A, Â§28 |
+| Org acting-as picker | YES | DONE | Â§19.5, Â§24.A |
+| In-app notifications bell | YES | DONE | Â§28.2 |
+| Online status banner | YES | DONE | Â§28.2 |
+| Staff AI overlay (docked, not just `/cynthia`) | YES | THIN | Â§4.4 |
+| Cynthia home + ingest + cards | YES | DONE | Â§4, Â§19.4 |
+| Cynthia activity feed | YES | THIN | Â§4.2 |
+| Self-heal / code-fix | YES | DONE | Â§19.9 |
+| Cursor paste credentials | YES | THIN | Â§3.1 |
+| Dashboard | YES | THIN | Â§3.2 |
+| CRM pipeline | YES | THIN | Â§3.2 |
+| Customers + contacts + preferredLanguage | YES | THIN | Â§3.2 |
+| Sales management | YES | THIN | Â§3.2 |
+| Quotes list + sales close gates | YES | DONE | Â§3.2, Â§24.B |
+| Multi-trade Quote Builder wizard | YES | DONE | Â§28.8 |
+| Quote line builder + PDF | YES | DONE | Â§3.2, Â§24.B |
+| Job pricing (small jobs + photos/vision) | YES | DONE | Â§19.10, Â§24.B |
+| Approvals queue | YES | DONE | Â§3.2 |
+| Product catalog | YES | DONE | Â§3.2 |
+| Product import system | YES (orphan) | ORPHAN | Â§28.14 â€” no `App.tsx` route |
+| Bathroom designer | YES | THIN | Â§3.2 |
+| AI design render | YES | THIN | Â§3.2 |
+| Trade configs (12 trades) + 3 playbooks | YES | THIN | Â§3.5 |
+| Site survey | YES | DONE | Â§3.2, Â§24.I |
+| Booking + calendar | YES | DONE | Â§3.2, Â§24.I |
+| Finance application (Stripe-gated) | YES | DONE | Â§3.2, Â§19.2 |
+| Communications hub (all tabs) | YES | DONE | Â§28.9 |
+| Lead inbox | YES | DONE | Â§18, Â§19.1, Â§28.9 |
+| Mailbox OAuth / IMAP | YES | DONE | Â§19.1 |
+| Legacy EmailSystem | YES (orphan) | ORPHAN | Â§28.14 |
+| WhatsApp Web + Meta | YES | DONE | Â§18 |
+| Cynthia website widget + portal chat | YES | DONE | Â§19.3 |
+| Cynthia website threads (legacy inbox UI) | YES | THIN | Â§3.2 |
+| Call Centre / Cynthia phone / Vapi / softphone | YES | DONE | Â§16 |
+| Staff softphones + phone PIN registration | YES | THIN | Â§16.6 |
+| UK Foreman persona | YES | THIN | Â§4.1, Â§17 |
+| Project mgmt (all tabs) | YES | DONE | Â§28.10 |
+| Project AI panel | YES | DONE | Â§28.3 |
+| Builder dashboard | YES | DONE | Â§3.2, Â§24.D |
+| Builder management (office) | YES | DONE | Â§3.2, Â§24.D |
+| Change orders | YES | DONE | Â§3.2, Â§24.D |
+| Customer portal (token) | YES | DONE | Â§3.1, Â§24.D |
+| Contracts + public sign | YES | DONE | Â§19.7 |
+| Planning hub/detail/customer approve | YES | DONE | Â§19.6, Â§24.G |
+| Building control hub + AI Studio BC docs | YES | DONE | Â§19.6, Â§28.4 |
+| Costing dashboard | YES | DONE | Â§3.2, Â§24.H |
+| Accounts hub (bank/income/receipts) | YES | DONE | Â§28.11 (flag-gated) |
+| Recruitment CRM (all tabs) | YES | DONE | Â§28.11 (flag-gated) |
+| Team management + access flags | YES | DONE | Â§3.2, Â§28.5 team tab |
+| Platform clients CRM | YES | DONE | Â§19.5 |
+| Portfolio / gallery | YES | DONE | Â§3.2, Â§24.H |
+| Settings hub (Pricing/Stages/AI/API/Email/Import/Business/Team) | YES | DONE | Â§28.5 |
+| AI Studio (humour, commands, knowledge, autonomy) | YES | DONE | Â§28.4 |
+| Language packs panel | YES | DONE | Â§19.12, Â§28.4 |
+| Conversation audit + code fixes UI | YES | DONE | Â§19.9 |
+| Import/export data packs | YES | DONE | Â§28.6 |
+| Company profile + logo + embed snippet | YES | DONE | Â§20 |
+| Full AI tools list | YES | DONE | Â§17 |
+| Integrations field map | YES | DONE | Â§20 |
+| Cloud persist / Supabase store | YES | DONE | Â§28.13 |
+| PM scheduler background | YES | DONE | Â§28.7 |
+| Native bridge / push | YES | DONE | Â§27, Â§19.8 |
+| Flutter WebView shell | YES (sibling repo) | DONE | Â§27 |
+| Auth signup modes | YES | DONE | Â§28.12 |
+| i18n locales | YES | DONE | Â§3.6, Â§27 locale bridge |
 
 ### 23.2 Backend / API surfaces
 
 | Surface | Doc coverage |
 |---------|--------------|
-| Voice + WhatsApp + gap tools | DONE (§16–18) |
-| Full per-file API catalogue (every `*-routes.ts` → paths) | MISSING → **§25** |
-| `ai-proxy` sub-handlers map | THIN → **§25** |
-| Auth / members / invites API file map | THIN → **§25** |
-| Banking / leads / platform / projects / push | THIN → **§25** |
+| Voice + WhatsApp + gap tools | DONE (Â§16â€“18) |
+| Full per-file API catalogue (every `*-routes.ts` â†’ paths) | MISSING â†’ **Â§25** |
+| `ai-proxy` sub-handlers map | THIN â†’ **Â§25** |
+| Auth / members / invites API file map | THIN â†’ **Â§25** |
+| Banking / leads / platform / projects / push | THIN â†’ **Â§25** |
 | Edge functions detail | THIN |
-| `server/data/*.json` store map | MISSING → **§25.4** |
-| Frontend `server/` LEGACY note | DONE (§5.6) |
-| Outbound worker path bug | DONE (§16.7) |
+| `server/data/*.json` store map | MISSING â†’ **Â§25.4** |
+| Frontend `server/` LEGACY note | DONE (Â§5.6) |
+| Outbound worker path bug | DONE (Â§16.7) |
 
 ### 23.3 Walk-through plan
 
-Former MISSING/THIN prose gaps are filled in **§§27–28**. Keep §23/§24/§25 updated when shipping new features. Re-probe §1 after any prod ship. Orphans stay documented (§28.14) until wired or deleted in code.
+Former MISSING/THIN prose gaps are filled in **Â§Â§27â€“28**. Keep Â§23/Â§24/Â§25 updated when shipping new features. Re-probe Â§1 after any prod ship. Orphans stay documented (Â§28.14) until wired or deleted in code.
 
 ---
 
@@ -1214,26 +1214,26 @@ Former MISSING/THIN prose gaps are filled in **§§27–28**. Keep §23/§24/§2
 | `BE/server` | Canonical production API (VPS `tradepro-api`) |
 | `LEGACY FE/server` | Do not treat as SoT |
 
-Each feature row: **UI → Components → Engine → API file(s) → Data**.
+Each feature row: **UI â†’ Components â†’ Engine â†’ API file(s) â†’ Data**.
 
 ### 24.A Auth & shell
 
 | Feature | UI | Components | Engine | API (BE/server) | Data |
 |---------|-----|------------|--------|-----------------|------|
-| Login | `/login` | `auth/pages/LoginPage.tsx`, `auth/components/SeedAccountsPanel.tsx` | `auth/lib/authApi.ts`, `engine/auth/sessionStore.ts` | `auth.ts`, `account-auth.ts` → `/api/auth/login`, `/me`, `/resolve-username` | Supabase `auth.users` + `profiles`; optional `users.json` |
-| Signup | `/signup` | `SignupPage.tsx`, `SignupModeTabs.tsx` | `authApi.ts`, `platform/platformApi.ts` | `account-auth.ts` → `register-org`, … | `organizations`, `profiles` |
-| Invite accept | `/invite/:token` | `InviteAcceptPage.tsx` | `authApi.ts` | `account-auth.ts` → `/api/auth/invites*`, `accept-invite` | `org_invites` |
-| Forgot / reset password | `/forgot-password`, `/reset-password` | auth pages | `authApi.ts` | Supabase Auth direct | — |
+| Login | `/login` | `auth/pages/LoginPage.tsx`, `auth/components/SeedAccountsPanel.tsx` | `auth/lib/authApi.ts`, `engine/auth/sessionStore.ts` | `auth.ts`, `account-auth.ts` â†’ `/api/auth/login`, `/me`, `/resolve-username` | Supabase `auth.users` + `profiles`; optional `users.json` |
+| Signup | `/signup` | `SignupPage.tsx`, `SignupModeTabs.tsx` | `authApi.ts`, `platform/platformApi.ts` | `account-auth.ts` â†’ `register-org`, â€¦ | `organizations`, `profiles` |
+| Invite accept | `/invite/:token` | `InviteAcceptPage.tsx` | `authApi.ts` | `account-auth.ts` â†’ `/api/auth/invites*`, `accept-invite` | `org_invites` |
+| Forgot / reset password | `/forgot-password`, `/reset-password` | auth pages | `authApi.ts` | Supabase Auth direct | â€” |
 | Profile / password | `/profile`, `/profile/password` | `ProfilePage`, `ChangePasswordPage` | session + authApi | Supabase profile update | `profiles` |
-| Role redirect | post-login | `auth/lib/redirectByRole.ts` | — | — | — |
-| App shell / nav | `*` authed | `AppShell.tsx` | i18n `shell` | — | localStorage nav expand |
+| Role redirect | post-login | `auth/lib/redirectByRole.ts` | â€” | â€” | â€” |
+| App shell / nav | `*` authed | `AppShell.tsx` | i18n `shell` | â€” | localStorage nav expand |
 | Org picker | header | `platform/OrgActingAsPicker.tsx` | `orgContext.ts`, `homeOrg.ts`, `platformApi.ts` | `/api/platform/*` | `organizations` |
 | Notifications | shell bell | `NotificationSystem.tsx` | `notifications/notificationStore.ts`, `notify.ts` | lead inbox poll `/api/leads/inbox` | local + lead inbox |
-| Online banner | shell | `OnlineStatusBanner.tsx` | — | — | — |
+| Online banner | shell | `OnlineStatusBanner.tsx` | â€” | â€” | â€” |
 | AI overlay | docked | `AI/AIAssistantOverlay.tsx`, `AIChatPanel.tsx` | `aiChatService.ts`, `staffAiService.ts`, `AIAssistantContext` | `/api/ai/staff`, `/orchestrate`, `/api/cynthia/*` | conversation stores |
 | Activity panel | shell | `AI/CynthiaActivityPanel.tsx` | `ai/agentActivity.ts` | `/api/agent-activity` | `agent_activity_events` |
 | Self-heal bridge | global | `AI/SelfHealErrorBridge.tsx` | `selfHealEvents.ts`, `codeFixService.ts` | `/api/ai/code-fix*` | `code_fix_jobs` / JSON |
-| Cursor paste | `/cursor-paste` | `pages/CursorPastePage.tsx` | — | `/api/agent/credentials/*` (dev) | `.cursor/local/deploy.env` |
+| Cursor paste | `/cursor-paste` | `pages/CursorPastePage.tsx` | â€” | `/api/agent/credentials/*` (dev) | `.cursor/local/deploy.env` |
 
 ### 24.B Quotes, estimating, approvals
 
@@ -1241,11 +1241,11 @@ Each feature row: **UI → Components → Engine → API file(s) → Data**.
 |---------|-----|------------|--------|-----|------|
 | Quotes list | `/quotes` | `QuotesList.tsx` | quotes context, `salesCloseFlow.ts` | sync `/api/data/sync` | `quotes` + synced-data |
 | Quote wizard | `/quote/...`, `/ai-estimate/...` | `QuoteBuilder/*` | `quoteCalculator.ts`, `aiEstimationService.ts`, `aiSchemaBuilder.ts`, `config/trades/*` | `/api/ai/estimate`, `/api/ai/orchestrate` | trades JSON configs |
-| Quote lines | `/quote-lines/...` | `QuoteLineBuilder.tsx`, `QuoteLineEditor.tsx` | `quotes/quoteLineUtils.ts`, `messaging/pdfGenerator.ts` | — | quotes |
-| Job pricing | `/price-job` | `JobPricing/JobPricing.tsx` | `pricing/smallJobsService.ts`, `priceResearchService.ts`, `indicativeEstimate.ts`, `visionAssessment.ts` | `/api/ai/price-research`, `/api/ai/estimate` | — |
-| Approvals | `/approvals` | `Approvals/ApprovalsQueue.tsx` | quote approval gates in App | — | quotes |
-| Sales close / contract gate | from quotes | — | `salesCloseFlow.ts` | contracts APIs | quotes → contracts |
-| Trades | drives wizard | — | `config/trades/{bathroom,kitchen,electrical,plumbing,roofing,remaining}.ts` + playbooks | — | files |
+| Quote lines | `/quote-lines/...` | `QuoteLineBuilder.tsx`, `QuoteLineEditor.tsx` | `quotes/quoteLineUtils.ts`, `messaging/pdfGenerator.ts` | â€” | quotes |
+| Job pricing | `/price-job` | `JobPricing/JobPricing.tsx` | `pricing/smallJobsService.ts`, `priceResearchService.ts`, `indicativeEstimate.ts`, `visionAssessment.ts` | `/api/ai/price-research`, `/api/ai/estimate` | â€” |
+| Approvals | `/approvals` | `Approvals/ApprovalsQueue.tsx` | quote approval gates in App | â€” | quotes |
+| Sales close / contract gate | from quotes | â€” | `salesCloseFlow.ts` | contracts APIs | quotes â†’ contracts |
+| Trades | drives wizard | â€” | `config/trades/{bathroom,kitchen,electrical,plumbing,roofing,remaining}.ts` + playbooks | â€” | files |
 
 ### 24.C CRM & customers
 
@@ -1254,45 +1254,45 @@ Each feature row: **UI → Components → Engine → API file(s) → Data**.
 | CRM | `/crm` | `ComprehensiveCRM.tsx` | `leads/leadService.ts` | `/api/leads/*` | `customers`, leads in synced-data |
 | Customers | `/customers` | `CustomerManagement.tsx`, `CustomerContactsPanel.tsx` | `contacts/contactStore.ts`, leads | `/api/auth/customers`, data sync | `customers`, `contacts` |
 | Lead inbox | `/communications?tab=leads` | `mailbox/LeadInboxPanel.tsx` | `leads/leadInboxService.ts` | `/api/leads/inbox*` | `lead-inbox.json` + Supabase |
-| Sales mgmt | `/sales` | `SalesManagement.tsx` | — | — | quotes/customers |
+| Sales mgmt | `/sales` | `SalesManagement.tsx` | â€” | â€” | quotes/customers |
 
 ### 24.D Projects, builder, change orders, portal
 
 | Feature | UI | Components | Engine | API | Data |
 |---------|-----|------------|--------|-----|------|
-| Projects | `/projects`, `/projects/:id`, `/builder-projects…` | `BuilderProjectManagement.tsx` + `project/*` tabs | `project/projectStore.ts`, `projectStatusService.ts`, `completionService.ts` | `/api/data/sync`, `/api/files/upload`, `/api/portal/:token`, WA group routes | `projects`, `project_files` |
-| Project AI | `?tab=ai` | `project/ProjectAIPanel.tsx` | `projectAi/projectAiService.ts`, `projectAiPromptBuilder.ts` | `/api/ai/project` | — |
+| Projects | `/projects`, `/projects/:id`, `/builder-projectsâ€¦` | `BuilderProjectManagement.tsx` + `project/*` tabs | `project/projectStore.ts`, `projectStatusService.ts`, `completionService.ts` | `/api/data/sync`, `/api/files/upload`, `/api/portal/:token`, WA group routes | `projects`, `project_files` |
+| Project AI | `?tab=ai` | `project/ProjectAIPanel.tsx` | `projectAi/projectAiService.ts`, `projectAiPromptBuilder.ts` | `/api/ai/project` | â€” |
 | Photos / docs / snagging / timeline / daily plan / comms | project tabs | `ProjectPhotosTab`, `ProjectDocumentsTab`, `ProjectSnaggingTab`, `ProjectTimeline`, `DailyPlanCard`, `ProjectCommsPanel`, `ProjectActionStrip` | project store + playbooks | files upload; messages | project_files, WA |
-| Builder dashboard | `/builder` | `BuilderDashboard.tsx` | project store | — | projects |
-| Builder management | `/builder-management` | `BuilderManagement.tsx` | `builder/builderStore.ts` | — | `builders` |
+| Builder dashboard | `/builder` | `BuilderDashboard.tsx` | project store | â€” | projects |
+| Builder management | `/builder-management` | `BuilderManagement.tsx` | `builder/builderStore.ts` | â€” | `builders` |
 | Change orders | `/changes` | `ChangeOrders.tsx` | project types | portal/contracts paths | project data |
 | Customer portal | `/portal/:token` | `CustomerPortal.tsx` | `cyrus/*` | `/api/portal/:token`, `/api/cyrus/portal*` ; Edge `contract-portal` | projects |
-| PM scheduler | background | — | `ai/pmScheduler.ts` (started in App) | — | — |
+| PM scheduler | background | â€” | `ai/pmScheduler.ts` (started in App) | â€” | â€” |
 
 ### 24.E Communications
 
 | Feature | UI | Components | Engine | API | Data |
 |---------|-----|------------|--------|-----|------|
 | Comms hub | `/communications`, `/email` | `CommunicationsHub.tsx` | `messaging/messagingHub.ts`, providers, `templateRenderer`, `messageLogStore` | `/api/messages/send`, mailbox, WA | message logs |
-| Send tab | Comms | hub | messagingHub | messages + WA Web | — |
+| Send tab | Comms | hub | messagingHub | messages + WA Web | â€” |
 | Lead inbox tab | `?tab=leads` | `LeadInboxPanel` | leadInboxService | `/api/leads/inbox*` | lead-inbox |
 | Mailbox inbox / compose / connect | Comms + Settings | `InboxPanel`, `EmailComposePanel`, `MailboxConnectPanel` | `mailbox/mailboxService.ts` | `/api/mailbox/*`, `/webhooks/gmail\|outlook` | `mailbox-data.json`, mailbox tables |
-| Templates / logs | Comms tabs | hub | templateRenderer, messageLogStore | — | local/synced |
-| WhatsApp QR | `/integrations` | `WhatsAppWebPanel.tsx` | — | `/api/whatsapp-web/*` | `.wwebjs_auth/` |
-| Meta WA | webhooks | — | `whatsappProvider.ts` | `whatsapp-webhook.ts` | whatsapp_* tables |
+| Templates / logs | Comms tabs | hub | templateRenderer, messageLogStore | â€” | local/synced |
+| WhatsApp QR | `/integrations` | `WhatsAppWebPanel.tsx` | â€” | `/api/whatsapp-web/*` | `.wwebjs_auth/` |
+| Meta WA | webhooks | â€” | `whatsappProvider.ts` | `whatsapp-webhook.ts` | whatsapp_* tables |
 
-### 24.F AI agents (quick location — detail in §§16–17)
+### 24.F AI agents (quick location â€” detail in Â§Â§16â€“17)
 
 | Feature | UI | Components | Engine | API |
 |---------|-----|------------|--------|-----|
-| Cynthia | `/cynthia` | `Cynthia/*`, `AI/*` | `cynthia/*`, `ai/toolRuntime*`, personas | `cynthia-routes.ts`, `ai-proxy` → staff/orchestrate |
+| Cynthia | `/cynthia` | `Cynthia/*`, `AI/*` | `cynthia/*`, `ai/toolRuntime*`, personas | `cynthia-routes.ts`, `ai-proxy` â†’ staff/orchestrate |
 | Cynthia website widget | external embed | `public/cynthia-widget.js` (+ `cyrus-widget.js` alias) | `engine/cyrus/*` | `cyrus-routes.ts`, `/api/ai/cyrus` |
 | Cynthia website threads UI | `/cyrus/legacy` | `CyrusConversations.tsx` | cyrusThreadApi | `/api/cyrus/threads*` |
-| Cynthia Call Centre (phone) | `/calls` | `CallCenter/*` | — | `vapi-routes`, `phone-webhook`, `agent-routes` |
+| Cynthia Call Centre (phone) | `/calls` | `CallCenter/*` | â€” | `vapi-routes`, `phone-webhook`, `agent-routes` |
 | Softphone | `/calls?tab=softphone` | `SoftPhonePanel.tsx` | jssip | SIP WSS (PARTIAL) |
-| Staff phones | Settings → Team | `StaffSoftphones`, `StaffPhoneRegistration` | — | `/api/agent/lines*`, `/api/org/staff/*` |
-| Foreman | AI mode | — | `personas/ukForeman.ts`, `foremanExecutor.ts` | orchestrator mode `foreman` |
-| AI Studio | Settings → AI | `aiStudio/AIStudioPanel.tsx`, LanguagePacks, audits | `aiStudioStore.ts` | `/api/ai/studio`, language-packs, conversation-log, code-fix |
+| Staff phones | Settings â†’ Team | `StaffSoftphones`, `StaffPhoneRegistration` | â€” | `/api/agent/lines*`, `/api/org/staff/*` |
+| Foreman | AI mode | â€” | `personas/ukForeman.ts`, `foremanExecutor.ts` | orchestrator mode `foreman` |
+| AI Studio | Settings â†’ AI | `aiStudio/AIStudioPanel.tsx`, LanguagePacks, audits | `aiStudioStore.ts` | `/api/ai/studio`, language-packs, conversation-log, code-fix |
 | AI Audit | `/ai-audit` | `ConversationAudit`, `CodeFixesAudit` | conversationLogService, codeFixService | conversation-log + code-fix |
 
 ### 24.G Contracts, planning, building control
@@ -1302,47 +1302,47 @@ Each feature row: **UI → Components → Engine → API file(s) → Data**.
 | Contracts hub | `/contracts` | `Contracts/ContractsHub.tsx`, `SignaturePad` | `contracts/*` | `contract-routes.ts`, deposit/stage checkout in `project-routes.ts` | `contracts` |
 | Public sign | `/contract/:token` | `ContractSignPage.tsx` | contractSignEffects | `/api/contract/:token`, `/sign`; Edge `contract-portal` | contracts |
 | Planning | `/planning`, `/planning/:id` | `planning/*` | `planning/*` | `/api/ai/planning` | `planning_applications` |
-| Planning approve | `/planning-approve/:token` | `PlanningCustomerApproval.tsx` | planning | — | planning |
+| Planning approve | `/planning-approve/:token` | `PlanningCustomerApproval.tsx` | planning | â€” | planning |
 | Building control | `/building-control` | `buildingControl/*` | `buildingControl/*`, `config/buildingControl/*` | `building-control-routes.ts`, `/api/ai/building-control` | `building-control/registry.json` |
 
 ### 24.H Money, recruitment, team, platform
 
 | Feature | UI | Components | Engine | API | Data |
 |---------|-----|------------|--------|-----|------|
-| Costing | `/costing` | `CostingDashboard.tsx` | `costing/*` | — | synced costing |
+| Costing | `/costing` | `CostingDashboard.tsx` | `costing/*` | â€” | synced costing |
 | Accounts | `/accounts` | `accounts/AccountsHub.tsx` | `banking/*` | `banking-routes.ts` + gap banking posts | bank_*, banking-tokens.json |
-| Finance app | `/finance` | `FinanceApplication.tsx` | Stripe integrationService | Stripe checkout routes | — |
-| Stripe | Integrations + platform | — | — | `stripe-routes.ts`, `stripe-service.ts`, gap refund/sub; Edge `stripe-webhook` | org subscription fields |
+| Finance app | `/finance` | `FinanceApplication.tsx` | Stripe integrationService | Stripe checkout routes | â€” |
+| Stripe | Integrations + platform | â€” | â€” | `stripe-routes.ts`, `stripe-service.ts`, gap refund/sub; Edge `stripe-webhook` | org subscription fields |
 | Recruitment | `/recruitment` | `RecruitmentCRM.tsx` | `recruitment/recruitmentStore.ts` | phone recruitment tools | recruitment_* |
 | Team | `/team` | `TeamManagement.tsx` | invites; flags recruitment/accounts | `account-auth` members/invites | profiles |
 | Platform clients | `/platform/clients` | `PlatformClientsCRM.tsx` | `platformApi.ts` | `platform-routes.ts`; Edge `platform-orgs` | organizations |
-| Portfolio | `/portfolio` | `Portfolio.tsx` | completion → portfolio | — | portfolio seed / completion |
+| Portfolio | `/portfolio` | `Portfolio.tsx` | completion â†’ portfolio | â€” | portfolio seed / completion |
 
 ### 24.I Design, survey, booking, products, settings misc
 
 | Feature | UI | Components | Engine | API | Data |
 |---------|-----|------------|--------|-----|------|
-| Designer | `/designer` | `BathroomDesigner.tsx` | trades | — | — |
-| AI render | `/ai-render/:tradeId?` | `AIBathroomRender.tsx` | `ai/renderService.ts`, `renderOptions.ts` | `/api/ai/render` | — |
-| Site survey | `/site-survey` | `SiteSurvey.tsx` | `surveyScorer.ts` | — | — |
-| Booking | `/booking` | `BookingSystem.tsx` | google_calendar integration | — | — |
-| Products | `/products` | `ProductCatalog.tsx` | `data/tradeProducts` | — | `products` |
-| Product import | *(no route)* | `ProductImportSystem.tsx` | — | — | ORPHAN |
-| Import/export | Settings → Import/Export | `settings/ImportExportPanel.tsx` | `data/dataImportExportService.ts` | `/api/data/sync` | packs |
-| Settings pricing/stages/business | `/settings` tabs | `Settings.tsx` | pricingRules / stages context | — | local + integrations company |
+| Designer | `/designer` | `BathroomDesigner.tsx` | trades | â€” | â€” |
+| AI render | `/ai-render/:tradeId?` | `AIBathroomRender.tsx` | `ai/renderService.ts`, `renderOptions.ts` | `/api/ai/render` | â€” |
+| Site survey | `/site-survey` | `SiteSurvey.tsx` | `surveyScorer.ts` | â€” | â€” |
+| Booking | `/booking` | `BookingSystem.tsx` | google_calendar integration | â€” | â€” |
+| Products | `/products` | `ProductCatalog.tsx` | `data/tradeProducts` | â€” | `products` |
+| Product import | *(no route)* | `ProductImportSystem.tsx` | â€” | â€” | ORPHAN |
+| Import/export | Settings â†’ Import/Export | `settings/ImportExportPanel.tsx` | `data/dataImportExportService.ts` | `/api/data/sync` | packs |
+| Settings pricing/stages/business | `/settings` tabs | `Settings.tsx` | pricingRules / stages context | â€” | local + integrations company |
 | Company profile / logo | Integrations | `CompanyLogoUpload.tsx` | `companyProfileSync.ts` | `/api/cyrus/company-settings`, embed-snippet | integrations |
-| Storage | uploads | — | `storage/storageService.ts` | Supabase Storage + `/api/files/upload` (offline) | Supabase Storage (local fallback) |
+| Storage | uploads | â€” | `storage/storageService.ts` | Supabase Storage + `/api/files/upload` (offline) | Supabase Storage (local fallback) |
 | Cloud persist | all CRUD | App context | `data/supabaseStore.ts`, `cloudPersist.ts` | Supabase REST + `/api/data/sync` | Supabase tables + synced-data.json |
-| Native push | bridge | `bridge/nativeBridge.ts` | — | `/api/push/*` | `device_tokens` / device-tokens.json |
+| Native push | bridge | `bridge/nativeBridge.ts` | â€” | `/api/push/*` | `device_tokens` / device-tokens.json |
 | i18n | app-wide | `i18n/` | languages.ts | `/api/language-packs`, `/api/translate/*` | language-packs.json |
 
 ---
 
 ## 25. API location catalogue (where each API is stored)
 
-Canonical: **`BE/server/`**. Entry: `index.ts` (dispatch order §5.1).
+Canonical: **`BE/server/`**. Entry: `index.ts` (dispatch order Â§5.1).
 
-### 25.1 Route / webhook files → path families
+### 25.1 Route / webhook files â†’ path families
 
 | File | Paths / family |
 |------|----------------|
@@ -1375,7 +1375,7 @@ Canonical: **`BE/server/`**. Entry: `index.ts` (dispatch order §5.1).
 | `gap-api-routes.ts` | `/api/sms/send`, `/api/stripe/refund`, `manage-subscription`, `/api/banking/flag-transaction`, `initiate-payment`, `/api/messages/whatsapp-template`, `whatsapp-media` |
 | `agent-activity-routes.ts` | `/api/agent-activity` |
 
-### 25.2 `ai-proxy.ts` → handler modules
+### 25.2 `ai-proxy.ts` â†’ handler modules
 
 | Path | Handler file |
 |------|----------------|
@@ -1407,13 +1407,13 @@ Library handlers (no own pathname): `channel-inbound-handler.ts`, `vision-handle
 | Edge `stripe-webhook` | `BE/supabase/functions/stripe-webhook/` |
 | Edge `contract-portal` | `BE/supabase/functions/contract-portal/` |
 
-(`BE/sip-bridge/` exists but is **unsupported** for Cynthia phone AI — Vapi only.)
+(`BE/sip-bridge/` exists but is **unsupported** for Cynthia phone AI â€” Vapi only.)
 
 ### 25.4 Backend JSON data stores (`BE/server/data/`)
 
 | File | Feature backing |
 |------|-----------------|
-| `synced-data.json` / `synced-data-{orgId}.json` | Primary CRM/projects/quotes/calls/… via `data-store.ts` |
+| `synced-data.json` / `synced-data-{orgId}.json` | Primary CRM/projects/quotes/calls/â€¦ via `data-store.ts` |
 | `organizations.json` | Org registry |
 | `users.json` | Legacy local users |
 | `usage-events.json` | Usage metering |
@@ -1427,23 +1427,23 @@ Library handlers (no own pathname): `channel-inbound-handler.ts`, `vision-handle
 | `language-packs.json` | Language packs |
 | `banking-tokens.json` | Open Banking tokens |
 | `building-control/registry.json` | BC knowledge |
-| `.wwebjs_auth/` | WhatsApp Web session — **DO_NOT_SHIP** |
+| `.wwebjs_auth/` | WhatsApp Web session â€” **DO_NOT_SHIP** |
 
 ---
 
 ## 26. Still-to-expand depth (after locations)
 
-Former prose gaps → **§§27–28**. Remaining optional depth (not blocking inventory): open-banking live providers beyond mock; wiring or deleting ORPHAN components (§28.14); Flutter FCM store build with Firebase files.
+Former prose gaps â†’ **Â§Â§27â€“28**. Remaining optional depth (not blocking inventory): open-banking live providers beyond mock; wiring or deleting ORPHAN components (Â§28.14); Flutter FCM store build with Firebase files.
 
 ---
 
-# Part D — Mobile + how-it-works (additive)
+# Part D â€” Mobile + how-it-works (additive)
 
 ---
 
 ## 27. Mobile / Flutter (`tradepro-mobile`)
 
-**Repo:** `c:\Users\dolab\Downloads\tradepro-mobile` · GitHub `dolab-jpg/tradepro-mobile` · HEAD `f674a522` · package `tradepro_mobile` (Builder Diddies)
+**Repo:** `c:\Users\dolab\Downloads\tradepro-mobile` Â· GitHub `dolab-jpg/tradepro-mobile` Â· HEAD `f674a522` Â· package `tradepro_mobile` (Builder Diddies)
 
 **Status:** LIVE hybrid WebView shell of production SPA. PARTIAL push/FCM until `PUSH_ENABLED` + Firebase config files in the mobile tree.
 
@@ -1451,10 +1451,10 @@ Former prose gaps → **§§27–28**. Remaining optional depth (not blocking in
 
 ```
 Flutter APK/iOS (online-only gate)
-  → WebView loads WEB_BASE_URL (default https://app.b-diddies.com)
-  → injects window.TradeProNative on every page finished
-  → SPA uses src/app/bridge/nativeBridge.ts (no-ops in browser)
-  → optional FCM → POST /api/push/register on tradepro-backend
+  â†’ WebView loads WEB_BASE_URL (default https://app.b-diddies.com)
+  â†’ injects window.TradeProNative on every page finished
+  â†’ SPA uses src/app/bridge/nativeBridge.ts (no-ops in browser)
+  â†’ optional FCM â†’ POST /api/push/register on tradepro-backend
 ```
 
 Launch URI defaults to `{web}/cynthia` (staff home), not bare `/`.
@@ -1463,14 +1463,14 @@ Launch URI defaults to `{web}/cynthia` (staff home), not bare `/`.
 
 | File | Role |
 |------|------|
-| `lib/main.dart` | Boot → connectivity → `WebShellScreen` |
+| `lib/main.dart` | Boot â†’ connectivity â†’ `WebShellScreen` |
 | `lib/config/app_config.dart` | `WEB_BASE_URL`, `API_BASE_URL`, `DEMO_ROLE`, `PUSH_ENABLED` |
 | `lib/screens/web_shell_screen.dart` | WebView + inject + push/share routing |
 | `lib/services/bridge_handler.dart` | Channel `TradeProNativeChannel` + JS bootstrap |
-| `lib/services/push_service.dart` | Register token → `/api/push/register` |
+| `lib/services/push_service.dart` | Register token â†’ `/api/push/register` |
 | `lib/services/firebase_push_controller.dart` | Optional FCM |
-| `lib/services/media_service.dart` | Camera / gallery / mic → data URLs |
-| `lib/services/share_intent_service.dart` | Android share → Cynthia ingest |
+| `lib/services/media_service.dart` | Camera / gallery / mic â†’ data URLs |
+| `lib/services/share_intent_service.dart` | Android share â†’ Cynthia ingest |
 | `lib/services/connectivity_service.dart` | Offline gate / stream |
 | `lib/services/locale_service.dart` | Shell locale from bridge |
 | `docs/DEVICE_TEST_CHECKLIST.md` | Device QA |
@@ -1479,7 +1479,7 @@ Launch URI defaults to `{web}/cynthia` (staff home), not bare `/`.
 
 `isAvailable`, `takePhoto`, `pickPhoto`, `startVoiceRecording`, `stopVoiceRecording`, `requestNotifications`, `registerPushSession`, `navigate`, `setPreferredLanguage`, `__ready`.
 
-Frontend call sites: `App.tsx` (push register on login), Cynthia/PhotoCapture (camera), `useVoiceInput` / `VoiceInputButton`, `useVoiceOutput` (TTS preference), `i18n` locale sync, `openNativeSoftPhone` → `/calls?tab=softphone`.
+Frontend call sites: `App.tsx` (push register on login), Cynthia/PhotoCapture (camera), `useVoiceInput` / `VoiceInputButton`, `useVoiceOutput` (TTS preference), `i18n` locale sync, `openNativeSoftPhone` â†’ `/calls?tab=softphone`.
 
 ### 27.4 Config defaults
 
@@ -1489,36 +1489,36 @@ Frontend call sites: `App.tsx` (push register on login), Cynthia/PhotoCapture (c
 | `API_BASE_URL` | `https://app.b-diddies.com` |
 | `PUSH_ENABLED` | `false` |
 | Softphone deep link | `/calls?tab=softphone` |
-| Share ingest | `/cynthia/ingest?text=…` |
+| Share ingest | `/cynthia/ingest?text=â€¦` |
 
 ### 27.5 Push / softphone / share
 
-- Push opt-in; no `google-services.json` / plist in repo → FCM PARTIAL.
-- FCM payload `incoming_call` / `softphone` → softphone tab; `cynthia_card` → Cynthia route.
-- Android share text → ingest URL; shared images → placeholder text only (PARTIAL).
+- Push opt-in; no `google-services.json` / plist in repo â†’ FCM PARTIAL.
+- FCM payload `incoming_call` / `softphone` â†’ softphone tab; `cynthia_card` â†’ Cynthia route.
+- Android share text â†’ ingest URL; shared images â†’ placeholder text only (PARTIAL).
 
 ---
 
 ## 28. How-it-works (former MISSING / THIN gaps)
 
-Short flows only — locations remain in §24.
+Short flows only â€” locations remain in Â§24.
 
 ### 28.1 Seed accounts on login
 
-Collapsible “Test accounts” on `LoginPage` fills username/email for Supabase seed users (roles: platform_owner → customer). Shared seed password pattern in panel. Files: `auth/components/SeedAccountsPanel.tsx`, `auth/pages/LoginPage.tsx`.
+Collapsible â€œTest accountsâ€ on `LoginPage` fills username/email for Supabase seed users (roles: platform_owner â†’ customer). Shared seed password pattern in panel. Files: `auth/components/SeedAccountsPanel.tsx`, `auth/pages/LoginPage.tsx`.
 
 ### 28.2 Notifications + online banner
 
-- **NotificationSystem:** AppShell bell → `notificationStore`; click marks read and navigates (`data.route` or project). Types: builder brief, photos, payment, customer/foreman actions, leads. Dev samples if `localStorage.tradepro_enable_dev_notifications=1`.
-- **OnlineStatusBanner:** sticky bar when `navigator.onLine` is false — required for Flutter online-only model. Files: `NotificationSystem.tsx`, `notifications/*`, `OnlineStatusBanner.tsx`.
+- **NotificationSystem:** AppShell bell â†’ `notificationStore`; click marks read and navigates (`data.route` or project). Types: builder brief, photos, payment, customer/foreman actions, leads. Dev samples if `localStorage.tradepro_enable_dev_notifications=1`.
+- **OnlineStatusBanner:** sticky bar when `navigator.onLine` is false â€” required for Flutter online-only model. Files: `NotificationSystem.tsx`, `notifications/*`, `OnlineStatusBanner.tsx`.
 
 ### 28.3 Project AI panel
 
-Project tab `ai` → `ProjectAIPanel` → `sendProjectAIMessage` → `POST /api/ai/project` with project-context prompt; tool results via `toolRuntime` (confirm for customer messages); conversation log + refresh project. Files: `project/ProjectAIPanel.tsx`, `engine/projectAi/*`. Backend: `project-ai-handler.ts`.
+Project tab `ai` â†’ `ProjectAIPanel` â†’ `sendProjectAIMessage` â†’ `POST /api/ai/project` with project-context prompt; tool results via `toolRuntime` (confirm for customer messages); conversation log + refresh project. Files: `project/ProjectAIPanel.tsx`, `engine/projectAi/*`. Backend: `project-ai-handler.ts`.
 
-### 28.4 AI Studio (Settings → AI)
+### 28.4 AI Studio (Settings â†’ AI)
 
-Vertical sub-panels in `AIStudioPanel` (not URL tabs): company voice/instructions; quick commands by role; knowledge library; Building Control docs (`BCDocLibrary`); autonomy & estimates / self-heal prefs; conversation audit controls; then `LanguagePacksPanel`. Persists via `aiStudioStore` → `/api/ai/studio`.
+Vertical sub-panels in `AIStudioPanel` (not URL tabs): company voice/instructions; quick commands by role; knowledge library; Building Control docs (`BCDocLibrary`); autonomy & estimates / self-heal prefs; conversation audit controls; then `LanguagePacksPanel`. Persists via `aiStudioStore` â†’ `/api/ai/studio`.
 
 ### 28.5 Settings tabs
 
@@ -1545,9 +1545,9 @@ Export full backup JSON, estimation pack, or customers CSV; import JSON/CSV with
 
 ### 28.8 QuoteBuilder stages
 
-1. No `tradeId` → AI assist CTA or `TradeSelectorStep`.  
-2. Trade chosen → `trade.wizardStages` drive `DynamicStage` (required fields).  
-3. Stage `summary` → `SummaryStep` + `calculateQuote`; approval / send / draft.  
+1. No `tradeId` â†’ AI assist CTA or `TradeSelectorStep`.  
+2. Trade chosen â†’ `trade.wizardStages` drive `DynamicStage` (required fields).  
+3. Stage `summary` â†’ `SummaryStep` + `calculateQuote`; approval / send / draft.  
 Routes: `/quote/:tradeId?/:customerId?`, `/ai-estimate/...`. Controls: `StageProgress`. Config: `config/trades/*`.
 
 ### 28.9 CommunicationsHub tabs
@@ -1565,21 +1565,22 @@ Staff: `overview`, `plan`, `files`, `messages`, `ai`; More: `team`, `snagging`, 
 
 ### 28.12 Signup modes
 
-`SignupModeTabs`: **`company`** (new org) vs **`invite`** (join with token). Default `invite` when `?invite=` present. Files: `SignupModeTabs.tsx`, `SignupPage.tsx` → `account-auth` register-org / accept-invite.
+`SignupModeTabs`: **`company`** (new org) vs **`invite`** (join with token). Default `invite` when `?invite=` present. Files: `SignupModeTabs.tsx`, `SignupPage.tsx` â†’ `account-auth` register-org / accept-invite.
 
 ### 28.13 Cloud persist vs local
 
 `useCloudPersistence()` === `isSupabaseConfigured()`. When true: App `CLOUD_MODE` hydrates CRM from Supabase; `readLocalJson`/`writeLocalJson` no-op for that business data; `supabaseStore` org-scoped load/save + realtime on projects. When false: local/synced JSON path (legacy). Files: `cloudPersist.ts`, `supabaseStore.ts`, `App.tsx`, `lib/supabase/client.ts`.
 
-**File storage (LIVE):** When Supabase is configured, `storage/storageService.ts` uploads to private bucket `project-files` under `{orgId}/…`, writes `project_files` metadata, and resolves display URLs via `createSignedUrl` (`resolveFileUrl`). Deletes remove the Storage object + metadata row. WhatsApp inbound media uses the backend service-role helper `server/storage.ts`. Without Supabase env, local `dataUrl` + `POST /api/files/upload` remains the offline fallback. Integrations registry defaults `storage.provider` to `supabase` (S3 not wired).
+**File storage (LIVE):** When Supabase is configured, `storage/storageService.ts` uploads to private bucket `project-files` under `{orgId}/â€¦`, writes `project_files` metadata, and resolves display URLs via `createSignedUrl` (`resolveFileUrl`). Deletes remove the Storage object + metadata row. WhatsApp inbound media uses the backend service-role helper `server/storage.ts`. Without Supabase env, local `dataUrl` + `POST /api/files/upload` remains the offline fallback. Integrations registry defaults `storage.provider` to `supabase` (S3 not wired).
 
 ### 28.14 Orphans (no router mount)
 
 | Component | Status |
 |-----------|--------|
-| `ProductImportSystem.tsx` | ORPHAN — `/products` uses `ProductCatalog` |
-| `EmailSystem.tsx` | ORPHAN — `/email` uses `CommunicationsHub` |
+| `ProductImportSystem.tsx` | ORPHAN â€” `/products` uses `ProductCatalog` |
+| `EmailSystem.tsx` | ORPHAN â€” `/email` uses `CommunicationsHub` |
 
 ---
 
-*End of master audit. Re-verify §1 after the next production ship. Keep §§23–25 and §§27–28 updated when adding features, APIs, or mobile bridge methods.*
+*End of master audit. Re-verify Â§1 after the next production ship. Keep Â§Â§23â€“25 and Â§Â§27â€“28 updated when adding features, APIs, or mobile bridge methods.*
+
