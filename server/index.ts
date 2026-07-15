@@ -26,6 +26,8 @@ import { handleCynthiaRoutes } from './cynthia-routes';
 import { handleLeadsRoutes } from './leads-routes';
 import { handleAgentCredentialsRoutes } from './agent-credentials-routes';
 import { handleOrgOpenAIKeyRoutes } from './org-openai-key-routes';
+import { handlePushRoutes } from './push-routes';
+import { handleGapApiRoutes } from './gap-api-routes';
 import { startMailboxPoller } from './mailbox/imapSyncService';
 import { startOutboundWorker } from './outbound-worker';
 import { ensureBdiddiesHomeOrg } from './organizations';
@@ -105,6 +107,10 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
 
   if (await handleCyrusRoutes(req, res, pathname)) return;
   if (await handleCynthiaRoutes(req, res, pathname)) return;
+
+  if (await handlePushRoutes(req, res, pathname)) return;
+
+  if (await handleGapApiRoutes(req, res, pathname, url)) return;
 
   if (await handleLeadsRoutes(req, res, pathname, url)) return;
 

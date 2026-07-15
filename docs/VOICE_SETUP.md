@@ -12,6 +12,7 @@ When API voice is connected, **Aria answers via Vapi + Soho66 SIP trunk** (`VOIC
 - Soft Phone (JsSIP) is an **optional** staff browser channel — Soho66 public WSS is often unavailable; use desk phone / VOIS for humans
 
 See `tradepro-backend/docs/VAPI_SIP.md` for the accurate setup.
+For routes that live only on the API host, see [BACKEND_DEPS.md](./BACKEND_DEPS.md).
 
 ## 1. Environment variables
 

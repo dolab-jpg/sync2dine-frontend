@@ -3,6 +3,7 @@ import {
   enqueueOutboundCall,
   getDataStore,
   getRequestOrgId,
+  getTransferNumbers,
   lookupContactByPhone,
   saveCall,
   saveCustomerRecord,
@@ -452,7 +453,13 @@ export function executePhoneTool(
   }
 
   if (name === 'transferToHuman') {
-    const transferNumber = process.env.VOICE_TRANSFER_NUMBER ?? '';
+    const dept = String(input.department ?? 'general') as keyof ReturnType<typeof getTransferNumbers>;
+    const numbers = getTransferNumbers();
+    const transferNumber =
+      numbers[dept]
+      || numbers.general
+      || process.env.VOICE_TRANSFER_NUMBER
+      || '';
     if (callId) {
       saveCall({
         id: callId,

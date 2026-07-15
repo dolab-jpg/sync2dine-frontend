@@ -36,6 +36,7 @@ import { getProject, updateProject } from '../project/projectStore';
 import { isPlanningAction } from '../planning/planningActionNames';
 import { executePlanningActions } from '../planning/planningAiService';
 import { mailboxService } from '../mailbox/mailboxService';
+import { executeGapTool, isGapTool } from './gapToolRuntime';
 
 export interface ToolRuntimeContext {
   app: AppContextType | null;
@@ -1204,6 +1205,10 @@ async function executeSingleTool(
 ): Promise<ToolExecutionResult> {
   const name = normalizeToolAction(action.action);
   const output = action.output ?? {};
+
+  if (isGapTool(name)) {
+    return executeGapTool(name, action, ctx);
+  }
 
   if (name === 'detectTrades') {
     const trades = output.trades as Array<{ tradeId: string; confidence: number }> | undefined;

@@ -24,7 +24,8 @@ const PROCEED_INTENTS = /\b(proceed|go ahead|use (your )?best judgment|just do i
 const WRITE_TOOL_NAMES = new Set([
   'saveCustomer', 'linkCustomer', 'saveQuote', 'updateQuote', 'startQuote',
   'writeData', 'proposePaymentPlan', 'proposeSchedule', 'draftInvoice',
-  'convertQuoteToProject',
+  'convertQuoteToProject', 'mergeCustomers', 'processRefund', 'initiatePayment',
+  'sendQuote', 'sendInvoice', 'closeProject', 'archiveQuote',
 ]);
 
 export function isProceedMessage(message: string): boolean {

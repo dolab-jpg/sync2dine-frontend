@@ -28,6 +28,8 @@ const SALES_QUOTING = new Set([
   'addQuoteLines',
   'updateQuoteLines',
   'navigateTo',
+  'createReminder',
+  'bulkUpdateLeadStatus',
 ]);
 
 const MANAGER_INSIGHTS = new Set([
@@ -48,6 +50,12 @@ const PROJECT_PM = new Set([
   'completeHandover',
   'assignContractor',
   'markPaymentReceived',
+  'closeProject',
+  'schedulePaymentReminder',
+  'requestReview',
+  'scheduleRecurringJob',
+  'createCalendarEvent',
+  'manageFiles',
 ]);
 
 const FINANCIAL = new Set([
@@ -55,6 +63,8 @@ const FINANCIAL = new Set([
   'draftCustomerMessage',
   'draftBuilderMessage',
   'notifyCustomerChangeOrder',
+  'sendInvoice',
+  'generateInvoicePdf',
 ]);
 
 // AI pricing + contracts: available to all staff-level roles.
@@ -64,12 +74,20 @@ const CONTRACTS_PRICING = new Set([
   'generatePaymentSchedule',
   'saveContract',
   'sendContract',
+  'sendQuote',
+  'generateContractPdf',
+  'archiveQuote',
+  'duplicateQuote',
 ]);
 
 // Price approval is restricted to managers and super admins (human-only gate).
 const APPROVALS = new Set([
   'approveQuote',
   'rejectQuote',
+  'processRefund',
+  'manageSubscription',
+  'initiatePayment',
+  'mergeCustomers',
 ]);
 
 const FOREMAN = new Set([
@@ -89,6 +107,7 @@ const COSTING = new Set([
   'fixCostEntry',
   'logHours',
   'correctTimesheet',
+  'draftSupplierOrder',
 ]);
 
 const COSTING_ADMIN = new Set([
@@ -121,6 +140,10 @@ const ACCOUNTS = new Set([
   'matchTransactionToProject',
   'draftClientReceipt',
   'sendClientReceipt',
+  'flagTransaction',
+  'processRefund',
+  'exportReport',
+  'initiatePayment',
 ]);
 
 const EMAIL = new Set([
@@ -129,6 +152,7 @@ const EMAIL = new Set([
   'draftEmailReply',
   'sendEmailReply',
   'sendEmailWithAttachment',
+  'searchEmails',
 ]);
 
 const CYNTHIA_OPS = new Set([
@@ -137,6 +161,14 @@ const CYNTHIA_OPS = new Set([
   'generateOpsReport',
   'placeOutboundCall',
   'sendToStaffCynthia',
+  'sendSms',
+  'sendWhatsAppTemplate',
+  'sendWhatsAppMedia',
+  'sendQuote',
+  'sendInvoice',
+  'generateInvoicePdf',
+  'generateContractPdf',
+  'exportReport',
 ]);
 
 const PLANNING = new Set([

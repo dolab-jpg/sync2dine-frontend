@@ -5,12 +5,15 @@ import {
   getAgentStatusSnapshot,
   getPhoneLineByAssignedUserId,
   getPhoneLineById,
+  getTransferNumbers,
   listPhoneLines,
   lookupContactByPhone,
   maskPhoneLine,
   savePhoneLine,
   updateAgentSettings,
+  updateTransferNumbers,
   type PhoneLinePurpose,
+  type TransferNumbers,
 } from './data-store';
 import {
   getChatterboxConfig,
@@ -435,5 +438,21 @@ export async function handleAgentRoutes(
       return true;
     }
   }
+
+  if (pathname === '/api/agent/transfer-numbers' && req.method === 'GET') {
+    sendJson(res, 200, { transferNumbers: getTransferNumbers() });
+    return true;
+  }
+  if (pathname === '/api/agent/transfer-numbers' && (req.method === 'PATCH' || req.method === 'POST')) {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}') as TransferNumbers;
+      const transferNumbers = updateTransferNumbers(body);
+      sendJson(res, 200, { transferNumbers });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : 'Invalid transfer numbers payload' });
+    }
+    return true;
+  }
+
   return false;
 }

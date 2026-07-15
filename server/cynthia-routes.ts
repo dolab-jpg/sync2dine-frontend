@@ -56,9 +56,12 @@ async function notifyStaffPush(opts: {
   cardId: string;
 }): Promise<void> {
   try {
-    const apiBase = process.env.API_BASE_URL || process.env.VITE_API_BASE_URL || '';
-    if (!apiBase) return;
-    await fetch(`${apiBase.replace(/\/$/, '')}/api/push/notify`, {
+    const apiBase = (process.env.API_BASE_URL || process.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+    // Prefer configured API host; otherwise local push stub on this server (G6)
+    const url = apiBase
+      ? `${apiBase}/api/push/notify`
+      : `http://127.0.0.1:${process.env.PORT || 3001}/api/push/notify`;
+    await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

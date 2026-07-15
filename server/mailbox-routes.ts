@@ -229,6 +229,39 @@ export async function handleMailboxRoutes(
     return true;
   }
 
+  if (pathname === '/api/mailbox/search' && req.method === 'GET') {
+    const connectionId = url.searchParams.get('connectionId');
+    if (!connectionId) {
+      sendJson(res, 400, { error: 'connectionId required' });
+      return true;
+    }
+    const query = (url.searchParams.get('query') || '').toLowerCase();
+    const from = (url.searchParams.get('from') || '').toLowerCase();
+    const dateFrom = url.searchParams.get('dateFrom') || '';
+    const dateTo = url.searchParams.get('dateTo') || '';
+    const limit = Number(url.searchParams.get('limit') || 20);
+    const messages = listMessages(connectionId, 200).filter((m) => {
+      const hay = `${m.subject} ${m.snippet} ${m.fromAddr}`.toLowerCase();
+      if (query && !hay.includes(query)) return false;
+      if (from && !String(m.fromAddr).toLowerCase().includes(from)) return false;
+      if (dateFrom && m.receivedAt && m.receivedAt < dateFrom) return false;
+      if (dateTo && m.receivedAt && m.receivedAt > dateTo) return false;
+      return true;
+    }).slice(0, limit);
+    sendJson(res, 200, {
+      count: messages.length,
+      emails: messages.map((m) => ({
+        id: m.id,
+        from: m.fromAddr,
+        subject: m.subject,
+        snippet: m.snippet,
+        receivedAt: m.receivedAt,
+        threadId: m.threadId,
+      })),
+    });
+    return true;
+  }
+
   if (pathname === '/webhooks/gmail' && req.method === 'POST') {
     let body = '';
     try {
@@ -314,6 +347,33 @@ export async function executeMailboxTool(
         body: String(input.body ?? ''),
       },
       readyToSend: Boolean(input.to && input.subject && input.body),
+    };
+  }
+
+  if (toolName === 'searchEmails') {
+    const query = String(input.query ?? '').toLowerCase();
+    const from = String(input.from ?? '').toLowerCase();
+    const dateFrom = String(input.dateFrom ?? '');
+    const dateTo = String(input.dateTo ?? '');
+    const limit = Number(input.limit) || 20;
+    const messages = listMessages(connectionId, 200).filter((m) => {
+      const hay = `${m.subject} ${m.snippet} ${m.fromAddr}`.toLowerCase();
+      if (query && !hay.includes(query)) return false;
+      if (from && !String(m.fromAddr).toLowerCase().includes(from)) return false;
+      if (dateFrom && m.receivedAt && m.receivedAt < dateFrom) return false;
+      if (dateTo && m.receivedAt && m.receivedAt > dateTo) return false;
+      return true;
+    }).slice(0, limit);
+    return {
+      count: messages.length,
+      emails: messages.map((m) => ({
+        id: m.id,
+        from: m.fromAddr,
+        subject: m.subject,
+        snippet: m.snippet,
+        receivedAt: m.receivedAt,
+        threadId: m.threadId,
+      })),
     };
   }
 

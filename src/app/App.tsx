@@ -168,7 +168,8 @@ export type QuoteStatus =
   | 'rejected'
   | 'sent'
   | 'accepted'
-  | 'expired';
+  | 'expired'
+  | 'archived';
 
 export interface QuoteApproval {
   state: 'pending' | 'approved' | 'rejected';

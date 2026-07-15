@@ -48,6 +48,8 @@ const SALES_QUOTING = new Set([
   'updateQuoteLines',
   'getBusinessSnapshot',
   'navigateTo',
+  'createReminder',
+  'bulkUpdateLeadStatus',
 ]);
 
 const MANAGER_INSIGHTS = new Set([
@@ -68,6 +70,12 @@ const PROJECT_PM = new Set([
   'completeHandover',
   'assignContractor',
   'markPaymentReceived',
+  'closeProject',
+  'schedulePaymentReminder',
+  'requestReview',
+  'scheduleRecurringJob',
+  'createCalendarEvent',
+  'manageFiles',
 ]);
 
 const FINANCIAL = new Set([
@@ -75,6 +83,8 @@ const FINANCIAL = new Set([
   'draftCustomerMessage',
   'draftBuilderMessage',
   'notifyCustomerChangeOrder',
+  'sendInvoice',
+  'generateInvoicePdf',
 ]);
 
 const CONTRACTS_PRICING = new Set([
@@ -83,11 +93,19 @@ const CONTRACTS_PRICING = new Set([
   'generatePaymentSchedule',
   'saveContract',
   'sendContract',
+  'sendQuote',
+  'generateContractPdf',
+  'archiveQuote',
+  'duplicateQuote',
 ]);
 
 const APPROVALS = new Set([
   'approveQuote',
   'rejectQuote',
+  'processRefund',
+  'manageSubscription',
+  'initiatePayment',
+  'mergeCustomers',
 ]);
 
 const FOREMAN = new Set([
@@ -107,6 +125,7 @@ const COSTING = new Set([
   'fixCostEntry',
   'logHours',
   'correctTimesheet',
+  'draftSupplierOrder',
 ]);
 
 const PHONE_RECEPTION = new Set([
@@ -142,6 +161,10 @@ const ACCOUNTS = new Set([
   'categorizeTransaction',
   'matchTransactionToProject',
   'draftClientReceipt',
+  'flagTransaction',
+  'processRefund',
+  'exportReport',
+  'initiatePayment',
 ]);
 
 const CYNTHIA_OPS = new Set([
@@ -153,6 +176,15 @@ const CYNTHIA_OPS = new Set([
   'sendEmailReply',
   'sendEmailWithAttachment',
   'requestCodeFix',
+  'searchEmails',
+  'sendSms',
+  'sendWhatsAppTemplate',
+  'sendWhatsAppMedia',
+  'sendQuote',
+  'sendInvoice',
+  'generateInvoicePdf',
+  'generateContractPdf',
+  'exportReport',
 ]);
 
 const PLANNING = new Set([

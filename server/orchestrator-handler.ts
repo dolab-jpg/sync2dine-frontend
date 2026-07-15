@@ -28,6 +28,7 @@ import type {
   OrchestratorResult,
 } from './orchestrator-types';
 import { PLANNING_ACTION_NAMES, PLANNING_TOOLS } from './planning-tools';
+import { GAP_AUTO_ACTIONS, GAP_CLOSING_TOOLS } from './gap-closing-tools';
 import {
   buildClarifyIntro,
   classifyTaskIntent,
@@ -1538,19 +1539,19 @@ function getToolsForMode(mode: OrchestratorMode, body?: OrchestratorRequest) {
   const planning = hasPlanningContext(body);
   let tools;
   if (mode === 'planning') {
-    tools = [...GENERIC_TOOLS, ...STAFF_TOOLS, ...NAVIGATION_TOOLS, ...PLANNING_TOOLS];
+    tools = [...GENERIC_TOOLS, ...STAFF_TOOLS, ...NAVIGATION_TOOLS, ...PLANNING_TOOLS, ...GAP_CLOSING_TOOLS];
   } else if (mode === 'staff') {
     tools = hasProject
-      ? [...GENERIC_TOOLS, ...STAFF_TOOLS, ...EMAIL_TOOLS, ...CONTRACT_TOOLS, ...PROJECT_TOOLS, ...COSTING_TOOLS, ...ACCOUNTS_TOOLS, ...LEAD_CYCLE_TOOLS, ...NAVIGATION_TOOLS]
-      : [...GENERIC_TOOLS, ...STAFF_TOOLS, ...EMAIL_TOOLS, ...CONTRACT_TOOLS, ...COSTING_TOOLS, ...ACCOUNTS_TOOLS, ...LEAD_CYCLE_TOOLS, ...NAVIGATION_TOOLS];
+      ? [...GENERIC_TOOLS, ...STAFF_TOOLS, ...EMAIL_TOOLS, ...CONTRACT_TOOLS, ...PROJECT_TOOLS, ...COSTING_TOOLS, ...ACCOUNTS_TOOLS, ...LEAD_CYCLE_TOOLS, ...NAVIGATION_TOOLS, ...GAP_CLOSING_TOOLS]
+      : [...GENERIC_TOOLS, ...STAFF_TOOLS, ...EMAIL_TOOLS, ...CONTRACT_TOOLS, ...COSTING_TOOLS, ...ACCOUNTS_TOOLS, ...LEAD_CYCLE_TOOLS, ...NAVIGATION_TOOLS, ...GAP_CLOSING_TOOLS];
   } else if (mode === 'project' || mode === 'foreman') {
-    tools = [...GENERIC_TOOLS, ...STAFF_TOOLS, ...EMAIL_TOOLS, ...CONTRACT_TOOLS, ...PROJECT_TOOLS, ...FOREMAN_TOOLS, ...COSTING_TOOLS, ...ACCOUNTS_TOOLS, ...LEAD_CYCLE_TOOLS, ...NAVIGATION_TOOLS];
+    tools = [...GENERIC_TOOLS, ...STAFF_TOOLS, ...EMAIL_TOOLS, ...CONTRACT_TOOLS, ...PROJECT_TOOLS, ...FOREMAN_TOOLS, ...COSTING_TOOLS, ...ACCOUNTS_TOOLS, ...LEAD_CYCLE_TOOLS, ...NAVIGATION_TOOLS, ...GAP_CLOSING_TOOLS];
   } else if (mode === 'customer' || mode === 'cyrus') {
     tools = [...GENERIC_TOOLS, ...CUSTOMER_TOOLS];
   } else if (mode === 'phone') {
     tools = [...GENERIC_TOOLS, ...CUSTOMER_TOOLS, ...PHONE_TOOLS];
   } else {
-    tools = [...GENERIC_TOOLS, ...STAFF_TOOLS, ...EMAIL_TOOLS, ...CONTRACT_TOOLS, ...PROJECT_TOOLS, ...FOREMAN_TOOLS, ...COSTING_TOOLS, ...ACCOUNTS_TOOLS, ...LEAD_CYCLE_TOOLS, ...NAVIGATION_TOOLS];
+    tools = [...GENERIC_TOOLS, ...STAFF_TOOLS, ...EMAIL_TOOLS, ...CONTRACT_TOOLS, ...PROJECT_TOOLS, ...FOREMAN_TOOLS, ...COSTING_TOOLS, ...ACCOUNTS_TOOLS, ...LEAD_CYCLE_TOOLS, ...NAVIGATION_TOOLS, ...GAP_CLOSING_TOOLS];
   }
 
   if (planning && mode !== 'planning') {
@@ -1610,6 +1611,7 @@ const AUTO_ACTION_NAMES = new Set([
   'placeOutboundCall',
   ...PHONE_AUTO_ACTIONS,
   ...PLANNING_ACTION_NAMES,
+  ...GAP_AUTO_ACTIONS,
 ]);
 
 function applyRoleGate(body: OrchestratorRequest, result: OrchestratorResult): OrchestratorResult {

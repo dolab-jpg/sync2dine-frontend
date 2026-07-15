@@ -124,17 +124,28 @@ export interface PhoneLine {
   purpose?: PhoneLinePurpose;
 }
 
+export interface TransferNumbers {
+  general?: string;
+  sales?: string;
+  projects?: string;
+  recruitment?: string;
+  accounts?: string;
+}
+
 export interface AgentSettings {
   isActive: boolean;
   activeVoiceId?: string;
   leadCallbackPolicy?: 'alert_only' | 'outbound_first' | 'inbound_only';
   ivrTree?: Record<string, unknown>;
+  /** Department → phone number for Aria live handoffs */
+  transferNumbers?: TransferNumbers;
   updatedAt: string;
 }
 
 const defaultAgentSettings: AgentSettings = {
   isActive: true,
   leadCallbackPolicy: 'alert_only',
+  transferNumbers: {},
   updatedAt: new Date().toISOString(),
 };
 
@@ -652,6 +663,21 @@ export function updateAgentSettings(patch: Partial<AgentSettings>): AgentSetting
   };
   syncData(store);
   return store.agentSettings;
+}
+
+export function getTransferNumbers(): TransferNumbers {
+  return { ...(getAgentSettings().transferNumbers ?? {}) };
+}
+
+export function updateTransferNumbers(patch: TransferNumbers): TransferNumbers {
+  const cleaned: TransferNumbers = {};
+  const keys: Array<keyof TransferNumbers> = ['general', 'sales', 'projects', 'recruitment', 'accounts'];
+  for (const key of keys) {
+    const val = patch[key];
+    if (typeof val === 'string' && val.trim()) cleaned[key] = val.trim();
+  }
+  updateAgentSettings({ transferNumbers: cleaned });
+  return getTransferNumbers();
 }
 
 export function listPhoneLines(): PhoneLine[] {

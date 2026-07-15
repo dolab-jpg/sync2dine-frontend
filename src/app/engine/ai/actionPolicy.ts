@@ -11,7 +11,7 @@ export type ActionPolicyOverrides = Pick<
 const CLARIFY_BLOCKED_ACTIONS = new Set([
   'saveCustomer', 'linkCustomer', 'saveQuote', 'updateQuote', 'startQuote',
   'writeData', 'proposePaymentPlan', 'proposeSchedule', 'draftInvoice',
-  'convertQuoteToProject',
+  'convertQuoteToProject', 'mergeCustomers', 'processRefund', 'initiatePayment',
 ]);
 
 export function isWriteToolBlockedInClarify(action: string): boolean {
@@ -43,6 +43,15 @@ const SAFETY_CONFIRM_ACTIONS = new Set([
   'sendEmailReply',
   'sendEmailWithAttachment',
   'placeOutboundCall',
+  'sendQuote',
+  'sendInvoice',
+  'mergeCustomers',
+  'sendSms',
+  'processRefund',
+  'manageSubscription',
+  'initiatePayment',
+  'sendWhatsAppTemplate',
+  'sendWhatsAppMedia',
 ]);
 
 const CUSTOMER_MESSAGE_ACTIONS = new Set([
