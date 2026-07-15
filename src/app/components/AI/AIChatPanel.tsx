@@ -1,13 +1,14 @@
 import { useState, useContext, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Sparkles, Loader2, AlertCircle, Headphones, Square } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { useAIAssistant } from '../../context/AIAssistantContext';
 import { VoiceInputButton } from './VoiceInputButton';
 import { useVoiceConversation } from '../../hooks/useVoiceConversation';
-import { PhotoCapture } from './PhotoCapture';
+import { PhotoCapture, type PhotoCaptureActions } from './PhotoCapture';
 import { estimateFromPhotos, type EstimationResult } from '../../engine/aiEstimationService';
 import { AIReviewPanel } from './AIReviewPanel';
 import { TradeChips } from './TradeChips';
 import { ChatComposer } from './ChatComposer';
+import { ComposerAttachMenu } from './ComposerAttachMenu';
 import { StarterQuestions } from './StarterQuestions';
 import { ToolResultPanel } from './ToolResultPanel';
 import { ChatMarkdown } from './ChatMarkdown';
@@ -79,6 +80,7 @@ export function AIChatPanel() {
   const [safetyPending, setSafetyPending] = useState<CopilotAction[]>([]);
   const [connection, setConnection] = useState<OpenAIConnectionState>({ status: 'checking' });
   const scrollRef = useRef<HTMLDivElement>(null);
+  const photoCaptureRef = useRef<PhotoCaptureActions | null>(null);
 
   const navigate = useNavigate();
   const studio = useAIStudioConfig();
@@ -787,8 +789,12 @@ export function AIChatPanel() {
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
         {messages.length === 0 && (
           <div className="text-center text-gray-500 py-6">
-            <Sparkles className="w-10 h-10 mx-auto mb-2 text-amber-500" />
-            <p className="font-medium">TradePro AI</p>
+            <img
+              src="/cynthia-avatar.png"
+              alt=""
+              className="w-14 h-14 rounded-full object-cover mx-auto mb-3 ring-2 ring-slate-100"
+            />
+            <p className="font-medium text-slate-800">TradePro AI</p>
             <p className="text-sm mt-1">{rolePrompt}</p>
             {studio.starterQuestionsEnabled && isChatConnected && (
               <div className="mt-4">
@@ -798,7 +804,14 @@ export function AIChatPanel() {
           </div>
         )}
         {messages.map((m) => (
-          <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={m.id} className={`flex gap-2 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            {m.role === 'assistant' && (
+              <img
+                src="/cynthia-avatar.png"
+                alt=""
+                className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5 ring-1 ring-slate-200"
+              />
+            )}
             <div className={`max-w-[85%] rounded-2xl px-4 py-2 ${
               m.role === 'user' ? 'bg-amber-500 text-white text-sm whitespace-pre-wrap' : 'bg-slate-100 text-slate-800'
             }`}>
@@ -936,6 +949,9 @@ export function AIChatPanel() {
           maxPhotos={settings.maxPhotos}
           photoGuidance={photoGuidance}
           showGuidance={photos.length > 0}
+          showActions={false}
+          compact
+          actionRef={photoCaptureRef}
         />
         {voice.active && (
           <button
@@ -950,39 +966,33 @@ export function AIChatPanel() {
             {voiceStatusLabel}
           </button>
         )}
-        <div className="flex gap-2 items-end">
-          <VoiceInputButton
-            onTranscript={(t) => {
-              setInput(t);
-              if ((settings.voiceConversation || voice.active) && isChatConnected) void handleSend(t);
-            }}
-          />
-          {voice.isSupported && (
-            <button
-              type="button"
-              title={voice.active ? 'Stop voice mode' : 'Hands-free voice mode'}
+        <ChatComposer
+          value={input}
+          onChange={setInput}
+          onSend={() => handleSend()}
+          loading={loading}
+          disabled={!isChatConnected}
+          placeholder={isChatConnected ? rolePrompt : 'Connect OpenAI in Settings to chat'}
+          leading={
+            <ComposerAttachMenu
               disabled={!isChatConnected}
-              onClick={() => (voice.active ? voice.stop() : voice.start())}
-              className={`shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-md border transition-colors ${
-                voice.active
-                  ? 'bg-indigo-600 text-white border-indigo-600'
-                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
-              } disabled:opacity-50`}
-            >
-              {voice.active ? <Square className="w-4 h-4" /> : <Headphones className="w-4 h-4" />}
-            </button>
-          )}
-          <div className="flex-1 min-w-0">
-            <ChatComposer
-              value={input}
-              onChange={setInput}
-              onSend={() => handleSend()}
-              loading={loading}
-              disabled={!isChatConnected}
-              placeholder={isChatConnected ? rolePrompt : 'Connect OpenAI in Settings to chat'}
+              onUpload={() => photoCaptureRef.current?.openUpload()}
+              onCamera={() => photoCaptureRef.current?.openCamera()}
+              handsFreeSupported={voice.isSupported}
+              handsFreeActive={voice.active}
+              onToggleHandsFree={() => (voice.active ? voice.stop() : voice.start())}
             />
-          </div>
-        </div>
+          }
+          trailing={
+            <VoiceInputButton
+              compact
+              onTranscript={(t) => {
+                setInput(t);
+                if ((settings.voiceConversation || voice.active) && isChatConnected) void handleSend(t);
+              }}
+            />
+          }
+        />
       </div>
     </div>
   );

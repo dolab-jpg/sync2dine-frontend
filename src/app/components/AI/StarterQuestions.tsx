@@ -56,13 +56,13 @@ export function StarterQuestions({ role, onSelect, visible = true }: StarterQues
   if (chips.length === 0) return null;
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1 px-1 scrollbar-thin">
+    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
       {chips.map((chip) => (
         <button
           key={chip.label}
           type="button"
           onClick={() => onSelect(chip.prompt)}
-          className="shrink-0 text-xs px-3 py-1.5 rounded-full border border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100 transition-colors"
+          className="shrink-0 text-xs px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
         >
           {chip.label}
         </button>

@@ -1,4 +1,4 @@
-import { Sparkles, X, PanelRight } from 'lucide-react';
+import { X, PanelRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAIContextSync } from '../../hooks/useAIContext';
 import { AIChatPanel } from './AIChatPanel';
@@ -73,12 +73,16 @@ export function AIAssistantPanel({
     >
       <div className="shrink-0 p-3 border-b border-slate-200/60 flex items-center justify-between bg-slate-50/80 gap-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800 min-w-0">
+          <img
+            src="/cynthia-avatar.png"
+            alt=""
+            className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-slate-200"
+          />
           <span
             className={`w-2 h-2 rounded-full shrink-0 ${liveAi ? 'bg-emerald-500' : 'bg-amber-400'}`}
             title={liveAi ? 'Live AI' : 'Demo AI mode'}
             aria-hidden
           />
-          <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
           <span className="truncate">TradePro AI</span>
           <span
             className={`w-2 h-2 rounded-full shrink-0 ${selfHealDot}`}

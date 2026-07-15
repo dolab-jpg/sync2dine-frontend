@@ -7,13 +7,15 @@ interface VoiceInputButtonProps {
   onTranscript: (text: string) => void;
   /** @deprecated Native audio is transcribed via Whisper; kept for API compat. */
   onVoiceNote?: (dataUrl: string) => void;
+  /** Compact ghost button for in-pill composer. */
+  compact?: boolean;
 }
 
 /**
  * Mic control: native hold-to-record (+ Whisper) in the Flutter shell,
  * Web Speech API elsewhere.
  */
-export function VoiceInputButton({ onTranscript }: VoiceInputButtonProps) {
+export function VoiceInputButton({ onTranscript, compact = false }: VoiceInputButtonProps) {
   const {
     isListening,
     isTranscribing,
@@ -28,15 +30,19 @@ export function VoiceInputButton({ onTranscript }: VoiceInputButtonProps) {
   if (!isSupported) return null;
 
   const busy = isListening || isTranscribing;
+  const sizeClass = compact ? 'size-9 rounded-full' : 'min-h-11 min-w-11';
+  const variant = compact
+    ? (busy ? 'destructive' : 'ghost')
+    : (busy ? 'destructive' : 'outline');
 
   if (isNative) {
     return (
       <Button
         type="button"
         size="icon"
-        variant={busy ? 'destructive' : 'outline'}
+        variant={variant}
         disabled={isTranscribing}
-        className="min-h-11 min-w-11 touch-manipulation"
+        className={`${sizeClass} touch-manipulation`}
         onPointerDown={(e) => {
           e.preventDefault();
           void startListening();
@@ -65,8 +71,8 @@ export function VoiceInputButton({ onTranscript }: VoiceInputButtonProps) {
     <Button
       type="button"
       size="icon"
-      variant={isListening ? 'destructive' : 'outline'}
-      className="min-h-11 min-w-11 touch-manipulation"
+      variant={isListening ? 'destructive' : compact ? 'ghost' : 'outline'}
+      className={`${sizeClass} touch-manipulation`}
       onMouseDown={() => void startListening()}
       onMouseUp={() => void stopListening()}
       onTouchStart={() => void startListening()}
