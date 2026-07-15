@@ -2,6 +2,7 @@ import type { AgentRole } from './agentContext';
 import type { AIStudioConfig, AutonomyLevel } from '../../config/ai/types';
 import type { CopilotAction } from './orchestratorService';
 import { canExecuteAction } from './rolePermissions';
+import { resolveLegacyTool } from './toolAliases';
 
 export type ActionPolicyOverrides = Pick<
   AIStudioConfig,
@@ -15,8 +16,7 @@ const CLARIFY_BLOCKED_ACTIONS = new Set([
 ]);
 
 export function isWriteToolBlockedInClarify(action: string): boolean {
-  const name = action === 'saveCustomer' ? 'linkCustomer' : action;
-  return CLARIFY_BLOCKED_ACTIONS.has(name);
+  return CLARIFY_BLOCKED_ACTIONS.has(resolveLegacyTool(action));
 }
 
 export function getClarifyQuestionCount(autonomy: AutonomyLevel): number {
@@ -65,12 +65,13 @@ export function requiresSafetyConfirm(
   requireConfirmCustomerMessages?: boolean,
   output?: Record<string, unknown>
 ): boolean {
-  if (action === 'writeData') {
+  const name = resolveLegacyTool(action);
+  if (name === 'writeData') {
     const op = output?.operation ?? output?.op;
     return op === 'delete';
   }
-  if (SAFETY_CONFIRM_ACTIONS.has(action)) {
-    if (CUSTOMER_MESSAGE_ACTIONS.has(action) && !requireConfirmCustomerMessages) {
+  if (SAFETY_CONFIRM_ACTIONS.has(name)) {
+    if (CUSTOMER_MESSAGE_ACTIONS.has(name) && !requireConfirmCustomerMessages) {
       return false;
     }
     return true;
@@ -79,20 +80,18 @@ export function requiresSafetyConfirm(
 }
 
 export function getHumanActionLabel(action: string, output?: Record<string, unknown>): string {
-  if (action === 'writeData' && output?.operation === 'delete') {
+  const name = resolveLegacyTool(action);
+  if (name === 'writeData' && output?.operation === 'delete') {
     return `Delete ${output.collection ?? 'record'}?`;
   }
   const labels: Record<string, string> = {
-    saveCustomer: 'Customer ready to save.',
     linkCustomer: 'Customer ready to save.',
     saveQuote: 'Quote ready to save.',
     proposeQuoteFields: 'Quote fields staged.',
     startQuote: 'Opening quote wizard.',
     proposePaymentPlan: 'Payment plan ready.',
     convertQuoteToProject: 'Converting quote to project.',
-    savePaymentPlan: 'Payment plan ready.',
     proposeSchedule: 'Schedule ready.',
-    saveProjectSchedule: 'Schedule ready.',
     draftInvoice: 'Invoice draft — check before sending.',
     draftContract: 'Contract draft — check before sending.',
     draftCustomerMessage: 'Customer message ready to send.',
@@ -110,7 +109,7 @@ export function getHumanActionLabel(action: string, output?: Record<string, unkn
     sendToStaffCynthia: 'Card sent to Cynthia.',
     writeData: 'Delete this record?',
   };
-  return labels[action] ?? `Review: ${action.replace(/([A-Z])/g, ' $1').trim()}`;
+  return labels[name] ?? `Review: ${name.replace(/([A-Z])/g, ' $1').trim()}`;
 }
 
 /** @deprecated Use processToolActions from toolRuntime instead. */

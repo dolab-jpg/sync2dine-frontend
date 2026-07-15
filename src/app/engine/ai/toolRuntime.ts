@@ -37,6 +37,8 @@ import { isPlanningAction } from '../planning/planningActionNames';
 import { executePlanningActions } from '../planning/planningAiService';
 import { mailboxService } from '../mailbox/mailboxService';
 import { executeGapTool, isGapTool } from './gapToolRuntime';
+import { resolveLegacyTool } from './toolAliases';
+import { expandFacadeCopilotAction } from './toolFacadeClient';
 
 export interface ToolRuntimeContext {
   app: AppContextType | null;
@@ -76,14 +78,9 @@ function readOptionalNumber(value: unknown): number | undefined {
   return undefined;
 }
 
-/** Map save* aliases and legacy propose* names to canonical executors. */
+/** Map aliased/legacy tool names to canonical executors (shared table in toolAliases.ts). */
 export function normalizeToolAction(action: string): string {
-  const aliases: Record<string, string> = {
-    saveCustomer: 'linkCustomer',
-    savePaymentPlan: 'proposePaymentPlan',
-    saveProjectSchedule: 'proposeSchedule',
-  };
-  return aliases[action] ?? action;
+  return resolveLegacyTool(action);
 }
 
 function buildQuoteRoute(tradeId?: string, customerId?: string): string {
@@ -1203,6 +1200,23 @@ async function executeSingleTool(
   action: CopilotAction,
   ctx: ToolRuntimeContext
 ): Promise<ToolExecutionResult> {
+  // Defensive: the server expands 12-tool facade calls (searchRecords,
+  // manageQuote, …) to canonical names, but if one leaks through we expand it
+  // here before alias resolution so gates and executors see canonical names.
+  action = expandFacadeCopilotAction(action);
+  const result = await dispatchSingleTool(action, ctx);
+  // Audit trail: result.action carries the canonical name; keep the alias the
+  // model actually called in the output so nothing is lost.
+  if (normalizeToolAction(action.action) !== action.action) {
+    return { ...result, output: { ...result.output, requestedAs: action.action } };
+  }
+  return result;
+}
+
+async function dispatchSingleTool(
+  action: CopilotAction,
+  ctx: ToolRuntimeContext
+): Promise<ToolExecutionResult> {
   const name = normalizeToolAction(action.action);
   const output = action.output ?? {};
 
@@ -1247,7 +1261,7 @@ async function executeSingleTool(
   if (name === 'completeHandover') return executeCompleteHandover(output, ctx);
   if (name === 'assignContractor') return executeAssignContractor(output, ctx);
   if (name === 'markPaymentReceived') return executeMarkPaymentReceived(output, ctx);
-  if (name === 'sendClientReceipt' || name === 'draftClientReceipt') return executeSendClientReceipt(output, ctx);
+  if (name === 'sendClientReceipt') return executeSendClientReceipt(output, ctx);
 
   if (
     name === 'listRecentEmails'
@@ -1263,9 +1277,10 @@ async function executeSingleTool(
     return executePlanningToolAction(name, action, ctx);
   }
 
-  if (name === 'navigateTo' || name === 'navigate') {
-    const routeOutput = name === 'navigate' ? { route: output.route ?? output.path } : output;
-    const ok = navigateToRoute(routeOutput, ctx.navigate);
+  if (name === 'navigateTo') {
+    // navigateToRoute reads output.route ?? output.path, covering both the
+    // navigateTo ({ route }) and legacy navigate ({ path }) payload shapes.
+    const ok = navigateToRoute(output, ctx.navigate);
     const route = readOptionalString(output.route) ?? readOptionalString(output.path);
     return {
       action: name,
@@ -1620,29 +1635,26 @@ export async function processToolActions(
   let lastCustomerId: string | undefined;
   let lastProjectId: string | undefined;
 
-  for (const action of actions) {
-    const key = `${action.action}:${JSON.stringify(action.output)}`;
+  for (const rawAction of actions) {
+    // Normalize once at ingress: facade names expand to canonical first, then
+    // dedupe keys, safety gates, and bookkeeping below all operate on the
+    // canonical name so facade calls and aliases share one code path.
+    const action = expandFacadeCopilotAction(rawAction);
+    const name = normalizeToolAction(action.action);
+    const key = `${name}:${JSON.stringify(action.output)}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
-    if (requiresSafetyConfirm(action.action, options?.requireConfirmCustomerMessages, action.output ?? action.input)) {
+    if (requiresSafetyConfirm(name, options?.requireConfirmCustomerMessages, action.output ?? action.input)) {
       pendingSafety.push(action);
       continue;
     }
 
     const enriched = { ...action };
-    if (
-      (normalizeToolAction(action.action) === 'saveQuote' || action.action === 'saveQuote')
-      && !readOptionalString(enriched.output?.customerId)
-      && lastCustomerId
-    ) {
+    if (name === 'saveQuote' && !readOptionalString(enriched.output?.customerId) && lastCustomerId) {
       enriched.output = { ...enriched.output, customerId: lastCustomerId };
     }
-    if (
-      normalizeToolAction(action.action) === 'proposePaymentPlan'
-      && !readOptionalString(enriched.output?.projectId)
-      && lastProjectId
-    ) {
+    if (name === 'proposePaymentPlan' && !readOptionalString(enriched.output?.projectId) && lastProjectId) {
       enriched.output = { ...enriched.output, projectId: lastProjectId };
     }
 
@@ -1652,10 +1664,10 @@ export async function processToolActions(
       planningApplicationId: readOptionalString(enriched.output?.applicationId) ?? ctx.planningApplicationId,
     });
     executed.push(result);
-    if (result.entityId && (action.action === 'linkCustomer' || action.action === 'saveCustomer')) {
+    if (result.entityId && name === 'linkCustomer') {
       lastCustomerId = result.entityId;
     }
-    if (action.action === 'convertQuoteToProject' && result.executed && result.entityId) {
+    if (name === 'convertQuoteToProject' && result.executed && result.entityId) {
       lastProjectId = result.entityId;
     }
     if (result.summary) summaries.push(result.summary);
@@ -1668,8 +1680,9 @@ export async function executeSafetyAction(
   action: CopilotAction,
   ctx: ToolRuntimeContext
 ): Promise<ToolExecutionResult> {
-  if (isProjectAction(normalizeToolAction(action.action))) {
-    return executeProjectAction(normalizeToolAction(action.action), action.output, ctx);
+  const expanded = expandFacadeCopilotAction(action);
+  if (isProjectAction(normalizeToolAction(expanded.action))) {
+    return executeProjectAction(normalizeToolAction(expanded.action), expanded.output, ctx);
   }
-  return executeSingleTool(action, ctx);
+  return executeSingleTool(expanded, ctx);
 }

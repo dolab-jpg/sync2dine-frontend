@@ -1,8 +1,11 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+// import.meta.env only exists under Vite/Vitest — guard so Node scripts
+// (e.g. scripts/verify-generic-ai.mjs via tsx) can import this module chain.
+const viteEnv = (import.meta.env ?? {}) as Record<string, string | undefined>;
+const url = viteEnv.VITE_SUPABASE_URL;
+const anonKey = viteEnv.VITE_SUPABASE_ANON_KEY;
 
 let client: SupabaseClient<Database> | null = null;
 

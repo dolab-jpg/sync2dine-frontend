@@ -1,15 +1,24 @@
 /**
  * Lightweight verification for generic AI dataPolicy + readData behaviour.
+ * Server modules live in the canonical tradepro-backend sibling checkout.
  * Run: npx --yes tsx scripts/verify-generic-ai.mjs
  */
-import {
-  filterRecordsForRole,
-  redactRecord,
-  canReadCollection,
-  canWriteCollection,
-} from '../server/dataPolicy.ts';
-import { executeReadData } from '../server/orchestrator-tool-exec.ts';
-import { requiresSafetyConfirm } from '../src/app/engine/ai/actionPolicy.ts';
+import { existsSync } from 'fs';
+import { fileURLToPath } from 'url';
+
+const backendServerUrl = new URL('../../tradepro-backend/server/', import.meta.url);
+if (!existsSync(fileURLToPath(backendServerUrl))) {
+  console.error(
+    'tradepro-backend checkout not found at ../tradepro-backend.\n' +
+    'Clone it as a sibling of this repo: git clone <tradepro-backend> ../tradepro-backend',
+  );
+  process.exit(1);
+}
+
+const { filterRecordsForRole, redactRecord, canReadCollection, canWriteCollection } =
+  await import(new URL('dataPolicy.ts', backendServerUrl).href);
+const { executeReadData } = await import(new URL('orchestrator-tool-exec.ts', backendServerUrl).href);
+const { requiresSafetyConfirm } = await import('../src/app/engine/ai/actionPolicy.ts');
 
 let passed = 0;
 let failed = 0;

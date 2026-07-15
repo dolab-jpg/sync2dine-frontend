@@ -1,5 +1,6 @@
 import type { AgentRole } from './agentContext';
 import { loadAIStudioConfig } from './aiStudioStore';
+import { resolveLegacyTool } from './toolAliases';
 
 const CUSTOMER_SELF_SERVICE = new Set([
   'lookupQuote',
@@ -268,9 +269,12 @@ const ROLE_ACTIONS: Record<AgentRole, Set<string>> = {
 };
 
 export function canExecuteAction(role: AgentRole, action: string): boolean {
-  if (action === 'readData' || action === 'writeData' || action === 'navigate') return true;
+  // Resolve aliases first so e.g. 'navigate' is gated exactly like 'navigateTo'
+  // instead of bypassing the role check.
+  const name = resolveLegacyTool(action);
+  if (name === 'readData' || name === 'writeData') return true;
   const allowed = ROLE_ACTIONS[role] ?? ROLE_ACTIONS.unknown;
-  return allowed.has(action);
+  return allowed.has(name);
 }
 
 export function filterActionsByRole<T extends { action: string }>(role: AgentRole, actions: T[]): T[] {

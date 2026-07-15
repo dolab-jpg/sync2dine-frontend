@@ -6,6 +6,7 @@ import { getActiveOrgId } from '../platform/orgContext';
 import { BDIDDIES_HOME_ORG_ID } from '../platform/homeOrg';
 import { getProject, updateProject } from '../project/projectStore';
 import type { CopilotAction } from './orchestratorService';
+import { resolveLegacyTool } from './toolAliases';
 
 export type GapToolExecutionResult = {
   action: string;
@@ -46,7 +47,7 @@ function num(value: unknown): number | undefined {
 }
 
 export function isGapTool(name: string): boolean {
-  return GAP_TOOL_NAME_SET.has(name);
+  return GAP_TOOL_NAME_SET.has(resolveLegacyTool(name));
 }
 
 function reminderStoreKey(orgId: string): string {
@@ -154,6 +155,7 @@ export async function executeGapTool(
   action: CopilotAction,
   ctx: GapToolContext
 ): Promise<GapToolExecutionResult> {
+  name = resolveLegacyTool(name);
   const output = { ...(action.output ?? {}), ...(action.input ?? {}) };
   const app = ctx.app;
 

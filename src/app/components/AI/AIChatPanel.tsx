@@ -56,6 +56,7 @@ import {
   statusLabel,
 } from '../../engine/ai/codeFixService';
 import { getActiveOrgId } from '../../engine/platform/orgContext';
+import { postAgentActivity } from '../../engine/ai/agentActivity';
 
 export function AIChatPanel() {
   const app = useContext(AppContext);
@@ -253,6 +254,16 @@ export function AIChatPanel() {
     });
     if (result.executed.length > 0) {
       setToolResults(result.executed);
+      // Mirror client-side tool executions to the live activity feed on all devices.
+      for (const r of result.executed) {
+        postAgentActivity({
+          userId: staffContext.userId,
+          action: r.action,
+          phase: r.executed ? 'completed' : 'error',
+          summary: r.summary || r.action,
+          route: r.openRoute,
+        });
+      }
     }
     if (result.pendingSafety.length > 0) {
       setSafetyPending(result.pendingSafety);

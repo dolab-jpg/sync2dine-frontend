@@ -18,40 +18,12 @@ function figmaAssetResolver() {
 }
 
 export default defineConfig(({ mode }) => {
-  // Surface .env/.env.local values to the API middleware (server/ runs in this process).
+  // Surface VITE_API_BASE_URL from .env/.env.local to the proxy plugin, which reads
+  // process.env at startup. Server-only secrets (OpenAI, Stripe, WhatsApp, JWT, …)
+  // now live in tradepro-backend/.env — the embedded server/ middleware is gone.
   const env = loadEnv(mode, __dirname, '')
-  for (const key of [
-    'OPENAI_API_KEY',
-    'WHATSAPP_ACCESS_TOKEN',
-    'WHATSAPP_PHONE_NUMBER_ID',
-    'INTEGRATIONS_MOCK_MODE',
-    'APP_BASE_URL',
-    'WEBHOOK_BASE_URL',
-    'CHATTERBOX_BASE_URL',
-    'CHATTERBOX_API_KEY',
-    'CHATTERBOX_TTS_PATH',
-    'TELEPHONY_PROVIDER',
-    'SOHO66_SIP_USERNAME',
-    'SOHO66_SIP_PASSWORD',
-    'SOHO66_SIP_DOMAIN',
-    'SOHO66_FROM_NUMBER',
-    'SOHO66_SIP_BRIDGE_URL',
-    'STRIPE_SECRET_KEY',
-    'STRIPE_WEBHOOK_SECRET',
-    'STRIPE_PRICE_STARTER',
-    'STRIPE_PRICE_PRO',
-    'STRIPE_PRICE_ENTERPRISE',
-    'JWT_SECRET',
-    'ORG_ENCRYPTION_KEY',
-    'AUTH_ENFORCED',
-    'PLATFORM_OWNER_EMAIL',
-    'PLATFORM_OWNER_PASSWORD',
-    'VITE_API_BASE_URL',
-    'SUPABASE_URL',
-    'SUPABASE_SERVICE_ROLE_KEY',
-    'VITE_SUPABASE_URL',
-  ]) {
-    if (env[key] && !process.env[key]) process.env[key] = env[key]
+  if (env.VITE_API_BASE_URL && !process.env.VITE_API_BASE_URL) {
+    process.env.VITE_API_BASE_URL = env.VITE_API_BASE_URL
   }
 
   return {

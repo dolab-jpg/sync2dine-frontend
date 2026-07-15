@@ -16,7 +16,9 @@ interface WWebStatus {
   } | null;
 }
 
-const API = import.meta.env.VITE_API_URL || '';
+// Same convention as authApi.ts / orgContext.ts: VITE_API_BASE_URL when set,
+// same-origin (empty prefix) in production.
+const API = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '').replace(/\/$/, '');
 
 export function WhatsAppWebPanel() {
   const [wwebStatus, setWwebStatus] = useState<WWebStatus>({ status: 'disconnected' });

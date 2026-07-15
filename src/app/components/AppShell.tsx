@@ -15,6 +15,7 @@ import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { useAIAssistant } from '../context/AIAssistantContext';
 import { AIAssistantPanel } from './AI/AIAssistantOverlay';
+import CynthiaActivityPanel from './AI/CynthiaActivityPanel';
 import { SelfHealErrorBridge } from './AI/SelfHealErrorBridge';
 import { useGestureToggle } from '../hooks/useGestureToggle';
 import { useIsMobile } from './ui/use-mobile';
@@ -601,6 +602,7 @@ export default function AppShell({ children }: AppShellProps) {
         )}
       </div>
     </div>
+    {isStaffHomeRole && <CynthiaActivityPanel userId={user.id} />}
     </div>
   );
 }
