@@ -52,10 +52,10 @@ flowchart LR
 
 | Repo | Local path | Remote | Branch | Local HEAD = `origin/master` |
 |------|------------|--------|--------|------------------------------|
-| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 56e8f80` (feature `@ 49b4fb6`) |
+| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 41766dd` (feature `@ 49b4fb6`) |
 | Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 0ead751` |
 
-**Frontend tip commit:** `56e8f80` — Path B VPS deploy record; feature `49b4fb6` WWeb-only + APPLICATION_MASTER §18.
+**Frontend tip commit:** `41766dd` — Tip SHA sync; feature `49b4fb6` WWeb-only + APPLICATION_MASTER §18.
 
 **Backend tip commit:** `0ead751` — Disable Meta WhatsApp Path B permanently; prefer WhatsApp Web.js only (`WHATSAPP_META_ENABLED` off).
 
