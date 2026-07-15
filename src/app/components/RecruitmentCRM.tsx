@@ -152,26 +152,6 @@ export default function RecruitmentCRM() {
   const [isScheduleInterviewOpen, setIsScheduleInterviewOpen] = useState(false);
   const [persistReady, setPersistReady] = useState(false);
 
-  useEffect(() => {
-    const store = loadRecruitmentStore();
-    if (store.jobs.length > 0) setJobs(store.jobs as JobPosting[]);
-    if (store.candidates.length > 0) setCandidates(store.candidates as Candidate[]);
-    if (store.interviews.length > 0) setInterviews(store.interviews as Interview[]);
-    setPersistReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!persistReady) return;
-    const data = {
-      jobs,
-      candidates,
-      interviews,
-      updatedAt: new Date().toISOString(),
-    };
-    saveRecruitmentStore(data);
-    void syncRecruitmentToServer(data);
-  }, [jobs, candidates, interviews, persistReady]);
-
   // Sample Data
   const [jobs, setJobs] = useState<JobPosting[]>([
     {
@@ -453,6 +433,26 @@ export default function RecruitmentCRM() {
       notes: 'Trial day - working on actual bathroom installation'
     }
   ]);
+
+  useEffect(() => {
+    const store = loadRecruitmentStore();
+    if (store.jobs.length > 0) setJobs(store.jobs as JobPosting[]);
+    if (store.candidates.length > 0) setCandidates(store.candidates as Candidate[]);
+    if (store.interviews.length > 0) setInterviews(store.interviews as Interview[]);
+    setPersistReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!persistReady) return;
+    const data = {
+      jobs,
+      candidates,
+      interviews,
+      updatedAt: new Date().toISOString(),
+    };
+    saveRecruitmentStore(data);
+    void syncRecruitmentToServer(data);
+  }, [jobs, candidates, interviews, persistReady]);
 
   const [onboardingTasks, setOnboardingTasks] = useState<OnboardingTask[]>([
     {
