@@ -12,8 +12,16 @@ mkdir -p "$APPDIR"
 tar -xzf /tmp/tradepro-deploy.tar.gz -C "$APPDIR"
 
 echo "== Publish frontend to docroot =="
+if [ ! -f "$APPDIR/dist/index.html" ]; then
+  echo "ERROR: $APPDIR/dist/index.html missing after extract — aborting before wiping docroot"
+  exit 1
+fi
 rm -rf "${DOCROOT:?}"/*
-cp -r "$APPDIR/dist/." "$DOCROOT/"
+cp -a "$APPDIR/dist/." "$DOCROOT/"
+if [ ! -f "$DOCROOT/index.html" ]; then
+  echo "ERROR: docroot publish failed (no index.html)"
+  exit 1
+fi
 cat > "$DOCROOT/.htaccess" <<'EOF'
 RewriteEngine On
 RewriteBase /
@@ -82,7 +90,8 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable --now tradepro-api
+systemctl enable tradepro-api
+systemctl restart tradepro-api
 sleep 3
 systemctl status tradepro-api --no-pager | head -8
 
