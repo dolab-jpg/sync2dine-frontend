@@ -489,8 +489,14 @@ export default function App() {
     items.map(q => {
       const base = {
         ...q,
+        customerName: q.customerName ?? 'Unknown customer',
         tradeId: q.tradeName === 'Small Jobs' ? q.tradeId : (q.tradeId ?? 'bathroom'),
         tradeName: q.tradeName ?? 'Bathroom',
+        items: q.items ?? [],
+        labour: q.labour ?? [],
+        extras: q.extras ?? [],
+        total: q.total ?? 0,
+        status: q.status ?? 'draft',
       };
       const lines = migrateQuoteToLines(base);
       return { ...base, lines };
