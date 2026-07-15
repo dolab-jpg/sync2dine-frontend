@@ -39,12 +39,45 @@ export interface CodeFixJob {
   updatedAt: string;
 }
 
+export interface CodeFixHealth {
+  live: boolean;
+  keyValid: boolean;
+  reposAccessible: boolean;
+  missingRepos: string[];
+  githubTokenConfigured: boolean;
+  checkedAt: string;
+  reason: string;
+}
+
 export interface CodeFixListResponse {
   jobs: CodeFixJob[];
   alerts: CodeFixJob[];
   queueDepth: number;
   activeRuns: number;
   cursorConfigured: boolean;
+  health?: CodeFixHealth;
+}
+
+export interface CodeFixMergeResult {
+  job: CodeFixJob;
+  merged: boolean;
+  needsManualMerge?: boolean;
+  prUrl?: string;
+  error?: string;
+  cursorAgentUrl?: string;
+}
+
+export interface CodeFixMergeBatchResult {
+  results: Array<{
+    id: string;
+    ok: boolean;
+    job?: CodeFixJob;
+    needsManualMerge?: boolean;
+    prUrl?: string;
+    error?: string;
+  }>;
+  merged: number;
+  needsManual: number;
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -60,6 +93,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error((data as { error?: string }).error || `Request failed (${res.status})`);
   }
   return data as T;
+}
+
+export async function getCodeFixHealth(force = false): Promise<CodeFixHealth> {
+  return api(`/api/ai/code-fix/health${force ? '?force=1' : ''}`);
 }
 
 export async function offerCodeFix(payload: {
@@ -128,6 +165,20 @@ export async function updateCodeFixStatus(
   });
 }
 
+export async function mergeCodeFix(jobId: string): Promise<CodeFixMergeResult> {
+  return api(`/api/ai/code-fix/${jobId}/merge`, { method: 'POST', body: '{}' });
+}
+
+export async function mergeCodeFixBatch(opts: {
+  ids?: string[];
+  allOpen?: boolean;
+}): Promise<CodeFixMergeBatchResult> {
+  return api('/api/ai/code-fix/merge-batch', {
+    method: 'POST',
+    body: JSON.stringify(opts),
+  });
+}
+
 export async function listCodeFixJobs(params?: {
   status?: string;
   search?: string;
@@ -154,7 +205,7 @@ export function statusLabel(status: CodeFixStatus): string {
     case 'queued': return 'Queued';
     case 'running': return 'Running';
     case 'awaiting_cursor_approval': return 'Needs Cursor approval';
-    case 'pr_open': return 'PR open';
+    case 'pr_open': return 'PR open — approve merge';
     case 'merged': return 'Merged';
     case 'failed': return 'Failed';
     case 'cancelled': return 'Cancelled';

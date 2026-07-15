@@ -45,6 +45,8 @@ export interface AIStudioConfig {
   starterQuestionsEnabled: boolean;
   conversationLoggingEnabled: boolean;
   conversationRetentionDays: number;
+  /** When true, surgical self-heal jobs auto-enqueue without chat Yes/No */
+  selfHealAutoStart: boolean;
   auditRoles: AgentRole[];
   commands: AIStudioCommand[];
   knowledgeChunks: AIKnowledgeChunk[];
@@ -68,6 +70,7 @@ export const DEFAULT_AI_STUDIO: AIStudioConfig = {
   starterQuestionsEnabled: false,
   conversationLoggingEnabled: true,
   conversationRetentionDays: 365,
+  selfHealAutoStart: true,
   auditRoles: ['super_admin', 'manager'],
   commands: [],
   knowledgeChunks: [],

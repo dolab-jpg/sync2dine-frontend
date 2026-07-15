@@ -5,6 +5,7 @@ import { AIChatPanel } from './AIChatPanel';
 import { useAIAssistant } from '../../context/AIAssistantContext';
 import { Button } from '../ui/button';
 import { integrationService } from '../../engine/integrations/integrationService';
+import { getCodeFixHealth, type CodeFixHealth } from '../../engine/ai/codeFixService';
 
 interface AIAssistantPanelProps {
   onClose: () => void;
@@ -28,12 +29,42 @@ export function AIAssistantPanel({
   useAIContextSync();
   const { bcSessionActive } = useAIAssistant();
   const [liveAi, setLiveAi] = useState(true);
+  const [selfHeal, setSelfHeal] = useState<CodeFixHealth | null>(null);
 
   useEffect(() => {
     const openai = integrationService.getConfig('openai');
     const status = integrationService.getStatus('openai');
     setLiveAi(Boolean(openai.apiKey?.trim()) && status !== 'not_configured');
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      void getCodeFixHealth()
+        .then((h) => {
+          if (!cancelled) setSelfHeal(h);
+        })
+        .catch(() => {
+          if (!cancelled) setSelfHeal(null);
+        });
+    };
+    load();
+    const id = window.setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  const selfHealDot =
+    selfHeal == null
+      ? 'bg-slate-300'
+      : selfHeal.live
+        ? selfHeal.githubTokenConfigured
+          ? 'bg-emerald-500'
+          : 'bg-amber-400'
+        : 'bg-red-500';
+  const selfHealTitle = selfHeal?.reason ?? 'Self-heal status unknown';
 
   return (
     <aside
@@ -49,6 +80,16 @@ export function AIAssistantPanel({
           />
           <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
           <span className="truncate">TradePro AI</span>
+          <span
+            className={`w-2 h-2 rounded-full shrink-0 ${selfHealDot}`}
+            title={selfHealTitle}
+            aria-label={selfHeal?.live ? 'Self-heal LIVE' : 'Self-heal not live'}
+          />
+          {selfHeal?.live && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-300 text-emerald-800 shrink-0">
+              LIVE
+            </span>
+          )}
           {bcSessionActive && (
             <span className="text-[10px] px-1.5 py-0.5 rounded border border-blue-300 text-blue-700 shrink-0">
               BC

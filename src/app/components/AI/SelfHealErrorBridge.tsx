@@ -7,18 +7,20 @@ import {
   SELF_HEAL_ERROR_EVENT,
   type SelfHealErrorDetail,
 } from '../../engine/ai/selfHealEvents';
-import { listCodeFixJobs, offerCodeFix } from '../../engine/ai/codeFixService';
+import { enqueueCodeFix, listCodeFixJobs, offerCodeFix } from '../../engine/ai/codeFixService';
 import { getActiveOrgId } from '../../engine/platform/orgContext';
+import { useAIStudioConfig } from '../../hooks/useAIStudioConfig';
 
 const ELIGIBLE = new Set(['super_admin', 'manager', 'staff', 'builder', 'platform_owner']);
 
 /**
  * Listens for app errors and offers Yes/No fix in the existing CRM AI chat.
- * OpenAI tool-schema 400s get a clear offer naming the broken function.
+ * Surgical fixes auto-start when selfHealAutoStart is enabled.
  */
 export function SelfHealErrorBridge() {
   const app = useContext(AppContext);
-  const { setIsOpen, addMessage, pageContext } = useAIAssistant();
+  const { setIsOpen, addMessage, pageContext, trackFixJob } = useAIAssistant();
+  const studio = useAIStudioConfig();
   const busyRef = useRef(false);
 
   useEffect(() => {
@@ -71,21 +73,25 @@ export function SelfHealErrorBridge() {
       const detail = (event as CustomEvent<SelfHealErrorDetail>).detail;
       if (!detail || busyRef.current) return;
       busyRef.current = true;
-      // Force-open panel immediately so Yes/No is visible
       setIsOpen(true);
 
       void (async () => {
         try {
           const route = detail.route || String(pageContext.route || window.location.pathname);
           const functionName = detail.functionName;
+          const requesterRole = role === 'platform_owner' ? 'super_admin' : role;
+          const requesterName = app?.user.name || 'Staff';
+          const requesterUserId = app?.user.id;
+          const orgId = getActiveOrgId() || undefined;
+
           const { job, dedupe, message } = await offerCodeFix({
             errorCode: detail.errorCode,
             description: detail.description,
             route,
-            requesterRole: role === 'platform_owner' ? 'super_admin' : role,
-            requesterName: app?.user.name || 'Staff',
-            requesterUserId: app?.user.id,
-            orgId: getActiveOrgId() || undefined,
+            requesterRole,
+            requesterName,
+            requesterUserId,
+            orgId,
           });
 
           setIsOpen(true);
@@ -95,21 +101,56 @@ export function SelfHealErrorBridge() {
               role: 'assistant',
               content:
                 message ||
-                `I’m already working on **${job.errorCode || 'this error'}** (status: ${job.status}). I’ll keep you updated here.`,
+                `I'm already working on **${job.errorCode || 'this error'}** (status: ${job.status}). I'll keep you updated here.`,
               fixJobId: job.id,
             });
+            if (['queued', 'running', 'pr_open'].includes(job.status)) {
+              trackFixJob(job.id);
+            }
             return;
           }
 
           let cursorNote = '';
           try {
             const status = await listCodeFixJobs();
-            if (!status.cursorConfigured) {
+            if (status.health && !status.health.live) {
+              cursorNote = `\n\n⚠️ Self-heal is **not LIVE**: ${status.health.reason}`;
+            } else if (!status.cursorConfigured) {
               cursorNote =
-                '\n\n⚠️ **CURSOR_API_KEY** is not configured yet — if you say Yes, the job will be logged and alert in **AI Audit → Code fixes**, but Cursor cannot open a PR until the key is added.';
+                '\n\n⚠️ **CURSOR_API_KEY** is not configured yet — jobs are logged in **AI Audit → Code fixes**, but Cursor cannot open a PR until the key is added.';
             }
           } catch {
             // ignore
+          }
+
+          const shouldAutoStart = studio.selfHealAutoStart !== false && job.scope === 'surgical';
+
+          if (shouldAutoStart) {
+            const result = await enqueueCodeFix({
+              jobId: job.id,
+              errorCode: job.errorCode,
+              description: job.description,
+              route: job.route,
+              requesterRole,
+              requesterName,
+              requesterUserId,
+              orgId,
+            });
+            trackFixJob(result.job.id);
+            const schemaIntro = detail.schemaError || functionName
+              ? `OpenAI rejected the tool schema for **\`${functionName || 'unknown'}\`**. `
+              : '';
+            addMessage({
+              role: 'assistant',
+              content:
+                `${schemaIntro}**Auto-fixing** \`${result.job.errorCode || 'error'}\` on **${result.job.route || 'this page'}**.\n\n` +
+                `${result.job.description}\n\n` +
+                (result.message || 'Logged — in the fix queue.') +
+                '\n\nI\'ll post the PR here for you to **Approve & merge**. You can also use **AI Audit → Code fixes**.' +
+                cursorNote,
+              fixJobId: result.job.id,
+            });
+            return;
           }
 
           const schemaIntro = detail.schemaError || functionName
@@ -124,7 +165,7 @@ export function SelfHealErrorBridge() {
             content:
               schemaIntro +
               (job.scope === 'needs_cursor_approval'
-                ? 'This may need a wider change — if you say **Yes**, I’ll prepare it for **your approval in Cursor** before any redesign.\n\n'
+                ? 'This may need a wider change — if you say **Yes**, I\'ll prepare it for **your approval in Cursor** before any redesign.\n\n'
                 : 'I can attempt a **surgical fix** (smallest patch — not a full redesign).\n\n') +
               '**Would you like me to fix this?**' +
               cursorNote,
@@ -140,7 +181,7 @@ export function SelfHealErrorBridge() {
           setIsOpen(true);
           addMessage({
             role: 'assistant',
-            content: `I noticed an error but couldn’t open a fix offer: ${
+            content: `I noticed an error but couldn't open a fix offer: ${
               err instanceof Error ? err.message : String(err)
             }`,
           });
@@ -152,7 +193,7 @@ export function SelfHealErrorBridge() {
 
     window.addEventListener(SELF_HEAL_ERROR_EVENT, onOffer);
     return () => window.removeEventListener(SELF_HEAL_ERROR_EVENT, onOffer);
-  }, [app?.user, pageContext.route, setIsOpen, addMessage]);
+  }, [app?.user, pageContext.route, setIsOpen, addMessage, studio.selfHealAutoStart, trackFixJob]);
 
   return null;
 }

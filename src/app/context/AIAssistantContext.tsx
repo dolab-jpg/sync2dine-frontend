@@ -19,6 +19,13 @@ export interface ChatFixOffer {
   resolved?: 'yes' | 'no';
 }
 
+export interface ChatMergeAction {
+  jobId: string;
+  prUrl?: string;
+  cursorAgentUrl?: string;
+  resolved?: boolean;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -29,6 +36,8 @@ export interface ChatMessage {
   fixOffer?: ChatFixOffer;
   /** Track an in-flight code-fix job for status updates */
   fixJobId?: string;
+  /** Approve & merge button when a PR is ready */
+  mergeAction?: ChatMergeAction;
 }
 
 export interface AISettings {
@@ -97,6 +106,9 @@ interface AIAssistantContextType {
   clearPendingTask: () => void;
   bcSessionActive: boolean;
   setBcSessionActive: (active: boolean) => void;
+  trackedFixJobs: string[];
+  trackFixJob: (jobId: string) => void;
+  untrackFixJob: (jobId: string) => void;
 }
 
 const AIAssistantContext = createContext<AIAssistantContextType | null>(null);
@@ -189,23 +201,20 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
       return false;
     }
   });
+  const [trackedFixJobs, setTrackedFixJobs] = useState<string[]>([]);
+
   const chatStorageKey = useMemo(() => {
     const context = buildAgentContext(pageContext);
-    let key: string;
     if (context.bcSessionId) {
-      key = `copilotChat:${context.role}:bc:${context.bcSessionId}`;
-    } else if (context.planningApplicationId) {
-      key = `copilotChat:${context.role}:planning:${context.planningApplicationId}`;
-    } else {
-      const userId = typeof pageContext.userId === 'string' && pageContext.userId
-        ? pageContext.userId
-        : context.role;
-      key = `copilotChat:user:${userId}`;
+      return `copilotChat:${context.role}:bc:${context.bcSessionId}`;
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d5e33b'},body:JSON.stringify({sessionId:'d5e33b',location:'AIAssistantContext.tsx:chatStorageKey',message:'storage key computed',data:{key,route:context.route,userId:pageContext.userId??null,bcSessionId:context.bcSessionId,role:context.role},timestamp:Date.now(),hypothesisId:'H1-H2-H5'})}).catch(()=>{});
-    // #endregion
-    return key;
+    if (context.planningApplicationId) {
+      return `copilotChat:${context.role}:planning:${context.planningApplicationId}`;
+    }
+    const userId = typeof pageContext.userId === 'string' && pageContext.userId
+      ? pageContext.userId
+      : context.role;
+    return `copilotChat:user:${userId}`;
   }, [pageContext]);
 
   const loadedKeyRef = React.useRef<string | null>(null);
@@ -214,9 +223,6 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
     const loaded = readStoredMessages(chatStorageKey);
     setMessages(loaded);
     loadedKeyRef.current = chatStorageKey;
-    // #region agent log
-    fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d5e33b'},body:JSON.stringify({sessionId:'d5e33b',location:'AIAssistantContext.tsx:reload',message:'messages loaded from storage',data:{chatStorageKey,loadedCount:loaded.length,firstContent:loaded[0]?.content?.slice(0,40)??null},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
   }, [chatStorageKey]);
 
   const setTradeOverride = useCallback((v: boolean) => {
@@ -292,9 +298,6 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     const writeAllowed = loadedKeyRef.current === chatStorageKey;
-    // #region agent log
-    fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d5e33b'},body:JSON.stringify({sessionId:'d5e33b',location:'AIAssistantContext.tsx:persist',message:'persist attempt',data:{chatStorageKey,loadedKey:loadedKeyRef.current,writeAllowed,messageCount:messages.length},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-    // #endregion
     if (!writeAllowed) return;
     try {
       localStorage.setItem(chatStorageKey, JSON.stringify(messages.slice(-200)));
@@ -304,13 +307,10 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
   }, [messages, chatStorageKey]);
 
   const addMessage = useCallback((msg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
-    setMessages(prev => {
-      const next = [...prev, { ...msg, id: Date.now().toString(), timestamp: new Date().toISOString() }];
-      // #region agent log
-      fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d5e33b'},body:JSON.stringify({sessionId:'d5e33b',location:'AIAssistantContext.tsx:addMessage',message:'message added',data:{role:msg.role,prevCount:prev.length,nextCount:next.length,contentPreview:msg.content.slice(0,40)},timestamp:Date.now(),hypothesisId:'H1-H3'})}).catch(()=>{});
-      // #endregion
-      return next;
-    });
+    setMessages((prev) => [
+      ...prev,
+      { ...msg, id: Date.now().toString(), timestamp: new Date().toISOString() },
+    ]);
   }, []);
 
   const updateMessage = useCallback((id: string, patch: Partial<ChatMessage>) => {
@@ -325,6 +325,14 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
       // ignore
     }
   }, [chatStorageKey]);
+
+  const trackFixJob = useCallback((jobId: string) => {
+    setTrackedFixJobs((prev) => (prev.includes(jobId) ? prev : [...prev, jobId]));
+  }, []);
+
+  const untrackFixJob = useCallback((jobId: string) => {
+    setTrackedFixJobs((prev) => prev.filter((id) => id !== jobId));
+  }, []);
 
   const updateSettings = useCallback((s: Partial<AISettings>) => {
     setSettings((prev) => {
@@ -367,6 +375,7 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
     pendingCopilotActions, setPendingCopilotActions,
     pendingTask, setPendingTask, clearPendingTask,
     bcSessionActive, setBcSessionActive,
+    trackedFixJobs, trackFixJob, untrackFixJob,
   }), [
     isOpen, setIsOpen,
     preferVoiceOnOpen, requestVoiceStart, clearPreferVoiceOnOpen,
@@ -377,7 +386,7 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
     detectedTrades, activeTradeId, tradeOverride, setTradeOverride, clearTradeOverride,
     aiDetectedTrade, jobGroupId, pendingCopilotActions,
     pendingTask, setPendingTask, clearPendingTask,
-    bcSessionActive,
+    bcSessionActive, trackedFixJobs, trackFixJob, untrackFixJob,
   ]);
 
   return (

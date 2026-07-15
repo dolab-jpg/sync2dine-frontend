@@ -412,6 +412,13 @@ export function AIStudioPanel() {
               onCheckedChange={(v) => update({ starterQuestionsEnabled: v })}
             />
           </div>
+          <div className="flex items-center justify-between">
+            <Label>Auto-start surgical self-heal fixes</Label>
+            <Switch
+              checked={config.selfHealAutoStart !== false}
+              onCheckedChange={(v) => update({ selfHealAutoStart: v })}
+            />
+          </div>
         </CardContent>
       </Card>
 

@@ -49,6 +49,7 @@ import {
   dismissCodeFix,
   enqueueCodeFix,
   getCodeFixJob,
+  mergeCodeFix,
   retryCodeFix,
   statusLabel,
 } from '../../engine/ai/codeFixService';
@@ -66,8 +67,8 @@ export function AIChatPanel() {
     aiDetectedTrade, setAiDetectedTrade,
     setJobGroupId,
     pendingTask, setPendingTask, clearPendingTask,
+    trackedFixJobs, trackFixJob, untrackFixJob,
   } = useAIAssistant();
-  const [trackedFixJobs, setTrackedFixJobs] = useState<string[]>([]);
   const announcedFixStatusRef = useRef<Record<string, string>>({});
   const { tradeId, tradeName, setTradeOverride } = useResolvedTrade();
   const [input, setInput] = useState('');
@@ -404,7 +405,7 @@ export function AIChatPanel() {
         requesterUserId: app?.user.id,
         orgId: getActiveOrgId() || undefined,
       });
-      setTrackedFixJobs((prev) => (prev.includes(result.job.id) ? prev : [...prev, result.job.id]));
+      trackFixJob(result.job.id);
       const queueNote =
         typeof result.queuePosition === 'number' && result.queuePosition > 0
           ? ` There are ${result.queuePosition} job(s) ahead of you.`
@@ -416,7 +417,7 @@ export function AIChatPanel() {
           queueNote +
           (result.needsCursorApproval
             ? '\n\nThis needs your approval in Cursor before a large change runs.'
-            : '\n\nI’ll update you here as it queues, runs, or fails.'),
+            : '\n\nI\'ll update you here as it queues, runs, or fails. When the PR is ready, tap **Approve & merge**.'),
         fixJobId: result.job.id,
       });
       if (result.job.cursorAgentUrl) {
@@ -432,7 +433,7 @@ export function AIChatPanel() {
         content: `Couldn’t start the fix: ${err instanceof Error ? err.message : String(err)}`,
       });
     }
-  }, [messages, updateMessage, addMessage, app?.user, agentContext.role]);
+  }, [messages, updateMessage, addMessage, app?.user, agentContext.role, trackFixJob]);
 
   useEffect(() => {
     if (trackedFixJobs.length === 0) return;
@@ -450,9 +451,15 @@ export function AIChatPanel() {
             }
           }
           const already = announcedFixStatusRef.current[jobId];
-          if (already === job.status) continue;
+          const statusKey =
+            job.status === 'pr_open'
+              ? job.prUrl
+                ? 'pr_open:ready'
+                : 'pr_open:waiting'
+              : job.status;
+          if (already === statusKey) continue;
           if (job.status === 'failed' && job.alertedAt) {
-            announcedFixStatusRef.current[jobId] = job.status;
+            announcedFixStatusRef.current[jobId] = statusKey;
             addMessage({
               role: 'assistant',
               content:
@@ -461,21 +468,30 @@ export function AIChatPanel() {
                 `Say **retry** or use Admin → AI Audit → Code fixes.`,
               fixJobId: job.id,
             });
-            setTrackedFixJobs((prev) => prev.filter((id) => id !== jobId));
+            untrackFixJob(jobId);
           } else if (job.status === 'pr_open') {
-            announcedFixStatusRef.current[jobId] = job.status;
+            announcedFixStatusRef.current[jobId] = statusKey;
             addMessage({
               role: 'assistant',
               content:
                 `**Fix PR ready** for \`${job.errorCode || 'error'}\`.\n` +
                 (job.prUrl ? `PR: ${job.prUrl}\n` : '') +
                 (job.cursorAgentUrl ? `Agent: ${job.cursorAgentUrl}\n` : '') +
-                'Bugbot can review it next. Please merge when you’re happy.',
+                (job.prUrl
+                  ? 'Bugbot can review it. Tap **Approve & merge**, or use **AI Audit → Code fixes** for bulk approve.'
+                  : 'Agent is running — waiting for a real GitHub PR URL before merge is available.'),
               fixJobId: job.id,
+              mergeAction: job.prUrl
+                ? {
+                    jobId: job.id,
+                    prUrl: job.prUrl,
+                    cursorAgentUrl: job.cursorAgentUrl,
+                  }
+                : undefined,
             });
-            setTrackedFixJobs((prev) => prev.filter((id) => id !== jobId));
+            if (job.prUrl) untrackFixJob(jobId);
           } else if (job.status === 'awaiting_cursor_approval') {
-            announcedFixStatusRef.current[jobId] = job.status;
+            announcedFixStatusRef.current[jobId] = statusKey;
             addMessage({
               role: 'assistant',
               content:
@@ -483,10 +499,10 @@ export function AIChatPanel() {
                 (job.cursorAgentUrl ? `Open: ${job.cursorAgentUrl}` : 'Open Cursor Agents dashboard.'),
               fixJobId: job.id,
             });
-            setTrackedFixJobs((prev) => prev.filter((id) => id !== jobId));
+            untrackFixJob(jobId);
           } else if (terminal.includes(job.status)) {
-            announcedFixStatusRef.current[jobId] = job.status;
-            setTrackedFixJobs((prev) => prev.filter((id) => id !== jobId));
+            announcedFixStatusRef.current[jobId] = statusKey;
+            untrackFixJob(jobId);
           }
         } catch {
           // ignore poll errors
@@ -499,7 +515,54 @@ export function AIChatPanel() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [trackedFixJobs, addMessage]);
+  }, [trackedFixJobs, addMessage, untrackFixJob]);
+
+  const respondToMergeAction = useCallback(async (messageId: string) => {
+    const msg = messages.find((m) => m.id === messageId);
+    const action = msg?.mergeAction;
+    if (!action || action.resolved) return;
+
+    updateMessage(messageId, {
+      mergeAction: { ...action, resolved: true },
+    });
+    addMessage({ role: 'user', content: 'Approve & merge' });
+
+    try {
+      const result = await mergeCodeFix(action.jobId);
+      if (result.merged) {
+        addMessage({
+          role: 'assistant',
+          content: `**Merged** \`${result.job.errorCode || 'fix'}\` successfully.`,
+          fixJobId: result.job.id,
+        });
+        return;
+      }
+      if (result.needsManualMerge && (result.prUrl || action.prUrl)) {
+        const url = result.prUrl || action.prUrl!;
+        addMessage({
+          role: 'assistant',
+          content:
+            `Could not merge from the server (${result.error || 'GITHUB_TOKEN missing or PR not mergeable'}).\n` +
+            `Opening the PR for you to merge manually: ${url}\n\n` +
+            `Also available in **AI Audit → Code fixes**.`,
+          fixJobId: action.jobId,
+        });
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      addMessage({
+        role: 'assistant',
+        content: `Merge failed: ${result.error || 'Unknown error'}`,
+        fixJobId: action.jobId,
+      });
+    } catch (err) {
+      addMessage({
+        role: 'assistant',
+        content: `Merge failed: ${err instanceof Error ? err.message : String(err)}`,
+        fixJobId: action.jobId,
+      });
+    }
+  }, [messages, updateMessage, addMessage]);
 
   const handleSend = async (text?: string): Promise<string | undefined> => {
     const content = (text ?? input).trim();
@@ -524,7 +587,7 @@ export function AIChatPanel() {
         addMessage({ role: 'user', content: 'retry' });
         try {
           const { job } = await retryCodeFix(lastFailed.fixJobId);
-          setTrackedFixJobs((prev) => (prev.includes(job.id) ? prev : [...prev, job.id]));
+          trackFixJob(job.id);
           addMessage({
             role: 'assistant',
             content: `Re-queued fix for \`${job.errorCode || 'error'}\` (${statusLabel(job.status)}).`,
@@ -765,6 +828,32 @@ export function AIChatPanel() {
               {m.fixOffer?.resolved && (
                 <p className="mt-2 text-[11px] text-slate-500">
                   You chose: {m.fixOffer.resolved === 'yes' ? 'Yes' : 'No'}
+                </p>
+              )}
+              {m.mergeAction && !m.mergeAction.resolved && (
+                <div className="mt-3 flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium"
+                    onClick={() => void respondToMergeAction(m.id)}
+                  >
+                    Approve & merge
+                  </button>
+                  {m.mergeAction.prUrl && (
+                    <a
+                      href={m.mergeAction.prUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs inline-flex items-center"
+                    >
+                      Open PR
+                    </a>
+                  )}
+                </div>
+              )}
+              {m.mergeAction?.resolved && (
+                <p className="mt-2 text-[11px] text-slate-500">
+                  Merge approved
                 </p>
               )}
             </div>

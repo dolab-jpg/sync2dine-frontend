@@ -19,6 +19,20 @@
 - Supabase migrations live only in `tradepro-backend/supabase/migrations/`.
 - If the request needs a multi-page redesign or module rewrite: **stop**, leave a comment that **Cursor approval** is required, and do not spray large changes.
 
+## Self-heal LIVE (CRM → Cursor Cloud Agents → GitHub)
+
+For the in-app self-heal queue (`/api/ai/code-fix`) to show **LIVE** and auto-fix surgical bugs:
+
+1. Set on the **live server** (and optionally local `.cursor/local/deploy.env`):
+   - `CURSOR_API_KEY` — Cursor Dashboard → API Keys (Cloud Agents)
+   - `GITHUB_TOKEN` — GitHub PAT with `repo` scope on `dolab-jpg/tradepro-frontend` and `tradepro-backend` (needed for **Approve & merge** from chat / AI Audit)
+2. In Cursor Dashboard, grant the API key’s GitHub App access to both repos.
+3. Confirm green **LIVE** on `/ai-audit` → **Code fixes**, and the LIVE badge in the TradePro AI chat header.
+4. Surgical errors **auto-start** (toggle in AI Studio: “Auto-start surgical self-heal fixes”). You approve merges in chat (**Approve & merge**) or bulk in AI Audit.
+5. Larger / redesign-scoped jobs still ask Yes/No and may open a plan-mode Cursor agent first.
+
+Without `GITHUB_TOKEN`, Approve & merge falls back to opening the PR on GitHub for a manual merge.
+
 ## Repos
 
 | Area | Repo |
