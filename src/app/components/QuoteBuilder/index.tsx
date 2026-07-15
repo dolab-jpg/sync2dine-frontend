@@ -34,6 +34,7 @@ export default function QuoteBuilder() {
   const { tradeId: resolvedTradeId } = useResolvedTrade();
   const autoNavigated = useRef(false);
   const surveyPrefillApplied = useRef(false);
+  const pricingBarRef = useRef<HTMLDivElement>(null);
   const [showManualTradePicker, setShowManualTradePicker] = useState(false);
   const [surveyPrefill, setSurveyPrefill] = useState<SurveyQuotePrefill | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,6 +77,24 @@ export default function QuoteBuilder() {
       surveyRiskScore: surveyPrefill?.riskScore,
     });
   }, [totals, answers.discount, surveyPrefill?.riskScore]);
+
+  useEffect(() => {
+    const el = pricingBarRef.current;
+    if (!el || !totals || !trade) {
+      document.documentElement.style.removeProperty('--bottom-bar-offset');
+      return;
+    }
+    const publish = () => {
+      document.documentElement.style.setProperty('--bottom-bar-offset', `${el.offsetHeight}px`);
+    };
+    publish();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(publish) : null;
+    ro?.observe(el);
+    return () => {
+      ro?.disconnect();
+      document.documentElement.style.removeProperty('--bottom-bar-offset');
+    };
+  }, [totals, trade]);
 
   useEffect(() => {
     if (customerId) {
@@ -471,7 +490,10 @@ export default function QuoteBuilder() {
         </div>
 
         {totals && trade && (
-          <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 shadow-2xl border-t-4 border-amber-500 z-40">
+          <div
+            ref={pricingBarRef}
+            className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 shadow-2xl border-t-4 border-amber-500 z-40 safe-area-pb"
+          >
             <div className="max-w-6xl mx-auto flex items-center justify-between">
               <div>
                 <p className="text-sm opacity-75">Current Total</p>

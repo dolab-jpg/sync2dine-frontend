@@ -56,8 +56,10 @@ export default function AppShell({ children }: AppShellProps) {
     (context.user.role === 'super_admin' ||
       context.user.role === 'manager' ||
       context.user.role === 'staff');
+  /** Cynthia owns the chat surface — do not cover it with TradePro AI sheet. */
+  const onCynthiaRoute = location.pathname.startsWith('/cynthia');
 
-  /** APK / mobile staff land on Cynthia as the main screen. */
+  /** Mobile staff land on Cynthia as the main screen. */
   useEffect(() => {
     if (!isStaffHomeRole) return;
     if (location.pathname !== '/') return;
@@ -65,6 +67,12 @@ export default function AppShell({ children }: AppShellProps) {
       navigate('/cynthia', { replace: true });
     }
   }, [isStaffHomeRole, location.pathname, isMobile, navigate]);
+
+  useEffect(() => {
+    if (onCynthiaRoute && aiOpen) {
+      setAiOpen(false);
+    }
+  }, [onCynthiaRoute, aiOpen, setAiOpen]);
 
   useEffect(() => {
     const mql = window.matchMedia(`(min-width: ${AI_DOCK_MIN_WIDTH}px)`);
@@ -431,7 +439,7 @@ export default function AppShell({ children }: AppShellProps) {
           </div>
 
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-            {aiSettings.enabled && aiSettings.showOverlay && (
+            {aiSettings.enabled && aiSettings.showOverlay && !onCynthiaRoute && (
               <button
                 type="button"
                 onClick={() => setAiOpen(!aiOpen)}
@@ -522,15 +530,17 @@ export default function AppShell({ children }: AppShellProps) {
           <main
             ref={mainRef}
             className={`flex-1 overflow-x-hidden overflow-y-auto min-w-0 transition-[margin] duration-300 ${
-              isStaffHomeRole ? 'pb-16 md:pb-0' : ''
+              isStaffHomeRole
+                ? 'pb-[calc(3.5rem+var(--safe-area-bottom))] md:pb-0'
+                : ''
             }`}
           >
             {children}
           </main>
-          {aiSettings.enabled && aiSettings.showOverlay && aiOpen && (
+          {aiSettings.enabled && aiSettings.showOverlay && aiOpen && !onCynthiaRoute && (
             <>
               <div
-                className={`${aiDockedInline ? 'hidden' : 'fixed'} z-50 flex flex-col min-h-0 overflow-hidden bg-white/98 backdrop-blur-sm shadow-2xl border-slate-200/80 inset-x-0 bottom-0 h-[min(85vh,100%)] rounded-t-2xl border-t sm:inset-x-auto sm:left-auto sm:top-14 sm:right-0 sm:bottom-0 sm:h-auto sm:w-96 sm:max-w-[min(24rem,100vw)] sm:rounded-none sm:rounded-l-2xl sm:border-t-0 sm:border-l`}
+                className={`${aiDockedInline ? 'hidden' : 'fixed'} z-50 flex flex-col min-h-0 overflow-hidden bg-white/98 backdrop-blur-sm shadow-2xl border-slate-200/80 inset-x-0 bottom-[var(--bottom-bar-offset,0px)] h-[min(85vh,100%)] rounded-t-2xl border-t sm:inset-x-auto sm:left-auto sm:top-14 sm:right-0 sm:bottom-[var(--bottom-bar-offset,0px)] sm:h-auto sm:w-96 sm:max-w-[min(24rem,100vw)] sm:rounded-none sm:rounded-l-2xl sm:border-t-0 sm:border-l`}
               >
                 <AIAssistantPanel
                   onClose={() => setAiOpen(false)}
@@ -540,7 +550,7 @@ export default function AppShell({ children }: AppShellProps) {
                 />
               </div>
               {aiDockedInline && (
-                <div className="hidden lg:flex shrink-0 h-full min-h-0">
+                <div className="hidden lg:flex shrink-0 h-full min-h-0 pb-[var(--bottom-bar-offset,0px)]">
                   <AIAssistantPanel
                     onClose={() => setAiOpen(false)}
                     docked={aiSettings.panelDocked}
@@ -555,8 +565,9 @@ export default function AppShell({ children }: AppShellProps) {
 
         {isStaffHomeRole && (
           <nav
-            className="md:hidden fixed bottom-0 inset-x-0 z-40 flex items-stretch justify-around border-t border-slate-200 bg-white/95 backdrop-blur safe-area-pb h-14"
+            className="md:hidden fixed bottom-0 inset-x-0 z-50 flex items-stretch justify-around border-t border-slate-200 bg-white/95 backdrop-blur safe-area-pb min-h-14"
             aria-label="Primary"
+            data-testid="staff-bottom-nav"
           >
             {[
               { to: '/cynthia', icon: MessageCircle, label: 'Cynthia' },
@@ -568,7 +579,7 @@ export default function AppShell({ children }: AppShellProps) {
                 key={to}
                 to={to}
                 className={({ isActive }) =>
-                  `flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium ${
+                  `flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium min-h-14 touch-manipulation ${
                     isActive ? 'text-emerald-700' : 'text-slate-500'
                   }`
                 }
@@ -580,7 +591,8 @@ export default function AppShell({ children }: AppShellProps) {
             <button
               type="button"
               onClick={() => setMobileNavOpen(true)}
-              className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-slate-500"
+              className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-slate-500 min-h-14 touch-manipulation"
+              aria-label="Open more navigation"
             >
               <MoreHorizontal className="h-5 w-5" />
               More

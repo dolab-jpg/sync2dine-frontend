@@ -27,7 +27,7 @@ export function ChatComposer({
     const el = ref.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [value]);
 
   // Refocus after AI finishes so clients can keep the conversation going.
@@ -60,7 +60,7 @@ export function ChatComposer({
           placeholder={placeholder}
           rows={1}
           disabled={disabled}
-          className="flex-1 min-h-[2.5rem] max-h-[7.5rem] resize-none text-sm"
+          className="flex-1 min-h-[3rem] max-h-40 resize-none text-sm"
           aria-label="Chat message"
           aria-busy={loading}
         />
