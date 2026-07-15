@@ -1,0 +1,14 @@
+---
+description: Land finished work on master and push so production can update
+alwaysApply: true
+---
+
+# Always land on master
+
+When finishing work the user wants shipped (features, fixes, commits they asked to push):
+
+1. **Commit on the working branch** as usual (or directly on `master` if they asked).
+2. **Update `master`**: merge or cherry-pick the finished commits into `master` (fast-forward when clean).
+3. **Push `origin master`** every time — do not stop after pushing only a feature branch (`cursor/…`).
+4. Production is **https://app.b-diddies.com** (Plesk VPS via `scripts/deploy-vps.sh`). Pushing GitHub `master` alone does **not** always update the live site; if they ask to update production, also run/rebuild the VPS deploy after the push (or confirm the usual deploy path with them).
+5. Prefer `master` as the long-lived integration branch. Feature branches are fine for WIP, but shipped work must reach `origin/master` in the same session unless the user says otherwise.
