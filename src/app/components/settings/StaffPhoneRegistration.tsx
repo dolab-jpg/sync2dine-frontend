@@ -106,7 +106,7 @@ export function StaffPhoneRegistration() {
       <CardHeader>
         <CardTitle>Staff WhatsApp / phone routing</CardTitle>
         <CardDescription>
-          Register team mobiles and a 4-digit phone PIN. On Aria calls from that number, say the digits to unlock staff/builder tools — Aria keeps chatting if the code is wrong.
+          Register team mobiles and a 4-digit phone PIN. On Cynthia calls from that number, say the digits to unlock staff/builder tools — Cynthia keeps chatting if the code is wrong.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

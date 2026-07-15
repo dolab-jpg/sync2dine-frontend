@@ -52,23 +52,16 @@ flowchart LR
 
 | Repo | Local path | Remote | Branch | Local HEAD = `origin/master` |
 |------|------------|--------|--------|------------------------------|
-| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 61f2e78` |
-| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 13f3c71` |
+| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | see tip below (updated on Cynthia unify push) |
+| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | see tip below (updated on Cynthia unify push) |
 
-**Frontend tip commit:** `61f2e78` — Proxy-only dev to canonical backend, tool alias layer, facade client, live Cynthia activity panel.
+**Frontend tip commit:** *(filled after push — Cynthia unified channels + Vapi-only phone branding)*
 
-**Backend tip commit:** `13f3c71` — Consolidate frontend server capabilities into canonical backend (home-org, gap tools, code-fix, AI tool facade, agent activity).
+**Backend tip commit:** *(filled after push — Cynthia phone prompts, Vapi-only gates, no sip-bridge rollback)*
 
-**Local dirty after this audit (frontend):**
+**Ship note (2026-07-15 Cynthia unify):** Cyrus + Aria collapsed into **Cynthia channels** (§4.1). Phone AI is Vapi-only; `/api/cyrus/*` + `cyrus-widget.js` remain transport aliases; new embeds use `cynthia-widget.js`.
 
-| Path | Category |
-|------|----------|
-| `docs/APPLICATION_MASTER.md`, `README.md`, `docs/archive/*` | Inventory + archived satellites — safe to commit when asked |
-| `.cursor/local/*.py`, `debug-login.png`, `playwright-report/`, `test-results/` | `DO_NOT_SHIP` |
-
-**Local dirty (backend):** `README.md` pointer (safe to commit when asked); `server/data/*`, `_patch_*.cjs`, `_tmp_*.cjs`, `tmp-aria-lizzie.mp3` → `DO_NOT_SHIP`.
-
-**Layer drift this audit:** none for SHAs — local = GitHub = VPS backend (`13f3c71`). No `VPS_ONLY` / `SUPABASE_ONLY` schema drift found.
+**DO_NOT_SHIP:** `.cursor/local/*.py`, `debug-login.png`, `playwright-report/`, `test-results/`, backend `server/data/*`, `_patch_*.cjs`, `_tmp_*.cjs`, `tmp-aria-lizzie.mp3`.
 
 ### 1B — VPS (`https://app.b-diddies.com`)
 

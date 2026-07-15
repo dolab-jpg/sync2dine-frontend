@@ -270,7 +270,7 @@ export default function CallCenter() {
   const [leadFormNotes, setLeadFormNotes] = useState('');
   const [creatingLead, setCreatingLead] = useState(false);
 
-  const playAriaAudio = useCallback(async (text: string) => {
+  const playCynthiaAudio = useCallback(async (text: string) => {
     if (!text.trim()) return;
     try {
       const res = await fetch('/api/agent/tts', {
@@ -292,7 +292,7 @@ export default function CallCenter() {
       audioRef.current = audio;
       await audio.play();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not play Aria voice');
+      toast.error(err instanceof Error ? err.message : 'Could not play Cynthia voice');
     }
   }, [activeVoiceId]);
 
@@ -397,7 +397,7 @@ export default function CallCenter() {
       });
       const data = await res.json();
       setIsActive(data.isActive !== false);
-      toast.success(checked ? 'Aria is now answering calls' : 'Aria paused — calls will not be answered');
+      toast.success(checked ? 'Cynthia is now answering calls' : 'Cynthia paused — calls will not be answered');
     } catch {
       setIsActive(!checked);
       toast.error('Failed to update agent status');
@@ -474,7 +474,7 @@ export default function CallCenter() {
       setTestCallId(data.callId);
       const agentLine = data.speak;
       setTestTranscript([{ role: 'agent', content: agentLine }]);
-      if (agentLine) void playAriaAudio(agentLine);
+      if (agentLine) void playCynthiaAudio(agentLine);
       fetchCalls();
       fetchStatus();
     } catch {
@@ -500,7 +500,7 @@ export default function CallCenter() {
       setTestCallId(data.callId);
       const agentLine = data.speak;
       setTestTranscript(prev => [...prev, { role: 'agent', content: agentLine }]);
-      if (agentLine) void playAriaAudio(agentLine);
+      if (agentLine) void playCynthiaAudio(agentLine);
       fetchCalls();
       fetchStatus();
     } catch {
@@ -606,7 +606,7 @@ export default function CallCenter() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to save');
       setTransferNumbers(data.transferNumbers ?? transferNumbers);
-      toast.success('Transfer numbers saved — Aria will use these for live handoffs');
+      toast.success('Transfer numbers saved — Cynthia will use these for live handoffs');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save transfer numbers');
     } finally {
@@ -744,7 +744,7 @@ export default function CallCenter() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <Phone className="w-7 h-7 text-amber-600" />
-            Call Centre — Aria
+            Call Centre — Cynthia
           </h1>
           <p className="text-slate-600 mt-1">AI voice agent control dashboard</p>
         </div>
@@ -763,7 +763,7 @@ export default function CallCenter() {
               <div>
                 <p className="font-semibold text-slate-900">AI Agent Master Switch</p>
                 <p className="text-sm text-slate-600">
-                  {isActive ? 'Aria is answering inbound calls' : 'Aria is paused — calls will not be answered'}
+                  {isActive ? 'Cynthia is answering inbound calls' : 'Cynthia is paused — calls will not be answered'}
                 </p>
               </div>
             </div>
@@ -985,7 +985,7 @@ export default function CallCenter() {
                               key={i}
                               className={`p-2 rounded text-sm ${turn.role === 'agent' ? 'bg-amber-100 ml-4' : 'bg-white border mr-4'}`}
                             >
-                              <span className="text-xs text-slate-400">{turn.role === 'agent' ? 'Aria' : 'Caller'}: </span>
+                              <span className="text-xs text-slate-400">{turn.role === 'agent' ? 'Cynthia' : 'Caller'}: </span>
                               {turn.content}
                             </div>
                           ))}
@@ -1117,7 +1117,7 @@ export default function CallCenter() {
                     </div>
                   ) : (
                     <p className="text-sm text-slate-600 p-4 rounded-lg border bg-slate-50">
-                      {lookupResult.message ?? 'Aria will create a new contact when this number calls.'}
+                      {lookupResult.message ?? 'Cynthia will create a new contact when this number calls.'}
                     </p>
                   )
                 )}
@@ -1134,7 +1134,7 @@ export default function CallCenter() {
                 Call Transfer Destinations
               </CardTitle>
               <CardDescription>
-                Where Aria puts calls through when she or the caller asks for a human. Leave blank to only take a message for that department.
+                Where Cynthia puts calls through when she or the caller asks for a human. Leave blank to only take a message for that department.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1165,7 +1165,7 @@ export default function CallCenter() {
                     Soho66 Phone Lines
                   </CardTitle>
                   <CardDescription>
-                    Aria AI lines only register with the bridge. Staff softphones use Calls → Soft Phone. Bridge: {bridgeUrl || 'Set SOHO66_SIP_BRIDGE_URL in .env.local'}
+                    Cynthia AI lines use purpose "aria" (compat) and answer via Vapi + Soho66. Staff softphones use Calls → Soft Phone.
                   </CardDescription>
                 </div>
                 <Button onClick={registerAllLines} disabled={registeringLines || phoneLines.length === 0}>
@@ -1184,7 +1184,7 @@ export default function CallCenter() {
                     <p className="font-medium text-slate-900">{line.label}</p>
                     <p className="text-sm text-slate-600">{line.sipUsername}@{line.sipDomain} · {formatPhone(line.did)}</p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {(line.purpose ?? 'staff') === 'aria' ? 'Aria AI' : 'Staff softphone'}
+                      {(line.purpose ?? 'staff') === 'aria' ? 'Cynthia AI' : 'Staff softphone'}
                       {line.assignedUserId ? ` · user ${line.assignedUserId}` : ''}
                     </p>
                     {line.lastError && <p className="text-xs text-red-600 mt-1">{line.lastError}</p>}
@@ -1239,7 +1239,7 @@ export default function CallCenter() {
                     onChange={e => setLineForm(f => ({ ...f, purpose: e.target.value as 'staff' | 'aria' }))}
                   >
                     <option value="staff">Staff softphone</option>
-                    <option value="aria">Aria AI (bridge)</option>
+                    <option value="aria">Cynthia AI (Vapi)</option>
                   </select>
                 </div>
                 <div>
@@ -1307,7 +1307,7 @@ export default function CallCenter() {
                   {testTranscript.map((turn, i) => (
                     <div key={i} className={`p-2 rounded text-sm flex gap-2 ${turn.role === 'agent' ? 'bg-amber-100' : 'bg-white border'}`}>
                       <div className="flex-1">
-                        <span className="font-medium text-xs text-slate-500">{turn.role === 'agent' ? 'Aria:' : 'You:'}</span>{' '}
+                        <span className="font-medium text-xs text-slate-500">{turn.role === 'agent' ? 'Cynthia:' : 'You:'}</span>{' '}
                         {turn.content}
                       </div>
                       {turn.role === 'agent' && (
@@ -1316,8 +1316,8 @@ export default function CallCenter() {
                           size="sm"
                           variant="ghost"
                           className="shrink-0 h-7 w-7 p-0"
-                          onClick={() => playAriaAudio(turn.content)}
-                          title="Play Aria voice"
+                          onClick={() => playCynthiaAudio(turn.content)}
+                          title="Play Cynthia voice"
                         >
                           <Volume2 className="w-4 h-4" />
                         </Button>

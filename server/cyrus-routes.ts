@@ -130,7 +130,7 @@ export async function handleCyrusRoutes(
     const settings = getCompanySettings(orgId);
     const appBase = (process.env.APP_BASE_URL || 'http://localhost:5174').replace(/\/$/, '');
     const apiBase = (process.env.VITE_API_BASE_URL || process.env.APP_BASE_URL || appBase).replace(/\/$/, '');
-    const snippet = `<script src="${appBase}/cyrus-widget.js" data-org-id="${orgId}" data-api="${apiBase}" async></script>`;
+    const snippet = `<script src="${appBase}/cynthia-widget.js" data-org-id="${orgId}" data-api="${apiBase}" data-name="Cynthia" async></script>`;
     sendJson(res, 200, {
       snippet,
       website: settings.website ?? '',

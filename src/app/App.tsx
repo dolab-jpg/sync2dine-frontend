@@ -136,7 +136,7 @@ export interface Customer {
   lastWhatsAppAt?: string;
   /** CRM lead fields */
   source?: 'facebook' | 'instagram' | 'google' | 'referral' | 'website' | 'phone' | 'walk-in' | 'email' | 'purchased';
-  /** Call Centre call id this lead was captured from (Aria auto-capture or staff "Create lead" action) */
+  /** Call Centre call id this lead was captured from (Cynthia auto-capture or staff "Create lead" action) */
   sourceCallId?: string;
   campaign?: string;
   adSet?: string;

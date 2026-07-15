@@ -149,7 +149,7 @@ export interface AgentSettings {
   activeVoiceId?: string;
   leadCallbackPolicy?: 'alert_only' | 'outbound_first' | 'inbound_only';
   ivrTree?: Record<string, unknown>;
-  /** Department → phone number for Aria live handoffs */
+  /** Department → phone number for Cynthia live handoffs */
   transferNumbers?: TransferNumbers;
   updatedAt: string;
 }
@@ -1010,7 +1010,7 @@ export function lookupContactByPhone(phone: string): {
   if (!customer && !resolved.customerId) {
     return {
       found: false,
-      message: 'Aria will create a new contact when this number calls.',
+      message: 'Cynthia will create a new contact when this number calls.',
     };
   }
 

@@ -138,7 +138,7 @@ export function SoftPhonePanel(_props: { lines?: PhoneLine[] }) {
         if (statusRef.current === 'registering') {
           setStatus('error');
           toast.error(
-            'Could not keep a WebSocket SIP session. Soho66 may not expose public WSS for JsSIP — use Soho66 VOIS or a SIP bridge for Aria.',
+            'Could not keep a WebSocket SIP session. Soho66 may not expose public WSS for JsSIP — use Soho66 VOIS or a SIP softphone for staff.',
           );
         }
       });
