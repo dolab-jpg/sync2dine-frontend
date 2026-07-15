@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ReactElement } from 'react';
+import React, { useState, useEffect, useRef, ReactElement } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import LoginPage from './auth/pages/LoginPage';
 import SignupPage from './auth/pages/SignupPage';
@@ -77,7 +77,7 @@ import ConversationAudit from './components/aiStudio/ConversationAudit';
 import CallCenter from './components/CallCenter/CallCenter';
 import AppShell from './components/AppShell';
 import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
-import { installApiFetchInterceptor, syncActiveOrgFromProfile } from './engine/platform/orgContext';
+import { ensureActiveOrgId, installApiFetchInterceptor, syncActiveOrgFromProfile } from './engine/platform/orgContext';
 import { integrationService } from './engine/integrations/integrationService';
 import { Toaster } from './components/ui/sonner';
 import { OnlineStatusBanner } from './components/OnlineStatusBanner';
@@ -97,6 +97,15 @@ import { isSupabaseConfigured } from '../lib/supabase/client';
 import { useCloudPersistence } from './engine/data/cloudPersist';
 
 const CLOUD_MODE = isSupabaseConfigured();
+
+function mergeById<T extends { id: string }>(primary: T[], secondary: T[]): T[] {
+  const map = new Map<string, T>();
+  for (const item of primary) map.set(item.id, item);
+  for (const item of secondary) {
+    if (!map.has(item.id)) map.set(item.id, item);
+  }
+  return [...map.values()];
+}
 
 export type UserRole = 'platform_owner' | 'super_admin' | 'manager' | 'staff' | 'builder' | 'recruitment' | 'customer';
 
@@ -624,6 +633,8 @@ export default function App() {
     localStorage.setItem('accountsAccess', JSON.stringify(next));
   };
 
+  const cloudHydratedRef = useRef(!CLOUD_MODE);
+
   useEffect(() => {
     const stopScheduler = startPmScheduler();
     return () => stopScheduler();
@@ -636,28 +647,51 @@ export default function App() {
   useEffect(() => {
     void loadProjectsAsync();
     void initBankingStore();
+    const unsub = initProjectsRealtime();
     void (async () => {
       await syncActiveOrgFromProfile();
+      await ensureActiveOrgId();
       await initCompanyProfile();
       await integrationService.initOrgOpenAIKey();
+
+      try {
+        const {
+          isSupabaseConfigured,
+          loadCustomersFromSupabase,
+          loadQuotesFromSupabase,
+          loadProductsFromSupabase,
+          loadPricingRulesFromSupabase,
+        } = await import('./engine/data/supabaseStore');
+        if (!isSupabaseConfigured()) {
+          cloudHydratedRef.current = true;
+          return;
+        }
+        const [remoteCustomers, remoteQuotes, remoteProducts, remoteRules] = await Promise.all([
+          loadCustomersFromSupabase(),
+          loadQuotesFromSupabase(),
+          loadProductsFromSupabase(),
+          loadPricingRulesFromSupabase(),
+        ]);
+        if (remoteCustomers.length) {
+          const remote = migrateCustomers(remoteCustomers as Customer[]);
+          setCustomers((prev) => (prev.length ? mergeById(remote, prev) : remote));
+        } else if (!CLOUD_MODE) {
+          setCustomers((prev) => (prev.length ? prev : mergeCrmLeads(migrateCustomers(testCustomers as Customer[]))));
+        }
+        if (remoteQuotes.length) {
+          const remote = migrateQuotes(remoteQuotes as Quote[]);
+          setQuotes((prev) => (prev.length ? mergeById(remote, prev) : remote));
+        }
+        if (remoteProducts.length) setProducts(migrateProducts(remoteProducts as Product[]));
+        else if (!CLOUD_MODE && remoteProducts.length === 0) setProducts((prev) => (prev.length ? prev : allTradeProducts));
+        if (remoteRules.length) setPricingRules(migratePricingRules(remoteRules as PricingRule[]));
+        else if (!CLOUD_MODE) setPricingRules((prev) => (prev.length ? prev : tradePricingRules));
+      } catch {
+        // ignore hydrate failures — keep in-memory state
+      } finally {
+        cloudHydratedRef.current = true;
+      }
     })();
-    const unsub = initProjectsRealtime();
-    void import('./engine/data/supabaseStore').then(async ({ isSupabaseConfigured, loadCustomersFromSupabase, loadQuotesFromSupabase, loadProductsFromSupabase, loadPricingRulesFromSupabase }) => {
-      if (!isSupabaseConfigured()) return;
-      const [remoteCustomers, remoteQuotes, remoteProducts, remoteRules] = await Promise.all([
-        loadCustomersFromSupabase(),
-        loadQuotesFromSupabase(),
-        loadProductsFromSupabase(),
-        loadPricingRulesFromSupabase(),
-      ]);
-      if (remoteCustomers.length) setCustomers(migrateCustomers(remoteCustomers as Customer[]));
-      else if (!CLOUD_MODE) setCustomers((prev) => (prev.length ? prev : mergeCrmLeads(migrateCustomers(testCustomers as Customer[]))));
-      if (remoteQuotes.length) setQuotes(migrateQuotes(remoteQuotes as Quote[]));
-      if (remoteProducts.length) setProducts(migrateProducts(remoteProducts as Product[]));
-      else if (!CLOUD_MODE && remoteProducts.length === 0) setProducts((prev) => (prev.length ? prev : allTradeProducts));
-      if (remoteRules.length) setPricingRules(migratePricingRules(remoteRules as PricingRule[]));
-      else if (!CLOUD_MODE) setPricingRules((prev) => (prev.length ? prev : tradePricingRules));
-    }).catch(() => {});
     return unsub;
   }, []);
 
@@ -686,6 +720,8 @@ export default function App() {
   // Persist — Supabase when configured; localStorage only in offline dev
   useEffect(() => {
     if (useCloudPersistence()) {
+      // Skip the empty initial state before hydrate so we never race ahead of load
+      if (!cloudHydratedRef.current && customers.length === 0) return;
       void import('./engine/data/supabaseStore').then(({ saveCustomersToSupabase }) => {
         void saveCustomersToSupabase(customers as unknown as Record<string, unknown>[]);
       });
@@ -698,6 +734,7 @@ export default function App() {
 
   useEffect(() => {
     if (useCloudPersistence()) {
+      if (!cloudHydratedRef.current && products.length === 0) return;
       void import('./engine/data/supabaseStore').then(({ saveProductsToSupabase }) => {
         void saveProductsToSupabase(products as unknown as Record<string, unknown>[]);
       });
@@ -708,6 +745,7 @@ export default function App() {
 
   useEffect(() => {
     if (useCloudPersistence()) {
+      if (!cloudHydratedRef.current && pricingRules.length === 0) return;
       void import('./engine/data/supabaseStore').then(({ savePricingRulesToSupabase }) => {
         void savePricingRulesToSupabase(pricingRules as unknown as Record<string, unknown>[]);
       });
@@ -718,6 +756,7 @@ export default function App() {
 
   useEffect(() => {
     if (useCloudPersistence()) {
+      if (!cloudHydratedRef.current && quotes.length === 0) return;
       void import('./engine/data/supabaseStore').then(({ saveQuotesToSupabase }) => {
         void saveQuotesToSupabase(quotes as unknown as Record<string, unknown>[]);
       });

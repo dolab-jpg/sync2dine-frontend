@@ -1,15 +1,27 @@
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { BDIDDIES_HOME_ORG_LEGACY_ID, getHomeOrgId, sanitizeOrgId } from './home-org';
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), 'data');
 export const DEFAULT_ORG_ID = 'default';
 
 let requestOrgId = DEFAULT_ORG_ID;
 const memoryStores = new Map<string, SyncedData>();
+let legacyHomeMigrated = false;
+
+function resolveStorageOrgId(orgId: string | null | undefined): string {
+  const raw = orgId?.trim() || '';
+  if (!raw || raw === DEFAULT_ORG_ID) {
+    // Prefer configured home uuid so phone/API leads land with the CRM org
+    const home = getHomeOrgId();
+    return home || DEFAULT_ORG_ID;
+  }
+  return sanitizeOrgId(raw) ?? raw;
+}
 
 export function setRequestOrgId(orgId: string | null | undefined): void {
-  requestOrgId = orgId?.trim() || DEFAULT_ORG_ID;
+  requestOrgId = resolveStorageOrgId(orgId);
 }
 
 export function getRequestOrgId(): string {
@@ -18,7 +30,7 @@ export function getRequestOrgId(): string {
 
 export function withOrgContext<T>(orgId: string, fn: () => T): T {
   const prev = requestOrgId;
-  requestOrgId = orgId?.trim() || DEFAULT_ORG_ID;
+  requestOrgId = resolveStorageOrgId(orgId);
   try {
     return fn();
   } finally {
@@ -237,48 +249,99 @@ function loadFromDisk(orgId: string): SyncedData {
   return data;
 }
 
-function migrateLegacySoho66Line(data: SyncedData): void {
-  if (data.phoneLines.length > 0) return;
-  const username = process.env.SOHO66_SIP_USERNAME?.trim();
-  const password = process.env.SOHO66_SIP_PASSWORD?.trim();
-  const did = process.env.SOHO66_FROM_NUMBER?.trim();
-  if (!username || !password) return;
-  const now = new Date().toISOString();
-  data.phoneLines = [{
-    id: 'line-legacy-1',
-    label: 'Line 1 (migrated)',
-    sipUsername: username,
-    sipPassword: password,
-    sipDomain: process.env.SOHO66_SIP_DOMAIN?.trim() || 'sip.soho66.co.uk',
-    did: did ?? '',
-    enabled: true,
-    status: 'disconnected',
-    updatedAt: now,
-  }];
+function mergeRecordArrays(
+  primary: Array<Record<string, unknown>>,
+  secondary: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  const map = new Map<string, Record<string, unknown>>();
+  for (const item of secondary) {
+    const id = String(item.id ?? '');
+    if (id) map.set(id, item);
+  }
+  for (const item of primary) {
+    const id = String(item.id ?? '');
+    if (id) map.set(id, item);
+  }
+  return [...map.values()];
+}
+
+/** One-time: fold legacy "default" / "bdiddies" disk stores into the home org uuid file. */
+function migrateLegacyOrgDiskStores(): void {
+  if (legacyHomeMigrated) return;
+  legacyHomeMigrated = true;
+  const homeId = getHomeOrgId();
+  if (!homeId || homeId === DEFAULT_ORG_ID) return;
+
+  const home = loadFromDisk(homeId);
+  const legacyDefault = loadFromDisk(DEFAULT_ORG_ID);
+  const legacySlug = loadFromDisk(BDIDDIES_HOME_ORG_LEGACY_ID);
+
+  const mergedCustomers = mergeRecordArrays(
+    home.customers,
+    mergeRecordArrays(legacyDefault.customers, legacySlug.customers),
+  );
+  const mergedQuotes = mergeRecordArrays(
+    home.quotes,
+    mergeRecordArrays(legacyDefault.quotes, legacySlug.quotes),
+  );
+  const mergedCalls = mergeRecordArrays(
+    home.calls,
+    mergeRecordArrays(legacyDefault.calls, legacySlug.calls),
+  );
+  const mergedContacts = mergeRecordArrays(
+    home.contacts,
+    mergeRecordArrays(legacyDefault.contacts, legacySlug.contacts),
+  );
+
+  const gained =
+    mergedCustomers.length > home.customers.length
+    || mergedQuotes.length > home.quotes.length
+    || mergedCalls.length > home.calls.length
+    || mergedContacts.length > home.contacts.length;
+
+  if (!gained && home.customers.length > 0) {
+    memoryStores.set(homeId, home);
+    return;
+  }
+
+  const next: SyncedData = {
+    ...home,
+    customers: mergedCustomers,
+    quotes: mergedQuotes,
+    calls: mergedCalls,
+    contacts: mergedContacts,
+    projects: home.projects.length ? home.projects : (legacyDefault.projects.length ? legacyDefault.projects : legacySlug.projects),
+    phoneLines: home.phoneLines.length ? home.phoneLines : (legacyDefault.phoneLines.length ? legacyDefault.phoneLines : legacySlug.phoneLines),
+    agentSettings: home.agentSettings ?? legacyDefault.agentSettings ?? legacySlug.agentSettings,
+    teamMembers: home.teamMembers.length ? home.teamMembers : (legacyDefault.teamMembers.length ? legacyDefault.teamMembers : legacySlug.teamMembers),
+  };
+  memoryStores.set(homeId, next);
+  ensureDir();
+  try {
+    writeFileSync(dataFileForOrg(homeId), JSON.stringify(next, null, 2));
+  } catch {
+    // ignore
+  }
 }
 
 function ensureOrgLoaded(orgId: string): SyncedData {
-  let store = memoryStores.get(orgId);
+  migrateLegacyOrgDiskStores();
+  const id = resolveStorageOrgId(orgId);
+  let store = memoryStores.get(id);
   if (!store) {
-    store = loadFromDisk(orgId);
-    memoryStores.set(orgId, store);
+    store = loadFromDisk(id);
+    memoryStores.set(id, store);
   }
   return store;
 }
 
 export function getDataStore(orgId?: string): SyncedData {
-  const id = orgId ?? requestOrgId;
-  const store = ensureOrgLoaded(id);
-  if (store.projects.length === 0 && store.contacts.length === 0 && store.phoneLines.length === 0) {
-    const loaded = loadFromDisk(id);
-    memoryStores.set(id, loaded);
-    return loaded;
-  }
-  return store;
+  const id = resolveStorageOrgId(orgId ?? requestOrgId);
+  return ensureOrgLoaded(id);
 }
 
 export function syncData(data: Partial<SyncedData>, orgId?: string): void {
-  const id = orgId ?? requestOrgId;
+  const id = resolveStorageOrgId(orgId ?? requestOrgId);
   const memoryStore = ensureOrgLoaded(id);
   const next = {
     ...memoryStore,
@@ -298,6 +361,26 @@ export function syncData(data: Partial<SyncedData>, orgId?: string): void {
   } catch {
     // ignore write errors in dev
   }
+}
+
+function migrateLegacySoho66Line(data: SyncedData): void {
+  if (data.phoneLines.length > 0) return;
+  const username = process.env.SOHO66_SIP_USERNAME?.trim();
+  const password = process.env.SOHO66_SIP_PASSWORD?.trim();
+  const did = process.env.SOHO66_FROM_NUMBER?.trim();
+  if (!username || !password) return;
+  const now = new Date().toISOString();
+  data.phoneLines = [{
+    id: 'line-legacy-1',
+    label: 'Line 1 (migrated)',
+    sipUsername: username,
+    sipPassword: password,
+    sipDomain: process.env.SOHO66_SIP_DOMAIN?.trim() || 'sip.soho66.co.uk',
+    did: did ?? '',
+    enabled: true,
+    status: 'disconnected',
+    updatedAt: now,
+  }];
 }
 
 export function normalizePhoneExport(phone: string): string {

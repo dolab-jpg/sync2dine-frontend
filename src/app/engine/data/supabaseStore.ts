@@ -2,9 +2,12 @@ import { getSupabase, isSupabaseConfigured, getOrgId } from '../../../lib/supaba
 import type { UnifiedProject } from '../project/types';
 import type { CustomerContact } from '../project/types';
 import { getHomeOrgId, isOrgUuid, sanitizeOrgId } from '../platform/homeOrg';
-import { getActiveOrgId } from '../platform/orgContext';
+import { ensureActiveOrgId, getActiveOrgId } from '../platform/orgContext';
 
 async function resolveOrg(): Promise<string | null> {
+  // Wait for profile/act-as org before any CRM read/write — avoids empty loads
+  // when activeOrgId is still resolving after refresh.
+  await ensureActiveOrgId();
   const active = sanitizeOrgId(getActiveOrgId());
   if (active) return active;
   const orgId = sanitizeOrgId(await getOrgId());
@@ -79,20 +82,30 @@ async function loadEntities<T>(table: string): Promise<T[]> {
   if (!orgId) return [];
   const supabase = getSupabase();
   const { data, error } = await supabase.from(table).select('id, data').eq('org_id', orgId);
-  if (error || !data) return [];
+  if (error) {
+    console.warn(`[supabase] load ${table} failed:`, error.message);
+    return [];
+  }
+  if (!data) return [];
   return data.map(r => ({ id: r.id, ...(r.data as Record<string, unknown>) })) as T[];
 }
 
 async function saveEntities(table: string, items: Array<Record<string, unknown>>): Promise<void> {
   if (!isSupabaseConfigured() || !items.length) return;
   const orgId = await resolveOrg();
-  if (!orgId) return;
+  if (!orgId) {
+    console.warn(`[supabase] save ${table} skipped: no org id`);
+    return;
+  }
   const supabase = getSupabase();
   const payload = items.map(item => {
     const { id, ...rest } = item;
     return { id: String(id), org_id: orgId, data: rest, updated_at: new Date().toISOString() };
   });
-  await supabase.from(table).upsert(payload, { onConflict: 'org_id,id' });
+  const { error } = await supabase.from(table).upsert(payload, { onConflict: 'org_id,id' });
+  if (error) {
+    console.warn(`[supabase] save ${table} failed:`, error.message);
+  }
 }
 
 export const loadCustomersFromSupabase = () => loadEntities<Record<string, unknown>>('customers');
