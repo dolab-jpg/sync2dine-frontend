@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { sanitizeOrgId } from './home-org';
 
 export type UserRole =
   | 'platform_owner'
@@ -464,7 +465,7 @@ export async function handleAccountAuthRoutes(
         return true;
       }
       const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
-      const orgId = resolveOrgIdForProfile(profile, req, url.searchParams.get('orgId'));
+      const orgId = sanitizeOrgId(resolveOrgIdForProfile(profile, req, url.searchParams.get('orgId')));
       if (!orgId && profile.role === 'platform_owner') {
         sendJson(res, 200, { members: [] });
         return true;
