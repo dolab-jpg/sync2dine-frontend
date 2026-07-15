@@ -24,16 +24,25 @@ async function demoLoginAsStaff(
   if (await isLoggedIn(page, viewport)) return;
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  if (role === 'super_admin') {
-    await page.getByRole('button', { name: /Super Admin/i }).first().click();
-    const signIn = page.getByRole('button', { name: /Demo as Super Admin/i });
-    await expect(signIn).toBeVisible({ timeout: 15_000 });
-    await signIn.click();
+
+  const demoLabel =
+    role === 'super_admin' ? /Demo as Super Admin/i : /Demo as Sales Representative/i;
+  const rolePick =
+    role === 'super_admin' ? /Super Admin/i : /Sales Representative/i;
+  const demoBtn = page.getByRole('button', { name: demoLabel });
+
+  if (await demoBtn.isVisible().catch(() => false)) {
+    await page.getByRole('button', { name: rolePick }).first().click();
+    await demoBtn.click();
   } else {
-    await page.getByRole('button', { name: /Sales Representative/i }).first().click();
-    const signIn = page.getByRole('button', { name: /Demo as Sales Representative/i });
-    await expect(signIn).toBeVisible({ timeout: 15_000 });
-    await signIn.click();
+    // Real auth (no VITE_DEMO_LOGIN) — use seeded E2E user
+    const email =
+      role === 'super_admin'
+        ? process.env.E2E_ADMIN_EMAIL || 'john@bathroompro.com'
+        : process.env.E2E_USER_EMAIL || 'mike@bathroompro.com';
+    await page.getByLabel(/Email or username/i).fill(email);
+    await page.locator('#login-password').fill(process.env.E2E_USER_PASSWORD || 'TradeProSeed1!');
+    await page.getByRole('button', { name: /^Sign in$/i }).click();
   }
   await page.waitForTimeout(400);
 
@@ -45,26 +54,7 @@ async function demoLoginAsStaff(
   }
 }
 
-async function navigateStaffRoute(
-  page: import('@playwright/test').Page,
-  viewport: { width: number; height: number } | null | undefined,
-  path: string,
-) {
-  if (new URL(page.url()).pathname === path) return;
-
-  const isMobile = !viewport || viewport.width < 768;
-  if (isMobile) {
-    await page.getByLabel('Open navigation menu').click();
-  }
-
-  const link = isMobile
-    ? page.getByRole('dialog', { name: 'Navigation' }).locator(`a[href="${path}"]`)
-    : page.locator('aside[aria-label="Navigation"]').locator(`a[href="${path}"]`);
-  await expect(link).toBeVisible({ timeout: 10_000 });
-  await link.click();
-  await page.waitForURL((url) => url.pathname === path, { timeout: 15_000 });
-}
-
+/** Direct navigation after login — avoids brittle hamburger click paths. */
 async function openStaffRoute(
   page: import('@playwright/test').Page,
   viewport: { width: number; height: number } | null | undefined,
@@ -72,11 +62,22 @@ async function openStaffRoute(
 ) {
   const needsSuperAdmin = path === '/integrations' || path === '/accounts';
   await demoLoginAsStaff(page, viewport, needsSuperAdmin ? 'super_admin' : 'staff');
-  await navigateStaffRoute(page, viewport, path);
-
+  await page.goto(path, { waitUntil: 'domcontentloaded' });
   await expect(await isLoggedIn(page, viewport)).toBe(true);
+
+  const isMobile = !viewport || viewport.width < 768;
+  if (path === '/' && isMobile) {
+    // Staff phone redirects `/` → `/cynthia`
+    await expect(page).toHaveURL(/\/cynthia/, { timeout: 15_000 });
+    await expect(page.getByTestId('cynthia-home')).toBeVisible({ timeout: 15_000 });
+    return;
+  }
   if (path === '/') {
     await expect(page.getByText(/Welcome back,/i)).toBeVisible({ timeout: 15_000 });
+    return;
+  }
+  if (path === '/cynthia') {
+    await expect(page.getByTestId('cynthia-home')).toBeVisible({ timeout: 15_000 });
     return;
   }
   await expect(page.locator('main')).toBeVisible({ timeout: 15_000 });
@@ -150,10 +151,9 @@ test.describe('Responsive snapshots — key screens', () => {
     test(`${route.file} snapshot`, async ({ page, viewport }, testInfo) => {
       test.skip(!snapshotProjects.has(testInfo.project.name));
       await openStaffRoute(page, viewport, route.path);
-      await page.waitForTimeout(400);
       await expect(page).toHaveScreenshot(`${testInfo.project.name}-${route.file}.png`, {
         fullPage: true,
-        maxDiffPixelRatio: 0.04,
+        maxDiffPixelRatio: 0.03,
       });
     });
   }

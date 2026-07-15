@@ -205,7 +205,8 @@
   padding-top: var(--safe-area-top);
 }
 
-.safe-area-bottom {
+.safe-area-bottom,
+.safe-area-pb {
   padding-bottom: var(--safe-area-bottom);
 }
 
@@ -214,8 +215,12 @@
   padding-right: var(--safe-area-right);
 }
 
-.native-shell .h-screen {
+/**
+ * Flutter WebView shell: notch/status on the root; home-indicator is owned by
+ * the fixed bottom nav (safe-area-pb) so we do not double-pad the bottom here.
+ */
+.native-shell.h-screen,
+.native-shell {
   min-height: 100dvh;
   padding-top: var(--safe-area-top);
-  padding-bottom: var(--safe-area-bottom);
 }
