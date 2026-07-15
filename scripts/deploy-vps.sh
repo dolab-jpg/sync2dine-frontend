@@ -37,8 +37,11 @@ RewriteRule . /index.html [L]
 EOF
 
 echo "== API env file =="
-if [ ! -f "$APPDIR/.env" ]; then
-  cat > "$APPDIR/.env" <<EOF
+# SELinux blocks systemd from reading httpd-labeled files under the vhost.
+# Keep the live EnvironmentFile at /etc/tradepro-api.env (etc_t).
+ENV_FILE=/etc/tradepro-api.env
+if [ ! -f "$ENV_FILE" ]; then
+  cat > "$ENV_FILE" <<EOF
 PORT=3001
 APP_BASE_URL=https://app.b-diddies.com
 WEBHOOK_BASE_URL=https://app.b-diddies.com
@@ -46,10 +49,12 @@ INTEGRATIONS_MOCK_MODE=true
 JWT_SECRET=$(openssl rand -hex 32)
 ORG_ENCRYPTION_KEY=$(openssl rand -hex 32)
 EOF
-  chmod 600 "$APPDIR/.env"
+  chmod 600 "$ENV_FILE"
 fi
 
 chown -R bdiddies:psacln "$APPDIR" "$DOCROOT"
+# Docroot must be readable by the web server group used by Plesk.
+chown bdiddies:psaserv "$DOCROOT" 2>/dev/null || true
 
 echo "== npm install (prod deps + tsx) =="
 cd "$APPDIR"
@@ -66,7 +71,7 @@ After=network.target
 User=bdiddies
 Group=psacln
 WorkingDirectory=$APPDIR
-EnvironmentFile=$APPDIR/.env
+EnvironmentFile=$ENV_FILE
 ExecStart=$NODE_BIN/node $APPDIR/node_modules/tsx/dist/cli.mjs server/index.ts
 Restart=always
 RestartSec=5

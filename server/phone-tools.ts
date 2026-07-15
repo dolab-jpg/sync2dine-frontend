@@ -1,24 +1,47 @@
 import {
   appendCustomerCallActivity,
+  appendProjectMessageRecord,
   enqueueOutboundCall,
   getDataStore,
   getRequestOrgId,
-  getTransferNumbers,
   lookupContactByPhone,
+  normalizePhoneExport,
   saveCall,
   saveCustomerRecord,
+  saveQuoteRecord,
   saveRecruitmentCandidate,
   saveRecruitmentInterview,
 } from './data-store';
 import type { CallIntent, OutboundCampaignTemplate } from './telephony/types';
 import type { OrchestratorRequest } from './orchestrator-types';
 import { sendToStaffCynthiaInternal } from './cynthia-routes';
+import { actionRequiresConfirmation } from './action-registry';
+import { formatSpokenGbp } from './spoken-money';
+import { resolvePhoneCallerIdentity } from './phone-auth';
 
 function firstString(...values: unknown[]): string | undefined {
   for (const value of values) {
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return undefined;
+}
+
+/** Accept UK mobiles/landlines; reject names, CRM ids, free text. */
+export function normalizeDialableE164(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  if (/[a-zA-Z]/.test(s)) return null;
+  if (/^c\d+$/i.test(s)) return null;
+  const digits = normalizePhoneExport(s.replace(/\s+/g, ''));
+  if (!digits || digits.length < 10 || digits.length > 15) return null;
+  return digits.startsWith('+') ? digits : `+${digits}`;
+}
+
+function isStaffPartyPhone(phone: string | undefined | null): boolean {
+  if (!phone) return false;
+  const identity = resolvePhoneCallerIdentity(phone);
+  return identity.kind === 'staff' || identity.kind === 'foreman';
 }
 
 export interface CaptureLeadFields {
@@ -41,10 +64,39 @@ export interface CaptureLeadFields {
  */
 export function captureOrUpdateLead(
   fields: CaptureLeadFields,
-  opts: { callId?: string; fallbackPhone?: string } = {},
-): { customer: Record<string, unknown>; isNewLead: boolean } {
-  const phone = firstString(fields.phone, opts.fallbackPhone);
-  const existingLookup = phone ? lookupContactByPhone(phone) : { found: false as const };
+  opts: { callId?: string; fallbackPhone?: string; allowStaffPhoneAsLead?: boolean } = {},
+): { customer: Record<string, unknown>; isNewLead: boolean; error?: string; spokenHint?: string } {
+  const explicitPhone = firstString(fields.phone);
+  const fallback = firstString(opts.fallbackPhone);
+  // Staff calling from their own phone must supply an explicit customer phone — never upsert by staff handset.
+  if (!opts.allowStaffPhoneAsLead && fallback && isStaffPartyPhone(fallback) && !explicitPhone) {
+    return {
+      customer: {},
+      isNewLead: false,
+      error: 'staff_phone_collision',
+      spokenHint: 'I need the customer name and their phone number to create that lead — I will not save it against your staff number.',
+    };
+  }
+  const phone = explicitPhone || (fallback && !isStaffPartyPhone(fallback) ? fallback : undefined);
+  if (!phone) {
+    return {
+      customer: {},
+      isNewLead: false,
+      error: 'phone_required',
+      spokenHint: 'I need a customer phone number to create the lead.',
+    };
+  }
+  // Never overwrite a CRM row that matches a registered staff number unless explicit and allowStaffPhoneAsLead
+  if (!opts.allowStaffPhoneAsLead && isStaffPartyPhone(phone)) {
+    return {
+      customer: {},
+      isNewLead: false,
+      error: 'staff_phone_collision',
+      spokenHint: 'That number belongs to a staff handset. Give me the customer phone instead.',
+    };
+  }
+
+  const existingLookup = lookupContactByPhone(phone);
   const store = getDataStore();
   const existing = existingLookup.found && existingLookup.customerId
     ? store.customers.find((c) => String(c.id) === existingLookup.customerId)
@@ -130,17 +182,55 @@ export const PHONE_TOOLS = [
     type: 'function' as const,
     function: {
       name: 'bookCallback',
-      description: 'Schedule a staff callback for the caller',
+      description: 'Schedule a staff callback. For staff callers, callbackTo must be the customer E.164 phone (not a name or CRM id).',
       parameters: {
         type: 'object',
         properties: {
           name: { type: 'string' },
-          phone: { type: 'string' },
+          phone: { type: 'string', description: 'Legacy alias for callbackTo' },
+          callbackTo: { type: 'string', description: 'Customer phone in E.164 e.g. +447576442345' },
           reason: { type: 'string' },
           preferredTime: { type: 'string' },
           urgency: { type: 'string', enum: ['low', 'medium', 'high'] },
         },
         required: ['reason'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'saveQuote',
+      description: 'Create or update an indicative quote in CRM during a staff phone call',
+      parameters: {
+        type: 'object',
+        properties: {
+          customerId: { type: 'string' },
+          customerName: { type: 'string' },
+          customerPhone: { type: 'string' },
+          tradeName: { type: 'string' },
+          total: { type: 'number' },
+          notes: { type: 'string' },
+          status: { type: 'string' },
+        },
+        required: ['total'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'sendCustomerMessage',
+      description: 'Send a WhatsApp (or SMS fallback) message to a customer. Fail closed if messaging is not configured — never invent success.',
+      parameters: {
+        type: 'object',
+        properties: {
+          to: { type: 'string', description: 'Customer phone E.164' },
+          message: { type: 'string' },
+          customerId: { type: 'string' },
+          customerName: { type: 'string' },
+        },
+        required: ['to', 'message'],
       },
     },
   },
@@ -310,6 +400,57 @@ export const PHONE_TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'placeOutboundCall',
+      description:
+        'Place or queue an outbound customer call. Prefer payment_reminder when chasing an outstanding invoice. Require spoken confirmation before calling.',
+      parameters: {
+        type: 'object',
+        properties: {
+          to: { type: 'string' },
+          template: {
+            type: 'string',
+            enum: ['quote_chase', 'payment_reminder', 'appointment_reminder', 'recruitment_screening', 'satisfaction_check', 'lead_callback'],
+          },
+          confirmed: { type: 'boolean', description: 'Must be true after the caller confirmed verbally' },
+          context: { type: 'object' },
+          scheduledAt: { type: 'string' },
+        },
+        required: ['to', 'template', 'confirmed'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'deliverCallFollowUp',
+      description:
+        'Fulfil a promised follow-up after the call: always send a staff Cynthia card; if the customer has portal/app access deliver customerMessage there; otherwise schedule a callback. Never claim success without tool success.',
+      parameters: {
+        type: 'object',
+        properties: {
+          summary: { type: 'string' },
+          customerMessage: { type: 'string' },
+          customerId: { type: 'string' },
+          projectId: { type: 'string' },
+          assignedStaffUserId: { type: 'string' },
+          confirmed: { type: 'boolean' },
+          callback: {
+            type: 'object',
+            properties: {
+              reason: { type: 'string' },
+              scheduledAt: { type: 'string' },
+              template: { type: 'string', enum: ['lead_callback', 'payment_reminder', 'quote_chase'] },
+              to: { type: 'string' },
+            },
+          },
+        },
+        required: ['summary'],
+      },
+    },
+  },
 ];
 
 export const PHONE_AUTO_ACTIONS = new Set([
@@ -322,17 +463,21 @@ export const PHONE_AUTO_ACTIONS = new Set([
   'logCandidate',
   'transferToHuman',
   'enqueueOutboundCall',
+  'placeOutboundCall',
   'captureMessage',
   'sendToStaffCynthia',
+  'deliverCallFollowUp',
   'escalateToStaff',
   'saveCustomer',
+  'saveQuote',
+  'sendCustomerMessage',
 ]);
 
-export function executePhoneTool(
+export async function executePhoneTool(
   name: string,
   input: Record<string, unknown>,
   body: OrchestratorRequest,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   const callId = firstString(body.callContext?.callId);
   const callerPhone = firstString(input.phone, body.callContext?.from, body.customerContext?.phone);
 
@@ -345,19 +490,42 @@ export function executePhoneTool(
   }
 
   if (name === 'captureLead') {
-    const { customer, isNewLead } = captureOrUpdateLead(input, { callId, fallbackPhone: callerPhone });
+    const result = captureOrUpdateLead(input, { callId, fallbackPhone: callerPhone });
+    if (result.error) {
+      return {
+        saved: false,
+        error: result.error,
+        spokenHint: result.spokenHint,
+      };
+    }
     return {
-      customerId: customer.id,
-      name: customer.name,
-      status: customer.status ?? 'lead',
+      customerId: result.customer.id,
+      name: result.customer.name,
+      status: result.customer.status ?? 'lead',
       saved: true,
-      isNewLead,
+      isNewLead: result.isNewLead,
+      spokenHint: result.isNewLead
+        ? `Lead saved for ${String(result.customer.name)}.`
+        : `Updated the lead for ${String(result.customer.name)}.`,
     };
   }
 
   if (name === 'bookCallback') {
+    const preferred = firstString(input.callbackTo, input.phone);
+    const staffOnLine = isStaffPartyPhone(callerPhone);
+    const dialTo = normalizeDialableE164(preferred)
+      || (!staffOnLine ? normalizeDialableE164(callerPhone) : null);
+    if (!dialTo) {
+      return {
+        callbackQueued: false,
+        error: 'invalid_callback_number',
+        spokenHint: staffOnLine
+          ? 'Tell me the customer phone number to dial back — I cannot queue a callback to a name or CRM id.'
+          : 'I need a valid UK phone number to book that callback.',
+      };
+    }
     const job = enqueueOutboundCall({
-      to: callerPhone ?? '',
+      to: dialTo,
       template: 'lead_callback',
       status: 'queued',
       context: {
@@ -366,9 +534,146 @@ export function executePhoneTool(
         preferredTime: input.preferredTime,
         urgency: input.urgency ?? 'medium',
         callId,
+        customerId: firstString(input.customerId, body.customerContext?.customerId),
       },
+      scheduledAt: firstString(input.preferredTime, input.scheduledAt),
     });
-    return { callbackQueued: true, jobId: job.id, preferredTime: input.preferredTime };
+    return {
+      callbackQueued: true,
+      jobId: job.id,
+      to: dialTo,
+      preferredTime: input.preferredTime,
+      spokenHint: `Callback queued to ${dialTo}${input.preferredTime ? ` around ${String(input.preferredTime)}` : ''}.`,
+    };
+  }
+
+  if (name === 'saveQuote') {
+    const total = Number(input.total ?? 0);
+    if (!Number.isFinite(total) || total <= 0) {
+      return {
+        saved: false,
+        error: 'invalid_total',
+        spokenHint: 'I need a pound amount to save that quote.',
+      };
+    }
+    const custPhone = normalizeDialableE164(firstString(input.customerPhone, input.phone));
+    const customerId = firstString(input.customerId, body.customerContext?.customerId);
+    let customerName = firstString(input.customerName, body.customerContext?.customerName) ?? 'Customer';
+    let resolvedId = customerId;
+    if (!resolvedId && custPhone) {
+      const found = lookupContactByPhone(custPhone);
+      if (found.found && found.customerId) {
+        resolvedId = found.customerId;
+        customerName = found.customerName || customerName;
+      }
+    }
+    if (custPhone && !isStaffPartyPhone(custPhone) && !resolvedId) {
+      const created = saveCustomerRecord({
+        name: customerName,
+        phone: custPhone,
+        status: 'lead',
+        source: 'phone',
+      });
+      resolvedId = String(created.id);
+    }
+    const spokenTotal = formatSpokenGbp(total);
+    const quote = saveQuoteRecord({
+      customerId: resolvedId ?? '',
+      customerName,
+      tradeName: firstString(input.tradeName, input.tradeId) ?? 'General',
+      total,
+      status: firstString(input.status) ?? 'draft',
+      notes: firstString(input.notes) ?? '',
+      source: 'phone',
+      sourceCallId: callId,
+      expiresAt: new Date(Date.now() + 14 * 86400000).toISOString(),
+    });
+    if (resolvedId && callId) {
+      appendCustomerCallActivity({
+        customerId: resolvedId,
+        callId,
+        summary: `Quote ${quote.id} saved — ${spokenTotal}`,
+        outcome: 'quote_saved',
+      });
+    }
+    return {
+      saved: true,
+      quoteId: quote.id,
+      total,
+      spokenTotal,
+      customerId: resolvedId ?? null,
+      customerName,
+      spokenHint: `Quote saved for ${customerName} at ${spokenTotal}.`,
+    };
+  }
+
+  if (name === 'sendCustomerMessage') {
+    const to = normalizeDialableE164(firstString(input.to, input.phone));
+    const message = firstString(input.message);
+    if (!to || !message) {
+      return {
+        sent: false,
+        error: 'missing_to_or_message',
+        spokenHint: 'I need a customer phone number and the message text.',
+      };
+    }
+    if (isStaffPartyPhone(to)) {
+      return {
+        sent: false,
+        error: 'staff_phone_collision',
+        spokenHint: 'That is a staff number — give me the customer number to message.',
+      };
+    }
+    const waToken = process.env.WHATSAPP_ACCESS_TOKEN?.trim();
+    const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
+    if (!waToken || !waPhoneId) {
+      // Fail closed — also push a Cynthia card so staff can still follow up
+      const staffPush = sendToStaffCynthiaInternal({
+        orgId: body.orgId || getRequestOrgId(),
+        userId: firstString(body.staffContext?.userId),
+        staffPhone: firstString(body.callContext?.from, callerPhone),
+        title: 'Customer message (WhatsApp not configured)',
+        customerName: firstString(input.customerName),
+        phone: to,
+        summary: message,
+        customerId: firstString(input.customerId),
+        source: 'phone',
+      });
+      return {
+        sent: false,
+        error: 'messaging_not_configured',
+        code: 'whatsapp_not_configured',
+        staffCardQueued: Boolean(staffPush.ok),
+        spokenHint: staffPush.ok
+          ? 'WhatsApp is not connected yet — I logged that message on your Cynthia chat instead.'
+          : 'WhatsApp is not configured, so I cannot send that message to the customer.',
+      };
+    }
+    try {
+      const { sendWhatsAppText } = await import('./whatsapp-webhook');
+      await sendWhatsAppText(waPhoneId, waToken, to.startsWith('+') ? to : `+${to}`, message);
+      const customerId = firstString(input.customerId);
+      if (customerId && callId) {
+        appendCustomerCallActivity({
+          customerId,
+          callId,
+          summary: `WhatsApp sent: ${message.slice(0, 180)}`,
+          outcome: 'message_sent',
+        });
+      }
+      return {
+        sent: true,
+        channel: 'whatsapp',
+        to,
+        spokenHint: 'Message sent on WhatsApp.',
+      };
+    } catch (err) {
+      return {
+        sent: false,
+        error: err instanceof Error ? err.message : 'send_failed',
+        spokenHint: 'I could not send that WhatsApp message.',
+      };
+    }
   }
 
   if (name === 'scheduleAppointment') {
@@ -453,13 +758,7 @@ export function executePhoneTool(
   }
 
   if (name === 'transferToHuman') {
-    const dept = String(input.department ?? 'general') as keyof ReturnType<typeof getTransferNumbers>;
-    const numbers = getTransferNumbers();
-    const transferNumber =
-      numbers[dept]
-      || numbers.general
-      || process.env.VOICE_TRANSFER_NUMBER
-      || '';
+    const transferNumber = process.env.VOICE_TRANSFER_NUMBER ?? '';
     if (callId) {
       saveCall({
         id: callId,
@@ -476,15 +775,45 @@ export function executePhoneTool(
     };
   }
 
-  if (name === 'enqueueOutboundCall') {
+  if (name === 'enqueueOutboundCall' || name === 'placeOutboundCall') {
+    if (name === 'placeOutboundCall' && actionRequiresConfirmation(name) && input.confirmed !== true) {
+      return {
+        queued: false,
+        needsConfirmation: true,
+        error: 'Ask the caller to confirm before placing the outbound call, then call again with confirmed:true',
+        spokenHint: 'Confirm with me and I will place that call.',
+      };
+    }
+    if (name === 'enqueueOutboundCall' && actionRequiresConfirmation(name) && input.confirmed !== true) {
+      return {
+        queued: false,
+        needsConfirmation: true,
+        error: 'Confirm before queueing the outbound call, then call again with confirmed:true',
+        spokenHint: 'Confirm and I will queue that reminder call.',
+      };
+    }
+    const dialTo = normalizeDialableE164(input.to);
+    if (!dialTo) {
+      return {
+        queued: false,
+        error: 'invalid_to_number',
+        spokenHint: 'I need a real phone number like plus four four seven… — not a name or customer id.',
+      };
+    }
     const job = enqueueOutboundCall({
-      to: input.to,
-      template: input.template as OutboundCampaignTemplate,
+      to: dialTo,
+      template: (input.template as OutboundCampaignTemplate) || 'lead_callback',
       status: 'queued',
       context: input.context ?? {},
       scheduledAt: input.scheduledAt,
     });
-    return { jobId: job.id, to: input.to, template: input.template, queued: true };
+    return {
+      jobId: job.id,
+      to: dialTo,
+      template: input.template || 'lead_callback',
+      queued: true,
+      spokenHint: `Queued an outbound call to ${dialTo}.`,
+    };
   }
 
   if (name === 'captureMessage') {
@@ -514,7 +843,6 @@ export function executePhoneTool(
     const result = sendToStaffCynthiaInternal({
       orgId: body.orgId || getRequestOrgId(),
       userId: firstString(input.staffUserId, input.userId, body.staffContext?.userId),
-      // Prefer the staff caller's number (from) / channel phone — not the company line (to).
       staffPhone: firstString(
         input.staffPhone,
         fromStaffContext ? callerPhone : undefined,
@@ -536,12 +864,153 @@ export function executePhoneTool(
       customerId: firstString(input.customerId, body.customerContext?.customerId),
       source: body.orchestratorMode === 'phone' || body.callContext ? 'phone' : 'cynthia',
     });
+    if (!result.ok || !result.card) {
+      return {
+        sent: false,
+        error: result.error || 'Failed to send Cynthia card',
+        code: result.code || 'staff_not_resolved',
+        spokenConfirm: 'I could not send that to your Cynthia chat — your staff profile is not fully registered.',
+      };
+    }
+    const spokenAmount = Number.isFinite(amount) ? formatSpokenGbp(amount) : null;
     return {
       sent: true,
       cardId: result.card.id,
       route: result.route,
       userId: result.userId,
-      spokenConfirm: "I've sent it to your Cynthia chat — open the app for address, amount, and Call.",
+      spokenTotal: spokenAmount,
+      spokenConfirm: spokenAmount
+        ? `I've sent it to your Cynthia chat — ${spokenAmount} and the details are there.`
+        : "I've sent it to your Cynthia chat — open the app for address, amount, and Call.",
+    };
+  }
+
+  if (name === 'deliverCallFollowUp') {
+    const followUps: Array<Record<string, unknown>> = [];
+    const summary = firstString(input.summary) || 'Call follow-up';
+    const customerId = firstString(input.customerId, body.customerContext?.customerId);
+    const projectId = firstString(input.projectId, body.projectContext?.projectId);
+    const staffUserId = firstString(input.assignedStaffUserId, body.staffContext?.userId);
+    const fromStaffContext = Boolean(body.staffContext?.userId || body.staffContext?.role);
+
+    const staffResult = sendToStaffCynthiaInternal({
+      orgId: body.orgId || getRequestOrgId(),
+      userId: staffUserId,
+      staffPhone: firstString(
+        fromStaffContext ? callerPhone : undefined,
+        body.callContext?.from,
+      ),
+      title: `Follow-up — ${summary.slice(0, 80)}`,
+      customerName: firstString(body.customerContext?.customerName),
+      phone: firstString(body.customerContext?.phone, callerPhone),
+      summary,
+      customerId,
+      projectId,
+      source: 'phone',
+      notes: firstString(input.customerMessage),
+    });
+    followUps.push({
+      type: 'staff_cynthia',
+      status: staffResult.ok ? 'completed' : 'failed',
+      entityId: staffResult.card?.id,
+      error: staffResult.error,
+      completedAt: staffResult.ok ? new Date().toISOString() : undefined,
+    });
+
+    let portalDelivered = false;
+    const customerMessage = firstString(input.customerMessage);
+    if (customerMessage && (projectId || customerId)) {
+      const store = getDataStore();
+      const project = projectId
+        ? store.projects.find((p) => String(p.id) === projectId)
+        : store.projects.find((p) => String(p.customerId) === customerId && p.portalToken);
+      if (project?.portalToken) {
+        appendProjectMessageRecord(String(project.id), {
+          id: `msg-${Date.now()}`,
+          role: 'staff',
+          author: 'Cynthia',
+          body: customerMessage,
+          createdAt: new Date().toISOString(),
+          channel: 'portal',
+          source: 'deliverCallFollowUp',
+        });
+        portalDelivered = true;
+        followUps.push({
+          type: 'customer_portal',
+          status: 'completed',
+          entityId: String(project.id),
+          completedAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    let callbackQueued = false;
+    const callback = input.callback && typeof input.callback === 'object'
+      ? (input.callback as Record<string, unknown>)
+      : undefined;
+    if (!portalDelivered && callback) {
+      const to = normalizeDialableE164(
+        firstString(callback.to, body.customerContext?.phone, !isStaffPartyPhone(callerPhone) ? callerPhone : undefined),
+      );
+      if (to) {
+        const job = enqueueOutboundCall({
+          to,
+          template: String(callback.template || 'lead_callback') as OutboundCampaignTemplate,
+          status: 'queued',
+          context: { reason: callback.reason, summary, customerId, projectId },
+          scheduledAt: callback.scheduledAt,
+        });
+        callbackQueued = true;
+        followUps.push({
+          type: 'scheduled_callback',
+          status: 'completed',
+          entityId: job.id,
+          completedAt: new Date().toISOString(),
+        });
+      } else {
+        followUps.push({
+          type: 'scheduled_callback',
+          status: 'failed',
+          error: 'No valid E.164 customer phone for callback',
+        });
+      }
+    } else if (!portalDelivered && customerMessage) {
+      followUps.push({
+        type: 'customer_portal',
+        status: 'failed',
+        error: 'Customer has no portal/app access',
+      });
+    }
+
+    if (callId) {
+      const store = getDataStore();
+      const fresh = store.calls.find((c) => String(c.id) === callId);
+      saveCall({
+        id: callId,
+        metadata: {
+          ...((fresh?.metadata as Record<string, unknown> | undefined) || {}),
+          followUps,
+        },
+      });
+    }
+
+    const staffOk = staffResult.ok;
+    const customerOk = portalDelivered || callbackQueued || !customerMessage;
+    const ok = staffOk && customerOk;
+    return {
+      ok,
+      followUps,
+      portalDelivered,
+      callbackQueued,
+      staffCardId: staffResult.card?.id,
+      spokenConfirm: ok
+        ? portalDelivered
+          ? 'Done — sent to your Cynthia chat and the customer portal.'
+          : callbackQueued
+            ? 'Done — sent to your Cynthia chat and scheduled the callback.'
+            : "Done — I've put that in your Cynthia chat."
+        : 'I could not complete that follow-up fully — check the details in Cynthia.',
+      error: ok ? undefined : 'One or more follow-up actions failed',
     };
   }
 

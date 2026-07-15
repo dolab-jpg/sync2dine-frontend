@@ -9,7 +9,7 @@ export function buildAriaSystemPrompt(body: OrchestratorRequest): string {
   const intent = callCtx?.intent ?? 'unknown';
   const afterHours = callCtx?.isAfterHours ?? false;
   const direction = callCtx?.direction ?? 'inbound';
-  const company = body.companyName ?? 'Builder Diddies';
+  const company = body.companyName ?? 'TradePro';
 
   return `You are Aria, the friendly AI phone receptionist for ${company} — a UK construction and bathroom installation company.
 
@@ -53,21 +53,19 @@ export function buildGreeting(
   afterHours: boolean,
   direction: 'inbound' | 'outbound',
   campaignPurpose?: string,
-  companyName = 'Builder Diddies',
 ): string {
-  const company = companyName || 'Builder Diddies';
   if (direction === 'outbound' && campaignPurpose) {
     return campaignPurpose;
   }
   if (afterHours) {
     return isKnown
-      ? `Good evening ${customerName.split(' ')[0]}, thank you for calling ${company}. Our office is currently closed, but I can take a message or arrange a callback for you. How can I help?`
-      : `Good evening, thank you for calling ${company}. Our office is currently closed, but I can take a message or arrange a callback. How can I help you today?`;
+      ? `Good evening ${customerName.split(' ')[0]}, thank you for calling TradePro. Our office is currently closed, but I can take a message or arrange a callback for you. How can I help?`
+      : 'Good evening, thank you for calling TradePro. Our office is currently closed, but I can take a message or arrange a callback. How can I help you today?';
   }
   if (isKnown) {
-    return `Hello ${customerName.split(' ')[0]}, thank you for calling ${company}. How can I help you today?`;
+    return `Hello ${customerName.split(' ')[0]}, thank you for calling TradePro. How can I help you today?`;
   }
-  return `Hello, thank you for calling ${company}. My name is Aria. How can I help you today?`;
+  return 'Hello, thank you for calling TradePro. My name is Aria. How can I help you today?';
 }
 
 export function detectIntentFromSpeech(text: string): CallIntent {

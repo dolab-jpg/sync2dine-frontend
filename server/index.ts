@@ -6,6 +6,7 @@ import { createServer } from 'http';
 import { handleAiRequest } from './ai-proxy';
 import { handleWhatsAppRoutes } from './whatsapp-webhook';
 import { handlePhoneRoutes } from './phone-webhook';
+import { handleVapiRoutes } from './vapi-routes';
 import { handleAgentRoutes } from './agent-routes';
 import { handleProjectRoutes } from './project-routes';
 import { handleBuildingControlRoutes } from './building-control-routes';
@@ -72,6 +73,8 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
   if (await handleWhatsAppRoutes(req, res, pathname, url)) return;
 
   if (await handlePhoneRoutes(req, res, pathname, url)) return;
+
+  if (await handleVapiRoutes(req, res, pathname)) return;
 
   if (await handleAgentRoutes(req, res, pathname, url)) return;
 

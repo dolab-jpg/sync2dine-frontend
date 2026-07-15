@@ -489,8 +489,8 @@ export async function executeChannelWrite(
 
   const phoneTools = new Set([
     'classifyCallIntent', 'captureLead', 'bookCallback', 'scheduleAppointment', 'screenCandidate',
-    'bookInterview', 'logCandidate', 'transferToHuman', 'enqueueOutboundCall', 'captureMessage',
-    'sendToStaffCynthia',
+    'bookInterview', 'logCandidate', 'transferToHuman', 'enqueueOutboundCall', 'placeOutboundCall',
+    'captureMessage', 'sendToStaffCynthia', 'saveQuote', 'sendCustomerMessage', 'deliverCallFollowUp',
   ]);
   if (phoneTools.has(action)) {
     if (action === 'sendToStaffCynthia' && (input.sent === true || firstString(input.cardId))) {
@@ -501,7 +501,7 @@ export async function executeChannelWrite(
         output: input,
       };
     }
-    const output = executePhoneTool(
+    const output = await executePhoneTool(
       action,
       {
         ...input,
@@ -656,7 +656,8 @@ export const CHANNEL_WRITE_TOOLS = [
   'recordCouncil', 'raiseChangeRequest', 'resolveChangeRequest', 'setDeadline', 'addComment', 'portalStatusCheck',
   'sendCouncilReply', 'sendCourtesyEmail', 'markDecision', 'generatePostApprovalTasks', 'convertToProject',
   'classifyCallIntent', 'captureLead', 'bookCallback', 'scheduleAppointment', 'screenCandidate', 'bookInterview',
-  'logCandidate', 'transferToHuman', 'enqueueOutboundCall', 'captureMessage', 'sendToStaffCynthia',
+  'logCandidate', 'transferToHuman', 'enqueueOutboundCall', 'placeOutboundCall', 'captureMessage', 'sendToStaffCynthia',
+  'saveQuote', 'sendCustomerMessage', 'deliverCallFollowUp',
   'draftEmailReply', 'sendEmailReply', 'sendEmailWithAttachment', 'searchEmails', 'updateProject', 'escalateToStaff',
   'generateInvoicePdf', 'generateContractPdf', 'sendQuote', 'sendInvoice', 'closeProject', 'archiveQuote',
   'duplicateQuote', 'createReminder', 'schedulePaymentReminder', 'mergeCustomers', 'requestReview',
