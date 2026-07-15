@@ -176,7 +176,7 @@ async function checkAiPanel(page, width) {
 
   async function readAiState() {
     return page.evaluate(() => {
-      const panels = Array.from(document.querySelectorAll('[aria-label="TradePro AI assistant"]'));
+      const panels = Array.from(document.querySelectorAll('[aria-label="Cynthia AI assistant"]'));
       const panel = panels.find((p) => {
         const rect = p.getBoundingClientRect();
         return rect.width > 10 && rect.height > 10;
@@ -223,7 +223,7 @@ async function checkAiPanel(page, width) {
 
   // Close panel without breaking subsequent tests
   await page.evaluate(() => {
-    const close = document.querySelector('[aria-label="TradePro AI assistant"] [aria-label="Close assistant"]');
+    const close = document.querySelector('[aria-label="Cynthia AI assistant"] [aria-label="Close assistant"]');
     close?.click();
   });
   await new Promise((r) => setTimeout(r, 300));
