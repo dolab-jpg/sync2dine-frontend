@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Upload, Sparkles, Download, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { buildRenderPrompt, generateAiRender } from '../engine/ai/renderService';
 
 export default function BathroomDesigner() {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -74,19 +75,48 @@ export default function BathroomDesigner() {
     }
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!uploadedImage) {
       toast.error('Please upload a bathroom photo first');
       return;
     }
 
     setIsGenerating(true);
+    try {
+      const settings: Record<string, string> = {
+        finish: designOptions.finish,
+        toilet: designOptions.toilet,
+        basin: designOptions.basin,
+        shower: designOptions.shower,
+        lighting: designOptions.lighting,
+      };
+      const renderGroups = [
+        { key: 'finish', label: 'Finish', options: finishOptions },
+        { key: 'toilet', label: 'Toilet', options: toiletOptions },
+        { key: 'basin', label: 'Basin', options: basinOptions },
+        { key: 'shower', label: 'Shower', options: showerOptions },
+        { key: 'lighting', label: 'Lighting', options: lightingOptions },
+      ];
+      const extrasLabels = extrasOptions
+        .filter((o) => designOptions.extras.includes(o.value))
+        .map((o) => o.label);
+      const prompt = [
+        buildRenderPrompt('Bathroom', settings, renderGroups),
+        extrasLabels.length ? `Also include: ${extrasLabels.join(', ')}.` : '',
+      ].filter(Boolean).join(' ');
 
-    setTimeout(() => {
-      setGeneratedDesign(uploadedImage);
+      const result = await generateAiRender({
+        image: uploadedImage,
+        prompt,
+        tradeId: 'bathroom',
+      });
+      setGeneratedDesign(result.image);
+      toast.success('AI design preview ready');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'AI design failed');
+    } finally {
       setIsGenerating(false);
-      toast.success('Design generated! (This is a mockup - real version would use AI)');
-    }, 2000);
+    }
   };
 
   const handleSaveDesign = () => {

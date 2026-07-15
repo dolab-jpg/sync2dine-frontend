@@ -211,8 +211,13 @@ export default function CustomerManagement() {
                   <Input
                     id="phone"
                     type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
                     value={formData.phone}
-                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                    onChange={e => setFormData({
+                      ...formData,
+                      phone: e.target.value.replace(/[^\d+\s()-]/g, ''),
+                    })}
                     required
                   />
                 </div>

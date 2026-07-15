@@ -126,6 +126,25 @@ export async function getProfileByBearer(req: IncomingMessage) {
   return profile ?? null;
 }
 
+/** Resolve org for platform_owner via body/query/header; others use profile.org_id. */
+function resolveOrgIdForProfile(
+  profile: { role?: unknown; org_id?: unknown },
+  req: IncomingMessage,
+  explicit?: string | null,
+): string | null {
+  if (profile.role !== 'platform_owner') {
+    return typeof profile.org_id === 'string' && profile.org_id.trim()
+      ? profile.org_id.trim()
+      : null;
+  }
+  if (explicit?.trim()) return explicit.trim();
+  const header = req.headers['x-org-id'];
+  if (typeof header === 'string' && header.trim()) return header.trim();
+  return typeof profile.org_id === 'string' && profile.org_id.trim()
+    ? profile.org_id.trim()
+    : null;
+}
+
 const ALLOWED_PROFILE_LANGS = new Set(['en', 'sq', 'uk', 'ru', 'zh', 'es', 'pl', 'fa']);
 
 function normalizePreferredLanguage(raw: unknown): string {
@@ -310,10 +329,7 @@ export async function handleAccountAuthRoutes(
         sendJson(res, 400, { error: 'Invalid role' });
         return true;
       }
-      let orgId =
-        profile.role === 'platform_owner' && body.orgId?.trim()
-          ? body.orgId.trim()
-          : (profile.org_id as string | null);
+      let orgId = resolveOrgIdForProfile(profile, req, body.orgId);
       const supabase = getSupabaseAdmin();
       if (!orgId && profile.role === 'super_admin') {
         const { data: organization } = await supabase
@@ -448,10 +464,7 @@ export async function handleAccountAuthRoutes(
         return true;
       }
       const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
-      const orgId =
-        profile.role === 'platform_owner' && url.searchParams.get('orgId')?.trim()
-          ? url.searchParams.get('orgId')!.trim()
-          : (profile.org_id as string | null);
+      const orgId = resolveOrgIdForProfile(profile, req, url.searchParams.get('orgId'));
       if (!orgId && profile.role === 'platform_owner') {
         sendJson(res, 200, { members: [] });
         return true;
@@ -577,10 +590,7 @@ export async function handleAccountAuthRoutes(
         return true;
       }
       const url = new URL(req.url || '', 'http://localhost');
-      const orgId =
-        profile.role === 'platform_owner' && url.searchParams.get('orgId')?.trim()
-          ? url.searchParams.get('orgId')!.trim()
-          : (profile.org_id as string | null);
+      const orgId = resolveOrgIdForProfile(profile, req, url.searchParams.get('orgId'));
       if (!orgId) {
         sendJson(res, 200, { invites: [] });
         return true;
@@ -631,10 +641,7 @@ export async function handleAccountAuthRoutes(
         sendJson(res, 400, { error: 'Password must be at least 8 characters' });
         return true;
       }
-      const orgId =
-        profile.role === 'platform_owner' && body.orgId?.trim()
-          ? body.orgId.trim()
-          : (profile.org_id as string | null);
+      const orgId = resolveOrgIdForProfile(profile, req, body.orgId);
       if (!orgId) {
         sendJson(res, 400, { error: 'Organization is required' });
         return true;

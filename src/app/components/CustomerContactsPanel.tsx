@@ -86,7 +86,13 @@ export function CustomerContactsPanel({ customerId, customerName, primaryPhone }
       {showAdd && (
         <div className="grid grid-cols-2 gap-2 p-3 bg-white rounded border">
           <Input placeholder="Name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-          <Input placeholder="Phone" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+          <Input
+            placeholder="Phone"
+            type="tel"
+            inputMode="tel"
+            value={form.phone}
+            onChange={e => setForm({ ...form, phone: e.target.value.replace(/[^\d+\s()-]/g, '') })}
+          />
           <Select value={form.role} onValueChange={v => setForm({ ...form, role: v as ContactRole })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>

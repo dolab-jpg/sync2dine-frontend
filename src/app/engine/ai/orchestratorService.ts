@@ -4,6 +4,7 @@ import { buildBritishVoicePrompt } from './britishVoice';
 import type { AgentContext } from './agentContext';
 import { isStaffRole } from './rolePermissions';
 import { PLANNING_ACTIONS } from '../planning/planningActionNames';
+import { getActiveOrgId } from '../platform/orgContext';
 
 export type OrchestratorMode = 'staff' | 'project' | 'foreman' | 'buildingControl' | 'planning' | 'customer' | 'cyrus' | 'auto';
 
@@ -216,6 +217,7 @@ export async function sendOrchestratorMessage(
     ?? integrationService.getConfig('company').companyName
     ?? 'Builder Diddies';
 
+  const activeOrgId = getActiveOrgId();
   const body: Record<string, unknown> = {
     model: options?.model || openaiConfig.staffModel || 'gpt-4o-mini',
     apiKey: integrationService.getLiveOpenAIApiKey(),
@@ -236,6 +238,7 @@ export async function sendOrchestratorMessage(
     channel: options?.channel ?? 'overlay_chat',
     pendingTask: options?.pendingTask,
     images: options?.images?.slice(0, 6),
+    ...(activeOrgId ? { orgId: activeOrgId } : {}),
   };
 
   if (isCustomer) {

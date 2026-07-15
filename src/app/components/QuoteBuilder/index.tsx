@@ -6,7 +6,7 @@ import { Button } from '../ui/button';
 import { ChevronLeft, ChevronRight, Check, Sparkles, Send, ClipboardCheck, FileEdit } from 'lucide-react';
 import { toast } from 'sonner';
 import { getTrade, isValidTradeId } from '../../config/trades';
-import type { TradeId, WizardAnswers } from '../../config/types';
+import type { TradeId, WizardAnswers, WizardField, WizardStage } from '../../config/types';
 import { calculateQuote } from '../../engine/quoteCalculator';
 import { StageProgress } from './StageProgress';
 import { DynamicStage } from './DynamicStage';
@@ -25,6 +25,36 @@ import {
   sendPricePack,
 } from '../../engine/salesCloseFlow';
 
+function isFieldFilled(field: WizardField, answers: WizardAnswers): boolean {
+  if (field.computeFrom) return true;
+  const raw = answers[field.key];
+  if (field.type === 'number') {
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(n)) return false;
+    if (field.min != null && n < field.min) return false;
+    if (field.max != null && n > field.max) return false;
+    return true;
+  }
+  if (field.type === 'multi-select' || Array.isArray(raw)) {
+    return Array.isArray(raw) && raw.length > 0;
+  }
+  if (raw === undefined || raw === null) return false;
+  return String(raw).trim().length > 0;
+}
+
+function validateStage(stage: WizardStage | undefined, answers: WizardAnswers): string | null {
+  if (!stage) return null;
+  for (const field of stage.fields) {
+    if (!field.required) continue;
+    if (!isFieldFilled(field, answers)) {
+      if (field.type === 'customer-select' || field.key === 'customerId') {
+        return 'Please select a customer before continuing';
+      }
+      return `Please complete “${field.label}” before continuing`;
+    }
+  }
+  return null;
+}
 export default function QuoteBuilder() {
   const context = useContext(AppContext);
   const { tradeId: routeTradeId, customerId } = useParams();
@@ -241,8 +271,54 @@ export default function QuoteBuilder() {
     });
   };
 
+  const handleNext = () => {
+    const error = validateStage(stages[currentStage], answers);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    setCurrentStage(currentStage + 1);
+  };
+
+  const handleOpenAiAssistant = () => {
+    if (!ai.settings.enabled || !ai.settings.showOverlay) {
+      toast.error('AI assistant is disabled in Settings');
+      return;
+    }
+    if (ai.settings.panelDocked) {
+      ai.updateSettings({ panelDocked: false });
+    }
+    if (ai.isOpen) {
+      ai.setIsOpen(false);
+      window.setTimeout(() => ai.setIsOpen(true), 50);
+    } else {
+      ai.setIsOpen(true);
+    }
+  };
+
   const buildQuotePayload = (status: 'draft' | 'awaiting_approval' | 'sent' | 'approved') => {
     if (!trade || !totals) return null;
+    if (status !== 'draft') {
+      for (let i = 0; i < stages.length; i++) {
+        const stage = stages[i];
+        if (stage.id === 'summary') continue;
+        const error = validateStage(stage, answers);
+        if (error) {
+          toast.error(error);
+          setCurrentStage(i);
+          return null;
+        }
+      }
+    } else {
+      const customerError = validateStage(
+        stages.find((s) => s.id === 'customer') ?? stages[0],
+        answers,
+      );
+      if (customerError) {
+        toast.error(customerError);
+        return null;
+      }
+    }
     const customer = customers.find((c) => c.id === String(answers.customerId));
     if (!customer) {
       toast.error('Please select a customer');
@@ -379,7 +455,7 @@ export default function QuoteBuilder() {
                 <Button
                   size="lg"
                   className="bg-amber-500 hover:bg-amber-600"
-                  onClick={() => ai.setIsOpen(true)}
+                  onClick={handleOpenAiAssistant}
                 >
                   Open AI Assistant
                 </Button>
@@ -434,7 +510,7 @@ export default function QuoteBuilder() {
           )}
           {showTradeSelector ? null : currentStage < stages.length - 1 ? (
             <Button
-              onClick={() => setCurrentStage(currentStage + 1)}
+              onClick={handleNext}
               size="lg"
               className="flex-1 min-w-[140px] text-lg py-6 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600"
             >

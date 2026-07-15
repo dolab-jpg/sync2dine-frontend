@@ -1,5 +1,6 @@
 import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client';
 import { fetchMembers, type OrgMember } from '../../auth/lib/authApi';
+import { getActiveOrgId } from '../platform/orgContext';
 
 export interface StaffPerformance {
   leads: number;
@@ -63,7 +64,7 @@ export async function loadOfficeTeam(): Promise<OfficeTeamMember[]> {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (!token) return cachedRoster;
-      const members = await fetchMembers(token);
+      const members = await fetchMembers(token, getActiveOrgId() ?? undefined);
       cachedRoster = members
         .map(toOfficeMember)
         .filter((m): m is OfficeTeamMember => m !== null);
