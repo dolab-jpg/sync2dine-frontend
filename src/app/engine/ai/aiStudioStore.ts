@@ -5,8 +5,14 @@ import {
   type CommandCategory,
 } from '../../config/ai/types';
 import type { AgentRole } from './agentContext';
+import { getActiveOrgId } from '../platform/orgContext';
+import { BDIDDIES_HOME_ORG_ID } from '../platform/homeOrg';
 
-const STORAGE_KEY = 'aiStudio';
+function storageKey(): string {
+  const orgId = getActiveOrgId() || BDIDDIES_HOME_ORG_ID;
+  return `aiStudio:${orgId}`;
+}
+
 export const AI_STUDIO_PANEL_PREFS_EVENT = 'ai-studio-panel-prefs';
 export const AI_STUDIO_CONFIG_EVENT = 'ai-studio-config-changed';
 
@@ -56,7 +62,7 @@ function defaultCommands(): AIStudioCommand[] {
     {
       id: 'staff-quote',
       label: 'Knock up a quote',
-      prompt: 'I need a quote for a job — help me gather details and give a ballpark figure.',
+      prompt: 'I need a quote for a job — help me gather details and give a ballpark figure. Draft it in chat first; only make a PDF when I confirm.',
       roles: ['staff', 'manager', 'super_admin'],
       category: 'sales_quoting',
       enabled: true,
@@ -106,7 +112,15 @@ function defaultCommands(): AIStudioCommand[] {
 
 export function loadAIStudioConfig(): AIStudioConfig {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = storageKey();
+    let raw = localStorage.getItem(key);
+    if (!raw) {
+      const legacy = localStorage.getItem('aiStudio');
+      if (legacy) {
+        raw = legacy;
+        localStorage.setItem(key, legacy);
+      }
+    }
     const legacyPrefs = readAiSettingsPanelPrefs();
     if (!raw) {
       return {
@@ -131,10 +145,7 @@ export function loadAIStudioConfig(): AIStudioConfig {
 }
 
 export function saveAIStudioConfig(config: AIStudioConfig): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-  // #region agent log
-  fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a8afb5'},body:JSON.stringify({sessionId:'a8afb5',location:'aiStudioStore.ts:save',message:'AI studio config saved',data:{starterQuestionsEnabled:config.starterQuestionsEnabled,instructionsLen:config.companyInstructions.length,commandCount:config.commands.length},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
-  // #endregion
+  localStorage.setItem(storageKey(), JSON.stringify(config));
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(AI_STUDIO_CONFIG_EVENT));
   }
@@ -168,7 +179,8 @@ async function syncAIStudioToServer(config: AIStudioConfig): Promise<void> {
 
 function readMongoSyncPayload(): { connectionString?: string; databaseName?: string } | undefined {
   try {
-    const raw = localStorage.getItem('integrations');
+    const orgId = getActiveOrgId() || BDIDDIES_HOME_ORG_ID;
+    const raw = localStorage.getItem(`integrations:${orgId}`) || localStorage.getItem('integrations');
     if (!raw) return undefined;
     const store = JSON.parse(raw);
     const mongo = store?.integrations?.mongodb;
@@ -189,7 +201,7 @@ export async function hydrateAIStudioFromServer(): Promise<void> {
   if (!remote) return;
   const local = loadAIStudioConfig();
   const merged = { ...local, ...remote, commands: remote.commands?.length ? remote.commands : local.commands };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+  localStorage.setItem(storageKey(), JSON.stringify(merged));
 }
 
 export function getCommandsForRole(role: AgentRole): AIStudioCommand[] {

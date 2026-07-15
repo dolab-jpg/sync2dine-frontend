@@ -96,6 +96,7 @@ export function getHumanActionLabel(action: string, output?: Record<string, unkn
     sendEmailWithAttachment: 'Send this email with attachment(s)?',
     placeOutboundCall: 'Place this outbound call?',
     generateQuotePdf: 'Quote PDF ready.',
+    draftQuote: 'Quote draft ready — confirm to make PDF.',
     generateOpsReport: 'Report ready.',
     sendToStaffCynthia: 'Card sent to Cynthia.',
     writeData: 'Delete this record?',

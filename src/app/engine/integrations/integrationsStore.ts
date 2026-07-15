@@ -4,8 +4,13 @@ import type {
   IntegrationInstanceState,
   IntegrationsStoreData,
 } from '../../config/integrations/types';
+import { getActiveOrgId } from '../platform/orgContext';
+import { BDIDDIES_HOME_ORG_ID } from '../platform/homeOrg';
 
-const STORAGE_KEY = 'integrations';
+function storageKey(): string {
+  const orgId = getActiveOrgId() || BDIDDIES_HOME_ORG_ID;
+  return `integrations:${orgId}`;
+}
 
 function createDefaultInstance(id: IntegrationId): IntegrationInstanceState {
   const def = INTEGRATION_REGISTRY.find(i => i.id === id)!;
@@ -32,7 +37,16 @@ function createDefaultStore(): IntegrationsStoreData {
 
 export function loadIntegrationsStore(): IntegrationsStoreData {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = storageKey();
+    let raw = localStorage.getItem(key);
+    // Migrate legacy global key once into current org bucket
+    if (!raw && key !== 'integrations') {
+      const legacy = localStorage.getItem('integrations');
+      if (legacy) {
+        raw = legacy;
+        localStorage.setItem(key, legacy);
+      }
+    }
     if (!raw) return createDefaultStore();
 
     const parsed = JSON.parse(raw) as IntegrationsStoreData;
@@ -61,7 +75,7 @@ export function loadIntegrationsStore(): IntegrationsStoreData {
 
 export function saveIntegrationsStore(data: IntegrationsStoreData): void {
   data.updatedAt = new Date().toISOString();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  localStorage.setItem(storageKey(), JSON.stringify(data));
 }
 
 export function getIntegrationValues(id: IntegrationId): Record<string, string> {

@@ -38,7 +38,28 @@ export async function getCurrentProfile() {
   return profile;
 }
 
+/**
+ * Resolve org for data reads/writes.
+ * platform_owner has profiles.org_id = null; when acting as (or on home org),
+ * prefer localStorage activeOrgId so Supabase queries match Node X-Org-Id.
+ */
 export async function getOrgId(): Promise<string | null> {
+  try {
+    const active = localStorage.getItem('activeOrgId')?.trim();
+    if (active) return active;
+  } catch {
+    // ignore
+  }
   const profile = await getCurrentProfile();
-  return profile?.org_id ?? null;
+  if (profile?.org_id) return profile.org_id;
+  // platform_owner with no acting-as → B-Diddies home
+  if (profile?.role === 'platform_owner') {
+    try {
+      localStorage.setItem('activeOrgId', 'bdiddies');
+    } catch {
+      // ignore
+    }
+    return 'bdiddies';
+  }
+  return null;
 }

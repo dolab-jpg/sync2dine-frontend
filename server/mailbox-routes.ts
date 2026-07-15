@@ -24,6 +24,8 @@ import {
   shouldUseLiveMailbox,
 } from './mailbox/oauth-config';
 import type { MailProviderId, SendMailboxPayload } from './mailbox/types';
+import { verifyToken, extractBearerToken } from './auth';
+import { BDIDDIES_HOME_ORG_ID } from './home-org';
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -40,9 +42,23 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
-function parseAuth(req: IncomingMessage): { userId: string; orgId: string } {
-  const userId = req.headers['x-user-id']?.toString() || 'default-user';
-  const orgId = req.headers['x-org-id']?.toString() || 'default';
+function parseAuth(req: IncomingMessage): { userId: string; orgId: string; unauthorized?: boolean } {
+  const headerUser = req.headers['x-user-id']?.toString();
+  const headerOrg = req.headers['x-org-id']?.toString();
+  const token = extractBearerToken(req);
+  const payload = token ? verifyToken(token) : null;
+  const authEnforced = process.env.AUTH_ENFORCED === '1' || process.env.AUTH_ENFORCED === 'true';
+
+  if (authEnforced && !payload) {
+    return { userId: '', orgId: '', unauthorized: true };
+  }
+
+  const userId = payload?.userId || headerUser || 'default-user';
+  const orgId =
+    (payload?.role === 'platform_owner' ? headerOrg : null)
+    || payload?.orgId
+    || headerOrg
+    || BDIDDIES_HOME_ORG_ID;
   return { userId, orgId };
 }
 
@@ -62,7 +78,11 @@ export async function handleMailboxRoutes(
 
   if (pathname === '/api/mailbox/connect' && req.method === 'GET') {
     const provider = (url.searchParams.get('provider') || 'google') as MailProviderId;
-    const { userId, orgId } = parseAuth(req);
+    const { userId, orgId, unauthorized } = parseAuth(req);
+    if (unauthorized) {
+      sendJson(res, 401, { error: 'Unauthorized — sign in required for mailbox' });
+      return true;
+    }
     const loginHint = url.searchParams.get('loginHint') ?? undefined;
 
     if (!shouldUseLiveMailbox(req)) {

@@ -9,6 +9,7 @@ import { Phone, PhoneOff, PhoneIncoming, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppContext } from '../../App';
 import type { PhoneLine } from './CallCenter';
+import { integrationService } from '../../engine/integrations/integrationService';
 
 type RegStatus = 'disconnected' | 'registering' | 'registered' | 'error';
 
@@ -28,10 +29,38 @@ export function SoftPhonePanel(_props: { lines?: PhoneLine[] }) {
   const [inCall, setInCall] = useState(false);
   const [incoming, setIncoming] = useState(false);
   const [remoteNumber, setRemoteNumber] = useState<string | null>(null);
+  const [crmMatch, setCrmMatch] = useState<{
+    name?: string;
+    customerId?: string;
+    isGuest?: boolean;
+  } | null>(null);
   const uaRef = useRef<import('jssip').UA | null>(null);
   const sessionRef = useRef<import('jssip').RTCSession | null>(null);
   const statusRef = useRef<RegStatus>('disconnected');
 
+  const lookupCrm = async (phone: string | null) => {
+    if (!phone) {
+      setCrmMatch(null);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/contacts/lookup?phone=${encodeURIComponent(phone)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCrmMatch({ name: undefined, isGuest: true });
+        return;
+      }
+      const name = data.customerName || data.contactName || data.name;
+      const customerId = data.customerId || data.id;
+      setCrmMatch({
+        name: name || undefined,
+        customerId: customerId || undefined,
+        isGuest: !name && !customerId,
+      });
+    } catch {
+      setCrmMatch({ isGuest: true });
+    }
+  };
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
@@ -119,15 +148,18 @@ export function SoftPhonePanel(_props: { lines?: PhoneLine[] }) {
         const remoteIdentity = (session as unknown as { remote_identity?: { uri?: { user?: string }; display_name?: string } }).remote_identity;
         const callerNumber = remoteIdentity?.uri?.user ?? null;
         setRemoteNumber(callerNumber ? (remoteIdentity?.display_name || callerNumber) : null);
+        void lookupCrm(callerNumber);
         session.on('ended', () => {
           setInCall(false);
           setIncoming(false);
           setRemoteNumber(null);
+          setCrmMatch(null);
         });
         session.on('failed', () => {
           setInCall(false);
           setIncoming(false);
           setRemoteNumber(null);
+          setCrmMatch(null);
         });
         if (session.direction === 'incoming') {
           setIncoming(true);
@@ -149,6 +181,7 @@ export function SoftPhonePanel(_props: { lines?: PhoneLine[] }) {
     sessionRef.current?.answer({ mediaConstraints: { audio: true, video: false } });
     setIncoming(false);
     setInCall(true);
+    void lookupCrm(remoteNumber);
   };
 
   const reject = () => {
@@ -156,6 +189,7 @@ export function SoftPhonePanel(_props: { lines?: PhoneLine[] }) {
     setIncoming(false);
     setInCall(false);
     setRemoteNumber(null);
+    setCrmMatch(null);
   };
 
   const hangup = () => {
@@ -163,6 +197,7 @@ export function SoftPhonePanel(_props: { lines?: PhoneLine[] }) {
     setInCall(false);
     setIncoming(false);
     setRemoteNumber(null);
+    setCrmMatch(null);
   };
 
   const call = () => {
@@ -246,14 +281,36 @@ export function SoftPhonePanel(_props: { lines?: PhoneLine[] }) {
       </div>
 
       {incoming && (
-        <div className="space-y-2">
+        <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-3">
           <p className="text-sm text-slate-700">
             Incoming call from <span className="font-mono font-semibold">{remoteNumber ?? 'unknown number'}</span>
           </p>
+          {crmMatch?.name ? (
+            <p className="text-sm font-medium text-emerald-800">CRM: {crmMatch.name}</p>
+          ) : (
+            <p className="text-sm text-slate-600">
+              Guest — new caller
+              {(() => {
+                const company = integrationService.getConfig('company').companyName;
+                return company ? ` · ${company}` : '';
+              })()}
+            </p>
+          )}
           <div className="flex gap-2">
             <Button onClick={answer}>Answer</Button>
             <Button variant="destructive" onClick={reject}>Reject</Button>
           </div>
+        </div>
+      )}
+
+      {inCall && !incoming && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm space-y-1">
+          <p className="font-medium text-emerald-900">
+            On call with {crmMatch?.name || remoteNumber || 'caller'}
+          </p>
+          {crmMatch?.isGuest && (
+            <p className="text-xs text-slate-600">Guest — capture lead details after the call</p>
+          )}
         </div>
       )}
 

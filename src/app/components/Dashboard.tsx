@@ -92,9 +92,26 @@ export default function Dashboard() {
                 </Button>
               )}
               {followUpsDue.length > 0 && (
-                <Button variant="outline" size="sm" onClick={() => navigate('/crm')}>
-                  {followUpsDue.length} follow-up{followUpsDue.length > 1 ? 's' : ''} due
-                </Button>
+                <>
+                  <Button variant="outline" size="sm" onClick={() => navigate('/crm')}>
+                    {followUpsDue.length} follow-up{followUpsDue.length > 1 ? 's' : ''} due
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate('/communications?template=quote_chase')}
+                  >
+                    <Mail className="w-4 h-4 mr-1" />
+                    Chase by email
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate('/calls?tab=outbound')}
+                  >
+                    Chase by call
+                  </Button>
+                </>
               )}
               {awaitingApproval > 0 && (
                 <Button variant="outline" size="sm" onClick={() => navigate('/approvals')}>

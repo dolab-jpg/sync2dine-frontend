@@ -562,7 +562,11 @@ export async function handleAccountAuthRoutes(
         sendJson(res, 401, { error: 'Unauthorized' });
         return true;
       }
-      const orgId = profile.org_id as string | null;
+      const url = new URL(req.url || '', 'http://localhost');
+      const orgId =
+        profile.role === 'platform_owner' && url.searchParams.get('orgId')?.trim()
+          ? url.searchParams.get('orgId')!.trim()
+          : (profile.org_id as string | null);
       if (!orgId) {
         sendJson(res, 200, { invites: [] });
         return true;
@@ -575,7 +579,7 @@ export async function handleAccountAuthRoutes(
         .is('accepted_at', null)
         .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false });
-      const baseUrl = process.env.APP_BASE_URL?.trim() || 'http://localhost:5174';
+      const baseUrl = process.env.APP_BASE_URL?.trim() || 'https://app.b-diddies.com';
       sendJson(res, 200, {
         invites: (data ?? []).map((i) => ({
           id: i.id,

@@ -97,13 +97,14 @@ export default function CynthiaHome() {
   const userId = app?.user.id || 'default-staff';
   const [composer, setComposer] = useState('');
   const [sending, setSending] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<Array<{ name: string; dataUrl: string; mime: string }>>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [bubbles, setBubbles] = useState<LocalBubble[]>([]);
   const [toolResults, setToolResults] = useState<ToolExecutionResult[]>([]);
   const [safetyPending, setSafetyPending] = useState<CopilotAction[]>([]);
   const [artifact, setArtifact] = useState<OpenArtifact | null>(null);
   const [fixJobs, setFixJobs] = useState<Array<{ id: string; job?: CodeFixJob }>>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const agentContext: AgentContext = useMemo(() => ({
     role: (app?.user.role as AgentContext['role']) ?? 'staff',
@@ -289,6 +290,14 @@ export default function CynthiaHome() {
         });
         setArtifact({ type: 'pdf', title, dataUrl: r.output.pdfDataUrl });
       }
+      if (typeof r.output.draftMarkdown === 'string') {
+        const draft = String(r.output.draftMarkdown);
+        setBubbles((prev) => [
+          ...prev,
+          { id: `draft_${Date.now()}`, kind: 'text', role: 'assistant', content: draft, ts: new Date().toISOString() },
+        ]);
+        void postCynthiaMessage(userId, { role: 'assistant', content: draft, source: 'cynthia' });
+      }
       if (typeof r.output.reportMarkdown === 'string') {
         const title = String(r.output.title || 'Report');
         void postCynthiaMessage(userId, {
@@ -308,15 +317,21 @@ export default function CynthiaHome() {
 
   const runSend = async (text: string, source: 'cynthia' | 'voice' | 'paste' | 'share' = 'cynthia') => {
     const trimmed = text.trim();
-    if (!trimmed || sending || !app) return;
+    const images = pendingAttachments.map((a) => a.dataUrl).filter((u) => u.startsWith('data:image'));
+    if ((!trimmed && images.length === 0) || sending || !app) return;
     setSending(true);
     setComposer('');
+    const attachLabel = pendingAttachments.length
+      ? ` [${pendingAttachments.map((a) => a.name).join(', ')}]`
+      : '';
+    const userContent = trimmed || 'Please review the attached file(s).';
     const localId = `local_${Date.now()}`;
     setBubbles((prev) => [
       ...prev,
-      { id: localId, kind: 'text', role: 'user', content: trimmed, ts: new Date().toISOString() },
+      { id: localId, kind: 'text', role: 'user', content: `${userContent}${attachLabel}`, ts: new Date().toISOString() },
     ]);
-    void postCynthiaMessage(userId, { role: 'user', content: trimmed, source });
+    void postCynthiaMessage(userId, { role: 'user', content: `${userContent}${attachLabel}`, source });
+    setPendingAttachments([]);
 
     try {
       const history = [
@@ -324,15 +339,17 @@ export default function CynthiaHome() {
           .filter((b): b is Extract<LocalBubble, { kind: 'text' }> => b.kind === 'text')
           .slice(-16)
           .map((b) => ({ role: b.role, content: b.content })),
-        { role: 'user', content: trimmed },
+        { role: 'user', content: userContent },
       ];
 
+      const companyName = integrationService.getConfig('company').companyName || 'Builder Diddies';
       const orchestratorResult = await sendOrchestratorMessage(history, agentContext, {
         userName: app.user.name,
         userId: app.user.id,
-        companyName: 'Builder Diddies',
+        companyName,
         orchestratorMode: 'staff',
         channel: 'overlay_chat',
+        images: images.length ? images : undefined,
         customers: app.customers.slice(0, 80).map((c) => ({
           id: c.id,
           name: c.name,
@@ -423,13 +440,24 @@ export default function CynthiaHome() {
     if (isNativeBridgeAvailable()) {
       const shot = await nativeTakePhoto(true);
       if (shot?.ok && shot.dataUrl) {
-        toast.message('Photo captured — tell Cynthia what to do');
-        setComposer((c) => `${c}\n[Photo attached: ${shot.fileName || 'camera.jpg'} — please review/price]`.trim());
+        setPendingAttachments((prev) => [
+          ...prev,
+          { name: shot.fileName || 'camera.jpg', dataUrl: shot.dataUrl!, mime: 'image/jpeg' },
+        ]);
+        toast.success('Photo attached — send when ready');
       }
       return;
     }
     fileRef.current?.click();
   };
+
+  const readFileAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Could not read file'));
+      reader.readAsDataURL(file);
+    });
 
   useEffect(() => {
     if (!fixJobs.length) return;
@@ -449,7 +477,10 @@ export default function CynthiaHome() {
   if (!app) return null;
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-3.5rem)] md:h-[min(100dvh,920px)] max-w-3xl mx-auto bg-[#e5ddd5] relative">
+    <div
+      className="flex flex-col h-[calc(100dvh-7rem)] sm:h-[calc(100dvh-7.5rem)] md:h-[min(100dvh,920px)] max-w-3xl mx-auto bg-[#e5ddd5] relative w-full"
+      data-testid="cynthia-home"
+    >
       <header className="shrink-0 flex items-center gap-3 px-3 py-2.5 bg-[#075e54] text-white shadow">
         <CynthiaAvatar name={name} sizeClass="h-10 w-10" className="ring-2 ring-white/25" />
         <div className="min-w-0 flex-1">
@@ -470,8 +501,9 @@ export default function CynthiaHome() {
           type="button"
           size="sm"
           variant="ghost"
-          className="text-white hover:bg-white/10 text-xs"
+          className="text-white hover:bg-white/10 text-xs min-h-11 touch-manipulation px-3"
           onClick={() => navigate('/projects')}
+          aria-label="Open jobs"
         >
           App
         </Button>
@@ -633,24 +665,53 @@ export default function CynthiaHome() {
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) {
-              setComposer((c) => `${c}\n[Attached: ${f.name} — tell me what to do]`.trim());
-              toast.message(`${f.name} noted`);
-            }
+            e.target.value = '';
+            if (!f) return;
+            void (async () => {
+              try {
+                const dataUrl = await readFileAsDataUrl(f);
+                if (!dataUrl) {
+                  toast.error('Could not read file');
+                  return;
+                }
+                setPendingAttachments((prev) => [
+                  ...prev,
+                  { name: f.name, dataUrl, mime: f.type || 'application/octet-stream' },
+                ]);
+                toast.success(`${f.name} attached — send when ready`);
+              } catch {
+                toast.error('Could not attach file');
+              }
+            })();
           }}
         />
-        <Button type="button" size="icon" variant="ghost" className="shrink-0 rounded-full" onClick={() => void pasteFromClipboard()} title="Paste">
+        <Button type="button" size="icon" variant="ghost" className="shrink-0 rounded-full min-h-11 min-w-11 touch-manipulation" onClick={() => void pasteFromClipboard()} title="Paste" aria-label="Paste from clipboard">
           <ClipboardPaste className="h-5 w-5 text-slate-600" />
         </Button>
-        <Button type="button" size="icon" variant="ghost" className="shrink-0 rounded-full" onClick={() => void attachPhoto()} title="Attach">
+        <Button type="button" size="icon" variant="ghost" className="shrink-0 rounded-full min-h-11 min-w-11 touch-manipulation" onClick={() => void attachPhoto()} title="Attach" aria-label="Attach photo">
           {isNativeBridgeAvailable() ? <ImageIcon className="h-5 w-5 text-slate-600" /> : <Paperclip className="h-5 w-5 text-slate-600" />}
         </Button>
+        {pendingAttachments.length > 0 && (
+          <div className="absolute left-14 bottom-14 flex flex-wrap gap-1 max-w-[70%]">
+            {pendingAttachments.map((a) => (
+              <button
+                key={a.name + a.dataUrl.slice(-12)}
+                type="button"
+                className="text-[10px] bg-white border border-slate-200 rounded-full px-2 py-1 shadow-sm"
+                onClick={() => setPendingAttachments((prev) => prev.filter((x) => x.dataUrl !== a.dataUrl))}
+                title="Remove attachment"
+              >
+                {a.name} ×
+              </button>
+            ))}
+          </div>
+        )}
         <textarea
           value={composer}
           onChange={(e) => setComposer(e.target.value)}
           rows={1}
           placeholder={`Message ${name}…`}
-          className="flex-1 resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm max-h-28 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
+          className="flex-1 resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-base max-h-28 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
@@ -661,10 +722,21 @@ export default function CynthiaHome() {
         <Button
           type="button"
           size="icon"
+          className="shrink-0 rounded-full min-h-11 min-w-11 touch-manipulation bg-[#075e54] text-white hover:bg-[#064e46]"
+          disabled={sending || (!composer.trim() && pendingAttachments.length === 0)}
+          onClick={() => void runSend(composer, 'cynthia')}
+          aria-label="Send"
+        >
+          {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+        </Button>
+        <Button
+          type="button"
+          size="icon"
           variant="ghost"
           disabled={sending || vapiStatus === 'connecting'}
-          className={`shrink-0 rounded-full ${vapiActive ? 'bg-red-100 text-red-600' : ''}`}
+          className={`shrink-0 rounded-full min-h-11 min-w-11 touch-manipulation ${vapiActive ? 'bg-red-100 text-red-600' : ''}`}
           title={vapiActive ? 'End Cynthia voice' : 'Talk to Cynthia (same phone voice)'}
+          aria-label={vapiActive ? 'End Cynthia voice' : 'Talk to Cynthia'}
           onClick={() => { void toggleVapi(); }}
         >
           {vapiStatus === 'connecting' ? (
@@ -674,15 +746,6 @@ export default function CynthiaHome() {
           ) : (
             <Mic className="h-5 w-5 text-slate-600" />
           )}
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          className="shrink-0 rounded-full bg-[#075e54] hover:bg-[#064e46]"
-          disabled={sending || !composer.trim()}
-          onClick={() => void runSend(composer, 'cynthia')}
-        >
-          {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
       </div>
 

@@ -132,6 +132,7 @@ const EMAIL = new Set([
 ]);
 
 const CYNTHIA_OPS = new Set([
+  'draftQuote',
   'generateQuotePdf',
   'generateOpsReport',
   'placeOutboundCall',

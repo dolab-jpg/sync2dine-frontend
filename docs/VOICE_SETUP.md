@@ -2,6 +2,17 @@
 
 Aria uses the **Company AI Brain** (OpenAI by default; optional DeepSeek for text) for conversation logic and **Chatterbox TTS** for the spoken voice. Photo pricing, vision, Whisper, and OpenAI TTS fallback always use the **OpenAI** key.
 
+## 0. Production voice path (Vapi — preferred)
+
+When API voice is connected, **Aria answers via Vapi + Soho66 SIP trunk** (`VOICE_PROVIDER=vapi` on tradepro-backend), not browser JsSIP.
+
+- Webhooks: `POST /webhooks/vapi` on the API host (production: `https://app.b-diddies.com`)
+- In-app Cynthia mic: `POST /api/vapi/web-session`
+- CRM caller match happens in Vapi webhooks (`resolveContactByPhone`) and shows on Call Centre → Live Call Status
+- Soft Phone (JsSIP) is an **optional** staff browser channel — Soho66 public WSS is often unavailable; use desk phone / VOIS for humans
+
+See `tradepro-backend/docs/VAPI_SIP.md` for the accurate setup.
+
 ## 1. Environment variables
 
 Copy `.env.example` to `.env.local` and set:

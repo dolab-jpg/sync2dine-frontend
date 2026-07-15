@@ -1064,7 +1064,9 @@ async function executeMailboxEmailTool(
   ctx: ToolRuntimeContext
 ): Promise<ToolExecutionResult> {
   const userId = ctx.userId ?? ctx.app?.user?.id ?? 'default-user';
-  const orgId = 'default';
+  const { getActiveOrgId } = await import('../platform/orgContext');
+  const { BDIDDIES_HOME_ORG_ID } = await import('../platform/homeOrg');
+  const orgId = getActiveOrgId() || BDIDDIES_HOME_ORG_ID;
   const connections = await mailboxService.getConnections(userId, orgId);
   const connectionId = readOptionalString(output.connectionId) ?? connections[0]?.id;
   if (!connectionId) {
@@ -1282,6 +1284,38 @@ async function executeSingleTool(
       action: name,
       summary: `Offered code fix for ${errorCode} in chat (Yes/No).`,
       output: { errorCode, description, route },
+      executed: true,
+    };
+  }
+
+  if (name === 'draftQuote') {
+    const customerName = readOptionalString(output.customerName) || 'Customer';
+    const total = Number(output.total ?? 0);
+    const tradeName = readOptionalString(output.tradeName) || 'General';
+    const notes = readOptionalString(output.notes) || '';
+    const lineItems = Array.isArray(output.lineItems)
+      ? (output.lineItems as Array<{ description?: string; amount?: number }>).map((i) => ({
+          description: String(i.description ?? 'Item'),
+          amount: Number(i.amount ?? 0),
+        }))
+      : [];
+    const linesText = lineItems.length
+      ? lineItems.map((i) => `• ${i.description}: £${i.amount.toFixed(2)}`).join('\n')
+      : `• Total: £${total.toFixed(2)}`;
+    return {
+      action: name,
+      summary: `Quote draft for ${customerName} (£${total.toLocaleString('en-GB')}). Say “make the PDF” when you’re happy.`,
+      openRoute: '/cynthia',
+      output: {
+        ...output,
+        title: `Quote draft — ${customerName}`,
+        draftMarkdown: `**Quote draft — ${customerName}**\n\nTrade: ${tradeName}\n\n${linesText}\n\n**Total: £${total.toFixed(2)}**${notes ? `\n\n_Notes:_ ${notes}` : ''}\n\n_Reply “yes” or “make the PDF” to convert this to a PDF._`,
+        customerName,
+        total,
+        tradeName,
+        lineItems,
+        awaitingPdfConfirm: true,
+      },
       executed: true,
     };
   }

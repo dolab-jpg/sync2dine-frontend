@@ -9,7 +9,7 @@ import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
-import { FileSignature, Plus, Trash2, Sparkles, Send, Eye, Loader2, Save, CheckCircle2 } from 'lucide-react';
+import { FileSignature, Plus, Trash2, Sparkles, Send, Eye, Loader2, Save, CheckCircle2, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   loadContractTemplates,
@@ -215,6 +215,39 @@ export default function ContractsHub() {
     }
   };
 
+  const handleCollectPayment = async (contract: Contract) => {
+    const stage = contract.stages.find((s) => /deposit|booking/i.test(s.label)) ?? contract.stages[0];
+    const amount = stage?.amount || contract.depositAmount || 0;
+    if (amount <= 0) {
+      toast.error('No deposit amount on this contract');
+      return;
+    }
+    try {
+      const res = await fetch('/api/contract-stage-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount,
+          contractId: contract.id,
+          stageId: stage?.label || 'deposit',
+          stageLabel: stage?.label || 'Deposit',
+          customerName: contract.customerName,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || 'Could not start Stripe Checkout');
+        return;
+      }
+      if (data.url) {
+        window.open(String(data.url), '_blank', 'noopener,noreferrer');
+        toast.success('Stripe Checkout opened');
+      }
+    } catch {
+      toast.error('Checkout request failed');
+    }
+  };
+
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6 flex items-center gap-3">
@@ -328,6 +361,11 @@ export default function ContractsHub() {
                         <img src={c.signatureDataUrl} alt="Signature" className="h-8 border rounded bg-white" />
                       )}
                       <Button size="sm" variant="outline" onClick={() => setPreviewContract(c)}><Eye className="w-4 h-4 mr-1" />Preview</Button>
+                      {c.status === 'signed' && c.depositAmount > 0 && (
+                        <Button size="sm" variant="secondary" onClick={() => void handleCollectPayment(c)}>
+                          <CreditCard className="w-4 h-4 mr-1" />Collect {gbp(c.depositAmount)}
+                        </Button>
+                      )}
                       {c.status !== 'signed' && (
                         <Button size="sm" onClick={() => handleSend(c)}><Send className="w-4 h-4 mr-1" />{c.status === 'sent' ? 'Resend link' : 'Send'}</Button>
                       )}

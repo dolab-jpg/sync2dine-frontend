@@ -159,6 +159,27 @@ export async function provisionOrganizationInSupabase(input: ProvisionOrgInput) 
     data: { updatedAt: new Date().toISOString() },
   }, { onConflict: 'org_id' });
 
+  // Seed company profile row so the tenant starts as a full product clone
+  await supabase.from('integrations').upsert(
+    {
+      org_id: org.id,
+      integration_id: 'company',
+      enabled: true,
+      mock_mode: false,
+      status: 'connected',
+      values: {
+        companyName: name,
+        website: '',
+        email: contactEmail,
+        phone: input.contactPhone ?? '',
+        address: input.address ?? '',
+        autoSendReceiptOnPaid: 'true',
+      },
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'org_id,integration_id' },
+  );
+
   const today = new Date().toISOString().slice(0, 10);
   await supabase.from('recruitment_jobs').upsert(
     DEFAULT_RECRUITMENT_JOBS.map((job) => ({

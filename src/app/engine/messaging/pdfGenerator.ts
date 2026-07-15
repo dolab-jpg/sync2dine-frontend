@@ -57,14 +57,37 @@ async function buildPdfDocument(options: BuildPdfOptions): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const page = doc.addPage([595, 842]);
-  const { width, height } = page.getSize();
-  let y = height - 48;
+  const pageWidth = 595;
+  const pageHeight = 842;
+  const marginX = 48;
+  const bottomMargin = 72;
+  const topContent = pageHeight - 48;
+
+  let page = doc.addPage([pageWidth, pageHeight]);
+  let y = topContent;
 
   const logo = company.logoUrl ? await embedLogo(doc, company.logoUrl) : null;
   const logoWidth = 72;
   const logoHeight = logo ? (logo.height / logo.width) * logoWidth : 0;
-  const headerRight = width - 48;
+  const headerRight = pageWidth - marginX;
+
+  const ensureSpace = (needed: number) => {
+    if (y - needed < bottomMargin) {
+      drawLegalFooter(page, font, company, marginX);
+      page = doc.addPage([pageWidth, pageHeight]);
+      y = topContent;
+      page.drawText(company.companyName?.trim() || 'Builder Diddies', {
+        x: marginX,
+        y,
+        size: 10,
+        font: bold,
+        color: rgb(0.35, 0.35, 0.4),
+      });
+      y -= 18;
+      page.drawText(title, { x: marginX, y, size: 12, font: bold, color: rgb(0.1, 0.1, 0.2) });
+      y -= 20;
+    }
+  };
 
   if (logo) {
     page.drawImage(logo, {
@@ -75,29 +98,30 @@ async function buildPdfDocument(options: BuildPdfOptions): Promise<Uint8Array> {
     });
   }
 
-  const companyName = company.companyName?.trim() || 'TradePro Ltd';
-  page.drawText(companyName, { x: 48, y, size: 14, font: bold, color: rgb(0.1, 0.1, 0.2) });
+  const companyName = company.companyName?.trim() || 'Builder Diddies';
+  page.drawText(companyName, { x: marginX, y, size: 14, font: bold, color: rgb(0.1, 0.1, 0.2) });
   y -= 16;
 
-  const headerLines = [company.address, company.phone, company.email].filter((l) => l?.trim());
+  const headerLines = [company.address, company.phone, company.email, company.website].filter((l) => l?.trim());
   for (const line of headerLines) {
-    page.drawText(line!.trim(), { x: 48, y, size: 9, font, color: rgb(0.35, 0.35, 0.4) });
+    ensureSpace(14);
+    page.drawText(line!.trim(), { x: marginX, y, size: 9, font, color: rgb(0.35, 0.35, 0.4) });
     y -= 12;
   }
 
   y -= 8;
   page.drawLine({
-    start: { x: 48, y },
-    end: { x: width - 48, y },
+    start: { x: marginX, y },
+    end: { x: pageWidth - marginX, y },
     thickness: 0.5,
     color: rgb(0.85, 0.85, 0.88),
   });
   y -= 22;
 
-  page.drawText(title, { x: 48, y, size: 18, font: bold, color: rgb(0.1, 0.1, 0.2) });
+  page.drawText(title, { x: marginX, y, size: 18, font: bold, color: rgb(0.1, 0.1, 0.2) });
   y -= 22;
   page.drawText(`Generated: ${new Date().toLocaleString('en-GB')}`, {
-    x: 48,
+    x: marginX,
     y,
     size: 9,
     font,
@@ -112,18 +136,32 @@ async function buildPdfDocument(options: BuildPdfOptions): Promise<Uint8Array> {
   }
 
   for (const section of allSections) {
-    if (y < 100) break;
-    page.drawText(section.heading, { x: 48, y, size: 12, font: bold, color: rgb(0.15, 0.35, 0.55) });
+    ensureSpace(30);
+    page.drawText(section.heading, { x: marginX, y, size: 12, font: bold, color: rgb(0.15, 0.35, 0.55) });
     y -= 16;
     for (const line of section.lines) {
-      if (!line || y < 72) break;
-      page.drawText(line, { x: 56, y, size: 10, font, color: rgb(0.15, 0.15, 0.2) });
-      y -= 14;
+      if (!line) continue;
+      // Soft wrap long lines for pdf-lib (no native wrap)
+      const chunks: string[] = [];
+      const maxChars = 90;
+      let rest = line;
+      while (rest.length > maxChars) {
+        let breakAt = rest.lastIndexOf(' ', maxChars);
+        if (breakAt < 40) breakAt = maxChars;
+        chunks.push(rest.slice(0, breakAt));
+        rest = rest.slice(breakAt).trimStart();
+      }
+      if (rest) chunks.push(rest);
+      for (const chunk of chunks) {
+        ensureSpace(16);
+        page.drawText(chunk, { x: 56, y, size: 10, font, color: rgb(0.15, 0.15, 0.2) });
+        y -= 14;
+      }
     }
     y -= 10;
   }
 
-  drawLegalFooter(page, font, company, 48);
+  drawLegalFooter(page, font, company, marginX);
 
   return doc.save();
 }

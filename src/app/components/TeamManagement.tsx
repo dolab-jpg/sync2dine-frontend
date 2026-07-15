@@ -16,6 +16,8 @@ import {
   type PendingInvite,
 } from '../auth/lib/authApi';
 import { getSupabase, isSupabaseConfigured } from '../../lib/supabase/client';
+import { getActiveOrgId } from '../engine/platform/orgContext';
+import { BDIDDIES_HOME_ORG_ID } from '../engine/platform/homeOrg';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { LANG_OPTIONS, normalizeLang } from '../i18n/languages';
@@ -72,9 +74,13 @@ export default function TeamManagement() {
         setLoading(false);
         return;
       }
+      const orgId =
+        user.role === 'platform_owner'
+          ? getActiveOrgId() || BDIDDIES_HOME_ORG_ID
+          : undefined;
       const [members, invites] = await Promise.all([
-        fetchMembers(token),
-        fetchPendingInvites(token).catch(() => [] as PendingInvite[]),
+        fetchMembers(token, orgId),
+        fetchPendingInvites(token, orgId).catch(() => [] as PendingInvite[]),
       ]);
       setTeamMembers(members);
       setPendingInvites(invites);
@@ -83,7 +89,7 @@ export default function TeamManagement() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user.role]);
 
   useEffect(() => {
     void refresh();
@@ -117,7 +123,14 @@ export default function TeamManagement() {
         toast.error('Sign in with a real account to invite teammates');
         return;
       }
-      const result = await createInvite({ email: formData.email.trim(), role: formData.role }, token);
+      const orgId =
+        user.role === 'platform_owner'
+          ? getActiveOrgId() || BDIDDIES_HOME_ORG_ID
+          : undefined;
+      const result = await createInvite(
+        { email: formData.email.trim(), role: formData.role, orgId },
+        token,
+      );
       setInviteUrl(result.invite.acceptUrl);
       toast.success('Invite created — share the accept link with your teammate');
       setFormData({ name: '', email: '', role: 'staff', phone: '' });

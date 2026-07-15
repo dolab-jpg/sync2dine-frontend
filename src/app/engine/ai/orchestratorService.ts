@@ -90,6 +90,7 @@ export const AUTO_ACTIONS = new Set([
   'lookupProjectStatus',
   'getPortalLink',
   'escalateToStaff',
+  'draftQuote',
   'generateQuotePdf',
   'generateOpsReport',
   'sendToStaffCynthia',
@@ -175,6 +176,8 @@ export async function sendOrchestratorMessage(
     customerName?: string;
     customerId?: string;
     dataContext?: Record<string, unknown[] | Record<string, unknown>>;
+    /** Image data URLs for vision (photos attached in Cynthia / overlay). */
+    images?: string[];
   }
 ): Promise<OrchestratorResponse> {
   const openaiConfig = integrationService.getConfig('openai');
@@ -193,6 +196,11 @@ export async function sendOrchestratorMessage(
   const cappedCustomers = options?.customers?.slice(0, CUSTOMER_PAYLOAD_CAP);
   const cappedQuotes = options?.quotes?.slice(0, QUOTE_PAYLOAD_CAP);
 
+  const companyName =
+    options?.companyName
+    ?? integrationService.getConfig('company').companyName
+    ?? 'Builder Diddies';
+
   const body: Record<string, unknown> = {
     model: options?.model || openaiConfig.staffModel || 'gpt-4o-mini',
     apiKey: integrationService.getLiveOpenAIApiKey(),
@@ -200,7 +208,7 @@ export async function sendOrchestratorMessage(
     provider: openaiConfig.provider || 'openai',
     messages,
     voicePrompt,
-    companyName: options?.companyName ?? 'TradePro',
+    companyName,
     businessSnapshot: options?.businessSnapshot,
     orchestratorMode: mode,
     aiStudio: {
@@ -212,6 +220,7 @@ export async function sendOrchestratorMessage(
     dataContext: options?.dataContext,
     channel: options?.channel ?? 'overlay_chat',
     pendingTask: options?.pendingTask,
+    images: options?.images?.slice(0, 6),
   };
 
   if (isCustomer) {

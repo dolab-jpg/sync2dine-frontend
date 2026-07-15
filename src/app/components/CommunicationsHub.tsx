@@ -21,6 +21,8 @@ import { InboxPanel } from './mailbox/InboxPanel';
 import { EmailComposePanel } from './mailbox/EmailComposePanel';
 import { MailboxConnectPanel } from './mailbox/MailboxConnectPanel';
 import { LeadInboxPanel } from './mailbox/LeadInboxPanel';
+import { getActiveOrgId } from '../engine/platform/orgContext';
+import { BDIDDIES_HOME_ORG_ID } from '../engine/platform/homeOrg';
 
 const DEFAULT_TEMPLATES = [
   {
@@ -28,6 +30,13 @@ const DEFAULT_TEMPLATES = [
     name: 'Quote Email',
     subject: 'Your Quote from {COMPANY_NAME}',
     body: `Dear {CUSTOMER_NAME},\n\nYour quote total is £{QUOTE_TOTAL}, valid until {QUOTE_EXPIRY}.\n\nReply to this email or call us if you have questions.\n\nBest regards,\n{USER_NAME}\n{COMPANY_NAME}`,
+    type: 'quote_sent' as MessageEventType,
+  },
+  {
+    id: 'quote_chase',
+    name: 'Quote Chase',
+    subject: 'Just checking in — your quote from {COMPANY_NAME}',
+    body: `Dear {CUSTOMER_NAME},\n\nI wanted to follow up on the quote we sent (total £{QUOTE_TOTAL}). Happy to answer any questions or adjust the scope if needed.\n\nWould a quick call this week work for you?\n\nBest regards,\n{USER_NAME}\n{COMPANY_NAME}`,
     type: 'quote_sent' as MessageEventType,
   },
   {
@@ -42,36 +51,58 @@ const DEFAULT_TEMPLATES = [
 export default function CommunicationsHub() {
   const context = useContext(AppContext);
   const userId = context?.user?.id;
+  const mailboxOrgId = getActiveOrgId() || BDIDDIES_HOME_ORG_ID;
   const [searchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab');
+  const templateFromUrl = searchParams.get('template');
+  const customerFromUrl = searchParams.get('customerId');
   const [activeTab, setActiveTab] = useState(tabFromUrl === 'leads' ? 'leads' : 'send');
   const [logs, setLogs] = useState(messagingHub.getLogs());
   const [sendEmail, setSendEmail] = useState(true);
   const [sendWhatsApp, setSendWhatsApp] = useState(true);
   const [mailboxConnection, setMailboxConnection] = useState<MailboxConnection | null>(null);
   const [replyDraft, setReplyDraft] = useState<{ to: string; subject: string; body: string } | null>(null);
+  const [form, setForm] = useState({
+    customerId: customerFromUrl || '',
+    templateId: templateFromUrl && DEFAULT_TEMPLATES.some((t) => t.id === templateFromUrl)
+      ? templateFromUrl
+      : 'quote',
+    subject: (DEFAULT_TEMPLATES.find((t) => t.id === templateFromUrl) ?? DEFAULT_TEMPLATES[0]).subject,
+    body: (DEFAULT_TEMPLATES.find((t) => t.id === templateFromUrl) ?? DEFAULT_TEMPLATES[0]).body,
+    quoteId: '',
+  });
 
   useEffect(() => {
     if (tabFromUrl === 'leads') setActiveTab('leads');
   }, [tabFromUrl]);
 
+  useEffect(() => {
+    if (templateFromUrl) {
+      const t = DEFAULT_TEMPLATES.find((x) => x.id === templateFromUrl);
+      if (t) {
+        setForm((prev) => ({
+          ...prev,
+          templateId: t.id,
+          subject: t.subject,
+          body: t.body,
+          customerId: customerFromUrl || prev.customerId,
+        }));
+        setActiveTab('send');
+      }
+    } else if (customerFromUrl) {
+      setForm((prev) => ({ ...prev, customerId: customerFromUrl }));
+    }
+  }, [templateFromUrl, customerFromUrl]);
+
   const loadMailbox = async () => {
     if (!userId) return;
-    const list = await mailboxService.getConnections(userId, 'default');
+    const list = await mailboxService.getConnections(userId, mailboxOrgId);
     setMailboxConnection(list[0] ?? null);
   };
 
   useEffect(() => {
     void loadMailbox();
-  }, [userId]);
-
-  const [form, setForm] = useState({
-    customerId: '',
-    templateId: 'quote',
-    subject: DEFAULT_TEMPLATES[0].subject,
-    body: DEFAULT_TEMPLATES[0].body,
-    quoteId: '',
-  });
+  }, [userId, mailboxOrgId]);
 
   useEffect(() => {
     setLogs(messagingHub.getLogs());
@@ -252,13 +283,13 @@ export default function CommunicationsHub() {
         </TabsContent>
 
         <TabsContent value="inbox" className="mt-4">
-          <InboxPanel userId={user.id} orgId="default" connection={mailboxConnection} />
+          <InboxPanel userId={user.id} orgId={mailboxOrgId} connection={mailboxConnection} />
         </TabsContent>
 
         <TabsContent value="compose" className="mt-4">
           <EmailComposePanel
             userId={user.id}
-            orgId="default"
+            orgId={mailboxOrgId}
             connection={mailboxConnection}
             defaultTo={replyDraft?.to}
             defaultSubject={replyDraft?.subject}
@@ -269,7 +300,7 @@ export default function CommunicationsHub() {
         <TabsContent value="mailbox" className="mt-4">
           <MailboxConnectPanel
             userId={user.id}
-            orgId="default"
+            orgId={mailboxOrgId}
             onConnectionChange={() => void loadMailbox()}
           />
         </TabsContent>

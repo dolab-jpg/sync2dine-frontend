@@ -60,10 +60,22 @@ export async function signOut(): Promise<void> {
 export async function ensureActiveOrgId(): Promise<string | null> {
   const existing = getActiveOrgId();
   if (existing) return existing;
-  if (!isSupabaseConfigured()) return null;
   if (!orgResolveInFlight) {
     orgResolveInFlight = (async () => {
       try {
+        if (isSupabaseConfigured()) {
+          const profile = await getCurrentProfile();
+          if (profile?.org_id) {
+            setActiveOrgId(profile.org_id);
+            return profile.org_id;
+          }
+          // platform_owner with no home membership → Builder Diddies home org
+          if (profile?.role === 'platform_owner') {
+            const { BDIDDIES_HOME_ORG_ID } = await import('./homeOrg');
+            setActiveOrgId(BDIDDIES_HOME_ORG_ID);
+            return BDIDDIES_HOME_ORG_ID;
+          }
+        }
         const orgId = await getOrgId();
         if (orgId) setActiveOrgId(orgId);
         return orgId;
@@ -96,8 +108,11 @@ export function installApiFetchInterceptor(): () => void {
       if (!orgId && !headers.has('X-Org-Id')) {
         orgId = await ensureActiveOrgId();
       }
-      // Always send an org id so server-side org OpenAI keys resolve (local default).
-      if (!orgId) orgId = 'default';
+      // Always send an org id — platform_owner defaults to B-Diddies home, not generic "default".
+      if (!orgId) {
+        const { BDIDDIES_HOME_ORG_ID } = await import('./homeOrg');
+        orgId = BDIDDIES_HOME_ORG_ID;
+      }
       const token = await getSupabaseAccessToken();
       if (!headers.has('X-Org-Id')) headers.set('X-Org-Id', orgId);
       if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
@@ -113,5 +128,13 @@ export function installApiFetchInterceptor(): () => void {
 export async function syncActiveOrgFromProfile(): Promise<void> {
   if (!isSupabaseConfigured()) return;
   const profile = await getCurrentProfile();
-  if (profile?.org_id) setActiveOrgId(profile.org_id);
+  if (profile?.org_id) {
+    setActiveOrgId(profile.org_id);
+    return;
+  }
+  // platform_owner: keep existing acting-as if set; otherwise seed B-Diddies home
+  if (profile?.role === 'platform_owner' && !getActiveOrgId()) {
+    const { BDIDDIES_HOME_ORG_ID } = await import('./homeOrg');
+    setActiveOrgId(BDIDDIES_HOME_ORG_ID);
+  }
 }

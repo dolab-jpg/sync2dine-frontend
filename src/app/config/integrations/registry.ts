@@ -292,15 +292,15 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     description: 'Used by Cynthia, templates, and invoice/quote/receipt PDFs',
     category: 'general',
     fields: [
-      { key: 'companyName', label: 'Company Name', type: 'text', placeholder: 'TradePro Ltd' },
-      { key: 'website', label: 'Website', type: 'url', placeholder: 'https://www.example.com' },
+      { key: 'companyName', label: 'Company Name', type: 'text', placeholder: 'Builder Diddies' },
+      { key: 'website', label: 'Website', type: 'url', placeholder: 'https://b-diddies.com' },
       { key: 'companyRegistrationNumber', label: 'Company registration number', type: 'text', placeholder: '12345678' },
       { key: 'vatNumber', label: 'VAT number', type: 'text', placeholder: 'GB123456789' },
-      { key: 'phone', label: 'Phone', type: 'text', placeholder: '020 1234 5678' },
-      { key: 'email', label: 'Email', type: 'text', placeholder: 'info@tradepro.com' },
+      { key: 'phone', label: 'Phone', type: 'text', placeholder: '020 3745 3233' },
+      { key: 'email', label: 'Email', type: 'text', placeholder: 'info@b-diddies.com' },
       { key: 'address', label: 'Address', type: 'text' },
       { key: 'logoUrl', label: 'Logo URL', type: 'url', placeholder: 'Upload below or paste image URL' },
-      { key: 'accountName', label: 'Bank account name', type: 'text', placeholder: 'TradePro Ltd' },
+      { key: 'accountName', label: 'Bank account name', type: 'text', placeholder: 'Builder Diddies' },
       { key: 'sortCode', label: 'Sort code', type: 'text', placeholder: '20-00-00' },
       { key: 'accountNumber', label: 'Account number', type: 'text', placeholder: '12345678' },
       {
@@ -340,10 +340,11 @@ export function getDefaultFieldValues(def: IntegrationDefinition): Record<string
     values.cyrusDisplayName = 'Cynthia';
   }
   if (def.id === 'company') {
-    values.companyName = 'TradePro Ltd';
-    values.phone = '020 1234 5678';
-    values.email = 'info@tradepro.com';
-    values.address = '123 High Street, London, SW1A 1AA';
+    values.companyName = 'Builder Diddies';
+    values.website = 'https://b-diddies.com';
+    values.phone = '020 3745 3233';
+    values.email = 'info@b-diddies.com';
+    values.address = '';
     values.autoSendReceiptOnPaid = 'true';
   }
   if (def.id === 'email_oauth') {
@@ -354,7 +355,7 @@ export function getDefaultFieldValues(def: IntegrationDefinition): Record<string
     values.host = 'smtp.gmail.com';
     values.port = '587';
     values.secure = 'true';
-    values.fromName = 'TradePro';
+    values.fromName = 'Builder Diddies';
   }
   if (def.id === 'storage') {
     values.provider = 'local';

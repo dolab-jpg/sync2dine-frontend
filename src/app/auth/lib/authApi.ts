@@ -155,8 +155,9 @@ export async function updateMember(
   return data.member;
 }
 
-export async function fetchPendingInvites(accessToken: string): Promise<PendingInvite[]> {
-  const res = await fetch(`${apiBase()}/api/auth/invites`, {
+export async function fetchPendingInvites(accessToken: string, orgId?: string): Promise<PendingInvite[]> {
+  const qs = orgId ? `?orgId=${encodeURIComponent(orgId)}` : '';
+  const res = await fetch(`${apiBase()}/api/auth/invites${qs}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const data = await parseJson<{ invites: PendingInvite[] }>(res);

@@ -209,18 +209,39 @@ export default function ComprehensiveCRM() {
               <p className="font-semibold text-amber-900 mb-2">{dueFollowUps.length} follow-up{dueFollowUps.length > 1 ? 's' : ''} due</p>
               <div className="flex flex-wrap gap-2">
                 {dueFollowUps.slice(0, 6).map((c) => (
-                  <Button
-                    key={c.id}
-                    variant="outline"
-                    size="sm"
-                    className="bg-white"
-                    onClick={() => {
-                      const lead = toLead(c);
-                      if (lead) setSelectedLead(lead);
-                    }}
-                  >
-                    {c.name}
-                  </Button>
+                  <div key={c.id} className="flex flex-wrap gap-1 items-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="bg-white"
+                      onClick={() => {
+                        const lead = toLead(c);
+                        if (lead) setSelectedLead(lead);
+                      }}
+                    >
+                      {c.name}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-8"
+                      onClick={() => {
+                        window.location.href = `/communications?customerId=${encodeURIComponent(c.id)}&template=quote_chase`;
+                      }}
+                    >
+                      Email chase
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-8"
+                      onClick={() => {
+                        window.location.href = `/calls?tab=outbound&to=${encodeURIComponent(c.phone || '')}`;
+                      }}
+                    >
+                      Call chase
+                    </Button>
+                  </div>
                 ))}
               </div>
             </CardContent>

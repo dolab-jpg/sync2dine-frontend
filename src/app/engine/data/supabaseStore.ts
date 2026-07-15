@@ -4,12 +4,14 @@
 import { getSupabase, isSupabaseConfigured, getOrgId } from '../../../lib/supabase/client';
 import type { UnifiedProject } from '../project/types';
 import type { CustomerContact } from '../project/types';
-
-const DEFAULT_ORG = '00000000-0000-0000-0000-000000000001';
+import { BDIDDIES_HOME_ORG_ID } from '../platform/homeOrg';
+import { getActiveOrgId } from '../platform/orgContext';
 
 async function resolveOrg(): Promise<string> {
+  const active = getActiveOrgId();
+  if (active) return active;
   const orgId = await getOrgId();
-  return orgId ?? DEFAULT_ORG;
+  return orgId ?? BDIDDIES_HOME_ORG_ID;
 }
 
 // ── Projects ──

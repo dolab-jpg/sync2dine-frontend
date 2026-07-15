@@ -124,7 +124,7 @@ export function resolveSystemPrompt(body: OrchestratorRequest): string {
 export function buildOrchestratorSystemPrompt(body: OrchestratorRequest): string {
   const mode = body.orchestratorMode ?? 'staff';
   const role = getRequestRole(body);
-  const company = firstString(body.companyName) ?? 'TradePro';
+  const company = firstString(body.companyName) ?? 'Builder Diddies';
   const userName = firstString(
     body.staffContext?.userName,
     body.customerContext?.customerName,
@@ -143,7 +143,7 @@ export function buildOrchestratorSystemPrompt(body: OrchestratorRequest): string
   if (mode === 'customer' || mode === 'cyrus' || role === 'customer') {
     const customerName = String(body.customerContext?.customerName ?? userName);
     const projectName = String(body.projectContext?.projectName ?? 'their project');
-    return `You are TradePro AI — the company assistant for ${company}. You are chatting with ${customerName}${userId ? ` (customer id: ${userId})` : ''}.
+    return `You are ${company}'s AI assistant. You are chatting with ${customerName}${userId ? ` (customer id: ${userId})` : ''}.
 Current page: ${route}. Active project: ${projectName}.
 
 ${rolePersona('customer')}
@@ -157,7 +157,7 @@ LINKS: only share links exactly as returned by tools. NEVER invent domains or UR
 Chat naturally like a helpful human — direct, warm, gently witty British tone. Always act in ${company}'s best interests (protect confidential data, don't over-promise). If a tool fails, say so plainly and offer the office.`;
   }
 
-  return `You are TradePro AI — the full company assistant for ${company}.
+  return `You are ${company}'s AI — the full company assistant for ${company}.
 You are talking to ${userName} (role: ${role}, user id: ${userId ?? 'session'}) on page ${route}.
 Operating mode: ${mode}.
 Business snapshot: ${snapshot}.
@@ -175,6 +175,11 @@ If a tool errors, say so plainly and offer the manual path.
 
 Available trades: bathroom, kitchen, electrical, plumbing, roofing, flooring, painting, plastering, extensions, windows, loft, landscaping.
 Use readData/writeData/navigate for open-ended tasks, or specialized tools (saveCustomer, saveQuote, proposeSchedule, convertQuoteToProject, etc.) for structured workflows.
+
+QUOTE PDF WORKFLOW (chat-first):
+- Discuss scope, line items and totals in chat first. Call draftQuote to show a structured draft the staff can review.
+- ONLY call generateQuotePdf after the user confirms (e.g. "yes", "looks good", "make the PDF", "PDF it").
+- Never invent PDF bytes yourself — always use generateQuotePdf for the file.
 
 TASK PLANNING (big or vague requests):
 - For large multi-step jobs: ask up to 4 targeted questions before creating records (customer identity, trade, budget, timeline, site address).

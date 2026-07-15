@@ -21,12 +21,15 @@ import { StaffPhoneRegistration } from './settings/StaffPhoneRegistration';
 import { StaffSoftphones } from './settings/StaffSoftphones';
 import { canManageCompanySettings } from '../engine/ai/rolePermissions';
 import type { AgentRole } from '../engine/ai/agentContext';
+import { getActiveOrgId } from '../engine/platform/orgContext';
+import { BDIDDIES_HOME_ORG_ID } from '../engine/platform/homeOrg';
 
 export default function Settings() {
   const context = useContext(AppContext);
   if (!context) return null;
 
   const { pricingRules, addPricingRule, updatePricingRule, deletePricingRule, user } = context;
+  const mailboxOrgId = getActiveOrgId() || BDIDDIES_HOME_ORG_ID;
 
   if (!canManageCompanySettings(user.role as AgentRole)) {
     return (
@@ -415,7 +418,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="email-inbox" className="space-y-6">
-          <MailboxConnectPanel userId={user.id} orgId="default" />
+          <MailboxConnectPanel userId={user.id} orgId={mailboxOrgId} />
         </TabsContent>
 
         <TabsContent value="import-export" className="space-y-6">

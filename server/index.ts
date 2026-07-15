@@ -28,6 +28,7 @@ import { handleAgentCredentialsRoutes } from './agent-credentials-routes';
 import { handleOrgOpenAIKeyRoutes } from './org-openai-key-routes';
 import { startMailboxPoller } from './mailbox/imapSyncService';
 import { startOutboundWorker } from './outbound-worker';
+import { ensureBdiddiesHomeOrg } from './organizations';
 
 const PORT = Number(process.env.PORT) || 3001;
 const ALLOWED_ORIGIN = process.env.APP_BASE_URL?.trim() || '*';
@@ -120,6 +121,7 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
 
 server.listen(PORT, () => {
   console.log(`TradePro API server running on port ${PORT}`);
+  ensureBdiddiesHomeOrg();
   startMailboxPoller();
   startOutboundWorker();
   void import('./code-fix-handler').then(({ startCodeFixWorker }) => startCodeFixWorker());

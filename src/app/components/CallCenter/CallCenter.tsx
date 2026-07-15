@@ -19,6 +19,7 @@ import {
 import { toast } from 'sonner';
 import { SoftPhonePanel } from './SoftPhonePanel';
 import { AppContext } from '../../App';
+import { integrationService } from '../../engine/integrations/integrationService';
 
 interface CallTurn {
   role: 'caller' | 'agent' | 'system';
@@ -240,8 +241,8 @@ export default function CallCenter() {
   const [testSpeech, setTestSpeech] = useState('');
   const [testTranscript, setTestTranscript] = useState<Array<{ role: string; content: string }>>([]);
   const [testRunning, setTestRunning] = useState(false);
-  const [outboundTo, setOutboundTo] = useState('');
-  const [outboundTemplate, setOutboundTemplate] = useState('lead_callback');
+  const [outboundTo, setOutboundTo] = useState(() => searchParams.get('to') || '');
+  const [outboundTemplate, setOutboundTemplate] = useState('quote_chase');
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [phoneLines, setPhoneLines] = useState<PhoneLine[]>([]);
@@ -805,7 +806,9 @@ export default function CallCenter() {
                         <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-900 truncate">On call with {call.contactName ?? 'Unknown caller'}</p>
+                        <p className="font-medium text-slate-900 truncate">
+                          On call with {call.contactName && call.contactName !== 'Guest' ? call.contactName : 'Guest — new caller'}
+                        </p>
                         <p className="text-sm text-slate-600">
                           <span className="text-slate-500">Caller: </span>
                           <span className="font-mono font-semibold text-slate-900">{formatPhone(call.from)}</span>
@@ -813,6 +816,24 @@ export default function CallCenter() {
                           {call.to ? ` · to ${formatPhone(call.to)}` : ''}
                           {' · '}{formatDuration(call.elapsedSec ?? undefined)} elapsed
                         </p>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {matched?.metadata?.phoneAuth && PHONE_AUTH_LABELS[matched.metadata.phoneAuth] && (
+                            <Badge
+                              variant={matched.metadata.phoneAuth === 'verified' ? 'default' : 'secondary'}
+                              className={`text-xs ${matched.metadata.phoneAuth === 'verified' ? 'bg-green-600' : ''}`}
+                            >
+                              PIN {PHONE_AUTH_LABELS[matched.metadata.phoneAuth]}
+                            </Badge>
+                          )}
+                          {(!call.contactName || call.contactName === 'Guest') && (
+                            <Badge variant="outline" className="text-xs">
+                              Company: {integrationService.getConfig('company').companyName || 'Builder Diddies'}
+                              {integrationService.getConfig('company').website
+                                ? ` · ${integrationService.getConfig('company').website}`
+                                : ''}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                       <Badge className="shrink-0">{call.status.replace(/_/g, ' ')}</Badge>
                       {customerId ? (
@@ -1328,7 +1349,7 @@ export default function CallCenter() {
             <Card>
               <CardHeader>
                 <CardTitle>Queue Outbound Call</CardTitle>
-                <CardDescription>Ready for your outbound module to plug in</CardDescription>
+                <CardDescription>Queue chase calls (quote follow-up, payment reminder, lead callback) via the connected voice API</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>

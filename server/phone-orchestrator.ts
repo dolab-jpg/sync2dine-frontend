@@ -71,6 +71,7 @@ export async function handlePhoneTurn(body: PhoneOrchestratorRequest): Promise<{
       afterHours,
       callContext.direction,
       campaign ? `${campaign.greeting} ${campaign.purpose}` : undefined,
+      body.companyName ?? 'Builder Diddies',
     );
     return { content: greeting, intent: callContext.intent, toolsUsed, proposedActions: [] };
   }

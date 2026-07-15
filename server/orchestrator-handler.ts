@@ -1080,8 +1080,37 @@ const EMAIL_TOOLS = [
   {
     type: 'function' as const,
     function: {
+      name: 'draftQuote',
+      description:
+        'Present a structured quote draft in chat for staff review. Do NOT generate a PDF. Use this before generateQuotePdf so the user can confirm line items and totals.',
+      parameters: {
+        type: 'object',
+        properties: {
+          customerName: { type: 'string' },
+          total: { type: 'number' },
+          tradeName: { type: 'string' },
+          notes: { type: 'string' },
+          lineItems: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                description: { type: 'string' },
+                amount: { type: 'number' },
+              },
+            },
+          },
+        },
+        required: ['customerName', 'total'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'generateQuotePdf',
-      description: 'Generate a quote PDF for inline display in Cynthia chat',
+      description:
+        'Generate a multi-page quote PDF for Cynthia after the user has confirmed the draft in chat. Do not call until the user says the draft looks good.',
       parameters: {
         type: 'object',
         properties: {
@@ -1573,6 +1602,7 @@ const AUTO_ACTION_NAMES = new Set([
   'draftEmailReply',
   'sendEmailReply',
   'sendEmailWithAttachment',
+  'draftQuote',
   'generateQuotePdf',
   'generateOpsReport',
   'sendToStaffCynthia',
@@ -2884,12 +2914,28 @@ async function runStaffOrchestrator(
   }
 
   const tools = getToolsForMode(mode, body);
+  const attachedImages = Array.isArray(body.images) ? body.images.filter((u): u is string => typeof u === 'string' && u.length > 0).slice(0, 6) : [];
   const chatMessages: Array<Record<string, unknown>> = [
     { role: 'system', content: resolveSystemPrompt(body) },
-    ...messages.map((message) => ({
-      role: toMessageRole(message.role),
-      content: message.content,
-    })),
+    ...messages.map((message, index) => {
+      const isLastUser =
+        index === messages.length - 1
+        && toMessageRole(message.role) === 'user'
+        && attachedImages.length > 0;
+      if (isLastUser) {
+        const parts: Array<Record<string, unknown>> = [
+          { type: 'text', text: message.content || 'Please review the attached image(s).' },
+        ];
+        for (const url of attachedImages) {
+          parts.push({ type: 'image_url', image_url: { url } });
+        }
+        return { role: toMessageRole(message.role), content: parts };
+      }
+      return {
+        role: toMessageRole(message.role),
+        content: message.content,
+      };
+    }),
   ];
   const proposedActions: OrchestratorAction[] = [];
   let detectedTrades: OrchestratorResult['detectedTrades'] = [];

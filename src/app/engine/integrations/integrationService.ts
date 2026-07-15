@@ -213,7 +213,7 @@ export const integrationService = {
   },
 
   getCompanyName(): string {
-    return integrationService.getConfig('company').companyName || 'TradePro Ltd';
+    return integrationService.getConfig('company').companyName || 'Builder Diddies';
   },
 
   getCompanyProfile(): ReturnType<typeof getCompanyProfile> {
