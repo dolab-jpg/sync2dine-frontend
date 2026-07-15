@@ -4,7 +4,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   {
     id: 'openai',
     name: 'Company AI Brain',
-    description: 'Company-wide OpenAI key (primary) — powers chat, job pricing, photos, Cynthia, and Aria. Optional DeepSeek for text only.',
+    description: 'Company-wide OpenAI key (primary) — powers chat, job pricing, photos, and Cynthia (staff, web, phone). Optional DeepSeek for text only.',
     category: 'ai',
     docsUrl: 'https://platform.openai.com/docs',
     fields: [
@@ -121,28 +121,6 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     ],
   },
   {
-    id: 'mongodb',
-    name: 'MongoDB Atlas',
-    description: 'Cloud database for projects, CRM data, and AI context',
-    category: 'database',
-    docsUrl: 'https://www.mongodb.com/docs/atlas/connect-to-cluster/',
-    fields: [
-      {
-        key: 'connectionString',
-        label: 'Connection String',
-        type: 'password',
-        placeholder: 'mongodb+srv://user:pass@cluster.mongodb.net/tradepro',
-        required: true,
-      },
-      {
-        key: 'databaseName',
-        label: 'Database Name',
-        type: 'text',
-        placeholder: 'tradepro',
-      },
-    ],
-  },
-  {
     id: 'webhook_server',
     name: 'Webhook Server',
     description: 'Deployed API for WhatsApp webhooks and messaging',
@@ -190,8 +168,8 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   },
   {
     id: 'voice_telephony',
-    name: 'Voice Telephony (Aria)',
-    description: 'Soho66 SIP bridge for Aria — configure lines in Call Centre → Phone Lines',
+    name: 'Voice Telephony (Cynthia)',
+    description: 'Cynthia phone via Vapi + Soho66 SIP trunk — configure lines in Call Centre → Phone Lines',
     category: 'messaging',
     docsUrl: 'https://docs.jambonz.org/',
     fields: [
@@ -209,7 +187,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   {
     id: 'chatterbox_tts',
     name: 'Chatterbox TTS',
-    description: 'Cloned voice TTS for Aria — upload a Cockney/Del Boy reference WAV on the Call Centre page',
+    description: 'Cloned voice TTS for Cynthia phone — upload a Cockney/Del Boy reference WAV on the Call Centre page',
     category: 'ai',
     fields: [
       { key: 'baseUrl', label: 'Base URL', type: 'url', placeholder: 'http://VPS_IP:8004', required: true },
@@ -223,9 +201,9 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     category: 'files',
     fields: [
       { key: 'provider', label: 'Provider', type: 'select', options: [
-        { value: 'local', label: 'Local (mock)' },
         { value: 'supabase', label: 'Supabase Storage' },
-        { value: 's3', label: 'Amazon S3' },
+        { value: 'local', label: 'Local (offline fallback)' },
+        { value: 's3', label: 'Amazon S3 (not wired)' },
       ]},
       { key: 'bucket', label: 'Bucket', type: 'text' },
       { key: 'accessKey', label: 'Access Key', type: 'password' },
@@ -351,10 +329,8 @@ export function getDefaultFieldValues(def: IntegrationDefinition): Record<string
     values.fromName = 'Builder Diddies';
   }
   if (def.id === 'storage') {
-    values.provider = 'local';
-  }
-  if (def.id === 'mongodb') {
-    values.databaseName = 'tradepro';
+    values.provider = 'supabase';
+    values.bucket = 'project-files';
   }
   if (def.id === 'voice_telephony') {
     values.provider = 'soho66';

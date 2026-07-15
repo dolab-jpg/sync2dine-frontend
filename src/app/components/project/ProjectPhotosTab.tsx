@@ -1,11 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Camera, Upload } from 'lucide-react';
 import { toast } from 'sonner';
-import type { UnifiedProject } from '../../engine/project/types';
-import { uploadProjectFile, getFileUrl } from '../../engine/storage/storageService';
+import type { ProjectFile, UnifiedProject } from '../../engine/project/types';
+import { uploadProjectFile, getFileUrl, resolveFileUrl } from '../../engine/storage/storageService';
 import { getProject } from '../../engine/project/projectStore';
 import { saveProposedActions } from '../../engine/projectAi/projectAiService';
 import { assessExtraFromPhotos, assessProgress } from '../../engine/ai/visionAssessment';
@@ -19,6 +19,38 @@ interface Props {
 
 const EXTRA_KEYWORDS = /\b(extra|variation|change order|upgrade|add(?:ed)?|premium|underfloor|mirror|niche|lighting|brassware)\b/i;
 
+function ProjectFileThumb({ file }: { file: ProjectFile }) {
+  const [url, setUrl] = useState<string | undefined>(() => getFileUrl(file));
+
+  useEffect(() => {
+    let cancelled = false;
+    void resolveFileUrl(file).then((resolved) => {
+      if (!cancelled && resolved) setUrl(resolved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [file.id, file.storagePath, file.dataUrl]);
+
+  return (
+    <div className="rounded-lg border overflow-hidden bg-slate-50">
+      {url && file.mimeType.startsWith('image/') ? (
+        <img src={url} alt={file.filename} className="w-full aspect-square object-cover" />
+      ) : (
+        <div className="aspect-square flex flex-col items-center justify-center p-2">
+          <Camera className="w-8 h-8 text-slate-400" />
+        </div>
+      )}
+      <div className="p-2">
+        <p className="text-xs font-medium truncate">{file.filename}</p>
+        <Label className="text-[10px] text-slate-500">
+          {file.source} · {file.uploadedBy}
+        </Label>
+      </div>
+    </div>
+  );
+}
+
 export function ProjectPhotosTab({ project, uploadedBy, userRole, onUpdate }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -27,14 +59,21 @@ export function ProjectPhotosTab({ project, uploadedBy, userRole, onUpdate }: Pr
   const [filter, setFilter] = useState<string>('all');
   const [uploadCaption, setUploadCaption] = useState('');
 
-  const files = project.files.filter(f =>
-    filter === 'all' || f.source === filter
-  );
-  const imageFiles = project.files.filter((file) => file.mimeType.startsWith('image/') && Boolean(file.dataUrl));
+  const files = project.files.filter((f) => filter === 'all' || f.source === filter);
+  const imageFiles = project.files.filter((file) => file.mimeType.startsWith('image/'));
 
   const refreshProject = () => {
     const latest = getProject(project.id);
     if (latest) onUpdate(latest);
+  };
+
+  const resolveImageUrls = async (list: ProjectFile[]) => {
+    const urls: string[] = [];
+    for (const file of list) {
+      const url = await resolveFileUrl(file);
+      if (url) urls.push(url);
+    }
+    return urls;
   };
 
   const buildChangeOrderSuggestion = (assessment: Awaited<ReturnType<typeof assessExtraFromPhotos>>, photoIds: string[]) => ({
@@ -133,22 +172,23 @@ export function ProjectPhotosTab({ project, uploadedBy, userRole, onUpdate }: Pr
     if (!list?.length) return;
     setUploading(true);
     try {
-      const uploadedImageUrls: string[] = [];
+      const uploadedImages: ProjectFile[] = [];
       const uploadedPhotoIds: string[] = [];
       const caption = uploadCaption.trim();
       for (let i = 0; i < list.length; i++) {
         const result = await uploadProjectFile(project.id, list[i], 'job_site', uploadedBy, {
           caption: caption || list[i].name,
         });
-        if (result.file.mimeType.startsWith('image/') && result.file.dataUrl) {
-          uploadedImageUrls.push(result.file.dataUrl);
+        if (result.file.mimeType.startsWith('image/')) {
+          uploadedImages.push(result.file);
           uploadedPhotoIds.push(result.file.id);
         }
       }
       refreshProject();
       toast.success(`${list.length} file(s) uploaded`);
 
-      if (userRole === 'builder' && caption && EXTRA_KEYWORDS.test(caption) && uploadedImageUrls.length > 0) {
+      if (userRole === 'builder' && caption && EXTRA_KEYWORDS.test(caption) && uploadedImages.length > 0) {
+        const uploadedImageUrls = await resolveImageUrls(uploadedImages);
         await enqueueExtraAssessment(uploadedImageUrls, caption, uploadedPhotoIds);
       }
     } catch {
@@ -163,7 +203,7 @@ export function ProjectPhotosTab({ project, uploadedBy, userRole, onUpdate }: Pr
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2 items-center justify-between">
         <div className="flex gap-2">
-          {['all', 'job_site', 'whatsapp', 'message'].map(src => (
+          {['all', 'job_site', 'whatsapp', 'message'].map((src) => (
             <Button
               key={src}
               size="sm"
@@ -194,11 +234,14 @@ export function ProjectPhotosTab({ project, uploadedBy, userRole, onUpdate }: Pr
           disabled={assessingExtra || imageFiles.length === 0}
           onClick={() => {
             const recentImages = imageFiles.slice(-4);
-            void enqueueExtraAssessment(
-              recentImages.map((file) => file.dataUrl as string),
-              uploadCaption.trim() || 'Assess if latest photos show extra scope',
-              recentImages.map((file) => file.id)
-            );
+            void (async () => {
+              const urls = await resolveImageUrls(recentImages);
+              await enqueueExtraAssessment(
+                urls,
+                uploadCaption.trim() || 'Assess if latest photos show extra scope',
+                recentImages.map((file) => file.id)
+              );
+            })();
           }}
         >
           Assess extra
@@ -209,10 +252,13 @@ export function ProjectPhotosTab({ project, uploadedBy, userRole, onUpdate }: Pr
           disabled={assessingProgress || imageFiles.length === 0}
           onClick={() => {
             const recentImages = imageFiles.slice(-4);
-            void enqueueProgressAssessment(
-              recentImages.map((file) => file.dataUrl as string),
-              recentImages.map((file) => file.id)
-            );
+            void (async () => {
+              const urls = await resolveImageUrls(recentImages);
+              await enqueueProgressAssessment(
+                urls,
+                recentImages.map((file) => file.id)
+              );
+            })();
           }}
         >
           Assess progress
@@ -231,24 +277,9 @@ export function ProjectPhotosTab({ project, uploadedBy, userRole, onUpdate }: Pr
         <p className="text-center text-slate-500 py-8 text-sm">No photos yet. Upload from site or receive via WhatsApp.</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {files.map(file => {
-            const url = getFileUrl(file);
-            return (
-              <div key={file.id} className="rounded-lg border overflow-hidden bg-slate-50">
-                {url && file.mimeType.startsWith('image/') ? (
-                  <img src={url} alt={file.filename} className="w-full aspect-square object-cover" />
-                ) : (
-                  <div className="aspect-square flex flex-col items-center justify-center p-2">
-                    <Camera className="w-8 h-8 text-slate-400" />
-                  </div>
-                )}
-                <div className="p-2">
-                  <p className="text-xs font-medium truncate">{file.filename}</p>
-                  <Label className="text-[10px] text-slate-500">{file.source} · {file.uploadedBy}</Label>
-                </div>
-              </div>
-            );
-          })}
+          {files.map((file) => (
+            <ProjectFileThumb key={file.id} file={file} />
+          ))}
         </div>
       )}
     </div>

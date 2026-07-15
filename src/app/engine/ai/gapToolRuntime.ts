@@ -849,21 +849,23 @@ export async function executeGapTool(
     if (fileAction === 'delete') {
       const fileId = str(output.fileId);
       const fileName = str(output.fileName);
-      const next = files.filter((f) => {
-        if (fileId && f.id === fileId) return false;
-        if (fileName && f.filename === fileName) return false;
-        return true;
+      const target = files.find((f) => {
+        if (fileId && f.id === fileId) return true;
+        if (fileName && f.filename === fileName) return true;
+        return false;
       });
-      if (next.length === files.length) {
+      if (!target) {
         return { action: name, summary: 'File not found.', output, executed: false };
       }
-      updateProject(projectId, { files: next });
+      const { deleteProjectFile } = await import('../storage/storageService');
+      await deleteProjectFile(projectId, target.id);
+      const remaining = getProject(projectId)?.files.length ?? 0;
       return {
         action: name,
         summary: 'File removed from project.',
         entityId: projectId,
         openRoute: `/projects/${projectId}`,
-        output: { ...output, projectId, remaining: next.length },
+        output: { ...output, projectId, remaining },
         executed: true,
       };
     }

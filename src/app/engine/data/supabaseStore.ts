@@ -168,6 +168,7 @@ export async function deleteProjectFromSupabase(id: string): Promise<void> {
 
 // ── Storage ──
 
+/** Uploads to `{orgId}/{path}`. Returns the relative `path` on success (private buckets — resolve via getSignedFileUrl). */
 export async function uploadFileToStorage(
   bucket: string,
   path: string,
@@ -187,8 +188,7 @@ export async function uploadFileToStorage(
     console.warn('Storage upload failed:', error.message);
     return null;
   }
-  const { data } = supabase.storage.from(bucket).getPublicUrl(fullPath);
-  return data.publicUrl;
+  return path;
 }
 
 export async function getSignedFileUrl(bucket: string, path: string): Promise<string | null> {
@@ -196,10 +196,24 @@ export async function getSignedFileUrl(bucket: string, path: string): Promise<st
   const orgId = await resolveOrg();
   if (!orgId) return null;
   const supabase = getSupabase();
-  const fullPath = `${orgId}/${path}`;
+  const fullPath = path.startsWith(`${orgId}/`) ? path : `${orgId}/${path}`;
   const { data, error } = await supabase.storage.from(bucket).createSignedUrl(fullPath, 3600);
   if (error) return null;
   return data.signedUrl;
+}
+
+export async function deleteFileFromStorage(bucket: string, path: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+  const orgId = await resolveOrg();
+  if (!orgId) return false;
+  const supabase = getSupabase();
+  const fullPath = path.startsWith(`${orgId}/`) ? path : `${orgId}/${path}`;
+  const { error } = await supabase.storage.from(bucket).remove([fullPath]);
+  if (error) {
+    console.warn('Storage delete failed:', error.message);
+    return false;
+  }
+  return true;
 }
 
 export async function saveProjectFileMetadata(
@@ -225,6 +239,14 @@ export async function saveProjectFileMetadata(
     task_id: file.taskId ?? null,
     bucket: file.bucket ?? 'project-files',
   }, { onConflict: 'org_id,id' });
+}
+
+export async function deleteProjectFileMetadata(projectId: string, fileId: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const orgId = await resolveOrg();
+  if (!orgId) return;
+  const supabase = getSupabase();
+  await supabase.from('project_files').delete().eq('org_id', orgId).eq('project_id', projectId).eq('id', fileId);
 }
 
 export { isSupabaseConfigured };
