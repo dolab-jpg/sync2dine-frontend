@@ -1,5 +1,5 @@
 import { loadIntegrationsStore, saveIntegrationsStore } from './integrationsStore';
-import { getActiveOrgId } from '../platform/orgContext';
+import { ensureActiveOrgId, getActiveOrgId } from '../platform/orgContext';
 
 export interface OrgOpenAIKeyStatus {
   configured: boolean;
@@ -22,8 +22,13 @@ function isRealLocalApiKey(value: string | undefined): boolean {
 
 async function fetchOrgOpenAIKeyStatus(role?: string): Promise<OrgOpenAIKeyStatus | null> {
   try {
+    const orgId = await ensureActiveOrgId();
+    if (!orgId) return null;
     const res = await fetch('/api/org/openai-key', {
-      headers: role ? { 'X-User-Role': role } : undefined,
+      headers: {
+        'X-Org-Id': orgId,
+        ...(role ? { 'X-User-Role': role } : {}),
+      },
     });
     if (!res.ok) return null;
     return (await res.json()) as OrgOpenAIKeyStatus;

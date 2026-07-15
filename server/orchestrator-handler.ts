@@ -2876,7 +2876,7 @@ export async function handleOrchestrator(body: OrchestratorRequest): Promise<Orc
       return await runPhoneOrchestrator(openai as unknown as Parameters<typeof runCustomerOrchestrator>[0], body, messages);
     }
 
-    return await runStaffOrchestrator(openai as unknown as Parameters<typeof runStaffOrchestrator>[0], body, messages);
+    return await runStaffOrchestrator(openai as unknown as Parameters<typeof runStaffOrchestrator>[0], body, messages, orgId);
   } catch (err) {
     throw mapOpenAIError(err);
   }
@@ -2885,10 +2885,9 @@ export async function handleOrchestrator(body: OrchestratorRequest): Promise<Orc
 async function runStaffOrchestrator(
   openai: OpenAIChatClient,
   body: OrchestratorRequest,
-  messages: OrchestratorMessage[]
+  messages: OrchestratorMessage[],
+  orgId: string | null,
 ): Promise<OrchestratorResult> {
-  const { resolveOrgIdFromBody } = await import('./org-context');
-  const orgId = resolveOrgIdFromBody(body as { orgId?: string });
   const model = body.model ?? 'gpt-4o-mini';
   const mode = resolveMode(body);
   const lastMessage = messages[messages.length - 1]?.content ?? '';

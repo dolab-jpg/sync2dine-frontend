@@ -4,6 +4,7 @@ import { useAIAssistant } from '../../context/AIAssistantContext';
 import {
   emitSelfHealError,
   installSelfHealFetchHook,
+  isAuthSelfHealError,
   SELF_HEAL_ERROR_EVENT,
   type SelfHealErrorDetail,
 } from '../../engine/ai/selfHealEvents';
@@ -77,6 +78,16 @@ export function SelfHealErrorBridge() {
 
       void (async () => {
         try {
+          if (isAuthSelfHealError(detail)) {
+            addMessage({
+              role: 'assistant',
+              content:
+                '**Session unauthorized** — your sign-in may have expired or is no longer valid.\n\n' +
+                '**Sign out and sign back in** to restore access. This is an authentication issue, not an application bug — I will not attempt a code fix.',
+            });
+            return;
+          }
+
           const route = detail.route || String(pageContext.route || window.location.pathname);
           const functionName = detail.functionName;
           const requesterRole = role === 'platform_owner' ? 'super_admin' : role;

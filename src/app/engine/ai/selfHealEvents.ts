@@ -7,6 +7,8 @@ export interface SelfHealErrorDetail {
   description: string;
   route?: string;
   status?: number;
+  /** Session/auth failure — Bridge must not offer or auto-start code fixes */
+  authError?: boolean;
   /** Parsed OpenAI tool name when Invalid schema for function 'X' */
   functionName?: string;
   schemaError?: boolean;
@@ -17,6 +19,26 @@ const DEDUPE_MS = 60_000;
 
 const SCHEMA_FUNCTION_RE = /Invalid schema for function ['"]([^'"]+)['"]/i;
 const INVALID_FUNCTION_PARAMS_RE = /invalid_function_parameters/i;
+const UNAUTHORIZED_RE = /unauthorized/i;
+
+/** Paths that should never trigger self-heal (code-fix loop, health probes). */
+function isSelfHealExcludedUrl(url: string): boolean {
+  return (
+    url.includes('/api/ai/code-fix') ||
+    url.includes('/api/ai/conversation-log') ||
+    url.includes('/api/ai/health') ||
+    url.includes('/health')
+  );
+}
+
+export function isAuthSelfHealError(detail: Pick<SelfHealErrorDetail, 'authError' | 'status' | 'errorCode' | 'description'>): boolean {
+  return (
+    detail.authError === true ||
+    detail.status === 401 ||
+    detail.errorCode === 'HTTP_401' ||
+    UNAUTHORIZED_RE.test(detail.description)
+  );
+}
 
 export function parseOpenAIToolSchemaError(bodyText: string): {
   functionName?: string;
@@ -50,9 +72,7 @@ export function installSelfHealFetchHook(): () => void {
       if (
         res.status >= 400 &&
         (url.includes('/api/') || url.includes('/webhooks/')) &&
-        !url.includes('/api/ai/code-fix') &&
-        !url.includes('/api/ai/conversation-log') &&
-        !url.includes('/api/ai/health')
+        !isSelfHealExcludedUrl(url)
       ) {
         let bodyHint = '';
         try {
@@ -79,11 +99,15 @@ export function installSelfHealFetchHook(): () => void {
             ? `Request failed (${res.status}): ${bodyHint}`
             : `Request failed with status ${res.status}`;
 
+        const authError =
+          res.status === 401 || UNAUTHORIZED_RE.test(bodyHint) ? true : undefined;
+
         emitSelfHealError({
           errorCode,
           description,
           route: window.location.pathname,
           status: res.status,
+          authError,
           functionName,
           schemaError,
         });

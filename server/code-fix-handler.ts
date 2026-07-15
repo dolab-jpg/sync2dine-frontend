@@ -19,6 +19,21 @@ const MAX_ATTEMPTS = 3;
 const STUCK_MS = 30 * 60 * 1000;
 const DEDUPE_MS = 15 * 60 * 1000;
 const HEALTH_CACHE_MS = 10 * 60 * 1000;
+const HTTP_CLASS_ERROR_CODES = new Set(['HTTP_401', 'HTTP_400', 'HTTP_503']);
+const OFFER_DEDUPE_STATUSES: CodeFixStatus[] = [
+  'offered',
+  'asking',
+  'queued',
+  'running',
+  'awaiting_cursor_approval',
+  'pr_open',
+];
+const ACTIVE_ENQUEUE_STATUSES: CodeFixStatus[] = [
+  'queued',
+  'running',
+  'pr_open',
+  'awaiting_cursor_approval',
+];
 
 export interface CodeFixHealth {
   live: boolean;
@@ -416,9 +431,14 @@ function findJob(id: string): CodeFixJob | undefined {
 function findDedupe(errorCode: string, route: string): CodeFixJob | undefined {
   const cutoff = Date.now() - DEDUPE_MS;
   return readJobs().find((j) => {
-    if (j.errorCode !== errorCode || j.route !== route) return false;
+    if (j.errorCode !== errorCode) return false;
     if (new Date(j.createdAt).getTime() < cutoff) return false;
-    return ['offered', 'asking', 'queued', 'running', 'awaiting_cursor_approval', 'pr_open'].includes(j.status);
+    if (!OFFER_DEDUPE_STATUSES.includes(j.status)) return false;
+    // HTTP class errors: dedupe globally by errorCode (ignore route)
+    if (HTTP_CLASS_ERROR_CODES.has(errorCode)) return true;
+    // Active pipeline jobs: same errorCode on any route blocks duplicate enqueue
+    if (ACTIVE_ENQUEUE_STATUSES.includes(j.status)) return true;
+    return j.route === route;
   });
 }
 
@@ -686,17 +706,17 @@ export async function handleCodeFixRoutes(
 
   startCodeFixWorker();
 
-  if (isAuthEnforced() && !requireAuth(req)) {
-    sendJson(res, 401, { error: 'Unauthorized' });
-    return true;
-  }
-
-  // GET /api/ai/code-fix/health
+  // GET /api/ai/code-fix/health — unauthenticated probe (must run before requireAuth)
   if (req.method === 'GET' && pathname === '/api/ai/code-fix/health') {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const force = url.searchParams.get('force') === '1';
     const health = await getCursorHealth(force);
     sendJson(res, 200, health);
+    return true;
+  }
+
+  if (isAuthEnforced() && !requireAuth(req)) {
+    sendJson(res, 401, { error: 'Unauthorized' });
     return true;
   }
 

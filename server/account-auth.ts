@@ -109,7 +109,7 @@ async function createAuthUser(input: {
   return { id: data.user.id };
 }
 
-async function getProfileByBearer(req: IncomingMessage) {
+export async function getProfileByBearer(req: IncomingMessage) {
   const token = req.headers.authorization?.startsWith('Bearer ')
     ? req.headers.authorization.slice(7).trim()
     : null;
@@ -310,17 +310,27 @@ export async function handleAccountAuthRoutes(
         sendJson(res, 400, { error: 'Invalid role' });
         return true;
       }
-      const orgId =
+      let orgId =
         profile.role === 'platform_owner' && body.orgId?.trim()
           ? body.orgId.trim()
           : (profile.org_id as string | null);
+      const supabase = getSupabaseAdmin();
+      if (!orgId && profile.role === 'super_admin') {
+        const { data: organization } = await supabase
+          .from('organizations')
+          .select('id')
+          .eq('contact_email', String(profile.email).trim().toLowerCase())
+          .maybeSingle();
+        if (organization?.id) {
+          orgId = organization.id as string;
+        }
+      }
       if (!orgId) {
         sendJson(res, 400, { error: 'Organization is required' });
         return true;
       }
 
       const inviteToken = randomBytes(24).toString('hex');
-      const supabase = getSupabaseAdmin();
       const { data: invite, error } = await supabase
         .from('org_invites')
         .insert({
@@ -442,6 +452,10 @@ export async function handleAccountAuthRoutes(
         profile.role === 'platform_owner' && url.searchParams.get('orgId')?.trim()
           ? url.searchParams.get('orgId')!.trim()
           : (profile.org_id as string | null);
+      if (!orgId && profile.role === 'platform_owner') {
+        sendJson(res, 200, { members: [] });
+        return true;
+      }
       if (!orgId) {
         sendJson(res, 400, { error: 'Organization is required' });
         return true;

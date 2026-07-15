@@ -57,7 +57,10 @@ export async function loadOfficeTeam(): Promise<OfficeTeamMember[]> {
   loadPromise = (async () => {
     try {
       if (!isSupabaseConfigured()) return cachedRoster;
-      const { data } = await getSupabase().auth.getSession();
+      const supabase = getSupabase();
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return cachedRoster;
+      const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (!token) return cachedRoster;
       const members = await fetchMembers(token);
