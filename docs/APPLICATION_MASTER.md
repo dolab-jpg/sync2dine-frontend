@@ -52,10 +52,10 @@ flowchart LR
 
 | Repo | Local path | Remote | Branch | Local HEAD = `origin/master` |
 |------|------------|--------|--------|------------------------------|
-| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 49b4fb6` (tip may include follow-up for this table) |
+| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 6d38ab8` (feature `@ 49b4fb6`) |
 | Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 0ead751` |
 
-**Frontend tip commit:** `49b4fb6` — Disable Meta WhatsApp Path B permanently; WWeb-only live transport; APPLICATION_MASTER §18 + go-live docs.
+**Frontend tip commit:** `6d38ab8` — Path B disable tip SHAs; feature `49b4fb6` WWeb-only + APPLICATION_MASTER §18.
 
 **Backend tip commit:** `0ead751` — Disable Meta WhatsApp Path B permanently; prefer WhatsApp Web.js only (`WHATSAPP_META_ENABLED` off).
 
@@ -72,13 +72,14 @@ Host SSH: `vps` → `mail.all1house.com`.
 | Check | Result |
 |-------|--------|
 | SPA docroot | `/var/www/vhosts/b-diddies.com/app.b-diddies.com/` |
-| Live bundles | `assets/index-CET7sGhh.js` + `assets/index-CEERq7t0.css` |
-| Local `dist/` | **Same hashes** (built ~2026-07-15 20:38 UTC) |
+| Live bundles | `assets/index-DH_Fv7bq.js` + `assets/index-XSsHTsfL.css` |
+| Local `dist/` | **Same hashes** (built ~2026-07-15 after Path B disable) |
 | Title in live HTML | Builder Diddies — Construction Estimation Platform |
 | API unit | `tradepro-api` = **active** |
 | API WorkingDirectory | `/var/www/vhosts/b-diddies.com/tradepro-backend` |
 | API process | Node 24 + `tsx` → `server/index.ts` (**canonical backend**, not frontend `server/`) |
-| VPS backend git SHA | `13f3c71` = local = `origin/master` |
+| VPS backend git SHA | `0ead751` = local = `origin/master` |
+| WhatsApp Meta on VPS | `WHATSAPP_META_ENABLED=false` in `/etc/tradepro-api.env`; `/webhooks/whatsapp` → 403 |
 | Env file | `/etc/tradepro-api.env` (key names only listed below) |
 | Also on disk | `tradepro-app/` frontend tree; `httpdocs/` marketing site — **SPA users hit `app.b-diddies.com`** |
 
