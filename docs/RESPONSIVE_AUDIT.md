@@ -1,5 +1,7 @@
 # Responsive audit log
 
+> **Inventory SoT:** [APPLICATION_MASTER.md](./APPLICATION_MASTER.md) §27 (Flutter WebView). This file is QA only.
+
 Repeatable checklist for phone, tablet, and desktop. Automated checks: `npm run test:responsive`.
 
 ## Device matrix

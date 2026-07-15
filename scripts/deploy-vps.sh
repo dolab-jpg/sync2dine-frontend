@@ -1,6 +1,12 @@
 #!/bin/bash
-# Deploy TradePro to app.b-diddies.com on the Plesk VPS.
+# LEGACY / FULL deploy — do not use for routine SPA updates.
+# Rewrites tradepro-api WorkingDirectory to tradepro-app (breaks production API on tradepro-backend).
+# For SPA-only publish to app.b-diddies.com (never marketing httpdocs), use: scripts/deploy-spa.sh
 set -euo pipefail
+
+echo "WARN: deploy-vps.sh is obsolete for production API. Prefer deploy-spa.sh for UI-only deploys."
+echo "Press Ctrl-C within 5s to abort, or wait to continue with the legacy full path..."
+sleep 5
 
 D=/var/www/vhosts/b-diddies.com
 APPDIR=$D/tradepro-app

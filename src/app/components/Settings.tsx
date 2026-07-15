@@ -11,7 +11,6 @@ import { Plus, Edit, Trash2, Settings as SettingsIcon, DollarSign, Sparkles, Plu
 import ImportExportPanel from './settings/ImportExportPanel';
 import IntegrationsHub from './integrations/IntegrationsHub';
 import { MailboxConnectPanel } from './mailbox/MailboxConnectPanel';
-import { MongoDBConnectionPanel } from './integrations/MongoDBConnectionPanel';
 import { AIStudioPanel } from './aiStudio/AIStudioPanel';
 import { integrationService } from '../engine/integrations/integrationService';
 import { toast } from 'sonner';
@@ -426,8 +425,6 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="ai" className="space-y-6">
-          <MongoDBConnectionPanel userName={user.name} />
-
           <Card className="bg-amber-50 border-amber-200">
             <CardContent className="p-4 flex items-center gap-3 text-sm text-amber-900">
               <Plug className="w-5 h-5 shrink-0" />

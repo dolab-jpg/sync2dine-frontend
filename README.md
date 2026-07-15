@@ -2,6 +2,8 @@
 
 React/Vite frontend for the TradePro multi-trade construction estimation platform.
 
+**Full inventory / audit (SPA · backend · Flutter mobile · GitHub · VPS · Supabase):** [docs/APPLICATION_MASTER.md](docs/APPLICATION_MASTER.md) — single living SoT (Flutter = §27).
+
 ## Backend
 
 Data, auth, and storage live in the separate **[tradepro-backend](../tradepro-backend)** repo (Supabase + Node companion for AI/webhooks).
@@ -36,3 +38,17 @@ npm run sync:types
 - Frontend: `npm run dev` (port 5174)
 - Backend companion: `cd ../tradepro-backend && npm run dev` (port 3001)
 - Local Supabase: `cd ../tradepro-backend && npm run supabase:start`
+
+## Production SPA deploy
+
+Publish static `dist/` to **`app.b-diddies.com`** only (not marketing `httpdocs/`):
+
+```powershell
+npm run build
+tar -czf tradepro-deploy.tar.gz dist
+scp tradepro-deploy.tar.gz vps:/tmp/tradepro-deploy.tar.gz
+scp scripts/deploy-spa.sh vps:/tmp/deploy-spa.sh
+ssh vps "sudo bash /tmp/deploy-spa.sh"
+```
+
+See [docs/APPLICATION_MASTER.md](docs/APPLICATION_MASTER.md) §11.

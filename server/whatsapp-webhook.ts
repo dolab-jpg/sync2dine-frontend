@@ -34,11 +34,20 @@ function verifySignature(payload: string, signature: string | undefined, appSecr
   return signature === expected;
 }
 
+/** Path B (Meta Cloud API) — cold forever unless explicitly enabled. Do not enable in production. */
+export function isMetaWhatsAppEnabled(): boolean {
+  const v = process.env.WHATSAPP_META_ENABLED?.trim().toLowerCase();
+  return v === '1' || v === 'true';
+}
+
 async function sendWhatsAppPayload(
   phoneNumberId: string,
   accessToken: string,
   payload: Record<string, unknown>
 ): Promise<void> {
+  if (!isMetaWhatsAppEnabled()) {
+    throw new Error('Meta WhatsApp Cloud API is disabled — use WhatsApp Web (QR) via tradepro-backend');
+  }
   await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
@@ -71,6 +80,9 @@ export async function sendWhatsAppAudio(
   audioBuffer: Buffer,
   mimeType = 'audio/mpeg'
 ): Promise<void> {
+  if (!isMetaWhatsAppEnabled()) {
+    throw new Error('Meta WhatsApp Cloud API is disabled — use WhatsApp Web (QR) via tradepro-backend');
+  }
   const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/media`, {
     method: 'POST',
     headers: {
@@ -115,6 +127,7 @@ async function downloadWhatsAppMedia(
   mediaId: string,
   accessToken: string
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  if (!isMetaWhatsAppEnabled()) return null;
   try {
     const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -267,6 +280,10 @@ export async function handleWhatsAppWebhookGet(
   res: ServerResponse,
   url: URL
 ) {
+  if (!isMetaWhatsAppEnabled()) {
+    sendJson(res, 403, { error: 'Meta WhatsApp webhook disabled — use WhatsApp Web (QR) via tradepro-backend' });
+    return;
+  }
   const mode = url.searchParams.get('hub.mode');
   const token = url.searchParams.get('hub.verify_token');
   const challenge = url.searchParams.get('hub.challenge');
@@ -284,6 +301,13 @@ export async function handleWhatsAppWebhookPost(
   req: IncomingMessage,
   res: ServerResponse
 ) {
+  if (!isMetaWhatsAppEnabled()) {
+    await readBody(req);
+    res.statusCode = 200;
+    res.end('OK');
+    return;
+  }
+
   const rawBody = await readBody(req);
   const signature = req.headers['x-hub-signature-256'] as string | undefined;
   const appSecret = process.env.META_APP_SECRET ?? '';
@@ -513,6 +537,14 @@ export async function handleMessageSend(req: IncomingMessage, res: ServerRespons
   const { channel, to, body: text, config, templateId, templateVars, attachment, groupId, sourceLang } = body;
 
   if (channel === 'whatsapp') {
+    // Legacy frontend server has no WWeb — Path B Meta is cold; use tradepro-backend for live WhatsApp
+    if (!isMetaWhatsAppEnabled()) {
+      sendJson(res, 400, {
+        error: 'WhatsApp Meta API disabled — send via tradepro-backend WhatsApp Web (QR in Integrations)',
+      });
+      return;
+    }
+
     const token = config?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
     const phoneId = config?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
     if (!token || !phoneId) {

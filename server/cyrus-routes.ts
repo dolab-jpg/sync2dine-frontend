@@ -76,15 +76,15 @@ function setCorsForWeb(res: ServerResponse, origin: string | undefined) {
 }
 
 async function maybeSendWhatsApp(sessionId: string, text: string): Promise<boolean> {
-  // Only real phone numbers get WhatsApp outbound
+  // Only real phone numbers get WhatsApp outbound (legacy server — Meta cold forever)
   if (!/^\d{10,15}$/.test(normalizeSessionKey(sessionId)) && !/^\+?\d{10,15}$/.test(sessionId)) {
     return false;
   }
-  const token = process.env.WHATSAPP_ACCESS_TOKEN?.trim();
-  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
-  if (!token || !phoneId) return false;
   try {
-    const { sendWhatsAppText } = await import('./whatsapp-webhook');
+    const { isMetaWhatsAppEnabled, sendWhatsAppText } = await import('./whatsapp-webhook');
+    const token = process.env.WHATSAPP_ACCESS_TOKEN?.trim();
+    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
+    if (!isMetaWhatsAppEnabled() || !token || !phoneId) return false;
     await sendWhatsAppText(phoneId, token, sessionId.startsWith('+') ? sessionId : `+${normalizeSessionKey(sessionId)}`, text);
     return true;
   } catch {

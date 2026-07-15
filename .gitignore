@@ -5,5 +5,7 @@ dist/
 .cursor/local/deploy.env
 .cursor/local/secrets.env
 server/data/*.json
+server/data/synced-data-*.json
+server/data/.wwebjs_auth/
 *.log
 .DS_Store

@@ -6,7 +6,6 @@ export type IntegrationId =
   | 'sendgrid'
   | 'email_oauth'
   | 'supabase'
-  | 'mongodb'
   | 'webhook_server'
   | 'stripe'
   | 'google_calendar'

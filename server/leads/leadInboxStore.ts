@@ -162,10 +162,12 @@ export async function notifyStaff(
   const prefix = urgency === 'high' ? 'URGENT: ' : 'Lead: ';
   const text = `${prefix}${summary}${customerId ? ` (CRM: ${customerId})` : ''}`;
 
+  if (!isWithinBusinessHours()) return;
+
+  const { isMetaWhatsAppEnabled } = await import('../whatsapp-webhook');
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-
-  if (!phoneNumberId || !accessToken || !isWithinBusinessHours()) return;
+  if (!isMetaWhatsAppEnabled() || !phoneNumberId || !accessToken) return;
 
   const staff = listTeamMembers(orgId).filter(
     m => m.role === 'staff' || m.role === 'manager' || m.role === 'super_admin'

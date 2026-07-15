@@ -25,9 +25,9 @@ export async function sendWhatsApp(message: OutboundMessage): Promise<MessageLog
     });
   }
 
+  // Live transport is WhatsApp Web.js on the backend — do not require a Meta accessToken
   const isMock = integrationService.isMockMode('whatsapp')
-    || !integrationService.isEnabled('whatsapp')
-    || !integrationService.getConfig('whatsapp').accessToken;
+    || !integrationService.isEnabled('whatsapp');
 
   if (isMock) {
     return appendMessageLog({

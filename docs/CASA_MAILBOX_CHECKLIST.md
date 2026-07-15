@@ -1,5 +1,7 @@
 # CASA / Production Mailbox Checklist
 
+> **Inventory SoT:** [APPLICATION_MASTER.md](./APPLICATION_MASTER.md) §19.1. This file is an ops checklist only.
+
 Use this checklist before enabling live Gmail OAuth in production (Google CASA verification).
 
 ## OAuth & Security

@@ -16,7 +16,7 @@ function createDefaultInstance(id: IntegrationId): IntegrationInstanceState {
   const def = INTEGRATION_REGISTRY.find(i => i.id === id)!;
   return {
     enabled: id === 'company',
-    mockMode: id !== 'mongodb',
+    mockMode: true,
     values: getDefaultFieldValues(def),
     status: 'not_configured',
   };
@@ -63,10 +63,15 @@ export function loadIntegrationsStore(): IntegrationsStoreData {
       }
     }
 
+    const integrations = {} as Record<IntegrationId, IntegrationInstanceState>;
+    for (const def of INTEGRATION_REGISTRY) {
+      integrations[def.id] = parsed.integrations[def.id] ?? defaults.integrations[def.id];
+    }
+
     return {
       ...defaults,
       ...parsed,
-      integrations: { ...defaults.integrations, ...parsed.integrations },
+      integrations,
     };
   } catch {
     return createDefaultStore();

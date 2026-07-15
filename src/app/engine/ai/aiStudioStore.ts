@@ -166,33 +166,13 @@ export async function fetchAIStudioFromServer(): Promise<AIStudioConfig | null> 
 
 async function syncAIStudioToServer(config: AIStudioConfig): Promise<void> {
   try {
-    const mongo = readMongoSyncPayload();
     await fetch('/api/ai/studio', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ config, mongodb: mongo }),
+      body: JSON.stringify({ config }),
     });
   } catch {
     // Server may be offline in dev
-  }
-}
-
-function readMongoSyncPayload(): { connectionString?: string; databaseName?: string } | undefined {
-  try {
-    const orgId = getActiveOrgId() || BDIDDIES_HOME_ORG_ID;
-    const raw = localStorage.getItem(`integrations:${orgId}`) || localStorage.getItem('integrations');
-    if (!raw) return undefined;
-    const store = JSON.parse(raw);
-    const mongo = store?.integrations?.mongodb;
-    if (!mongo?.enabled || mongo?.mockMode) return undefined;
-    const connectionString = mongo?.values?.connectionString;
-    if (!connectionString?.trim()) return undefined;
-    return {
-      connectionString: connectionString.trim(),
-      databaseName: mongo?.values?.databaseName,
-    };
-  } catch {
-    return undefined;
   }
 }
 

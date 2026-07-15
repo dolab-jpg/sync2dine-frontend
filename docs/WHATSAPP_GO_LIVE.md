@@ -1,48 +1,20 @@
-# WhatsApp + Cyrus Go-Live Checklist
+# WhatsApp Go-Live Checklist (WhatsApp Web only)
 
-## Meta Business Setup (your tasks)
+> **Inventory SoT:** [APPLICATION_MASTER.md](./APPLICATION_MASTER.md) §18. This file is an ops checklist only.
 
-1. Create a [Meta Business Manager](https://business.facebook.com) account
-2. Create a [Meta Developer App](https://developers.facebook.com) and add the **WhatsApp** product
-3. Link a **WhatsApp Business Account (WABA)** to your business
-4. Verify a **dedicated phone number** (not used on personal WhatsApp)
-5. Generate a **permanent access token** and note:
-   - Phone Number ID
-   - Business Account ID
-   - App ID and App Secret
-6. Choose a **Webhook Verify Token** (any secure string you define)
+## Current path — WhatsApp Web.js (LIVE)
 
-## Enter credentials in the app
+Path B Meta Cloud API is **disabled permanently** (`WHATSAPP_META_ENABLED` off). Do not configure Meta credentials on production.
 
-1. Log in as **Super Admin**
-2. Go to **Settings → Integrations**
-3. Configure **OpenAI**, **WhatsApp**, **Email**, and **Company Profile**
-4. Use **Test Connection** on each card
-5. Turn off **Master mock mode** when ready for live sends
+1. Deploy / run **tradepro-backend** with WWeb client (`initWWebClient` on listen)
+2. Log in as **Super Admin** → **Integrations → WhatsApp Web**
+3. Scan the **QR** with a long-lived real WhatsApp number on your phone
+4. Confirm status `ready` (`GET /api/whatsapp-web/status` → 200)
+5. Keep `INTEGRATIONS_MOCK_MODE=false`
+6. On VPS: leave Meta env blank (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`, `META_APP_SECRET`); leave `WHATSAPP_META_ENABLED` unset or `false`
+7. Prefer project mode **WhatsApp 1:1 + portal** (Meta group create returns 503)
 
-## Deploy webhook server
-
-WhatsApp requires HTTPS webhooks for inbound messages (Cyrus replies).
-
-```bash
-# Deploy server/index.ts to Railway, Render, or Fly.io
-# Set environment variables from .env.example
-# Point Meta webhook to: https://your-api.example.com/webhooks/whatsapp
-```
-
-Subscribe to webhook fields: `messages`
-
-## Message templates (required for proactive outbound)
-
-Outside the 24-hour customer reply window, you must use **approved templates**:
-
-| Template name | Purpose |
-|---------------|---------|
-| `quote_ready` | Hi {{1}}, your quote for {{2}} is ready. Total: {{3}}. Reply to chat with Cyrus. |
-| `booking_confirmed` | Hi {{1}}, your site survey is booked for {{2}} at {{3}}. |
-| `document_delivery` | Hi {{1}}, here is your {{2}}. Reply if you have questions. |
-
-Submit templates in Meta Business Manager — approval typically takes 24–48 hours.
+Session files live under `tradepro-backend/server/data/.wwebjs_auth/` — **DO_NOT_SHIP** / never wholesale scp.
 
 ## UK compliance
 
@@ -50,15 +22,26 @@ Submit templates in Meta Business Manager — approval typically takes 24–48 h
 - Update privacy policy to mention WhatsApp communications
 - Honour opt-out requests promptly
 
-## Supabase migration (when going live)
+## Local / product testing
 
-Replace `localStorage` with Supabase tables:
+- Use **Integrations → WhatsApp Web** QR (prod API), not the legacy frontend `server/` Meta paths
+- Use **Simulate inbound WhatsApp (dev)** on the Integrations card to exercise Cynthia without a live send when needed
 
-- `customers`, `quotes`, `message_logs`, `whatsapp_conversations`
-- `integrations` (encrypted JSON per provider)
+---
 
-## Local dev testing
+## Archived — Meta Cloud API (not in use)
 
-- Use **Integrations → WhatsApp → Simulate inbound message** to test Cyrus without Meta
-- Use ngrok to expose `/webhooks/whatsapp` for real webhook testing:
-  `ngrok http 5173` (Vite dev) or `ngrok http 3001` (standalone server)
+The following Meta Business / WABA steps are **archived**. Path B source remains cold in the repo; **do not enable** `WHATSAPP_META_ENABLED` in production.
+
+<details>
+<summary>Historical Meta WABA checklist (do not use)</summary>
+
+1. Create a Meta Business Manager account
+2. Create a Meta Developer App and add the WhatsApp product
+3. Link a WhatsApp Business Account (WABA)
+4. Verify a dedicated Cloud API phone number
+5. Generate a permanent access token (Phone Number ID, Business Account ID, App Secret)
+6. Point webhook to `https://your-api.example.com/webhooks/whatsapp`
+7. Approve message templates for outside-24h outbound
+
+</details>

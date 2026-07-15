@@ -1,5 +1,7 @@
 # Deployment audit — 2026-07-15
 
+> **Historical snapshot.** For the current verified inventory (including DRIFT vs this file — VPS now runs tradepro-backend; WhatsApp Web APIs return 200; 14 migrations), use **[APPLICATION_MASTER.md](./APPLICATION_MASTER.md)**.
+
 Read-only check of local → GitHub → VPS (`https://app.b-diddies.com`) → Supabase.  
 No deploys, restarts, or migrations were applied during this audit.
 

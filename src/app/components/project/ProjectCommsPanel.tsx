@@ -38,13 +38,21 @@ export function ProjectCommsPanel({ project, contacts, onUpdate, compact, onFocu
           description: `Project group for ${project.customerName}`,
         }),
       });
-      const data = await res.json() as { group?: UnifiedProject['whatsappGroup']; mock?: boolean };
+      const data = await res.json() as {
+        group?: UnifiedProject['whatsappGroup'];
+        mock?: boolean;
+        error?: string;
+      };
+      if (!res.ok) {
+        toast.error(data.error || 'WhatsApp groups unavailable — use 1:1 WhatsApp Web + portal');
+        return;
+      }
       if (data.group) {
         onUpdate(updateProject(project.id, {
           whatsappGroup: data.group,
           whatsappMode: 'group',
         })!);
-        toast.success(data.mock ? 'Mock group created (configure Meta for live)' : 'WhatsApp group created');
+        toast.success('WhatsApp group created');
       }
     } catch {
       toast.error('Failed to create group');
@@ -85,7 +93,7 @@ export function ProjectCommsPanel({ project, contacts, onUpdate, compact, onFocu
       <div>
         <h3 className="text-sm font-semibold text-slate-900 mb-1">Share &amp; channels</h3>
         <p className="text-xs text-slate-500 mb-2">
-          Customer portal for unlimited chat and files. WhatsApp is optional.
+          Customer portal for unlimited chat and files. Live WhatsApp uses WhatsApp Web (QR in Integrations).
         </p>
       </div>
 
@@ -105,7 +113,7 @@ export function ProjectCommsPanel({ project, contacts, onUpdate, compact, onFocu
             </SelectContent>
           </Select>
           <p className="text-xs text-slate-500">
-            Portal gives unlimited conversation and files. WhatsApp group requires Meta Groups API.
+            Recommended: WhatsApp 1:1 + portal (WhatsApp Web QR). Meta Cloud groups are unavailable.
           </p>
         </CardContent>
       </Card>

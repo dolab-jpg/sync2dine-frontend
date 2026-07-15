@@ -24,7 +24,6 @@ export async function logConversationMessage(entry: Omit<ConversationLogEntry, '
       body: JSON.stringify({
         ...entry,
         timestamp: new Date().toISOString(),
-        mongodb: readMongoSyncPayload(),
       }),
     });
   } catch {
@@ -64,24 +63,6 @@ export async function fetchConversationTranscript(threadId: string): Promise<Con
 
 export function exportTranscriptJson(messages: ConversationLogEntry[]): string {
   return JSON.stringify(messages, null, 2);
-}
-
-function readMongoSyncPayload(): { connectionString?: string; databaseName?: string } | undefined {
-  try {
-    const raw = localStorage.getItem('integrations');
-    if (!raw) return undefined;
-    const store = JSON.parse(raw);
-    const mongo = store?.integrations?.mongodb;
-    if (!mongo?.enabled || mongo?.mockMode) return undefined;
-    const connectionString = mongo?.values?.connectionString;
-    if (!connectionString?.trim()) return undefined;
-    return {
-      connectionString: connectionString.trim(),
-      databaseName: mongo?.values?.databaseName,
-    };
-  } catch {
-    return undefined;
-  }
 }
 
 export function exportTranscriptCsv(messages: ConversationLogEntry[]): string {

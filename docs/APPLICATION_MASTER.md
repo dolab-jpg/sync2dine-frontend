@@ -52,14 +52,16 @@ flowchart LR
 
 | Repo | Local path | Remote | Branch | Local HEAD = `origin/master` |
 |------|------------|--------|--------|------------------------------|
-| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 9f36243` (tip may include follow-up for this table) |
-| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 2249837` |
+| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 5483edb` (tip may include follow-up for this table) |
+| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 0ead751` |
 
-**Frontend tip commit:** `9f36243` — Unify Cynthia across staff/web/phone channels; Vapi-only phone branding; `cynthia-widget.js`; Call Centre Cynthia copy.
+**Frontend tip commit:** `5483edb` — Disable Meta WhatsApp Path B permanently; WWeb-only live transport; APPLICATION_MASTER §18 + go-live docs.
 
-**Backend tip commit:** `2249837` — Cynthia phone prompts; Vapi-only gates; no sip-bridge rollback; VAPI_SIP.md + sip-bridge README updated.
+**Backend tip commit:** `0ead751` — Disable Meta WhatsApp Path B permanently; prefer WhatsApp Web.js only (`WHATSAPP_META_ENABLED` off).
 
 **Ship note (2026-07-15 Cynthia unify):** Cyrus + Aria collapsed into **Cynthia channels** (§4.1). Phone AI is Vapi-only; `/api/cyrus/*` + `cyrus-widget.js` remain transport aliases; new embeds use `cynthia-widget.js`.
+
+**Ship note (2026-07-15 WhatsApp Path B):** Meta Cloud API disabled permanently (`WHATSAPP_META_ENABLED` off). Sole LIVE transport = WhatsApp Web.js QR (§18). Leave Meta secrets blank on VPS.
 
 **DO_NOT_SHIP:** `.cursor/local/*.py`, `debug-login.png`, `playwright-report/`, `test-results/`, backend `server/data/*`, `_patch_*.cjs`, `_tmp_*.cjs`, `tmp-aria-lizzie.mp3`.
 
@@ -93,12 +95,12 @@ Host SSH: `vps` → `mail.all1house.com`.
 | `GET /api/whatsapp-web/qr` | **200** | Was 404 — **now LIVE** |
 | `GET /api/agent-activity` | 401 | Route present, auth required |
 | `GET /webhooks/vapi` | 405 | Webhook wired |
-| `GET /webhooks/whatsapp` | 403 | Meta webhook path exists |
+| `GET /webhooks/whatsapp` | 403 | Meta Path B cold forever (`WHATSAPP_META_ENABLED` off) |
 | `GET /api/vapi/web-session` | 404 | GET unused — use POST |
 | `POST /api/vapi/web-session` | 401 | Route present, auth/session required |
 | `GET /api/vapi/health` | 200 | Vapi health OK |
 
-**Env key names on VPS** (values not recorded): `PORT`, `APP_BASE_URL`, `INTEGRATIONS_MOCK_MODE`, `JWT_SECRET`, `ORG_ENCRYPTION_KEY`, `SUPABASE_*`, `OPENAI_API_KEY`, `CURSOR_API_KEY`, `VOICE_PROVIDER`, `TELEPHONY_PROVIDER`, `VAPI_*`, `ELEVENLABS_*`, `SOHO66_*`, `VOICE_*`, `HOME_ORG_ID`, `DEFAULT_ORG_ID`, `GITHUB_TOKEN`, `WEBHOOK_BASE_URL`, …
+**Env key names on VPS** (values not recorded): `PORT`, `APP_BASE_URL`, `INTEGRATIONS_MOCK_MODE`, `JWT_SECRET`, `ORG_ENCRYPTION_KEY`, `SUPABASE_*`, `OPENAI_API_KEY`, `CURSOR_API_KEY`, `VOICE_PROVIDER`, `TELEPHONY_PROVIDER`, `VAPI_*`, `ELEVENLABS_*`, `SOHO66_*`, `VOICE_*`, `HOME_ORG_ID`, `DEFAULT_ORG_ID`, `GITHUB_TOKEN`, `WEBHOOK_BASE_URL`, … WhatsApp Meta keys (`WHATSAPP_META_ENABLED`, `WHATSAPP_ACCESS_TOKEN`, …) must stay **off / blank** (§18).
 
 ### 1C — Supabase cloud
 
@@ -311,7 +313,7 @@ Voice / WhatsApp / mailbox / Stripe / Cynthia channel setup deep-dives: **§§16
 
 Source: `tradepro-backend/server/index.ts` (first match wins):
 
-WhatsApp Meta → Phone → Vapi → Agent → Projects → Building control → AI Studio → Conversation audit → Banking → Mailbox → Package updates → Messages → Price research → Contracts → Stripe → Auth → Org OpenAI key → Platform → Leads → Cynthia web (`/api/cyrus`) → Cynthia staff → Channels → Agent credentials → Push → **WhatsApp Web** → Gap APIs → Agent activity → `/api/ai/*` proxy → 404.
+WhatsApp Meta (cold / inert) → Phone → Vapi → Agent → Projects → Building control → AI Studio → Conversation audit → Banking → Mailbox → Package updates → Messages → Price research → Contracts → Stripe → Auth → Org OpenAI key → Platform → Leads → Cynthia web (`/api/cyrus`) → Cynthia staff → Channels → Agent credentials → Push → **WhatsApp Web (LIVE)** → Gap APIs → Agent activity → `/api/ai/*` proxy → 404.
 
 ### 5.2 Route groups (canonical)
 
@@ -322,7 +324,7 @@ WhatsApp Meta → Phone → Vapi → Agent → Projects → Building control →
 | AI | `/api/ai/*`, `/api/ai/studio`, code-fix | LIVE |
 | Agent / Call Centre | `/api/agent/*`, contacts lookup, TTS/STT, lines | LIVE |
 | Vapi | `/webhooks/vapi`, `/api/vapi/*` | LIVE |
-| WhatsApp Meta | `/webhooks/whatsapp` | LIVE |
+| WhatsApp Meta | `/webhooks/whatsapp` | DISABLED (cold forever) |
 | WhatsApp Web.js | `/api/whatsapp-web/*` | LIVE |
 | Cynthia web channels (alias) | `/api/cyrus/*` | LIVE |
 | Cynthia | `/api/cynthia/*` | LIVE |
@@ -532,7 +534,7 @@ Historical point-in-time checks: [archive/DEPLOYMENT_AUDIT_2026-07-15.md](./arch
 | [archive/DEPLOYMENT_AUDIT_2026-07-15.md](./archive/DEPLOYMENT_AUDIT_2026-07-15.md) | Local↔GitHub↔VPS↔Supabase snapshot | **Archived (DRIFT)** — historical only; prefer §1 |
 | [archive/BACKEND_DEPS.md](./archive/BACKEND_DEPS.md) | Routes expected from backend | **Archived (STALE framing)** — prefer §5 + §25 |
 | [CYRUS_GO_LIVE.md](./CYRUS_GO_LIVE.md) | OpenAI / Cynthia / WhatsApp checklist | Ops checklist — use for go-live steps; wiring details may lag WhatsApp Web-first model |
-| [WHATSAPP_GO_LIVE.md](./WHATSAPP_GO_LIVE.md) | Meta WABA checklist | Still useful for Meta Cloud; Web.js path is now primary UI integration |
+| [WHATSAPP_GO_LIVE.md](./WHATSAPP_GO_LIVE.md) | WhatsApp go-live | QR / Web.js only; Meta Cloud checklist archived (not in use) |
 | [VOICE_SETUP.md](./VOICE_SETUP.md) | Cynthia phone / Vapi / Soho66 | Ops checklist; production is Vapi-only (no sip-bridge rollback) |
 | [CASA_MAILBOX_CHECKLIST.md](./CASA_MAILBOX_CHECKLIST.md) | Gmail OAuth / CASA | Ops checklist — link only |
 | [RESPONSIVE_AUDIT.md](./RESPONSIVE_AUDIT.md) + `docs/responsive-audit/` | Responsive QA | Separate QA artifact |
@@ -849,13 +851,20 @@ Frontend mirror: `toolFacadeClient.ts`.
 
 ---
 
-## 18. WhatsApp (Web.js + Meta) full setup
+## 18. WhatsApp (Web.js sole transport) full setup
 
-**Status:** LIVE on VPS (QR API 200; backend runs WWeb client). Meta Cloud = fallback / templates / groups.
+**Status:** LIVE on VPS via **WhatsApp Web.js only** (QR API 200; backend WWeb client). Path B Meta Cloud API is **DISABLED permanently** — source retained cold; **do not enable** in production.
 
 **Ops docs:** [WHATSAPP_GO_LIVE.md](./WHATSAPP_GO_LIVE.md) · [CYRUS_GO_LIVE.md](./CYRUS_GO_LIVE.md)
 
-### 18.1 Path A — WhatsApp Web.js (primary)
+**Ops rules (avoid Meta / WABA issues):**
+
+- Leave `WHATSAPP_META_ENABLED` unset or `false` forever on VPS
+- Keep `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`, `META_APP_SECRET` **blank** on the live host
+- No Meta Developer webhook subscriptions for prod traffic
+- Staff chat = long-lived real numbers via QR session only (`server/data/.wwebjs_auth/` — DO_NOT_SHIP)
+
+### 18.1 Path A — WhatsApp Web.js (sole LIVE transport)
 
 | Piece | Path |
 |-------|------|
@@ -866,6 +875,7 @@ Frontend mirror: `toolFacadeClient.ts`.
 | Session | `tradepro-backend/server/data/.wwebjs_auth/` — **DO_NOT_SHIP** / never wholesale scp |
 | UI | `components/integrations/WhatsAppWebPanel.tsx` in Integrations hub |
 | Registry | `whatsapp` — field `cyrusDisplayName` only |
+| Hub send | `POST /api/messages/send` — WWeb when `ready`; else 400 (connect QR) |
 
 | Method | Path |
 |--------|------|
@@ -878,37 +888,39 @@ Frontend mirror: `toolFacadeClient.ts`.
 
 **Setup:** open `/integrations` → WhatsApp Web → scan QR → status `ready`. Confirm `GET /api/whatsapp-web/status` on prod. Keep `INTEGRATIONS_MOCK_MODE=false`.
 
-### 18.2 Path B — Meta Cloud API (fallback)
+### 18.2 Path B — Meta Cloud API (DISABLED / cold forever)
+
+**Status:** DISABLED permanently. Code kept for archaeology only — not a product path. Requires `WHATSAPP_META_ENABLED=true` (never set in production).
 
 | Piece | Detail |
 |-------|--------|
-| Handler | `server/whatsapp-webhook.ts` (both repos; prod = backend) |
-| Webhook | `GET/POST /webhooks/whatsapp` |
-| Hub send | `POST /api/messages/send` — prefers WWeb if ready, else Meta |
-| Groups | `POST /api/projects/:id/whatsapp-group`, `…/invite` |
-| Env | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `META_APP_SECRET`, optional `WHATSAPP_VOICE_REPLY` |
+| Handler | `server/whatsapp-webhook.ts` (both repos; prod = backend) — Graph choke + inert webhook when flag off |
+| Webhook | `GET/POST /webhooks/whatsapp` — GET 403 / POST empty ack when disabled |
+| Hub send | No Meta fallback when flag off |
+| Groups / templates | `503` when flag off |
+| Env (leave blank) | `WHATSAPP_META_ENABLED=false`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `META_APP_SECRET`, optional `WHATSAPP_VOICE_REPLY` |
 
 ### 18.3 Inbound pipeline
 
 ```
-WWeb message OR Meta webhook
+WWeb message
   → channel-inbound-handler.ts
   → channel-router.ts (staff / customer / unknown)
   → orchestrator-handler.ts (Cynthia tools — staff / web / phone modes)
   → channel-action-executor / channel-writes
-  → reply via sendWWeb* or Meta Graph
+  → reply via sendWWeb*
 ```
 
-Also: frontend `engine/messaging/messagingHub.ts` + `whatsappProvider.ts`; UI `/communications`, `/cyrus/legacy`, project `ProjectCommsPanel`.
+Meta webhook is inert while Path B is cold. Also: frontend `engine/messaging/messagingHub.ts` + `whatsappProvider.ts`; UI `/communications`, `/cyrus/legacy`, project `ProjectCommsPanel` (prefer 1:1 + portal).
 
 ### 18.4 WhatsApp gaps
 
 | Item | Status |
 |------|--------|
 | Frontend `server/` has no WWeb | LEGACY — do not use as prod API |
-| `whatsappProvider` mock if Meta token missing | Can falsely stay mock even when WWeb ready — watch client sends |
+| `whatsappProvider` Meta-token false mock | FIXED — mock only on mock-mode / disabled; backend chooses WWeb |
 | Concierge WhatsApp outbound | Returns note only — PARTIAL |
-| Project WhatsApp groups | Meta Groups; UI can create mock — PARTIAL |
+| Project WhatsApp groups | Unavailable (Meta Groups cold by design) — use 1:1 + portal |
 
 ---
 
@@ -1091,7 +1103,7 @@ Also: global `INTEGRATIONS_MOCK_MODE` and per-integration mock toggles in `integ
 |-----|---------|
 | [VOICE_SETUP.md](./VOICE_SETUP.md) | Step-by-step Cynthia phone / Vapi flags |
 | Backend `docs/VAPI_SIP.md` | Vapi + Soho66 SIP details |
-| [WHATSAPP_GO_LIVE.md](./WHATSAPP_GO_LIVE.md) | Meta WABA checklist |
+| [WHATSAPP_GO_LIVE.md](./WHATSAPP_GO_LIVE.md) | WhatsApp Web QR go-live (Meta archived) |
 | [CYRUS_GO_LIVE.md](./CYRUS_GO_LIVE.md) | Cynthia website widget + WhatsApp go-live |
 | [CASA_MAILBOX_CHECKLIST.md](./CASA_MAILBOX_CHECKLIST.md) | Gmail OAuth / CASA production |
 | [archive/BACKEND_DEPS.md](./archive/BACKEND_DEPS.md) | Archived — prefer §5 + §25 |
@@ -1146,7 +1158,7 @@ Legend: **DONE** = detailed in this MD · **THIN** = mentioned only (routes tabl
 | Lead inbox | YES | DONE | §18, §19.1, §28.9 |
 | Mailbox OAuth / IMAP | YES | DONE | §19.1 |
 | Legacy EmailSystem | YES (orphan) | ORPHAN | §28.14 |
-| WhatsApp Web + Meta | YES | DONE | §18 |
+| WhatsApp Web (Meta Path B cold forever) | YES | DONE | §18 |
 | Cynthia website widget + portal chat | YES | DONE | §19.3 |
 | Cynthia website threads (legacy inbox UI) | YES | THIN | §3.2 |
 | Call Centre / Cynthia phone / Vapi / softphone | YES | DONE | §16 |
@@ -1279,7 +1291,7 @@ Each feature row: **UI → Components → Engine → API file(s) → Data**.
 | Mailbox inbox / compose / connect | Comms + Settings | `InboxPanel`, `EmailComposePanel`, `MailboxConnectPanel` | `mailbox/mailboxService.ts` | `/api/mailbox/*`, `/webhooks/gmail\|outlook` | `mailbox-data.json`, mailbox tables |
 | Templates / logs | Comms tabs | hub | templateRenderer, messageLogStore | — | local/synced |
 | WhatsApp QR | `/integrations` | `WhatsAppWebPanel.tsx` | — | `/api/whatsapp-web/*` | `.wwebjs_auth/` |
-| Meta WA | webhooks | — | `whatsappProvider.ts` | `whatsapp-webhook.ts` | whatsapp_* tables |
+| Meta WA (cold) | `/webhooks/whatsapp` inert | — | — | `whatsapp-webhook.ts` gated by `WHATSAPP_META_ENABLED` | — |
 
 ### 24.F AI agents (quick location — detail in §§16–17)
 

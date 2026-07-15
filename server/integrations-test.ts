@@ -30,6 +30,18 @@ export async function handleIntegrationTest(
     }
 
     if (integrationId === 'whatsapp') {
+      const metaEnabled = (() => {
+        const v = process.env.WHATSAPP_META_ENABLED?.trim().toLowerCase();
+        return v === '1' || v === 'true';
+      })();
+      if (!metaEnabled) {
+        sendJson(res, 400, {
+          success: false,
+          message: 'Meta Cloud API disabled — connect WhatsApp Web (QR) via tradepro-backend Integrations',
+          status: 'error',
+        });
+        return;
+      }
       const token = values.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
       const phoneId = values.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
       if (!token || !phoneId) {
@@ -79,26 +91,6 @@ export async function handleIntegrationTest(
         return;
       }
       sendJson(res, 200, { success: true, message: 'Supabase connection successful', status: 'connected' });
-      return;
-    }
-
-    if (integrationId === 'mongodb') {
-      const connectionString = values.connectionString || process.env.MONGODB_CONNECTION_STRING;
-      if (!connectionString?.trim()) {
-        sendJson(res, 400, { success: false, message: 'Connection string required', status: 'error' });
-        return;
-      }
-      const { testMongoConnection } = await import('./mongodb');
-      const result = await testMongoConnection(connectionString, values.databaseName);
-      if (!result.ok) {
-        sendJson(res, 400, { success: false, message: result.error, status: 'error' });
-        return;
-      }
-      sendJson(res, 200, {
-        success: true,
-        message: `Connected to database "${result.database}" (${result.collections.length} collections)`,
-        status: 'connected',
-      });
       return;
     }
 
