@@ -32,6 +32,17 @@ export default function CustomerManagement() {
     syncToServer();
   }, [customers]);
 
+  useEffect(() => {
+    const onPersistError = (event: Event) => {
+      const detail = (event as CustomEvent<{ table?: string; error?: string }>).detail;
+      if (detail?.table === 'customers') {
+        toast.error(`Customer not saved to cloud: ${detail.error || 'unknown error'}`);
+      }
+    };
+    window.addEventListener('tradepro:persist-error', onPersistError);
+    return () => window.removeEventListener('tradepro:persist-error', onPersistError);
+  }, []);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);

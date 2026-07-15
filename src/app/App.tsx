@@ -729,7 +729,15 @@ export default function App() {
       // Skip the empty initial state before hydrate so we never race ahead of load
       if (!cloudHydratedRef.current && customers.length === 0) return;
       void import('./engine/data/supabaseStore').then(({ saveCustomersToSupabase }) => {
-        void saveCustomersToSupabase(customers as unknown as Record<string, unknown>[]);
+        void saveCustomersToSupabase(customers as unknown as Record<string, unknown>[]).then((err) => {
+          if (err) {
+            window.dispatchEvent(
+              new CustomEvent('tradepro:persist-error', {
+                detail: { table: 'customers', error: err },
+              }),
+            );
+          }
+        });
       });
     } else {
       localStorage.setItem('customers', JSON.stringify(customers));
@@ -782,7 +790,25 @@ export default function App() {
       id: Date.now().toString(),
       createdAt: new Date().toISOString()
     };
-    setCustomers([...customers, newCustomer]);
+    setCustomers((prev) => {
+      const next = [...prev, newCustomer];
+      // Persist immediately with the next list so refresh doesn't lose the row
+      // before the effect runs (and so we use the correct array, not a stale closure).
+      if (useCloudPersistence()) {
+        void import('./engine/data/supabaseStore').then(({ saveCustomersToSupabase }) => {
+          void saveCustomersToSupabase(next as unknown as Record<string, unknown>[]).then((err) => {
+            if (err) {
+              window.dispatchEvent(
+                new CustomEvent('tradepro:persist-error', {
+                  detail: { table: 'customers', error: err },
+                }),
+              );
+            }
+          });
+        });
+      }
+      return next;
+    });
     return newCustomer;
   };
 

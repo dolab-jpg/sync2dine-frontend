@@ -675,7 +675,16 @@ export function saveCustomerRecord(customer: Record<string, unknown>): Record<st
     store.customers.unshift(record);
   }
   syncData(store);
-  return store.customers.find(c => String(c.id) === id) ?? record;
+  const saved = store.customers.find(c => String(c.id) === id) ?? record;
+  // CRM UI loads from Supabase — mirror disk/AI/WhatsApp/phone creates there too.
+  void import('./supabase-crm')
+    .then(({ mirrorCustomerToSupabaseAsync }) => {
+      mirrorCustomerToSupabaseAsync(saved as Record<string, unknown>, getRequestOrgId());
+    })
+    .catch((err) => {
+      console.warn('[data-store] supabase mirror import failed:', err);
+    });
+  return saved;
 }
 
 /** Append a phone-call activity note onto the customer record. */

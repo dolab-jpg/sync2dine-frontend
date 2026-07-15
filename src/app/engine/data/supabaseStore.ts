@@ -90,12 +90,13 @@ async function loadEntities<T>(table: string): Promise<T[]> {
   return data.map(r => ({ id: r.id, ...(r.data as Record<string, unknown>) })) as T[];
 }
 
-async function saveEntities(table: string, items: Array<Record<string, unknown>>): Promise<void> {
-  if (!isSupabaseConfigured() || !items.length) return;
+async function saveEntities(table: string, items: Array<Record<string, unknown>>): Promise<string | null> {
+  if (!isSupabaseConfigured() || !items.length) return null;
   const orgId = await resolveOrg();
   if (!orgId) {
-    console.warn(`[supabase] save ${table} skipped: no org id`);
-    return;
+    const msg = `save ${table} skipped: no org id`;
+    console.warn(`[supabase] ${msg}`);
+    return msg;
   }
   const supabase = getSupabase();
   const payload = items.map(item => {
@@ -105,10 +106,13 @@ async function saveEntities(table: string, items: Array<Record<string, unknown>>
   const { error } = await supabase.from(table).upsert(payload, { onConflict: 'org_id,id' });
   if (error) {
     console.warn(`[supabase] save ${table} failed:`, error.message);
+    return error.message;
   }
+  return null;
 }
 
 export const loadCustomersFromSupabase = () => loadEntities<Record<string, unknown>>('customers');
+/** Returns error message on failure, otherwise null. */
 export const saveCustomersToSupabase = (items: Record<string, unknown>[]) => saveEntities('customers', items);
 export const loadQuotesFromSupabase = () => loadEntities<Record<string, unknown>>('quotes');
 export const saveQuotesToSupabase = (items: Record<string, unknown>[]) => saveEntities('quotes', items);

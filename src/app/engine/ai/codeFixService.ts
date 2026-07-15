@@ -109,7 +109,13 @@ export async function offerCodeFix(payload: {
   chatSessionId?: string;
   screenshotDataUrl?: string;
   orgId?: string;
-}): Promise<{ job: CodeFixJob; dedupe?: boolean; message?: string }> {
+}): Promise<{
+  job?: CodeFixJob;
+  dedupe?: boolean;
+  message?: string;
+  skipped?: boolean;
+  reason?: string;
+}> {
   return api('/api/ai/code-fix', {
     method: 'POST',
     body: JSON.stringify({ action: 'offer', ...payload }),

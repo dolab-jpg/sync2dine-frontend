@@ -50,6 +50,7 @@ import {
   dismissCodeFix,
   enqueueCodeFix,
   getCodeFixJob,
+  listCodeFixJobs,
   mergeCodeFix,
   retryCodeFix,
   statusLabel,
@@ -419,7 +420,7 @@ export function AIChatPanel() {
           queueNote +
           (result.needsCursorApproval
             ? '\n\nThis needs your approval in Cursor before a large change runs.'
-            : '\n\nI\'ll update you as it queues, runs, or fails. Use **Open Code fixes** below to track it — **Approve & merge** only appears after a real GitHub PR is ready.'),
+            : '\n\nI\'ll notify you when a GitHub PR link is ready. Track anytime via **Open Code fixes**. Then use **Open PR** / **Approve & merge** here (GitHub merge page if auto-merge is not configured).'),
         fixJobId: result.job.id,
         statusAction: {
           label: 'Open Code fixes',
@@ -449,6 +450,56 @@ export function AIChatPanel() {
       }
     }
   }, [messages, trackFixJob]);
+
+  // Surface PRs that already exist (chat often missed the poll while closed / before PR URL arrived)
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { jobs } = await listCodeFixJobs({ status: 'pr_open' });
+        if (cancelled) return;
+        for (const job of jobs) {
+          if (!job.prUrl) continue;
+          const key = `pr_open:ready`;
+          if (announcedFixStatusRef.current[job.id] === key) continue;
+          const alreadyInChat = messages.some(
+            (m) => m.fixJobId === job.id && m.mergeAction?.prUrl === job.prUrl,
+          );
+          if (alreadyInChat) {
+            announcedFixStatusRef.current[job.id] = key;
+            continue;
+          }
+          announcedFixStatusRef.current[job.id] = key;
+          addMessage({
+            role: 'assistant',
+            content:
+              `**PR ready** for \`${job.errorCode || 'error'}\` on **${job.route || 'app'}**.\n` +
+              `${job.prUrl}\n` +
+              `Use **Open PR** to review, or **Approve & merge** (opens GitHub if auto-merge isn’t configured).\n` +
+              `Also listed under **AI Audit → Code fixes**.`,
+            fixJobId: job.id,
+            mergeAction: {
+              jobId: job.id,
+              prUrl: job.prUrl,
+              cursorAgentUrl: job.cursorAgentUrl,
+            },
+            statusAction: {
+              label: 'Open Code fixes',
+              href: '/ai-audit?tab=code_fixes',
+            },
+          });
+        }
+      } catch {
+        // ignore — poll / Code fixes remain available
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only when chat opens — avoid re-spamming on every message
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: one pass per open
+  }, [isOpen]);
 
   useEffect(() => {
     if (trackedFixJobs.length === 0) return;
@@ -486,25 +537,40 @@ export function AIChatPanel() {
             untrackFixJob(jobId);
           } else if (job.status === 'pr_open') {
             announcedFixStatusRef.current[jobId] = statusKey;
-            addMessage({
-              role: 'assistant',
-              content:
-                `**Fix PR ready** for \`${job.errorCode || 'error'}\`.\n` +
-                (job.prUrl ? `PR: ${job.prUrl}\n` : '') +
-                (job.cursorAgentUrl ? `Agent: ${job.cursorAgentUrl}\n` : '') +
-                (job.prUrl
-                  ? 'Bugbot can review it. Tap **Approve & merge**, or use **AI Audit → Code fixes** for bulk approve.'
-                  : 'Agent is running — waiting for a real GitHub PR URL before merge is available.'),
-              fixJobId: job.id,
-              mergeAction: job.prUrl
-                ? {
-                    jobId: job.id,
-                    prUrl: job.prUrl,
-                    cursorAgentUrl: job.cursorAgentUrl,
-                  }
-                : undefined,
-            });
-            if (job.prUrl) untrackFixJob(jobId);
+            if (!job.prUrl) {
+              addMessage({
+                role: 'assistant',
+                content:
+                  `Cursor is still preparing the PR for \`${job.errorCode || 'error'}\`.\n` +
+                  (job.cursorAgentUrl ? `Agent: ${job.cursorAgentUrl}\n` : '') +
+                  `No GitHub URL yet — keep **AI Audit → Code fixes** open; I’ll add **Open PR** here when it appears.`,
+                fixJobId: job.id,
+                statusAction: {
+                  label: 'Open Code fixes',
+                  href: '/ai-audit?tab=code_fixes',
+                },
+              });
+            } else {
+              addMessage({
+                role: 'assistant',
+                content:
+                  `**PR ready** for \`${job.errorCode || 'error'}\`.\n` +
+                  `${job.prUrl}\n` +
+                  (job.cursorAgentUrl ? `Agent: ${job.cursorAgentUrl}\n` : '') +
+                  `Use **Open PR** to review, or **Approve & merge** (opens GitHub if auto-merge isn’t configured).`,
+                fixJobId: job.id,
+                mergeAction: {
+                  jobId: job.id,
+                  prUrl: job.prUrl,
+                  cursorAgentUrl: job.cursorAgentUrl,
+                },
+                statusAction: {
+                  label: 'Open Code fixes',
+                  href: '/ai-audit?tab=code_fixes',
+                },
+              });
+              untrackFixJob(jobId);
+            }
           } else if (job.status === 'awaiting_cursor_approval') {
             announcedFixStatusRef.current[jobId] = statusKey;
             addMessage({

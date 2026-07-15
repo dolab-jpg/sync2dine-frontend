@@ -183,10 +183,13 @@ function extractPrUrlFromAgent(data: Record<string, unknown>): string | undefine
   const agent = (data.agent ?? data) as Record<string, unknown>;
   const git = (agent.git ?? data.git ?? {}) as Record<string, unknown>;
   const prs = (git.pullRequests ?? git.prs ?? []) as Array<{ url?: string }>;
+  const repos = (agent.repos ?? data.repos ?? []) as Array<{ prUrl?: string; url?: string }>;
+  const repoPr = repos.map((r) => r.prUrl).find((u): u is string => Boolean(u));
   return (
     (typeof data.prUrl === 'string' && data.prUrl) ||
     (typeof agent.prUrl === 'string' && agent.prUrl) ||
     prs[0]?.url ||
+    repoPr ||
     undefined
   );
 }
@@ -399,6 +402,14 @@ function classifyScope(input: {
     if (/(improve|prettier|modernize|overhaul)/i.test(text)) return 'needs_cursor_approval';
   }
   return 'surgical';
+}
+
+/** Gateway / billing / rate-limit — never create Cursor jobs for these. */
+function isNonFixableOpsError(errorCode: string, description: string): boolean {
+  if (/^HTTP_(429|502|503|504)$/i.test(errorCode.trim())) return true;
+  return /no credit|usage limit|billing|quota|insufficient_quota|rate.?limit|openai key rejected|econnreset|econnrefused|etimedout|bad gateway|service unavailable|gateway|upstream|temporarily unavailable|CURSOR_API_KEY not configured/i.test(
+    `${errorCode} ${description}`,
+  );
 }
 
 function pickRepo(route: string, description: string): string {
@@ -965,6 +976,17 @@ export async function handleCodeFixRoutes(
     const description = String(body.description ?? body.message ?? '').trim();
     const route = String(body.route ?? '').trim();
     const orgId = resolveOrgIdForRequest(req, body as { orgId?: string }) ?? undefined;
+
+    if (isNonFixableOpsError(errorCode, description)) {
+      sendJson(res, 200, {
+        skipped: true,
+        reason: 'ops_infra',
+        message:
+          'This is an ops/infra or billing failure (not an application code defect). No Cursor fix was created.',
+        errorCode,
+      });
+      return true;
+    }
 
     if (action === 'offer') {
       const existing = errorCode ? findDedupe(errorCode, route) : undefined;

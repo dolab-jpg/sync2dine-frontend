@@ -5,6 +5,7 @@ import {
   emitSelfHealError,
   installSelfHealFetchHook,
   isAuthSelfHealError,
+  isOpsSelfHealError,
   SELF_HEAL_ERROR_EVENT,
   type SelfHealErrorDetail,
 } from '../../engine/ai/selfHealEvents';
@@ -14,9 +15,14 @@ import { useAIStudioConfig } from '../../hooks/useAIStudioConfig';
 
 const ELIGIBLE = new Set(['super_admin', 'manager', 'staff', 'builder', 'platform_owner']);
 
+/** Throttle soft-fail messages when the offer API itself is down (502 etc.). */
+let lastOfferFailAt = 0;
+const OFFER_FAIL_COOLDOWN_MS = 5 * 60_000;
+
 /**
  * Listens for app errors and offers Yes/No fix in the existing CRM AI chat.
  * Surgical fixes auto-start when selfHealAutoStart is enabled.
+ * Auth + ops/infra (502/503/quota) never open Cursor offers — they stay quiet.
  */
 export function SelfHealErrorBridge() {
   const app = useContext(AppContext);
@@ -73,12 +79,21 @@ export function SelfHealErrorBridge() {
     const onOffer = (event: Event) => {
       const detail = (event as CustomEvent<SelfHealErrorDetail>).detail;
       if (!detail || busyRef.current) return;
+
+      // Ops/infra: never open chat or call the offer API (stops 502 spam loops).
+      if (isOpsSelfHealError(detail)) {
+        if (import.meta.env.DEV) {
+          console.info('[self-heal] suppressed ops error', detail.errorCode, detail.description.slice(0, 120));
+        }
+        return;
+      }
+
       busyRef.current = true;
-      setIsOpen(true);
 
       void (async () => {
         try {
           if (isAuthSelfHealError(detail)) {
+            setIsOpen(true);
             addMessage({
               role: 'assistant',
               content:
@@ -95,7 +110,7 @@ export function SelfHealErrorBridge() {
           const requesterUserId = app?.user.id;
           const orgId = getActiveOrgId() || undefined;
 
-          const { job, dedupe, message } = await offerCodeFix({
+          const offer = await offerCodeFix({
             errorCode: detail.errorCode,
             description: detail.description,
             route,
@@ -104,6 +119,12 @@ export function SelfHealErrorBridge() {
             requesterUserId,
             orgId,
           });
+
+          if (offer.skipped || !offer.job) {
+            return;
+          }
+
+          const { job, dedupe, message } = offer;
 
           setIsOpen(true);
 
@@ -157,7 +178,7 @@ export function SelfHealErrorBridge() {
                 `${schemaIntro}**Auto-fixing** \`${result.job.errorCode || 'error'}\` on **${result.job.route || 'this page'}**.\n\n` +
                 `${result.job.description}\n\n` +
                 (result.message || 'Logged — in the fix queue.') +
-                '\n\nI\'ll update you when the Cursor agent finishes. Use **Open Code fixes** below to track progress — an **Approve & merge** button will appear here only after a real GitHub PR URL is ready.' +
+                '\n\nI\'ll notify you when a GitHub PR is ready. Until then use **Open Code fixes**. When the PR link arrives, this chat gets **Open PR** + **Approve & merge** (merge opens GitHub if server token is not set).' +
                 cursorNote,
               fixJobId: result.job.id,
               statusAction: {
@@ -193,12 +214,22 @@ export function SelfHealErrorBridge() {
             },
           });
         } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          // Offer API itself often returns 502 when nginx/API is flaky — do not spam chat.
+          if (isOpsSelfHealError({ errorCode: 'OFFER_FAILED', description: msg })) {
+            if (import.meta.env.DEV) {
+              console.info('[self-heal] offer API ops failure suppressed', msg);
+            }
+            return;
+          }
+          const now = Date.now();
+          if (now - lastOfferFailAt < OFFER_FAIL_COOLDOWN_MS) return;
+          lastOfferFailAt = now;
           setIsOpen(true);
           addMessage({
             role: 'assistant',
-            content: `I noticed an error but couldn't open a fix offer: ${
-              err instanceof Error ? err.message : String(err)
-            }`,
+            content:
+              'Self-heal couldn’t log that error right now (temporary). The failure is **not** being sent to Cursor. Try again in a few minutes, or open **AI Audit → Code fixes**.',
           });
         } finally {
           busyRef.current = false;
