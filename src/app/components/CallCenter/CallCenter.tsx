@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useContext, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
@@ -14,8 +14,11 @@ import {
   Phone, PhoneIncoming, PhoneOutgoing, Clock, MessageSquare,
   RefreshCw, Play, Send, AlertCircle, Voicemail, Mic, Search,
   ChevronDown, ChevronUp, User, ExternalLink, Power, Volume2, Plus, Trash2, Radio,
+  PhoneForwarded, ShieldCheck, Globe, UserPlus,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { SoftPhonePanel } from './SoftPhonePanel';
+import { AppContext } from '../../App';
 
 interface CallTurn {
   role: 'caller' | 'agent' | 'system';
@@ -40,7 +43,38 @@ interface CallRecord {
   startedAt: string;
   endedAt?: string;
   campaignTemplate?: string;
+  transferredTo?: string;
+  metadata?: {
+    callerKind?: 'customer' | 'staff' | 'foreman';
+    callerRole?: string;
+    phoneAuth?: 'verified' | 'pending' | 'locked' | 'n/a';
+    callLanguage?: string;
+    transferNumber?: string;
+  };
 }
+
+interface TransferNumbers {
+  general?: string;
+  sales?: string;
+  projects?: string;
+  recruitment?: string;
+  accounts?: string;
+}
+
+const TRANSFER_DEPARTMENTS: Array<{ key: keyof TransferNumbers; label: string; placeholder: string }> = [
+  { key: 'general', label: 'Default / General', placeholder: '+4420...' },
+  { key: 'sales', label: 'Sales', placeholder: '+4420...' },
+  { key: 'projects', label: 'Projects', placeholder: '+4420...' },
+  { key: 'recruitment', label: 'Recruitment', placeholder: '+4420...' },
+  { key: 'accounts', label: 'Accounts', placeholder: '+4420...' },
+];
+
+const PHONE_AUTH_LABELS: Record<string, string> = {
+  verified: 'PIN verified',
+  pending: 'PIN pending',
+  locked: 'PIN locked',
+  'n/a': '',
+};
 
 interface OutboundJob {
   id: string;
@@ -62,6 +96,7 @@ interface AgentStatus {
     status: string;
     lineLabel?: string;
     to?: string;
+    customerId?: string;
   } | null;
   activeCalls?: Array<{
     id: string;
@@ -71,6 +106,7 @@ interface AgentStatus {
     elapsedSec?: number;
     status: string;
     lineLabel?: string;
+    customerId?: string;
   }>;
   linesSummary?: { total: number; registered: number; onCall: number };
   todayStats: {
@@ -223,6 +259,16 @@ export default function CallCenter() {
   });
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
 
+  const [transferNumbers, setTransferNumbers] = useState<TransferNumbers>({});
+  const [transferSaving, setTransferSaving] = useState(false);
+
+  const app = useContext(AppContext);
+  const [leadFormCallId, setLeadFormCallId] = useState<string | null>(null);
+  const [leadFormName, setLeadFormName] = useState('');
+  const [leadFormEmail, setLeadFormEmail] = useState('');
+  const [leadFormNotes, setLeadFormNotes] = useState('');
+  const [creatingLead, setCreatingLead] = useState(false);
+
   const playAriaAudio = useCallback(async (text: string) => {
     if (!text.trim()) return;
     try {
@@ -305,11 +351,21 @@ export default function CallCenter() {
     }
   }, []);
 
+  const fetchTransferNumbers = useCallback(async () => {
+    try {
+      const res = await fetch('/api/agent/transfer-numbers');
+      const data = await res.json();
+      setTransferNumbers(data.transferNumbers ?? {});
+    } catch {
+      // keep defaults
+    }
+  }, []);
+
   const refreshAll = useCallback(async () => {
     setLoading(true);
-    await Promise.all([fetchSettings(), fetchStatus(), fetchCalls(), fetchVoices(), fetchLines()]);
+    await Promise.all([fetchSettings(), fetchStatus(), fetchCalls(), fetchVoices(), fetchLines(), fetchTransferNumbers()]);
     setLoading(false);
-  }, [fetchSettings, fetchStatus, fetchCalls, fetchVoices, fetchLines]);
+  }, [fetchSettings, fetchStatus, fetchCalls, fetchVoices, fetchLines, fetchTransferNumbers]);
 
   useEffect(() => { refreshAll(); }, [refreshAll]);
 
@@ -320,6 +376,14 @@ export default function CallCenter() {
     }, 5000);
     return () => clearInterval(interval);
   }, [fetchStatus, fetchCalls]);
+
+  // Deep-link support: /calls?callId=... (e.g. from a "View call" link on a CRM lead)
+  useEffect(() => {
+    const linkedCallId = searchParams.get('callId');
+    if (linkedCallId && calls.some(c => c.id === linkedCallId)) {
+      setExpandedCallId(linkedCallId);
+    }
+  }, [searchParams, calls]);
 
   async function toggleAgent(checked: boolean) {
     setTogglingAgent(true);
@@ -530,6 +594,25 @@ export default function CallCenter() {
     });
   }
 
+  async function saveTransferNumbers() {
+    setTransferSaving(true);
+    try {
+      const res = await fetch('/api/agent/transfer-numbers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(transferNumbers),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to save');
+      setTransferNumbers(data.transferNumbers ?? transferNumbers);
+      toast.success('Transfer numbers saved — Aria will use these for live handoffs');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save transfer numbers');
+    } finally {
+      setTransferSaving(false);
+    }
+  }
+
   async function queueOutbound() {
     if (!outboundTo.trim()) {
       toast.error('Enter a phone number');
@@ -552,6 +635,102 @@ export default function CallCenter() {
     } catch {
       toast.error('Failed to queue outbound call');
     }
+  }
+
+  function openLeadForm(call: Pick<CallRecord, 'id' | 'from' | 'contactName'>) {
+    setLeadFormCallId(call.id);
+    setLeadFormName(call.contactName && call.contactName !== 'Guest' ? call.contactName : '');
+    setLeadFormEmail('');
+    setLeadFormNotes('');
+  }
+
+  function closeLeadForm() {
+    setLeadFormCallId(null);
+  }
+
+  async function submitLeadFromCall(call: Pick<CallRecord, 'id' | 'from'>) {
+    if (!leadFormName.trim()) {
+      toast.error('Enter the caller\'s name to create a lead');
+      return;
+    }
+    setCreatingLead(true);
+    try {
+      const res = await fetch('/api/leads/from-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callId: call.id,
+          phone: call.from,
+          name: leadFormName.trim(),
+          email: leadFormEmail.trim() || undefined,
+          notes: leadFormNotes.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error ?? 'Failed to create lead');
+      toast.success(`Lead created for ${leadFormName.trim()} — visible in CRM`);
+      if (app?.upsertCustomer && data.customer?.id) {
+        app.upsertCustomer(data.customer as Parameters<typeof app.upsertCustomer>[0]);
+      }
+      closeLeadForm();
+      fetchCalls();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create lead');
+    } finally {
+      setCreatingLead(false);
+    }
+  }
+
+  function renderLeadForm(call: Pick<CallRecord, 'id' | 'from'>) {
+    if (leadFormCallId !== call.id) return null;
+    return (
+      <div className="p-3 rounded-lg border bg-white space-y-3">
+        <p className="text-sm font-medium text-slate-700">New lead — phone pre-filled from caller ID</p>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div>
+            <Label>Phone (from caller ID)</Label>
+            <Input value={formatPhone(call.from)} disabled className="font-mono" />
+          </div>
+          <div>
+            <Label>Caller name</Label>
+            <Input
+              value={leadFormName}
+              onChange={e => setLeadFormName(e.target.value)}
+              placeholder="Name from the call, or type it in"
+              autoFocus
+            />
+          </div>
+          <div>
+            <Label>Email (optional)</Label>
+            <Input
+              value={leadFormEmail}
+              onChange={e => setLeadFormEmail(e.target.value)}
+              placeholder="customer@example.com"
+            />
+          </div>
+          <div>
+            <Label>Notes (optional)</Label>
+            <Input
+              value={leadFormNotes}
+              onChange={e => setLeadFormNotes(e.target.value)}
+              placeholder="Enquiry details for follow-up"
+            />
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            onClick={() => submitLeadFromCall(call)}
+            disabled={creatingLead || !leadFormName.trim()}
+          >
+            {creatingLead ? 'Creating…' : 'Save as new lead'}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={closeLeadForm} disabled={creatingLead}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   const activeCalls = agentStatus?.activeCalls ?? (agentStatus?.activeCall ? [agentStatus.activeCall] : []);
@@ -614,25 +793,54 @@ export default function CallCenter() {
         </CardHeader>
         <CardContent className="space-y-4">
           {activeCalls.length > 0 ? (
-            <div className="space-y-2 max-h-[280px] overflow-y-auto">
-              {activeCalls.map(call => (
-                <div key={call.id} className="flex items-center gap-4 p-4 rounded-lg bg-amber-50 border border-amber-200">
-                  <span className="relative flex h-3 w-3 shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-900 truncate">On call with {call.contactName ?? 'Unknown caller'}</p>
-                    <p className="text-sm text-slate-600">
-                      {formatPhone(call.from)}
-                      {call.lineLabel ? ` · ${call.lineLabel}` : ''}
-                      {call.to ? ` · ${formatPhone(call.to)}` : ''}
-                      {' · '}{formatDuration(call.elapsedSec ?? undefined)} elapsed
-                    </p>
+            <div className="space-y-3 max-h-[360px] overflow-y-auto">
+              {activeCalls.map(call => {
+                const matched = calls.find(c => c.id === call.id);
+                const customerId = call.customerId ?? matched?.customerId;
+                return (
+                  <div key={call.id} className="p-4 rounded-lg bg-amber-50 border border-amber-200 space-y-3">
+                    <div className="flex items-center gap-4">
+                      <span className="relative flex h-3 w-3 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-slate-900 truncate">On call with {call.contactName ?? 'Unknown caller'}</p>
+                        <p className="text-sm text-slate-600">
+                          <span className="text-slate-500">Caller: </span>
+                          <span className="font-mono font-semibold text-slate-900">{formatPhone(call.from)}</span>
+                          {call.lineLabel ? ` · ${call.lineLabel}` : ''}
+                          {call.to ? ` · to ${formatPhone(call.to)}` : ''}
+                          {' · '}{formatDuration(call.elapsedSec ?? undefined)} elapsed
+                        </p>
+                      </div>
+                      <Badge className="shrink-0">{call.status.replace(/_/g, ' ')}</Badge>
+                      {customerId ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={() => navigate(`/crm?customerId=${customerId}`)}
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Open in CRM
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={() => openLeadForm({ id: call.id, from: call.from, contactName: call.contactName })}
+                        >
+                          <UserPlus className="w-4 h-4 mr-2" />
+                          Create lead
+                        </Button>
+                      )}
+                    </div>
+                    {renderLeadForm({ id: call.id, from: call.from })}
                   </div>
-                  <Badge className="shrink-0">{call.status.replace(/_/g, ' ')}</Badge>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="text-slate-500 text-sm py-2">No active calls right now</p>
@@ -715,10 +923,41 @@ export default function CallCenter() {
                         {call.intent && (
                           <Badge variant="secondary" className="text-xs">{INTENT_LABELS[call.intent] ?? call.intent}</Badge>
                         )}
+                        {call.metadata?.callerKind && call.metadata.callerKind !== 'customer' && (
+                          <Badge variant="outline" className="text-xs gap-1">
+                            <ShieldCheck className="w-3 h-3" />
+                            {call.metadata.callerRole ?? call.metadata.callerKind}
+                          </Badge>
+                        )}
+                        {call.metadata?.phoneAuth && PHONE_AUTH_LABELS[call.metadata.phoneAuth] && (
+                          <Badge
+                            variant={call.metadata.phoneAuth === 'verified' ? 'default' : 'destructive'}
+                            className={`text-xs ${call.metadata.phoneAuth === 'verified' ? 'bg-green-600' : ''}`}
+                          >
+                            {PHONE_AUTH_LABELS[call.metadata.phoneAuth]}
+                          </Badge>
+                        )}
+                        {call.metadata?.callLanguage && call.metadata.callLanguage !== 'en' && (
+                          <Badge variant="outline" className="text-xs gap-1">
+                            <Globe className="w-3 h-3" />
+                            {call.metadata.callLanguage.toUpperCase()}
+                          </Badge>
+                        )}
+                        {(call.status === 'transferred' || call.transferredTo) && (
+                          <Badge variant="outline" className="text-xs gap-1">
+                            <PhoneForwarded className="w-3 h-3" />
+                            Transferred{call.transferredTo ? ` · ${call.transferredTo}` : ''}
+                          </Badge>
+                        )}
                       </div>
                     </button>
                     {expanded && (
                       <div className="border-t p-3 bg-slate-50 space-y-3">
+                        <div className="flex items-center gap-2 p-2 rounded-md bg-white border">
+                          <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                          <span className="text-xs text-slate-500">Caller number:</span>
+                          <span className="font-mono font-semibold text-sm text-slate-900">{formatPhone(call.from)}</span>
+                        </div>
                         <div className="space-y-2 max-h-[240px] overflow-y-auto">
                           {(call.transcript ?? []).map((turn, i) => (
                             <div
@@ -730,16 +969,28 @@ export default function CallCenter() {
                             </div>
                           ))}
                         </div>
-                        {call.customerId && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => navigate(`/crm?customerId=${call.customerId}`)}
-                          >
-                            <ExternalLink className="w-4 h-4 mr-2" />
-                            Open in CRM
-                          </Button>
-                        )}
+                        <div className="flex flex-wrap gap-2">
+                          {call.customerId ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigate(`/crm?customerId=${call.customerId}`)}
+                            >
+                              <ExternalLink className="w-4 h-4 mr-2" />
+                              Open in CRM
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openLeadForm(call)}
+                            >
+                              <UserPlus className="w-4 h-4 mr-2" />
+                              Create lead from this call
+                            </Button>
+                          )}
+                        </div>
+                        {renderLeadForm(call)}
                       </div>
                     )}
                   </div>
@@ -855,6 +1106,35 @@ export default function CallCenter() {
         </TabsContent>
 
         <TabsContent value="lines" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PhoneForwarded className="w-5 h-5" />
+                Call Transfer Destinations
+              </CardTitle>
+              <CardDescription>
+                Where Aria puts calls through when she or the caller asks for a human. Leave blank to only take a message for that department.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {TRANSFER_DEPARTMENTS.map((dept) => (
+                  <div key={dept.key}>
+                    <Label>{dept.label}</Label>
+                    <Input
+                      value={transferNumbers[dept.key] ?? ''}
+                      onChange={(e) => setTransferNumbers((prev) => ({ ...prev, [dept.key]: e.target.value }))}
+                      placeholder={dept.placeholder}
+                    />
+                  </div>
+                ))}
+              </div>
+              <Button onClick={saveTransferNumbers} disabled={transferSaving}>
+                {transferSaving ? 'Saving…' : 'Save transfer numbers'}
+              </Button>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

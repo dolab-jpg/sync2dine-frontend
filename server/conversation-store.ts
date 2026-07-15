@@ -53,6 +53,11 @@ export interface TeamMember {
   name: string;
   phone: string;
   role: 'super_admin' | 'manager' | 'staff' | 'builder';
+  /** Worker UI / channel reply language: en | sq | uk | ru | zh | es | pl | fa */
+  preferredLanguage?: string | null;
+  /** scrypt$salt$hash — never return to clients */
+  phonePinHash?: string;
+  phonePinUpdatedAt?: string;
   updatedAt: string;
 }
 
@@ -270,9 +275,26 @@ export function upsertTeamMember(member: Omit<TeamMember, 'updatedAt'> & { updat
   const record: TeamMember = { ...member, updatedAt: member.updatedAt ?? now };
   const idx = (store.teamMembers ?? []).findIndex((m) => m.id === record.id || m.phone === record.phone);
   const members = [...(store.teamMembers ?? [])];
-  if (idx >= 0) members[idx] = { ...members[idx], ...record };
-  else members.push(record);
+  if (idx >= 0) {
+    const prev = members[idx];
+    // Preserve existing PIN hash unless a new one is explicitly provided
+    members[idx] = {
+      ...prev,
+      ...record,
+      phonePinHash: record.phonePinHash !== undefined ? record.phonePinHash : prev.phonePinHash,
+      phonePinUpdatedAt: record.phonePinUpdatedAt !== undefined
+        ? record.phonePinUpdatedAt
+        : prev.phonePinUpdatedAt,
+    };
+  } else {
+    members.push(record);
+  }
   store.teamMembers = members;
   syncData(store);
-  return record;
+  return members[idx >= 0 ? idx : members.length - 1];
+}
+
+export function publicTeamMember(m: TeamMember): Omit<TeamMember, 'phonePinHash'> & { hasPhonePin: boolean } {
+  const { phonePinHash, ...rest } = m;
+  return { ...rest, hasPhonePin: Boolean(phonePinHash) };
 }

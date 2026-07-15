@@ -1,6 +1,8 @@
 import {
+  appendCustomerCallActivity,
   enqueueOutboundCall,
   getDataStore,
+  lookupContactByPhone,
   saveCall,
   saveCustomerRecord,
   saveRecruitmentCandidate,
@@ -8,12 +10,76 @@ import {
 } from './data-store';
 import type { CallIntent, OutboundCampaignTemplate } from './telephony/types';
 import type { OrchestratorRequest } from './orchestrator-types';
+import { sendToStaffCynthiaInternal } from './cynthia-routes';
 
 function firstString(...values: unknown[]): string | undefined {
   for (const value of values) {
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return undefined;
+}
+
+export interface CaptureLeadFields {
+  name?: unknown;
+  phone?: unknown;
+  email?: unknown;
+  address?: unknown;
+  postcode?: unknown;
+  interestedTrades?: unknown;
+  scope?: unknown;
+  budget?: unknown;
+  notes?: unknown;
+}
+
+/**
+ * Create-or-update a CRM lead for a phone caller. Shared by the AI `captureLead`
+ * tool (automatic, mid-call) and the staff-assisted "Create lead from this call"
+ * REST path — both must dedupe against existing customers/contacts by phone so
+ * repeat callers don't spawn duplicate lead records.
+ */
+export function captureOrUpdateLead(
+  fields: CaptureLeadFields,
+  opts: { callId?: string; fallbackPhone?: string } = {},
+): { customer: Record<string, unknown>; isNewLead: boolean } {
+  const phone = firstString(fields.phone, opts.fallbackPhone);
+  const existingLookup = phone ? lookupContactByPhone(phone) : { found: false as const };
+  const store = getDataStore();
+  const existing = existingLookup.found && existingLookup.customerId
+    ? store.customers.find((c) => String(c.id) === existingLookup.customerId)
+    : undefined;
+
+  const name = firstString(fields.name) ?? (existing?.name as string | undefined) ?? 'Unknown caller';
+  const scopeNote = [fields.scope, fields.notes].filter(Boolean).join(' — ');
+  const combinedNotes = [existing?.notes, scopeNote].filter(Boolean).join(' | ');
+  const newTrades = Array.isArray(fields.interestedTrades) ? fields.interestedTrades : [];
+  const existingTrades = Array.isArray(existing?.interestedTrades) ? existing?.interestedTrades as unknown[] : [];
+  const mergedTrades = [...new Set([...existingTrades, ...newTrades])];
+
+  const customer = saveCustomerRecord({
+    id: existing?.id,
+    name,
+    phone: phone ?? existing?.phone ?? '',
+    email: firstString(fields.email) ?? existing?.email ?? '',
+    address: firstString(fields.address, fields.postcode) ?? existing?.address ?? '',
+    status: existing?.status ?? 'lead',
+    interestedTrades: mergedTrades,
+    notes: combinedNotes,
+    source: existing?.source ?? 'phone',
+    budget: fields.budget ?? existing?.budget,
+    sourceCallId: (existing?.sourceCallId as string | undefined) ?? opts.callId,
+  });
+
+  if (opts.callId) {
+    saveCall({ id: opts.callId, customerId: customer.id, intent: 'new_sales_lead', outcome: 'lead_captured' });
+    appendCustomerCallActivity({
+      customerId: String(customer.id),
+      callId: opts.callId,
+      summary: scopeNote || (existing ? 'Lead details updated from phone call' : 'Lead captured from phone call'),
+      outcome: 'lead_captured',
+    });
+  }
+
+  return { customer, isNewLead: !existing };
 }
 
 export const PHONE_TOOLS = [
@@ -216,6 +282,32 @@ export const PHONE_TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'sendToStaffCynthia',
+      description:
+        'When staff say "send it to me", "pop it in the chat", or "send me the details", push a rich card (address, amount, phone, summary) into their Cynthia APK chat so they can open it and call the customer.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Card title e.g. Quote ready — Mrs Smith' },
+          customerName: { type: 'string' },
+          phone: { type: 'string', description: 'Customer phone for Call button' },
+          address: { type: 'string' },
+          amount: { type: 'number', description: 'Quote or job amount in GBP' },
+          summary: { type: 'string' },
+          notes: { type: 'string' },
+          quoteId: { type: 'string' },
+          projectId: { type: 'string' },
+          customerId: { type: 'string' },
+          staffUserId: { type: 'string', description: 'Staff user id if known' },
+          staffPhone: { type: 'string', description: 'Staff phone to resolve inbox' },
+        },
+        required: ['title'],
+      },
+    },
+  },
 ];
 
 export const PHONE_AUTO_ACTIONS = new Set([
@@ -229,6 +321,7 @@ export const PHONE_AUTO_ACTIONS = new Set([
   'transferToHuman',
   'enqueueOutboundCall',
   'captureMessage',
+  'sendToStaffCynthia',
   'escalateToStaff',
   'saveCustomer',
 ]);
@@ -250,21 +343,14 @@ export function executePhoneTool(
   }
 
   if (name === 'captureLead') {
-    const customer = saveCustomerRecord({
-      name: input.name,
-      phone: callerPhone,
-      email: input.email ?? '',
-      address: input.address ?? input.postcode ?? '',
-      status: 'lead',
-      interestedTrades: input.interestedTrades ?? [],
-      notes: [input.scope, input.notes].filter(Boolean).join(' — '),
-      source: 'phone',
-      budget: input.budget,
-    });
-    if (callId) {
-      saveCall({ id: callId, customerId: customer.id, intent: 'new_sales_lead', outcome: 'lead_captured' });
-    }
-    return { customerId: customer.id, name: customer.name, status: 'lead', saved: true };
+    const { customer, isNewLead } = captureOrUpdateLead(input, { callId, fallbackPhone: callerPhone });
+    return {
+      customerId: customer.id,
+      name: customer.name,
+      status: customer.status ?? 'lead',
+      saved: true,
+      isNewLead,
+    };
   }
 
   if (name === 'bookCallback') {
@@ -410,6 +496,34 @@ export function executePhoneTool(
       captured: true,
       department: input.department ?? 'general',
       urgency: input.urgency ?? 'medium',
+    };
+  }
+
+  if (name === 'sendToStaffCynthia') {
+    const amountRaw = input.amount;
+    const amount = typeof amountRaw === 'number' ? amountRaw : Number(amountRaw);
+    const result = sendToStaffCynthiaInternal({
+      orgId: body.orgId,
+      userId: firstString(input.staffUserId, body.userId),
+      staffPhone: firstString(input.staffPhone, body.callContext?.to),
+      title: firstString(input.title) ?? 'Details from call',
+      customerName: firstString(input.customerName, body.customerContext?.customerName),
+      phone: firstString(input.phone, callerPhone, body.customerContext?.phone),
+      address: firstString(input.address),
+      amount: Number.isFinite(amount) ? amount : undefined,
+      summary: firstString(input.summary),
+      notes: firstString(input.notes),
+      quoteId: firstString(input.quoteId),
+      projectId: firstString(input.projectId),
+      customerId: firstString(input.customerId, body.customerContext?.customerId),
+      source: 'phone',
+    });
+    return {
+      sent: true,
+      cardId: result.card.id,
+      route: result.route,
+      userId: result.userId,
+      spokenConfirm: "I've sent it to your Cynthia chat — open the app for address, amount, and Call.",
     };
   }
 

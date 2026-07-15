@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Badge } from './ui/badge';
-import { Facebook, Instagram, Search as GoogleIcon, Phone, Mail, User, MapPin, Calendar, TrendingUp, Filter, Plus, MessageSquare, Video, ExternalLink } from 'lucide-react';
+import { Facebook, Instagram, Search as GoogleIcon, Phone, PhoneCall, Mail, User, MapPin, Calendar, TrendingUp, Filter, Plus, MessageSquare, Video, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { AddressMapLink } from './ui/AddressMapLink';
 import { getAllTrades } from '../config/trades';
@@ -593,6 +593,20 @@ export default function ComprehensiveCRM() {
                   <Button variant="outline" className="flex-1 min-w-[140px]" onClick={handleLogFollowUp}>
                     Log Follow-up
                   </Button>
+                  {selectedLead.sourceCallId && (
+                    <Button
+                      variant="outline"
+                      className="flex-1 min-w-[140px]"
+                      onClick={() => {
+                        const callId = selectedLead.sourceCallId;
+                        setSelectedLead(null);
+                        navigate(`/calls?callId=${callId}`);
+                      }}
+                    >
+                      <PhoneCall className="w-4 h-4 mr-2" />
+                      View call
+                    </Button>
+                  )}
                   <Button variant="destructive" className="flex-1 min-w-[140px]" onClick={handleMarkLost}>
                     Mark Lost
                   </Button>

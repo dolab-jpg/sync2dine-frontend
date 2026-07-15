@@ -64,6 +64,10 @@ export interface TeamMemberRecord {
   name: string;
   phone: string;
   role: 'super_admin' | 'manager' | 'staff' | 'builder';
+  /** Worker UI / channel reply language: en | sq | uk | ru | zh | es | pl | fa */
+  preferredLanguage?: string | null;
+  phonePinHash?: string;
+  phonePinUpdatedAt?: string;
   updatedAt: string;
 }
 
@@ -578,6 +582,52 @@ export function saveCustomerRecord(customer: Record<string, unknown>): Record<st
   }
   syncData(store);
   return store.customers.find(c => String(c.id) === id) ?? record;
+}
+
+/** Append a phone-call activity note onto the customer record. */
+export function appendCustomerCallActivity(input: {
+  customerId: string;
+  callId?: string;
+  summary: string;
+  outcome?: string;
+}): Record<string, unknown> {
+  const store = getDataStore();
+  const idx = store.customers.findIndex(c => String(c.id) === input.customerId);
+  const stamp = new Date().toISOString();
+  const line = [
+    `[Aria call ${stamp.slice(0, 16).replace('T', ' ')}]`,
+    input.summary.trim(),
+    input.outcome ? `Outcome: ${input.outcome.trim()}` : '',
+    input.callId ? `(callId ${input.callId})` : '',
+  ].filter(Boolean).join(' ');
+
+  const activity = {
+    id: `CA${Date.now()}`,
+    type: 'aria_call',
+    callId: input.callId ?? null,
+    summary: input.summary,
+    outcome: input.outcome ?? null,
+    createdAt: stamp,
+  };
+
+  if (idx < 0) {
+    return { ...activity, logged: false };
+  }
+
+  const customer = store.customers[idx] as Record<string, unknown>;
+  const prevNotes = String(customer.notes ?? '');
+  const activities = Array.isArray(customer.activities)
+    ? [...(customer.activities as unknown[])]
+    : [];
+  activities.unshift(activity);
+  store.customers[idx] = {
+    ...customer,
+    notes: prevNotes ? `${line}\n${prevNotes}` : line,
+    activities: activities.slice(0, 50),
+    updatedAt: stamp,
+  };
+  syncData(store);
+  return { ...activity, logged: true };
 }
 
 export function getAgentSettings(): AgentSettings {

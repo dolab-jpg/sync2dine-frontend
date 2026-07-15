@@ -27,6 +27,7 @@ export function SoftPhonePanel(_props: { lines?: PhoneLine[] }) {
   const [status, setStatus] = useState<RegStatus>('disconnected');
   const [inCall, setInCall] = useState(false);
   const [incoming, setIncoming] = useState(false);
+  const [remoteNumber, setRemoteNumber] = useState<string | null>(null);
   const uaRef = useRef<import('jssip').UA | null>(null);
   const sessionRef = useRef<import('jssip').RTCSession | null>(null);
   const statusRef = useRef<RegStatus>('disconnected');
@@ -115,18 +116,23 @@ export function SoftPhonePanel(_props: { lines?: PhoneLine[] }) {
       ua.on('newRTCSession', (data: { session: import('jssip').RTCSession }) => {
         const session = data.session;
         sessionRef.current = session;
+        const remoteIdentity = (session as unknown as { remote_identity?: { uri?: { user?: string }; display_name?: string } }).remote_identity;
+        const callerNumber = remoteIdentity?.uri?.user ?? null;
+        setRemoteNumber(callerNumber ? (remoteIdentity?.display_name || callerNumber) : null);
         session.on('ended', () => {
           setInCall(false);
           setIncoming(false);
+          setRemoteNumber(null);
         });
         session.on('failed', () => {
           setInCall(false);
           setIncoming(false);
+          setRemoteNumber(null);
         });
         if (session.direction === 'incoming') {
           setIncoming(true);
           setInCall(false);
-          toast.message('Incoming call');
+          toast.message(callerNumber ? `Incoming call from ${callerNumber}` : 'Incoming call');
         } else {
           setInCall(true);
         }
@@ -149,12 +155,14 @@ export function SoftPhonePanel(_props: { lines?: PhoneLine[] }) {
     sessionRef.current?.terminate();
     setIncoming(false);
     setInCall(false);
+    setRemoteNumber(null);
   };
 
   const hangup = () => {
     sessionRef.current?.terminate();
     setInCall(false);
     setIncoming(false);
+    setRemoteNumber(null);
   };
 
   const call = () => {
@@ -214,6 +222,9 @@ export function SoftPhonePanel(_props: { lines?: PhoneLine[] }) {
             <PhoneIncoming className="w-3 h-3 mr-1" /> ringing
           </Badge>
         )}
+        {(incoming || inCall) && remoteNumber && (
+          <Badge variant="outline" className="font-mono">{remoteNumber}</Badge>
+        )}
         {status !== 'registered' ? (
           <Button onClick={() => void register()} disabled={status === 'registering'}>
             {status === 'registering' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Phone className="w-4 h-4 mr-2" />}
@@ -235,9 +246,14 @@ export function SoftPhonePanel(_props: { lines?: PhoneLine[] }) {
       </div>
 
       {incoming && (
-        <div className="flex gap-2">
-          <Button onClick={answer}>Answer</Button>
-          <Button variant="destructive" onClick={reject}>Reject</Button>
+        <div className="space-y-2">
+          <p className="text-sm text-slate-700">
+            Incoming call from <span className="font-mono font-semibold">{remoteNumber ?? 'unknown number'}</span>
+          </p>
+          <div className="flex gap-2">
+            <Button onClick={answer}>Answer</Button>
+            <Button variant="destructive" onClick={reject}>Reject</Button>
+          </div>
         </div>
       )}
 
