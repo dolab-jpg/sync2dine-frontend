@@ -262,6 +262,7 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
     : undefined;
 
   const orchestratorBody: OrchestratorRequest = {
+    orgId,
     messages: [...history, { role: 'user', content: normalized.english }],
     orchestratorMode: resolveOrchestratorMode(route),
     channel: orchestratorChannel,

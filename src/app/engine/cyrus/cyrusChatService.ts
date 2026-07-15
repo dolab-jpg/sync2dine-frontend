@@ -173,7 +173,7 @@ export async function sendCyrusMessage(
             output: { content, toolsUsed },
             status: 'approved',
             createdAt: new Date().toISOString(),
-            approvedBy: 'Cyrus',
+            approvedBy: 'Cynthia',
           },
         ],
       });
@@ -235,7 +235,7 @@ export async function simulateInboundWhatsApp(
         appendConversationMessage(phone, { role: 'assistant', content: reply, phone: key });
       }
       syncToServer();
-      return reply || 'Cyrus received your message.';
+      return reply || 'Cynthia received your message.';
     }
   } catch {
     // fall through to client-side Cyrus

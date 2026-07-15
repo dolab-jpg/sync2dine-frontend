@@ -91,7 +91,7 @@ export default function QuotesList() {
         },
         subject: renderTemplate('Your Quote from {COMPANY_NAME}', vars),
         body: renderTemplate(
-          `Dear {CUSTOMER_NAME},\n\nYour quote for £{QUOTE_TOTAL} is ready. Valid until {QUOTE_EXPIRY}.\n\nChat with Cyrus on WhatsApp for questions.`,
+          `Dear {CUSTOMER_NAME},\n\nYour quote for £{QUOTE_TOTAL} is ready. Valid until {QUOTE_EXPIRY}.\n\nReply to this email or call us with any questions.`,
           vars
         ),
         eventType: 'quote_sent',

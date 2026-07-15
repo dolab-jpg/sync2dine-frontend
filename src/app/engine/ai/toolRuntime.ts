@@ -1286,6 +1286,188 @@ async function executeSingleTool(
     };
   }
 
+  if (name === 'generateQuotePdf') {
+    const { generateQuotePdf } = await import('../messaging/pdfGenerator');
+    const customerName = readOptionalString(output.customerName) || 'Customer';
+    const total = Number(output.total ?? 0);
+    const tradeName = readOptionalString(output.tradeName);
+    const lineItems = Array.isArray(output.lineItems)
+      ? (output.lineItems as Array<{ description?: string; amount?: number }>).map((i) => ({
+          description: String(i.description ?? 'Item'),
+          amount: Number(i.amount ?? 0),
+        }))
+      : undefined;
+    try {
+      const pdf = await generateQuotePdf(customerName, total, tradeName, lineItems);
+      const dataUrl = `data:${pdf.mimeType};base64,${pdf.content}`;
+      return {
+        action: name,
+        summary: `Quote PDF ready for ${customerName} (£${total.toLocaleString('en-GB')}).`,
+        openRoute: '/cynthia',
+        output: {
+          ...output,
+          title: `Quote — ${customerName}`,
+          pdfDataUrl: dataUrl,
+          pdfFilename: pdf.filename,
+        },
+        executed: true,
+      };
+    } catch (err) {
+      return {
+        action: name,
+        summary: err instanceof Error ? err.message : 'Could not generate quote PDF.',
+        output,
+        executed: false,
+      };
+    }
+  }
+
+  if (name === 'generateOpsReport') {
+    const title = readOptionalString(output.title) || 'Operations report';
+    const reportType = readOptionalString(output.reportType) || 'custom';
+    let markdown = readOptionalString(output.markdown) || '';
+    if (!markdown && ctx.app) {
+      const customers = ctx.app.customers ?? [];
+      const quotes = ctx.app.quotes ?? [];
+      const awaiting = quotes.filter((q) => String(q.status).includes('await') || q.status === 'sent');
+      const leads = customers.filter((c) => c.status === 'lead' || c.status === 'enquiry');
+      markdown = [
+        `# ${title}`,
+        '',
+        `Generated: ${new Date().toLocaleString('en-GB')}`,
+        `Type: ${reportType}`,
+        '',
+        `## Snapshot`,
+        `- Customers: ${customers.length}`,
+        `- Quotes: ${quotes.length}`,
+        `- Awaiting / sent quotes: ${awaiting.length}`,
+        `- Leads: ${leads.length}`,
+        '',
+        `## Recent quotes`,
+        ...quotes.slice(0, 8).map(
+          (q) => `- ${q.customerName}: £${Number(q.total).toLocaleString('en-GB')} (${q.status})`,
+        ),
+        '',
+        `## Recent leads`,
+        ...leads.slice(0, 8).map((c) => `- ${c.name}${c.phone ? ` · ${c.phone}` : ''}`),
+      ].join('\n');
+    }
+    return {
+      action: name,
+      summary: `${title} ready.`,
+      openRoute: '/cynthia',
+      output: { ...output, title, reportMarkdown: markdown },
+      executed: true,
+    };
+  }
+
+  if (name === 'placeOutboundCall') {
+    const to = readOptionalString(output.to);
+    if (!to) {
+      return { action: name, summary: 'Need a phone number to call.', output, executed: false };
+    }
+    const template =
+      readOptionalString(output.template)
+      || 'lead_callback';
+    const customerName = readOptionalString(output.customerName);
+    const reason = readOptionalString(output.reason) || 'Staff requested from Cynthia';
+    try {
+      const res = await fetch('/api/calls/outbound', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to,
+          template,
+          context: {
+            customerName,
+            reason,
+            source: 'cynthia',
+          },
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok || data.success === false) {
+        const errMsg =
+          (typeof data.error === 'string' && data.error)
+          || `Outbound call failed (${res.status}).`;
+        return {
+          action: name,
+          summary: errMsg,
+          output,
+          executed: false,
+        };
+      }
+      return {
+        action: name,
+        summary: `Calling ${customerName || to}…`,
+        openRoute: '/calls',
+        output: { ...output, ...data, template },
+        executed: true,
+      };
+    } catch (err) {
+      return {
+        action: name,
+        summary: err instanceof Error ? err.message : 'Outbound call failed.',
+        output,
+        executed: false,
+      };
+    }
+  }
+
+  if (name === 'sendToStaffCynthia') {
+    // Server / phone / channel paths may have already persisted the card.
+    if (output.sent === true || readOptionalString(output.cardId)) {
+      const title = readOptionalString(output.title) || 'Details for you';
+      return {
+        action: name,
+        summary: readOptionalString(output.spokenConfirm) || `Sent to Cynthia chat: ${title}`,
+        openRoute: readOptionalString(output.route) || '/cynthia',
+        output,
+        executed: true,
+      };
+    }
+    const title = readOptionalString(output.title) || 'Details for you';
+    try {
+      const res = await fetch('/api/cynthia/send-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: readOptionalString(output.staffUserId) || readOptionalString(output.userId) || ctx.userId,
+          title,
+          customerName: readOptionalString(output.customerName),
+          phone: readOptionalString(output.phone),
+          address: readOptionalString(output.address),
+          amount: output.amount != null ? Number(output.amount) : undefined,
+          summary: readOptionalString(output.summary),
+          notes: readOptionalString(output.notes),
+          quoteId: readOptionalString(output.quoteId),
+          projectId: readOptionalString(output.projectId),
+          customerId: readOptionalString(output.customerId),
+          staffUserId: readOptionalString(output.staffUserId) || ctx.userId,
+          source: 'cynthia',
+        }),
+      });
+      if (!res.ok) {
+        return { action: name, summary: 'Could not send Cynthia card.', output, executed: false };
+      }
+      const data = (await res.json()) as { card?: { id?: string }; route?: string };
+      return {
+        action: name,
+        summary: `Sent to Cynthia chat: ${title}`,
+        openRoute: data.route || '/cynthia',
+        output: { ...output, cardId: data.card?.id, route: data.route, sent: true },
+        executed: true,
+      };
+    } catch (err) {
+      return {
+        action: name,
+        summary: err instanceof Error ? err.message : 'Could not send Cynthia card.',
+        output,
+        executed: false,
+      };
+    }
+  }
+
   if (name === 'writeData') {
     const collection = readOptionalString(output.collection) as WriteDataInput['collection'] | undefined;
     const operation = (readOptionalString(output.operation) ?? 'update') as WriteDataInput['operation'];

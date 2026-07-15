@@ -2,6 +2,7 @@ import {
   appendCustomerCallActivity,
   enqueueOutboundCall,
   getDataStore,
+  getRequestOrgId,
   lookupContactByPhone,
   saveCall,
   saveCustomerRecord,
@@ -502,13 +503,23 @@ export function executePhoneTool(
   if (name === 'sendToStaffCynthia') {
     const amountRaw = input.amount;
     const amount = typeof amountRaw === 'number' ? amountRaw : Number(amountRaw);
+    const fromStaffContext = Boolean(body.staffContext?.userId || body.staffContext?.role);
     const result = sendToStaffCynthiaInternal({
-      orgId: body.orgId,
-      userId: firstString(input.staffUserId, body.userId),
-      staffPhone: firstString(input.staffPhone, body.callContext?.to),
+      orgId: body.orgId || getRequestOrgId(),
+      userId: firstString(input.staffUserId, input.userId, body.staffContext?.userId),
+      // Prefer the staff caller's number (from) / channel phone — not the company line (to).
+      staffPhone: firstString(
+        input.staffPhone,
+        fromStaffContext ? callerPhone : undefined,
+        body.callContext?.from,
+      ),
       title: firstString(input.title) ?? 'Details from call',
       customerName: firstString(input.customerName, body.customerContext?.customerName),
-      phone: firstString(input.phone, callerPhone, body.customerContext?.phone),
+      phone: firstString(
+        input.phone,
+        fromStaffContext ? undefined : callerPhone,
+        body.customerContext?.phone,
+      ),
       address: firstString(input.address),
       amount: Number.isFinite(amount) ? amount : undefined,
       summary: firstString(input.summary),
@@ -516,7 +527,7 @@ export function executePhoneTool(
       quoteId: firstString(input.quoteId),
       projectId: firstString(input.projectId),
       customerId: firstString(input.customerId, body.customerContext?.customerId),
-      source: 'phone',
+      source: body.orchestratorMode === 'phone' || body.callContext ? 'phone' : 'cynthia',
     });
     return {
       sent: true,

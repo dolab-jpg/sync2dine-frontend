@@ -103,13 +103,15 @@ export default function CyrusConversations() {
   const onVoice = useCallback((text: string) => {
     if (text) setComposer((prev) => (prev ? `${prev} ${text}` : text));
   }, []);
-  const { isListening, startListening, stopListening, isSupported } = useVoiceInput(onVoice);
+  const { isListening, startListening, stopListening, isSupported } = useVoiceInput(onVoice, {
+    onError: (message) => toast.error(message),
+  });
   const { speak } = useVoiceOutput();
 
   if (!context) return null;
   const { customers, updateCustomer, user } = context;
   const userRole = user.role;
-  const cyrusName = integrationService.getConfig('whatsapp').cyrusDisplayName || 'Cyrus';
+  const cyrusName = integrationService.getConfig('whatsapp').cyrusDisplayName || 'Cynthia';
 
   const selectedThread = threads.find((t) => t.sessionId === selectedId || t.phone === selectedId);
   const selectedCustomer = selectedThread
@@ -176,7 +178,7 @@ export default function CyrusConversations() {
         void speak(data.reply, voiceMode);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Cyrus failed — check OpenAI in Integrations');
+      toast.error(err instanceof Error ? err.message : 'Cynthia failed — check OpenAI in Integrations');
       void checkOpenAIConnection({ role: userRole }).then(setOpenaiState);
     } finally {
       setSending(false);
@@ -204,7 +206,7 @@ export default function CyrusConversations() {
             {cyrusName} Conversations
           </h1>
           <p className="text-gray-600 mt-1">
-            Live inbox — WhatsApp, website, and portal — powered by OpenAI via Cyrus
+            Live inbox — website and portal — powered by OpenAI via Cynthia
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
@@ -234,7 +236,7 @@ export default function CyrusConversations() {
             ) : threads.length === 0 ? (
               <p className="p-4 text-sm text-gray-500">
                 No conversations yet. Use Integrations → WhatsApp → Simulate inbound, the website embed,
-                or portal Ask Cyrus.
+                or portal Ask Cynthia.
               </p>
             ) : (
               <div className="divide-y max-h-[600px] overflow-auto">
@@ -413,7 +415,7 @@ export default function CyrusConversations() {
                     <Input
                       value={composer}
                       onChange={(e) => setComposer(e.target.value)}
-                      placeholder="Type a reply or ask Cyrus…"
+                      placeholder="Type a reply or ask Cynthia…"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();

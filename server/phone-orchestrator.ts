@@ -149,6 +149,10 @@ export async function handlePhoneTurn(body: PhoneOrchestratorRequest): Promise<{
   for (const action of allActions) {
     toolsUsed.push(action.action);
     if (PHONE_AUTO_ACTIONS.has(action.action) || CUSTOMER_READ_TOOLS.has(action.action)) {
+      // Phone orchestrator already executed tools in-loop — don't double-send cards.
+      if (action.action === 'sendToStaffCynthia' && action.output?.sent) {
+        continue;
+      }
       let output: Record<string, unknown>;
       if (CUSTOMER_READ_TOOLS.has(action.action)) {
         output = executeCustomerTool(action.action, action.input, orchestratorBody);
@@ -167,6 +171,14 @@ export async function handlePhoneTurn(body: PhoneOrchestratorRequest): Promise<{
   }
 
   let content = result.content;
+  for (const action of allActions) {
+    if (action.action === 'sendToStaffCynthia' && action.output?.spokenConfirm) {
+      const confirm = String(action.output.spokenConfirm);
+      if (!content.toLowerCase().includes('cynthia')) {
+        content = `${content} ${confirm}`.trim();
+      }
+    }
+  }
   if (content.length > 500) {
     content = content.slice(0, 497) + '...';
   }

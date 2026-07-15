@@ -289,7 +289,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   {
     id: 'company',
     name: 'Company Profile',
-    description: 'Used by Cyrus, templates, and invoice/quote/receipt PDFs',
+    description: 'Used by Cynthia, templates, and invoice/quote/receipt PDFs',
     category: 'general',
     fields: [
       { key: 'companyName', label: 'Company Name', type: 'text', placeholder: 'TradePro Ltd' },
@@ -334,7 +334,7 @@ export function getDefaultFieldValues(def: IntegrationDefinition): Record<string
     values.staffModel = 'gpt-4o-mini';
     values.cyrusModel = 'gpt-4o-mini';
     values.summaryModel = 'gpt-4o-mini';
-    values.ttsVoice = 'fable';
+    values.ttsVoice = 'nova';
   }
   if (def.id === 'whatsapp') {
     values.cyrusDisplayName = 'Cynthia';

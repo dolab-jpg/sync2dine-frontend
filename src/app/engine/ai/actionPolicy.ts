@@ -42,6 +42,7 @@ const SAFETY_CONFIRM_ACTIONS = new Set([
   'approveQuote',
   'sendEmailReply',
   'sendEmailWithAttachment',
+  'placeOutboundCall',
 ]);
 
 const CUSTOMER_MESSAGE_ACTIONS = new Set([
@@ -93,6 +94,10 @@ export function getHumanActionLabel(action: string, output?: Record<string, unkn
     approveQuote: 'Approve this quote price?',
     sendEmailReply: 'Send this email from your connected inbox?',
     sendEmailWithAttachment: 'Send this email with attachment(s)?',
+    placeOutboundCall: 'Place this outbound call?',
+    generateQuotePdf: 'Quote PDF ready.',
+    generateOpsReport: 'Report ready.',
+    sendToStaffCynthia: 'Card sent to Cynthia.',
     writeData: 'Delete this record?',
   };
   return labels[action] ?? `Review: ${action.replace(/([A-Z])/g, ' $1').trim()}`;

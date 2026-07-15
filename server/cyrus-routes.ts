@@ -178,7 +178,7 @@ export async function handleCyrusRoutes(
       const record = setHandoffMode(orgId, sessionId, mode);
       const notice = mode === 'human_takeover'
         ? 'A team member has joined this conversation.'
-        : 'Cyrus AI is handling this conversation again.';
+        : 'Cynthia AI is handling this conversation again.';
       appendConversationMessage(orgId, sessionId, {
         role: 'assistant',
         content: notice,

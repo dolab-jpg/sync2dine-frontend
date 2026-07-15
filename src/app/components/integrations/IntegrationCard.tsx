@@ -196,10 +196,10 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
 
           {definition.id === 'company' && (
             <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-              <Label className="font-semibold text-slate-900">Cyrus website chat (existing site)</Label>
+              <Label className="font-semibold text-slate-900">Cynthia website chat (existing site)</Label>
               <p className="text-xs text-slate-600">
-                Paste this into your company website footer (the URL above). Visitors chat with Cyrus;
-                threads appear under Cyrus Conversations for staff handoff.
+                Paste this into your company website footer (the URL above). Visitors chat with Cynthia;
+                threads appear under Cynthia for staff handoff.
               </p>
               <pre className="text-xs bg-white border rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all">
                 {embedSnippet || 'Save Company Profile to generate the snippet.'}
@@ -234,7 +234,7 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
                 variant="outline"
                 onClick={() => simulateWhatsApp(simulateMsg)}
               >
-                Send to Cyrus
+                Send to Cynthia
               </Button>
             </div>
           )}

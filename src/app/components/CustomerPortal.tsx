@@ -47,7 +47,7 @@ export default function CustomerPortal() {
   const [cyrusMessages, setCyrusMessages] = useState<ServerConversationMessage[]>([]);
   const [cyrusInput, setCyrusInput] = useState('');
   const [cyrusBusy, setCyrusBusy] = useState(false);
-  const cyrusName = integrationService.getConfig('whatsapp').cyrusDisplayName || 'Cyrus';
+  const cyrusName = integrationService.getConfig('whatsapp').cyrusDisplayName || 'Cynthia';
   const { speak } = useVoiceOutput();
   const onCyrusVoice = useCallback((text: string) => {
     if (text) setCyrusInput((prev) => (prev ? `${prev} ${text}` : text));
@@ -525,7 +525,7 @@ export default function CustomerPortal() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Ask {cyrusName}</CardTitle>
           <p className="text-xs text-slate-500">
-            Quick answers about your project — the office can also take over from Cyrus Conversations.
+            Quick answers about your project — the office can also take over from Cynthia.
           </p>
         </CardHeader>
         <CardContent className="space-y-3">

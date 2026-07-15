@@ -107,6 +107,7 @@ const PHONE_RECEPTION = new Set([
   'transferToHuman',
   'enqueueOutboundCall',
   'captureMessage',
+  'sendToStaffCynthia',
 ]);
 
 const RECRUITMENT = new Set([
@@ -128,6 +129,13 @@ const EMAIL = new Set([
   'draftEmailReply',
   'sendEmailReply',
   'sendEmailWithAttachment',
+]);
+
+const CYNTHIA_OPS = new Set([
+  'generateQuotePdf',
+  'generateOpsReport',
+  'placeOutboundCall',
+  'sendToStaffCynthia',
 ]);
 
 const PLANNING = new Set([
@@ -166,6 +174,7 @@ const ROLE_ACTIONS: Record<AgentRole, Set<string>> = {
     ...CONTRACTS_PRICING,
     ...PLANNING,
     ...EMAIL,
+    ...CYNTHIA_OPS,
     'requestCodeFix',
   ]),
   manager: new Set([
@@ -185,6 +194,7 @@ const ROLE_ACTIONS: Record<AgentRole, Set<string>> = {
     ...MANAGER_INSIGHTS,
     ...PLANNING,
     ...EMAIL,
+    ...CYNTHIA_OPS,
     'requestCodeFix',
   ]),
   super_admin: new Set([
@@ -204,6 +214,7 @@ const ROLE_ACTIONS: Record<AgentRole, Set<string>> = {
     ...MANAGER_INSIGHTS,
     ...PLANNING,
     ...EMAIL,
+    ...CYNTHIA_OPS,
     'requestCodeFix',
   ]),
   builder: new Set([

@@ -67,7 +67,7 @@ export default function IntegrationsHub() {
   const handleSimulateWhatsApp = async (message: string) => {
     try {
       const reply = await simulateInboundWhatsApp(message, context?.customers ?? [], context?.quotes ?? []);
-      toast.success(`Cyrus replied: ${reply.slice(0, 80)}...`);
+      toast.success(`Cynthia replied: ${reply.slice(0, 80)}...`);
       refresh();
     } catch {
       toast.error('Simulation failed');

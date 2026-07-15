@@ -365,10 +365,12 @@ export async function handlePhoneOutboundWebhook(req: IncomingMessage, res: Serv
 
 export async function handleOutboundCallApi(req: IncomingMessage, res: ServerResponse) {
   const body = JSON.parse(await readBody(req));
-  const { to, template, context, scheduledAt } = body;
+  const { to, context, scheduledAt } = body;
+  // Cynthia / staff chat may omit template — default to lead callback campaign.
+  const template = (body.template as string | undefined) || 'lead_callback';
 
-  if (!to || !template) {
-    sendJson(res, 400, { error: 'to and template are required' });
+  if (!to) {
+    sendJson(res, 400, { error: 'to is required' });
     return;
   }
 

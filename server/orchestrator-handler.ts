@@ -1573,6 +1573,11 @@ const AUTO_ACTION_NAMES = new Set([
   'draftEmailReply',
   'sendEmailReply',
   'sendEmailWithAttachment',
+  'generateQuotePdf',
+  'generateOpsReport',
+  'sendToStaffCynthia',
+  'requestCodeFix',
+  'placeOutboundCall',
   ...PHONE_AUTO_ACTIONS,
   ...PLANNING_ACTION_NAMES,
 ]);
@@ -2850,6 +2855,8 @@ async function runStaffOrchestrator(
   body: OrchestratorRequest,
   messages: OrchestratorMessage[]
 ): Promise<OrchestratorResult> {
+  const { resolveOrgIdFromBody } = await import('./org-context');
+  const orgId = resolveOrgIdFromBody(body as { orgId?: string });
   const model = body.model ?? 'gpt-4o-mini';
   const mode = resolveMode(body);
   const lastMessage = messages[messages.length - 1]?.content ?? '';
@@ -2918,6 +2925,11 @@ async function runStaffOrchestrator(
 
       if (SERVER_READ_TOOLS.has(toolName)) {
         output = await executeServerReadTool(toolName, parsedInput, body);
+      } else if (toolName === 'sendToStaffCynthia') {
+        // Persist the Cynthia card server-side so phone/WhatsApp/channel paths land
+        // even when no browser client is online to run toolRuntime.
+        output = executePhoneTool(toolName, parsedInput, { ...body, orgId });
+        proposedActions.push({ action: toolName, input: parsedInput, output });
       } else {
         output = toolName === 'updateLeadStatus'
           ? executeUpdateLeadStatus(parsedInput)
@@ -2964,11 +2976,23 @@ async function runStaffOrchestrator(
     finalContent = summaryPass.choices[0]?.message?.content ?? null;
   }
 
+  // Append spoken confirm when a Cynthia card was pushed server-side
+  let content =
+    finalContent ?? buildActionsSummaryText(proposedActions) ?? 'How can I help with your quote or project today?';
+  for (const action of proposedActions) {
+    if (action.action === 'sendToStaffCynthia' && action.output?.spokenConfirm) {
+      const confirm = String(action.output.spokenConfirm);
+      if (!content.toLowerCase().includes('cynthia')) {
+        content = `${content} ${confirm}`.trim();
+      }
+    }
+  }
+
   const autoActions = proposedActions.filter((action) => AUTO_ACTION_NAMES.has(action.action));
   const clientProposed = proposedActions.filter((action) => !AUTO_ACTION_NAMES.has(action.action));
 
   return applyRoleGate(body, {
-    content: finalContent ?? buildActionsSummaryText(proposedActions) ?? 'How can I help with your quote or project today?',
+    content,
     proposedActions: clientProposed,
     autoActions,
     detectedTrades,

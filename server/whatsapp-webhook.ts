@@ -250,7 +250,7 @@ async function handleBuilderInbound(
     if (result.content?.trim()) {
       appendProjectMessage(projectId, {
         id: `WM${Date.now()}b`,
-        from: 'Cyrus',
+        from: 'Cynthia',
         fromRole: 'office',
         body: `Builder triage: ${result.content}`,
         timestamp: new Date().toISOString(),
@@ -473,7 +473,7 @@ export async function handleWhatsAppWebhookPost(
     if (projectId) {
       appendProjectMessage(projectId, {
         id: `WM${Date.now()}a`,
-        from: inbound.route.mode === 'staff' ? 'TradePro AI' : 'Cyrus',
+        from: inbound.route.mode === 'staff' ? 'TradePro AI' : 'Cynthia',
         fromRole: 'office',
         body: inbound.replyEnglish,
         bodyEnglish: inbound.replyEnglish,

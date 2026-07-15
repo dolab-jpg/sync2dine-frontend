@@ -1,5 +1,5 @@
 /**
- * Cyrus website chat widget — paste via Integrations → Company Profile embed snippet.
+ * Cynthia website chat widget — paste via Integrations → Company Profile embed snippet.
  * data-org-id (required), data-api (API base), data-name (display name)
  */
 (function () {
@@ -8,7 +8,7 @@
   if (!script) return;
   var orgId = script.getAttribute('data-org-id') || 'default';
   var apiBase = (script.getAttribute('data-api') || '').replace(/\/$/, '');
-  var displayName = script.getAttribute('data-name') || 'Cyrus';
+  var displayName = script.getAttribute('data-name') || 'Cynthia';
   var storageKey = 'cyrus_web_session_' + orgId;
 
   function apiUrl(path) {

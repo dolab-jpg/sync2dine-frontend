@@ -122,7 +122,7 @@ export default function QuoteLineBuilder() {
     if (channels.length > 0) {
       const vars = buildQuoteVariables(customer, quoteData, user.name, discount);
       const body = renderTemplate(
-        `Dear {CUSTOMER_NAME},\n\nYour quote total is £{QUOTE_TOTAL}, valid until {QUOTE_EXPIRY}.\n\nReply or message Cyrus on WhatsApp with any questions.\n\n{COMPANY_NAME}`,
+        `Dear {CUSTOMER_NAME},\n\nYour quote total is £{QUOTE_TOTAL}, valid until {QUOTE_EXPIRY}.\n\nReply to this email or call us with any questions.\n\n{COMPANY_NAME}`,
         vars
       );
       const result = await messagingHub.send({

@@ -97,7 +97,7 @@ export async function processInboundEmail(message: CachedEmailMessage, orgId = '
     if (resolved.projectId && reply.content) {
       appendProjectMessage(resolved.projectId, {
         id: randomUUID(),
-        from: conn?.displayName || 'Cyrus',
+        from: conn?.displayName || 'Cynthia',
         fromRole: 'office',
         message: reply.content,
         timestamp: new Date().toISOString(),

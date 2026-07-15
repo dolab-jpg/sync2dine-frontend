@@ -90,6 +90,13 @@ export const AUTO_ACTIONS = new Set([
   'lookupProjectStatus',
   'getPortalLink',
   'escalateToStaff',
+  'generateQuotePdf',
+  'generateOpsReport',
+  'sendToStaffCynthia',
+  'requestCodeFix',
+  'placeOutboundCall',
+  'sendEmailReply',
+  'sendEmailWithAttachment',
   ...PLANNING_ACTIONS,
 ]);
 

@@ -1,56 +1,65 @@
-import { Mic, MicOff } from 'lucide-react';
-import { useState } from 'react';
+import { Mic, MicOff, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
-import {
-  isNativeBridgeAvailable,
-  nativeStartVoice,
-  nativeStopVoice,
-} from '../../bridge/nativeBridge';
+import { toast } from 'sonner';
 
 interface VoiceInputButtonProps {
   onTranscript: (text: string) => void;
-  /** When native returns audio, parent can transcribe or attach the clip. */
+  /** @deprecated Native audio is transcribed via Whisper; kept for API compat. */
   onVoiceNote?: (dataUrl: string) => void;
 }
 
-export function VoiceInputButton({ onTranscript, onVoiceNote }: VoiceInputButtonProps) {
-  const { isListening, startListening, stopListening, isSupported } = useVoiceInput(onTranscript);
-  const [nativeRecording, setNativeRecording] = useState(false);
-  const nativeAvailable = isNativeBridgeAvailable();
+/**
+ * Mic control: native hold-to-record (+ Whisper) in the Flutter shell,
+ * Web Speech API elsewhere.
+ */
+export function VoiceInputButton({ onTranscript }: VoiceInputButtonProps) {
+  const {
+    isListening,
+    isTranscribing,
+    startListening,
+    stopListening,
+    isSupported,
+    isNative,
+  } = useVoiceInput(onTranscript, {
+    onError: (message) => toast.error(message),
+  });
 
-  const handleNativeStart = async () => {
-    const result = await nativeStartVoice();
-    if (result?.ok) setNativeRecording(true);
-  };
+  if (!isSupported) return null;
 
-  const handleNativeStop = async () => {
-    const result = await nativeStopVoice();
-    setNativeRecording(false);
-    if (result?.ok && result.dataUrl) {
-      onVoiceNote?.(result.dataUrl);
-    }
-  };
+  const busy = isListening || isTranscribing;
 
-  if (nativeAvailable) {
+  if (isNative) {
     return (
       <Button
         type="button"
         size="icon"
-        variant={nativeRecording ? 'destructive' : 'outline'}
+        variant={busy ? 'destructive' : 'outline'}
+        disabled={isTranscribing}
         className="min-h-11 min-w-11 touch-manipulation"
-        onMouseDown={() => void handleNativeStart()}
-        onMouseUp={() => void handleNativeStop()}
-        onTouchStart={() => void handleNativeStart()}
-        onTouchEnd={() => void handleNativeStop()}
-        title="Hold to record voice note"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          void startListening();
+        }}
+        onPointerUp={() => void stopListening()}
+        onPointerLeave={() => {
+          if (isListening) void stopListening();
+        }}
+        onPointerCancel={() => {
+          if (isListening) void stopListening();
+        }}
+        title="Hold to speak"
       >
-        {nativeRecording ? <MicOff className="w-4 h-4 animate-pulse" /> : <Mic className="w-4 h-4" />}
+        {isTranscribing ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : isListening ? (
+          <MicOff className="w-4 h-4 animate-pulse" />
+        ) : (
+          <Mic className="w-4 h-4" />
+        )}
       </Button>
     );
   }
-
-  if (!isSupported) return null;
 
   return (
     <Button
@@ -58,10 +67,10 @@ export function VoiceInputButton({ onTranscript, onVoiceNote }: VoiceInputButton
       size="icon"
       variant={isListening ? 'destructive' : 'outline'}
       className="min-h-11 min-w-11 touch-manipulation"
-      onMouseDown={startListening}
-      onMouseUp={stopListening}
-      onTouchStart={startListening}
-      onTouchEnd={stopListening}
+      onMouseDown={() => void startListening()}
+      onMouseUp={() => void stopListening()}
+      onTouchStart={() => void startListening()}
+      onTouchEnd={() => void stopListening()}
       title="Hold to speak"
     >
       {isListening ? <MicOff className="w-4 h-4 animate-pulse" /> : <Mic className="w-4 h-4" />}

@@ -120,6 +120,7 @@ const PHONE_RECEPTION = new Set([
   'transferToHuman',
   'enqueueOutboundCall',
   'captureMessage',
+  'sendToStaffCynthia',
   'saveCustomer',
   'linkCustomer',
   'detectTrades',
@@ -141,6 +142,16 @@ const ACCOUNTS = new Set([
   'categorizeTransaction',
   'matchTransactionToProject',
   'draftClientReceipt',
+]);
+
+const CYNTHIA_OPS = new Set([
+  'generateQuotePdf',
+  'generateOpsReport',
+  'placeOutboundCall',
+  'sendToStaffCynthia',
+  'sendEmailReply',
+  'sendEmailWithAttachment',
+  'requestCodeFix',
 ]);
 
 const PLANNING = new Set([
@@ -166,10 +177,10 @@ const PLANNING = new Set([
 const ROLE_ACTIONS: Record<ServerAgentRole, Set<string>> = {
   customer: new Set([...CUSTOMER_SELF_SERVICE]),
   agent: new Set([...CUSTOMER_SELF_SERVICE, ...PHONE_RECEPTION, ...RECRUITMENT]),
-  staff: new Set([...CUSTOMER_SELF_SERVICE, ...SALES_QUOTING, ...PROJECT_PM, ...FINANCIAL, ...FOREMAN, ...COSTING, ...ACCOUNTS, ...PHONE_RECEPTION, ...CONTRACTS_PRICING, ...PLANNING]),
-  manager: new Set([...CUSTOMER_SELF_SERVICE, ...SALES_QUOTING, ...PROJECT_PM, ...FINANCIAL, ...FOREMAN, ...COSTING, ...COSTING_ADMIN, ...ACCOUNTS, ...PHONE_RECEPTION, ...RECRUITMENT, ...CONTRACTS_PRICING, ...APPROVALS, ...MANAGER_INSIGHTS, ...PLANNING]),
-  super_admin: new Set([...CUSTOMER_SELF_SERVICE, ...SALES_QUOTING, ...PROJECT_PM, ...FINANCIAL, ...FOREMAN, ...COSTING, ...COSTING_ADMIN, ...ACCOUNTS, ...PHONE_RECEPTION, ...RECRUITMENT, ...CONTRACTS_PRICING, ...APPROVALS, ...MANAGER_INSIGHTS, ...PLANNING]),
-  platform_owner: new Set([...CUSTOMER_SELF_SERVICE, ...SALES_QUOTING, ...PROJECT_PM, ...FINANCIAL, ...FOREMAN, ...COSTING, ...COSTING_ADMIN, ...ACCOUNTS, ...PHONE_RECEPTION, ...RECRUITMENT, ...CONTRACTS_PRICING, ...APPROVALS, ...MANAGER_INSIGHTS, ...PLANNING]),
+  staff: new Set([...CUSTOMER_SELF_SERVICE, ...SALES_QUOTING, ...PROJECT_PM, ...FINANCIAL, ...FOREMAN, ...COSTING, ...ACCOUNTS, ...PHONE_RECEPTION, ...CONTRACTS_PRICING, ...PLANNING, ...CYNTHIA_OPS]),
+  manager: new Set([...CUSTOMER_SELF_SERVICE, ...SALES_QUOTING, ...PROJECT_PM, ...FINANCIAL, ...FOREMAN, ...COSTING, ...COSTING_ADMIN, ...ACCOUNTS, ...PHONE_RECEPTION, ...RECRUITMENT, ...CONTRACTS_PRICING, ...APPROVALS, ...MANAGER_INSIGHTS, ...PLANNING, ...CYNTHIA_OPS]),
+  super_admin: new Set([...CUSTOMER_SELF_SERVICE, ...SALES_QUOTING, ...PROJECT_PM, ...FINANCIAL, ...FOREMAN, ...COSTING, ...COSTING_ADMIN, ...ACCOUNTS, ...PHONE_RECEPTION, ...RECRUITMENT, ...CONTRACTS_PRICING, ...APPROVALS, ...MANAGER_INSIGHTS, ...PLANNING, ...CYNTHIA_OPS]),
+  platform_owner: new Set([...CUSTOMER_SELF_SERVICE, ...SALES_QUOTING, ...PROJECT_PM, ...FINANCIAL, ...FOREMAN, ...COSTING, ...COSTING_ADMIN, ...ACCOUNTS, ...PHONE_RECEPTION, ...RECRUITMENT, ...CONTRACTS_PRICING, ...APPROVALS, ...MANAGER_INSIGHTS, ...PLANNING, ...CYNTHIA_OPS]),
   builder: new Set([
     ...FOREMAN,
     ...COSTING,

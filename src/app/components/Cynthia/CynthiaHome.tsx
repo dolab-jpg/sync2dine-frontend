@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
-  Mic, MicOff, Paperclip, Send, ClipboardPaste, Image as ImageIcon, Loader2, Wrench, Sparkles,
+  Mic, MicOff, Paperclip, Send, ClipboardPaste, Image as ImageIcon, Loader2, Wrench,
 } from 'lucide-react';
 import { AppContext } from '../../App';
 import { Button } from '../ui/button';
@@ -14,6 +14,7 @@ import {
   type ToolExecutionResult,
   type ToolRuntimeContext,
 } from '../../engine/ai/toolRuntime';
+import { getHumanActionLabel } from '../../engine/ai/actionPolicy';
 import { ChatMarkdown } from '../AI/ChatMarkdown';
 import { ToolResultPanel } from '../AI/ToolResultPanel';
 import { StaffActionCard } from './StaffActionCard';
@@ -43,8 +44,43 @@ type LocalBubble =
   | { id: string; kind: 'card'; message: CynthiaStaffMessage }
   | { id: string; kind: 'artifact'; message: CynthiaStaffMessage };
 
+/** Local copy of Builder Diddies staff photo from https://b-diddies.com */
+const CYNTHIA_AVATAR_SRC = '/cynthia-avatar.png';
+
 function cynthiaName(): string {
   return integrationService.getConfig('whatsapp').cyrusDisplayName || 'Cynthia';
+}
+
+function CynthiaAvatar({
+  name,
+  sizeClass = 'h-10 w-10',
+  className = '',
+}: {
+  name: string;
+  sizeClass?: string;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div
+        className={`${sizeClass} rounded-full bg-emerald-300/30 flex items-center justify-center text-lg font-semibold shrink-0 ${className}`}
+        aria-hidden="true"
+      >
+        C
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={CYNTHIA_AVATAR_SRC}
+      alt={name}
+      className={`${sizeClass} rounded-full object-cover shrink-0 bg-emerald-300/20 ${className}`}
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 export default function CynthiaHome() {
@@ -142,17 +178,28 @@ export default function CynthiaHome() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [bubbles, toolResults, sending]);
 
+  const ingestConsumed = useRef(false);
   useEffect(() => {
-    if (ingestText.trim()) {
-      setComposer((prev) => (prev ? prev : ingestText.trim()));
-      toast.message(`${name} ready`, { description: 'Shared content loaded — send to process.' });
-    }
+    if (!ingestText.trim() || ingestConsumed.current) return;
+    ingestConsumed.current = true;
+    const text = ingestText.trim();
+    setComposer(text);
+    toast.message(`${name} ready`, { description: 'Shared content loaded — send to process.' });
   }, [ingestText, name]);
 
   const onVoice = useCallback((text: string) => {
     if (text) setComposer((prev) => (prev ? `${prev} ${text}` : text));
   }, []);
-  const { isListening, startListening, stopListening, isSupported } = useVoiceInput(onVoice);
+  const {
+    isListening,
+    isTranscribing,
+    startListening,
+    stopListening,
+    isSupported,
+    isNative,
+  } = useVoiceInput(onVoice, {
+    onError: (message) => toast.error(message),
+  });
   const { speak } = useVoiceOutput();
 
   const handleToolOutputs = async (executed: ToolExecutionResult[]) => {
@@ -198,6 +245,7 @@ export default function CynthiaHome() {
         setArtifact({ type: 'report', title, markdown: r.output.reportMarkdown });
       }
       if (r.action === 'sendToStaffCynthia' && r.executed) {
+        toast.success(r.summary || 'Sent to Cynthia chat', { duration: 2800 });
         void reloadThread();
       }
     }
@@ -291,7 +339,7 @@ export default function CynthiaHome() {
       void postCynthiaMessage(userId, { role: 'assistant', content: reply, source: 'cynthia' });
       void reloadThread();
 
-      if (source === 'voice') void speak(reply);
+      if (source === 'voice') void speak(reply, 'auto');
     } catch (err) {
       const msg = err instanceof Error ? err.message : `${name} could not process that.`;
       toast.error(msg);
@@ -350,9 +398,7 @@ export default function CynthiaHome() {
   return (
     <div className="flex flex-col h-[calc(100dvh-3.5rem)] md:h-[min(100dvh,920px)] max-w-3xl mx-auto bg-[#e5ddd5] relative">
       <header className="shrink-0 flex items-center gap-3 px-3 py-2.5 bg-[#075e54] text-white shadow">
-        <div className="h-10 w-10 rounded-full bg-emerald-300/30 flex items-center justify-center text-lg font-semibold">
-          C
-        </div>
+        <CynthiaAvatar name={name} sizeClass="h-10 w-10" className="ring-2 ring-white/25" />
         <div className="min-w-0 flex-1">
           <p className="font-semibold leading-tight">{name}</p>
           <p className="text-[11px] text-emerald-100 truncate">Runs the whole operation · chat first</p>
@@ -371,7 +417,7 @@ export default function CynthiaHome() {
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-2 py-3 space-y-2">
         {bubbles.length === 0 && !sending && (
           <div className="mx-auto max-w-sm rounded-2xl bg-white/90 p-4 text-center shadow-sm mt-8">
-            <Sparkles className="h-6 w-6 text-emerald-700 mx-auto mb-2" />
+            <CynthiaAvatar name={name} sizeClass="h-14 w-14" className="mx-auto mb-2 ring-2 ring-emerald-600/20" />
             <p className="text-sm font-semibold text-slate-900">Hi — I&apos;m {name}</p>
             <p className="text-xs text-slate-600 mt-1">
               Share a note, speak, or paste details. I can quote, create PDFs &amp; reports, email, call, and push cards when you&apos;re on the phone.
@@ -449,8 +495,15 @@ export default function CynthiaHome() {
             <p className="text-xs font-semibold text-amber-900">Confirm these actions</p>
             {safetyPending.map((a, i) => (
               <div key={`${a.action}-${i}`} className="flex items-center justify-between gap-2 text-xs">
-                <span>{a.action}</span>
-                <div className="flex gap-1">
+                <span className="min-w-0">
+                  {getHumanActionLabel(a.action, a.output)}
+                  {a.action === 'placeOutboundCall' && a.output?.to ? (
+                    <span className="block text-amber-800/80 truncate">
+                      {String(a.output.customerName || '')} {String(a.output.to)}
+                    </span>
+                  ) : null}
+                </span>
+                <div className="flex gap-1 shrink-0">
                   <Button
                     size="sm"
                     className="h-7"
@@ -458,7 +511,8 @@ export default function CynthiaHome() {
                       const execResult = await executeSafetyAction(a, buildRuntimeContext());
                       setToolResults((prev) => [execResult, ...prev]);
                       await handleToolOutputs([execResult]);
-                      toast.success(execResult.summary);
+                      if (execResult.executed) toast.success(execResult.summary);
+                      else toast.error(execResult.summary || 'Action failed');
                       setSafetyPending((prev) => prev.filter((_, j) => j !== i));
                     }}
                   >
@@ -541,16 +595,55 @@ export default function CynthiaHome() {
             }
           }}
         />
-        {isSupported && (
+        {isSupported ? (
           <Button
             type="button"
             size="icon"
             variant="ghost"
-            className={`shrink-0 rounded-full ${isListening ? 'bg-red-100 text-red-600' : ''}`}
-            onClick={() => (isListening ? stopListening() : startListening())}
-            title="Voice"
+            disabled={isTranscribing || sending}
+            className={`shrink-0 rounded-full ${isListening || isTranscribing ? 'bg-red-100 text-red-600' : ''}`}
+            title={isNative ? 'Hold to speak' : 'Voice input'}
+            onClick={() => {
+              if (isNative) return;
+              if (isListening) void stopListening();
+              else void startListening();
+            }}
+            onPointerDown={(e) => {
+              if (!isNative) return;
+              e.preventDefault();
+              void startListening();
+            }}
+            onPointerUp={() => {
+              if (!isNative) return;
+              void stopListening();
+            }}
+            onPointerLeave={() => {
+              if (!isNative || !isListening) return;
+              void stopListening();
+            }}
+            onPointerCancel={() => {
+              if (!isNative || !isListening) return;
+              void stopListening();
+            }}
           >
-            {isListening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5 text-slate-600" />}
+            {isTranscribing ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : isListening ? (
+              <MicOff className="h-5 w-5" />
+            ) : (
+              <Mic className="h-5 w-5 text-slate-600" />
+            )}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="shrink-0 rounded-full opacity-50"
+            title="Voice not available"
+            onClick={() => toast.error('Voice input is not supported here — type your message instead')}
+          >
+            <Mic className="h-5 w-5 text-slate-400" />
           </Button>
         )}
         <Button
@@ -558,7 +651,7 @@ export default function CynthiaHome() {
           size="icon"
           className="shrink-0 rounded-full bg-[#075e54] hover:bg-[#064e46]"
           disabled={sending || !composer.trim()}
-          onClick={() => void runSend(composer, isListening ? 'voice' : 'cynthia')}
+          onClick={() => void runSend(composer, isListening || isTranscribing ? 'voice' : 'cynthia')}
         >
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>

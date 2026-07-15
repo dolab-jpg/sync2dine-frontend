@@ -1,6 +1,7 @@
 import { MapPin, Phone, PoundSterling, FileText, ExternalLink, Mail } from 'lucide-react';
 import { Button } from '../ui/button';
 import type { CynthiaStaffCard } from '../../engine/cynthia/cynthiaStaffApi';
+import { toast } from 'sonner';
 
 interface StaffActionCardProps {
   card: CynthiaStaffCard;
@@ -8,6 +9,20 @@ interface StaffActionCardProps {
   onOpenPdf?: (dataUrl: string, title: string) => void;
   onOpenReport?: (markdown: string, title: string) => void;
   highlight?: boolean;
+}
+
+function openExternalUri(uri: string) {
+  try {
+    const a = document.createElement('a');
+    a.href = uri;
+    a.rel = 'noopener noreferrer';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch {
+    window.location.href = uri;
+  }
 }
 
 export function StaffActionCard({
@@ -24,11 +39,21 @@ export function StaffActionCard({
 
   const runAction = (kind: string, value: string) => {
     if (kind === 'call') {
-      window.location.href = `tel:${value.replace(/\s/g, '')}`;
+      const digits = value.replace(/[^\d+]/g, '');
+      if (!digits) {
+        toast.error('No phone number on this card');
+        return;
+      }
+      openExternalUri(`tel:${digits}`);
+      toast.message('Opening dialer…');
       return;
     }
     if (kind === 'email') {
-      window.location.href = `mailto:${value}`;
+      if (!value.trim()) {
+        toast.error('No email on this card');
+        return;
+      }
+      openExternalUri(`mailto:${value.trim()}`);
       return;
     }
     if (kind === 'navigate' || kind === 'open') {

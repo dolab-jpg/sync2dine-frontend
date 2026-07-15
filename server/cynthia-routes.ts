@@ -124,7 +124,12 @@ export async function handleCynthiaRoutes(
     const orgId = orgFrom(req);
     const body = (await readJsonBody(req)) as Record<string, unknown>;
     const userId = resolveStaffUserId({
-      userId: typeof body.userId === 'string' ? body.userId : undefined,
+      userId:
+        typeof body.userId === 'string'
+          ? body.userId
+          : typeof body.staffUserId === 'string'
+            ? body.staffUserId
+            : undefined,
       staffPhone: typeof body.staffPhone === 'string' ? body.staffPhone : undefined,
       orgId,
     });

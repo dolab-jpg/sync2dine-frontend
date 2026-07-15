@@ -27,7 +27,7 @@ const DEFAULT_TEMPLATES = [
     id: 'quote',
     name: 'Quote Email',
     subject: 'Your Quote from {COMPANY_NAME}',
-    body: `Dear {CUSTOMER_NAME},\n\nYour quote total is £{QUOTE_TOTAL}, valid until {QUOTE_EXPIRY}.\n\nReply to this message or chat with Cyrus on WhatsApp if you have questions.\n\nBest regards,\n{USER_NAME}\n{COMPANY_NAME}`,
+    body: `Dear {CUSTOMER_NAME},\n\nYour quote total is £{QUOTE_TOTAL}, valid until {QUOTE_EXPIRY}.\n\nReply to this email or call us if you have questions.\n\nBest regards,\n{USER_NAME}\n{COMPANY_NAME}`,
     type: 'quote_sent' as MessageEventType,
   },
   {
