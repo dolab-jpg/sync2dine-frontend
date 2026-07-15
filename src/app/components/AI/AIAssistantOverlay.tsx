@@ -69,7 +69,7 @@ export function AIAssistantPanel({
   return (
     <aside
       className={`relative bg-white/98 backdrop-blur-sm flex flex-col min-h-0 ${LAYOUT_WIDTH[layout]}`}
-      aria-label="TradePro AI assistant"
+      aria-label="Cynthia AI assistant"
     >
       <div className="shrink-0 p-3 border-b border-slate-200/60 flex items-center justify-between bg-slate-50/80 gap-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800 min-w-0">
@@ -83,7 +83,7 @@ export function AIAssistantPanel({
             title={liveAi ? 'Live AI' : 'Demo AI mode'}
             aria-hidden
           />
-          <span className="truncate">TradePro AI</span>
+          <span className="truncate">Cynthia</span>
           <span
             className={`w-2 h-2 rounded-full shrink-0 ${selfHealDot}`}
             title={selfHealTitle}

@@ -91,7 +91,7 @@ export function MailboxConnectPanel({ userId, orgId, onConnectionChange }: Props
       </CardHeader>
       <CardContent className="space-y-4">
         {connections.length === 0 && (
-          <p className="text-sm text-gray-600">No mailbox connected. Connect Gmail, Outlook, or Yahoo to read and send email from TradePro.</p>
+          <p className="text-sm text-gray-600">No mailbox connected. Connect Gmail, Outlook, or Yahoo to read and send email from Builder Diddies.</p>
         )}
         {connections.map(conn => (
           <div key={conn.id} className="flex flex-wrap items-center justify-between gap-2 p-3 border rounded-lg bg-slate-50">

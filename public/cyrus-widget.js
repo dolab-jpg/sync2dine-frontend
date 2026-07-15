@@ -52,7 +52,7 @@
     '</style>' +
     '<button id="cyrus-fab" type="button" aria-label="Chat">Chat with ' + displayName + '</button>' +
     '<div id="cyrus-panel" role="dialog" aria-label="' + displayName + ' chat">' +
-    '<div id="cyrus-head">' + displayName + ' — how can we help?</div>' +
+    '<div id="cyrus-head">' + displayName + ' — I am here to help</div>' +
     '<div id="cyrus-msgs"></div>' +
     '<form id="cyrus-form">' +
     '<input id="cyrus-input" type="text" placeholder="Type a message…" autocomplete="off" />' +

@@ -89,7 +89,7 @@ export default function ResetPasswordPage() {
             </div>
           ) : (
             <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
-              <p className="text-sm text-slate-600">Choose a new password for your TradePro account.</p>
+              <p className="text-sm text-slate-600">Choose a new password for your Builder Diddies account.</p>
               <PasswordField
                 id="reset-password"
                 label="New password"

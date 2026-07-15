@@ -67,7 +67,7 @@ export function createContractDraftFromQuote(
 ): Contract {
   const stages = buildContractStages(quote.total, depositAmount);
   const body = [
-    `# TradePro works agreement`,
+    `# Builder Diddies works agreement`,
     ``,
     `**Customer:** ${quote.customerName}`,
     `**Trade:** ${quote.tradeName ?? 'Works'}`,
@@ -149,7 +149,7 @@ export async function sendPricePack(opts: {
           customerId: opts.customer.id,
           customerName: opts.customer.name,
         },
-        subject: `Your quote — ${opts.quote.tradeName ?? 'TradePro'}`,
+        subject: `Your quote — ${opts.quote.tradeName ?? 'Builder Diddies'}`,
         body,
         eventType: 'quote_sent',
         templateId: 'quote_sent',

@@ -405,7 +405,7 @@ export default function CustomerPortal() {
                     <p className="font-medium text-slate-900">How to pay</p>
                     <p>
                       Bank transfer to{' '}
-                      {integrationService.getConfig('company').companyName || 'TradePro'}
+                      {integrationService.getConfig('company').companyName || 'Builder Diddies'}
                       {integrationService.getConfig('company').email
                         ? ` — use your name as the reference, or email ${integrationService.getConfig('company').email}`
                         : ' — use your surname and postcode as the payment reference'}

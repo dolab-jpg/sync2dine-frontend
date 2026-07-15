@@ -33,5 +33,5 @@ export async function sendChatMessage(
   if (last.includes('price') || last.includes('cost')) {
     return "Tell me what sort of job it is and roughly how big — I'll work up an indicative range. Proper quote follows a site look.";
   }
-  return "TradePro AI here (mock mode). Ask about quotes, site photos, or project updates — or set OPENAI_API_KEY in Settings for the full experience.";
+  return "Cynthia here (mock mode) — Cynthia, I am here to help. Ask about quotes, site photos, or project updates — or set OPENAI_API_KEY in Settings for the full experience.";
 }

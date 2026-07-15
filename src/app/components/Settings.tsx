@@ -516,12 +516,12 @@ export default function Settings() {
             <CardContent className="space-y-4">
               <div>
                 <Label>Company Name</Label>
-                <Input defaultValue="TradePro Ltd" />
+                <Input defaultValue="Builder Diddies" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Email</Label>
-                  <Input type="email" defaultValue="info@tradepro.com" />
+                  <Input type="email" defaultValue="info@b-diddies.com" />
                 </div>
                 <div>
                   <Label>Phone</Label>

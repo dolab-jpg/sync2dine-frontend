@@ -70,7 +70,7 @@ export default function InviteAcceptPage() {
           ) : (
             <>
               <p className="text-sm text-slate-600 text-center">
-                You&apos;ve been invited to join TradePro as <strong>{invite!.email}</strong>.
+                You&apos;ve been invited to join Builder Diddies as <strong>{invite!.email}</strong>.
               </p>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
                 <div className="flex flex-wrap gap-2">

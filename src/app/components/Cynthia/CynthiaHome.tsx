@@ -513,7 +513,7 @@ export default function CynthiaHome() {
         {bubbles.length === 0 && !sending && (
           <div className="mx-auto max-w-sm rounded-2xl bg-white/90 p-4 text-center shadow-sm mt-8">
             <CynthiaAvatar name={name} sizeClass="h-14 w-14" className="mx-auto mb-2 ring-2 ring-emerald-600/20" />
-            <p className="text-sm font-semibold text-slate-900">Hi — I&apos;m {name}</p>
+            <p className="text-sm font-semibold text-slate-900">Cynthia, I am here to help</p>
             <p className="text-xs text-slate-600 mt-1">
               Share a note, speak, or paste details. I can quote, create PDFs &amp; reports, email, call, and push cards when you&apos;re on the phone.
             </p>

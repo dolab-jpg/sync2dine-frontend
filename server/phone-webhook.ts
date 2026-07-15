@@ -241,7 +241,7 @@ async function processCallTurn(
     .trim()
     .slice(0, 500)
     || (isConnect
-      ? `Hello${resolved.customerName ? ` ${resolved.customerName}` : ''}, it's Aria from TradePro. How can I help today?`
+      ? `Hello${resolved.customerName ? ` ${resolved.customerName}` : ''}, it's Aria from Builder Diddies. How can I help today?`
       : "Sorry, I didn't quite catch that — could you say that again?");
 
   appendCallTurn(String(call.id), { role: 'agent', content: speak });

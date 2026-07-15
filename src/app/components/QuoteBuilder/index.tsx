@@ -374,7 +374,7 @@ export default function QuoteBuilder() {
                 <Sparkles className="w-12 h-12 mx-auto text-amber-500" />
                 <h3 className="text-xl font-bold text-slate-900">Describe the job in AI</h3>
                 <p className="text-slate-600 max-w-md mx-auto">
-                  Open the TradePro AI assistant and describe the work — it will detect the trade and prefill your quote.
+                  Open Cynthia and describe the work — she will detect the trade and prefill your quote.
                 </p>
                 <Button
                   size="lg"

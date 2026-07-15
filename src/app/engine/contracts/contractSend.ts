@@ -80,7 +80,7 @@ export async function sendContractEmail(
     CONTRACT_TOTAL: contract.total.toLocaleString('en-GB', { maximumFractionDigits: 0 }),
     DEPOSIT_AMOUNT: contract.depositAmount.toLocaleString('en-GB', { maximumFractionDigits: 0 }),
     CONTRACT_SIGN_LINK: signUrl,
-    COMPANY_NAME: company.companyName || 'TradePro',
+    COMPANY_NAME: company.companyName || 'Builder Diddies',
     COMPANY_PHONE: company.phone || '',
   });
 
@@ -93,7 +93,7 @@ export async function sendContractEmail(
         customerId: customer.id,
         customerName: customer.name,
       },
-      subject: `Review and sign your contract — ${company.companyName || 'TradePro'}`,
+      subject: `Review and sign your contract — ${company.companyName || 'Builder Diddies'}`,
       body,
       eventType: 'custom',
     },

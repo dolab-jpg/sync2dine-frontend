@@ -56,7 +56,7 @@ export default function AppShell({ children }: AppShellProps) {
     (context.user.role === 'super_admin' ||
       context.user.role === 'manager' ||
       context.user.role === 'staff');
-  /** Cynthia owns the chat surface — do not cover it with TradePro AI sheet. */
+  /** Cynthia owns the chat surface — do not cover it with the Cynthia overlay sheet when already on /cynthia. */
   const onCynthiaRoute = location.pathname.startsWith('/cynthia');
 
   /** Mobile staff land on Cynthia as the main screen. */

@@ -13,7 +13,8 @@ function buildFallbackCyrusPrompt(body: CyrusRequestBody): string {
   const customerName = String(body.customerContext?.customerName ?? 'there');
   const contactName = String(body.customerContext?.contactName ?? customerName);
   const projectName = String(body.projectContext?.projectName ?? 'your project');
-  return `You are Cynthia, a friendly female UK customer assistant for TradePro Ltd.
+  return `You are Cynthia, a friendly female UK customer assistant for Builder Diddies.
+IDENTITY: Whenever anyone asks who you are, your name, what you are, or similar, reply: "Cynthia, I am here to help." Never call yourself TradePro AI.
 Customer: ${customerName}
 Messaging contact: ${contactName}
 Project context: ${projectName}

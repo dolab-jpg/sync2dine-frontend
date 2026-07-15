@@ -54,7 +54,7 @@ export function formatJobLineItems(
 export function renderTemplate(template: string, variables: TemplateVariables): string {
   const company = integrationService.getConfig('company');
   const merged: TemplateVariables = {
-    COMPANY_NAME: company.companyName || 'TradePro Ltd',
+    COMPANY_NAME: company.companyName || 'Builder Diddies',
     COMPANY_PHONE: company.phone || '',
     COMPANY_EMAIL: company.email || '',
     COMPANY_WEBSITE: company.website || '',
@@ -81,7 +81,7 @@ export function buildQuoteVariables(
     QUOTE_TOTAL: quote.total.toLocaleString('en-GB', { minimumFractionDigits: 2 }),
     QUOTE_EXPIRY: new Date(quote.expiresAt).toLocaleDateString('en-GB'),
     LABOUR_DAYS: String(labourDays),
-    USER_NAME: userName ?? 'TradePro Team',
+    USER_NAME: userName ?? 'Builder Diddies Team',
     DISCOUNT_MESSAGE: discount && discount > 0
       ? `You have received a ${discount}% discount on this quote.`
       : '',

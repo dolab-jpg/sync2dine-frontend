@@ -234,7 +234,7 @@ function executeConvertQuoteToProject(
   let planNote = '';
   if (withPlan) {
     const stages = buildDefaultPaymentStages(project.totalCustomerCost);
-    applyProjectAction(project.id, 'proposePaymentPlan', { stages, projectId: project.id }, ctx.approvedBy ?? 'TradePro AI');
+    applyProjectAction(project.id, 'proposePaymentPlan', { stages, projectId: project.id }, ctx.approvedBy ?? 'Cynthia');
     planNote = ' Default payment plan applied (10/40/30/20).';
   }
 
@@ -278,7 +278,7 @@ function executeLinkCustomer(output: Record<string, unknown>, ctx: ToolRuntimeCo
     phone: String(output.phone ?? ''),
     address: String(output.address ?? ''),
     status: 'lead',
-    notes: 'Created via TradePro AI',
+    notes: 'Created via Cynthia',
     photos: [],
     interestedTrades: trades,
     whatsappOptIn: false,
@@ -445,7 +445,7 @@ function executeProjectAction(
   if (!projectId) {
     return { action, summary: `${action} needs an open project.`, output, executed: false };
   }
-  const approvedBy = ctx.approvedBy ?? 'TradePro AI';
+  const approvedBy = ctx.approvedBy ?? 'Cynthia';
   const createdChangeOrderId = applyProjectAction(projectId, action, output, approvedBy);
   if (action === 'proposeChangeOrder' && createdChangeOrderId) {
     approveChangeOrderForCustomer(projectId, createdChangeOrderId, approvedBy);
@@ -636,7 +636,7 @@ async function executeSaveContract(output: Record<string, unknown>, ctx: ToolRun
     CUSTOMER_EMAIL: customer.email,
     CUSTOMER_PHONE: customer.phone,
     CUSTOMER_ADDRESS: customer.address,
-    USER_NAME: ctx.approvedBy ?? company.companyName ?? 'TradePro',
+    USER_NAME: ctx.approvedBy ?? company.companyName ?? 'Builder Diddies',
     CONTRACT_TOTAL: quote.total.toLocaleString('en-GB', { maximumFractionDigits: 0 }),
     DEPOSIT_AMOUNT: deposit.toLocaleString('en-GB', { maximumFractionDigits: 0 }),
     PAYMENT_SCHEDULE: formatPaymentSchedule(stages),
@@ -675,7 +675,7 @@ async function executeSendContract(output: Record<string, unknown>, ctx: ToolRun
   }
   const customer = app.customers.find((c) => c.id === contract.customerId);
   if (!customer?.email) return { action: 'sendContract', summary: 'Customer has no email address.', output, executed: false };
-  const userName = app.user?.name ?? 'TradePro Team';
+  const userName = app.user?.name ?? 'Builder Diddies Team';
   const result = await sendContractEmail(contract, customer, userName);
   if (result.success) {
     return {
@@ -1183,7 +1183,7 @@ async function executePlanningToolAction(
       executed: false,
     };
   }
-  const by = ctx.approvedBy ?? 'TradePro AI';
+  const by = ctx.approvedBy ?? 'Cynthia';
   const applied = await executePlanningActions(
     appId,
     [{ action: name, input, output: action.output ?? input }],

@@ -56,7 +56,7 @@ export default function EmailSystem() {
     username: 'your-email@gmail.com',
     password: '',
     fromEmail: 'info@bathroompro.com',
-    fromName: 'TradePro',
+    fromName: 'Builder Diddies',
     secure: true
   });
 
@@ -222,7 +222,7 @@ Best regards,
     {
       id: '1',
       to: 'james.wilson@email.com',
-      subject: 'Your {TRADE_NAME} Quote from TradePro',
+      subject: 'Your {TRADE_NAME} Quote from Builder Diddies',
       sentAt: new Date(2026, 3, 20, 14, 30).toISOString(),
       status: 'sent',
       customerId: '2',
@@ -231,7 +231,7 @@ Best regards,
     {
       id: '2',
       to: 'sophie.a@email.com',
-      subject: 'Your {TRADE_NAME} Quote from TradePro',
+      subject: 'Your {TRADE_NAME} Quote from Builder Diddies',
       sentAt: new Date(2026, 3, 18, 10, 15).toISOString(),
       status: 'sent',
       customerId: '5',
@@ -278,7 +278,7 @@ Best regards,
     result = result.replace(/{CUSTOMER_ADDRESS}/g, customer.address);
 
     // Company variables
-    result = result.replace(/{COMPANY_NAME}/g, 'TradePro');
+    result = result.replace(/{COMPANY_NAME}/g, 'Builder Diddies');
     result = result.replace(/{TRADE_NAME}/g, 'Construction');
     result = result.replace(/{COMPANY_PHONE}/g, '020 1234 5678');
     result = result.replace(/{USER_NAME}/g, user.name);

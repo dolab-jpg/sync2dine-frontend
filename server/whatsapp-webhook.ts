@@ -473,7 +473,7 @@ export async function handleWhatsAppWebhookPost(
     if (projectId) {
       appendProjectMessage(projectId, {
         id: `WM${Date.now()}a`,
-        from: inbound.route.mode === 'staff' ? 'TradePro AI' : 'Cynthia',
+        from: 'Cynthia',
         fromRole: 'office',
         body: inbound.replyEnglish,
         bodyEnglish: inbound.replyEnglish,

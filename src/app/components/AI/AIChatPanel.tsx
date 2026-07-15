@@ -223,7 +223,7 @@ export function AIChatPanel() {
     projectId: agentContext.projectId,
     planningApplicationId: agentContext.planningApplicationId,
     tradeId: tradeId ?? null,
-    approvedBy: app?.user.name ?? 'TradePro AI',
+    approvedBy: app?.user.name ?? 'Cynthia',
     role: agentContext.role,
     userId: staffContext.userId,
     customerId: resolveCustomerId() || agentContext.customerId,
@@ -291,7 +291,7 @@ export function AIChatPanel() {
         model: settings.model,
         userName: staffContext.userName,
         userId: staffContext.userId,
-        companyName: 'TradePro',
+        companyName: integrationService.getConfig('company').companyName || 'Builder Diddies',
         customers: staffContext.customers,
         quotes: staffContext.quotes,
         businessSnapshot,
@@ -794,7 +794,8 @@ export function AIChatPanel() {
               alt=""
               className="w-14 h-14 rounded-full object-cover mx-auto mb-3 ring-2 ring-slate-100"
             />
-            <p className="font-medium text-slate-800">TradePro AI</p>
+            <p className="font-medium text-slate-800">Cynthia</p>
+            <p className="text-sm mt-1 text-slate-600">Cynthia, I am here to help</p>
             <p className="text-sm mt-1">{rolePrompt}</p>
             {studio.starterQuestionsEnabled && isChatConnected && (
               <div className="mt-4">

@@ -1,6 +1,6 @@
 import type { UnifiedProject } from '../project/types';
 
-export function buildProjectAISystemPrompt(project: UnifiedProject, companyName = 'TradePro Ltd'): string {
+export function buildProjectAISystemPrompt(project: UnifiedProject, companyName = 'Builder Diddies'): string {
   const tasksSummary = project.tasks.length
     ? project.tasks.map(t => `- ${t.title} (${t.status})${t.targetDate ? ` due ${t.targetDate}` : ''}`).join('\n')
     : 'No tasks yet.';

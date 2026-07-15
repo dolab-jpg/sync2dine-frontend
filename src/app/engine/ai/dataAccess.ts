@@ -213,7 +213,7 @@ function writeCustomer(
     phone: String(data.phone ?? ''),
     address: String(data.address ?? ''),
     status: (data.status as Customer['status']) ?? 'lead',
-    notes: String(data.notes ?? 'Created via TradePro AI'),
+    notes: 'Created via Cynthia',
     photos: [],
     interestedTrades: (data.interestedTrades as Customer['interestedTrades']) ?? [],
     whatsappOptIn: Boolean(data.whatsappOptIn ?? false),

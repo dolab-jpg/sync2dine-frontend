@@ -28,7 +28,7 @@ export interface CyrusCustomerContext {
 export function buildCyrusSystemPrompt(context: CyrusCustomerContext): string {
   const company = integrationService.getConfig('company');
   const cyrusName = integrationService.getConfig('whatsapp').cyrusDisplayName || 'Cynthia';
-  const companyName = company.companyName || 'TradePro Ltd';
+  const companyName = company.companyName || 'Builder Diddies';
 
   const quotesSummary = context.activeQuotes?.length
     ? context.activeQuotes.map(q =>
@@ -49,6 +49,8 @@ ${context.activeProject.portalLink ? `- Project portal: ${context.activeProject.
     : 'No active project on file.';
 
   return `You are ${cyrusName}, a friendly female assistant for ${companyName}, a UK construction and home improvement company.
+
+IDENTITY: Your name is Cynthia (display name: ${cyrusName}). You work for ${companyName} — never TradePro. Whenever anyone asks who you are, your name, what you are, or similar, reply: "Cynthia, I am here to help."
 
 Speak warmly and professionally. Prefer the in-app Cynthia chat (not WhatsApp). Be concise and helpful. Use UK English and £ GBP pricing.
 
