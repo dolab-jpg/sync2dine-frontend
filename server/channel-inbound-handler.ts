@@ -41,6 +41,13 @@ export interface ChannelInboundRequest {
   model?: string;
   /** When true, skip AI even if handoff is ai_active (used for staff composer logs). */
   skipAi?: boolean;
+  /**
+   * Extra facts for the AI brain (customer/company/account). Not stored as a user message.
+   * The model should answer from this + conversation memory — not ask the caller to repeat known facts.
+   */
+  brainContext?: string;
+  /** When false, do not persist `text` as a user turn (e.g. synthetic call-connected prompts). */
+  persistUser?: boolean;
 }
 
 export interface ChannelInboundResult {
@@ -162,7 +169,7 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
   if (confirm.handled) {
     const lang = normalizeLang(route.preferredLanguage);
     const replyEnglish = confirm.reply ?? getPhrase(lang, 'done');
-    const replyLocalized = await localizeOutboundText(replyEnglish, lang);
+    const replyLocalized = await localizeOutboundText(replyEnglish, lang, orgId);
     appendConversationMessage(orgId, phone, {
       role: 'user',
       content: text,
@@ -196,19 +203,21 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
   }
 
   const targetLang = normalizeLang(route.preferredLanguage);
-  const normalized = await normalizeInboundText(text, targetLang);
+  const normalized = await normalizeInboundText(text, targetLang, orgId);
   const history = conversationToOrchestratorMessages(orgId, phone, 20);
   const studio = readStudioConfigExport();
   const humourLevel = String(studio?.humourLevel ?? 'balanced');
   const companyInstructions = String(studio?.companyInstructions ?? '');
 
-  appendConversationMessage(orgId, phone, {
-    role: 'user',
-    content: text,
-    bodyEnglish: normalized.english,
-    detectedLanguage: targetLang,
-    channel,
-  }, { channel, contactName: req.contactName });
+  if (req.persistUser !== false) {
+    appendConversationMessage(orgId, phone, {
+      role: 'user',
+      content: text,
+      bodyEnglish: normalized.english,
+      detectedLanguage: targetLang,
+      channel,
+    }, { channel, contactName: req.contactName });
+  }
 
   const channelKey = buildChannelPrompt(channel, route);
   const orchestratorChannel: OrchestratorRequest['channel'] =
@@ -220,12 +229,20 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
   const resolvedRole = resolveRole(route);
   const knowledgeChunks = Array.isArray(studio?.knowledgeChunks) ? studio.knowledgeChunks as unknown[] : [];
   const knowledgeBlock = formatKnowledgeChunks(knowledgeChunks);
-  const languageInstruction = getSystemInstruction(targetLang);
+  const rawLanguageInstruction = getSystemInstruction(targetLang);
+  // Staff/foreman may chat in their own language, but that must never bleed into tool calls,
+  // CRM writes, or customer-facing text (see FORMAL_TOOL_OUTPUT_RULE) — scope the instruction
+  // explicitly so the per-language pack line can't be read as covering the whole reply.
+  const languageInstruction =
+    (route.mode === 'staff' || route.mode === 'foreman') && targetLang !== 'en'
+      ? `LANGUAGE FOR YOUR SPOKEN/TYPED REPLY TO THIS COLLEAGUE ONLY (never for tool calls, CRM writes, documents, or any customer-facing text — those always stay in formal UK English): ${rawLanguageInstruction}`
+      : rawLanguageInstruction;
+  const brainBlock = String(req.brainContext || '').trim();
   const voicePrompt = [
     buildBritishVoicePrompt(
       String(studio?.humourLevel ?? 'balanced'),
       resolvedRole,
-      [companyInstructions, knowledgeBlock].filter(Boolean).join('\n\n') || undefined,
+      [companyInstructions, knowledgeBlock, brainBlock].filter(Boolean).join('\n\n') || undefined,
       orchestratorChannel === 'whatsapp_staff' || orchestratorChannel === 'phone_staff'
         ? orchestratorChannel
         : channel === 'whatsapp'
@@ -235,6 +252,9 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
             : 'customer_portal',
     ),
     languageInstruction,
+    channel === 'phone'
+      ? 'Live phone call: reply in 1-3 short spoken sentences only. No lists, markdown, or mentions of tools. Use the account and company memory you already have.'
+      : '',
   ].filter(Boolean).join('\n\n');
 
   const staffContext = route.mode === 'staff' || route.mode === 'foreman'
@@ -310,8 +330,7 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
     replyText = getPhrase(targetLang, 'greeting');
   }
 
-  // Orchestrator already replies in target language via pack systemInstruction — no OpenAI translate.
-  const replyLocalized = await localizeOutboundText(replyText, targetLang);
+  const replyLocalized = await localizeOutboundText(replyText, targetLang, orgId);
 
   appendConversationMessage(orgId, phone, {
     role: 'assistant',

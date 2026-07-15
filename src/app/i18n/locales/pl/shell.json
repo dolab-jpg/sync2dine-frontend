@@ -1,0 +1,28 @@
+{
+  "nav": {
+    "dashboard": "Panel",
+    "calendar": "Kalendarz",
+    "approvals": "Zatwierdzenia",
+    "communications": "Komunikacja",
+    "projects": "Projekty",
+    "customers": "Klienci",
+    "sales": "Sprzedaż",
+    "products": "Produkty",
+    "contracts": "Umowy",
+    "planning": "Planowanie",
+    "buildingControl": "Nadzór budowlany",
+    "team": "Zespół",
+    "settings": "Ustawienia",
+    "integrations": "Integracje",
+    "callCenter": "Call center",
+    "accounts": "Księgowość",
+    "recruitment": "Rekrutacja",
+    "aiAudit": "Audyt AI",
+    "platformClients": "Klienci platformy",
+    "profile": "Konto",
+    "logout": "Wyloguj"
+  },
+  "searchPlaceholder": "Szukaj klientów, projektów, ofert…",
+  "aiAssistant": "Asystent AI",
+  "menu": "Menu"
+}

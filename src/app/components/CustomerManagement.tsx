@@ -324,6 +324,7 @@ export default function CustomerManagement() {
                       <SelectItem value="en">English</SelectItem>
                       <SelectItem value="sq">Albanian</SelectItem>
                       <SelectItem value="uk">Ukrainian</SelectItem>
+                      <SelectItem value="ru">Russian</SelectItem>
                       <SelectItem value="zh">Chinese</SelectItem>
                       <SelectItem value="es">Spanish</SelectItem>
                       <SelectItem value="pl">Polish</SelectItem>
@@ -331,7 +332,7 @@ export default function CustomerManagement() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-green-800 mt-1">
-                    Saved language pack for WhatsApp/phone — no live translation.
+                    Language for worker-facing channel replies. Customer documents stay English.
                   </p>
                 </div>
                 <p className="text-xs text-green-800">Phone format: UK mobile e.g. 07700 900000 or +447700900000</p>

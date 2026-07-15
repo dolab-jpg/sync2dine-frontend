@@ -109,6 +109,7 @@ export interface OrgMember {
   email: string;
   username: string | null;
   role: string;
+  preferred_language?: string | null;
   created_at: string;
 }
 
@@ -135,6 +136,23 @@ export async function removeMember(memberId: string, accessToken: string): Promi
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   await parseJson<{ removed: boolean }>(res);
+}
+
+export async function updateMember(
+  memberId: string,
+  input: { preferredLanguage?: string; preferred_language?: string; name?: string },
+  accessToken: string,
+): Promise<OrgMember> {
+  const res = await fetch(`${apiBase()}/api/auth/members/${encodeURIComponent(memberId)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(input),
+  });
+  const data = await parseJson<{ member: OrgMember }>(res);
+  return data.member;
 }
 
 export async function fetchPendingInvites(accessToken: string): Promise<PendingInvite[]> {

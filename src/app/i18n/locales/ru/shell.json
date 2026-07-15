@@ -1,0 +1,28 @@
+{
+  "nav": {
+    "dashboard": "Панель",
+    "calendar": "Календарь",
+    "approvals": "Согласования",
+    "communications": "Связь",
+    "projects": "Проекты",
+    "customers": "Клиенты",
+    "sales": "Продажи",
+    "products": "Товары",
+    "contracts": "Договоры",
+    "planning": "Планирование",
+    "buildingControl": "Стройконтроль",
+    "team": "Команда",
+    "settings": "Настройки",
+    "integrations": "Интеграции",
+    "callCenter": "Колл-центр",
+    "accounts": "Счета",
+    "recruitment": "Подбор",
+    "aiAudit": "Аудит ИИ",
+    "platformClients": "Клиенты платформы",
+    "profile": "Аккаунт",
+    "logout": "Выйти"
+  },
+  "searchPlaceholder": "Поиск клиентов, проектов, смет…",
+  "aiAssistant": "ИИ-ассистент",
+  "menu": "Меню"
+}

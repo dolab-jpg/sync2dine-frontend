@@ -3,25 +3,34 @@ import type { IntegrationDefinition, IntegrationId } from './types';
 export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   {
     id: 'openai',
-    name: 'OpenAI',
-    description: 'Company-wide AI key — once saved by Super Admin, all staff, builders, and customers use it',
+    name: 'Company AI Brain',
+    description: 'Company-wide OpenAI key (primary) — powers chat, job pricing, photos, Cynthia, and Aria. Optional DeepSeek for text only.',
     category: 'ai',
     docsUrl: 'https://platform.openai.com/docs',
     fields: [
-      { key: 'apiKey', label: 'API Key', type: 'password', placeholder: 'sk-...', required: true },
+      { key: 'provider', label: 'Active text provider', type: 'select', options: [
+        { value: 'openai', label: 'OpenAI (recommended)' },
+        { value: 'deepseek', label: 'DeepSeek (optional text alternate)' },
+      ]},
+      { key: 'apiKey', label: 'OpenAI API Key', type: 'password', placeholder: 'sk-...', required: true },
+      { key: 'deepseekApiKey', label: 'DeepSeek API Key (optional)', type: 'password', placeholder: 'sk-...' },
       { key: 'staffModel', label: 'Staff AI Model', type: 'select', options: [
         { value: 'gpt-4o', label: 'gpt-4o' },
         { value: 'gpt-4o-mini', label: 'gpt-4o-mini' },
+        { value: 'deepseek-chat', label: 'deepseek-chat' },
+        { value: 'deepseek-reasoner', label: 'deepseek-reasoner' },
       ]},
-      { key: 'cyrusModel', label: 'Cyrus Model', type: 'select', options: [
+      { key: 'cyrusModel', label: 'Cynthia Model', type: 'select', options: [
         { value: 'gpt-4o-mini', label: 'gpt-4o-mini' },
         { value: 'gpt-4o', label: 'gpt-4o' },
+        { value: 'deepseek-chat', label: 'deepseek-chat' },
       ]},
       { key: 'summaryModel', label: 'Chat Summary Model', type: 'select', options: [
         { value: 'gpt-4o-mini', label: 'gpt-4o-mini' },
         { value: 'gpt-4o', label: 'gpt-4o' },
+        { value: 'deepseek-chat', label: 'deepseek-chat' },
       ]},
-      { key: 'ttsVoice', label: 'TTS Voice', type: 'select', options: [
+      { key: 'ttsVoice', label: 'TTS Voice (OpenAI)', type: 'select', options: [
         { value: 'fable', label: 'fable' },
         { value: 'alloy', label: 'alloy' },
         { value: 'nova', label: 'nova' },
@@ -31,8 +40,8 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   },
   {
     id: 'whatsapp',
-    name: 'WhatsApp Business (Meta)',
-    description: 'Cyrus client messaging, notifications, and document delivery',
+    name: 'WhatsApp Business (legacy — dormant)',
+    description: 'Legacy Meta channel (not required). Cynthia in-app chat is the primary messaging brain.',
     category: 'messaging',
     docsUrl: 'https://developers.facebook.com/docs/whatsapp/cloud-api',
     fields: [
@@ -43,7 +52,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
       { key: 'appSecret', label: 'App Secret', type: 'password' },
       { key: 'webhookVerifyToken', label: 'Webhook Verify Token', type: 'password' },
       { key: 'webhookUrl', label: 'Webhook URL', type: 'readonly', placeholder: 'Set after deploying server' },
-      { key: 'cyrusDisplayName', label: 'Cyrus Display Name', type: 'text', placeholder: 'Cyrus' },
+      { key: 'cyrusDisplayName', label: 'Cynthia Display Name', type: 'text', placeholder: 'Cynthia' },
     ],
   },
   {
@@ -321,13 +330,14 @@ export function getDefaultFieldValues(def: IntegrationDefinition): Record<string
     }
   }
   if (def.id === 'openai') {
+    values.provider = 'openai';
     values.staffModel = 'gpt-4o-mini';
     values.cyrusModel = 'gpt-4o-mini';
     values.summaryModel = 'gpt-4o-mini';
     values.ttsVoice = 'fable';
   }
   if (def.id === 'whatsapp') {
-    values.cyrusDisplayName = 'Cyrus';
+    values.cyrusDisplayName = 'Cynthia';
   }
   if (def.id === 'company') {
     values.companyName = 'TradePro Ltd';

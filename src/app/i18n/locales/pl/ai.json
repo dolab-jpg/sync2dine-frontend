@@ -1,0 +1,12 @@
+{
+  "title": "Asystent AI",
+  "placeholder": "Pytaj w swoim języku — do klienta po angielsku…",
+  "thinking": "Myślę…",
+  "send": "Wyślij",
+  "voice": "Głos",
+  "englishPreview": "Podgląd angielski (klient / dokumenty)",
+  "willSendEnglish": "To zostanie wysłane do klienta po angielsku:",
+  "blockedNoEnglish": "Nie udało się przetłumaczyć na angielski. Wiadomość nie została wysłana.",
+  "workerReply": "Pokazane w Twoim języku",
+  "searchTranslated": "Wyszukiwanie uruchomiono po angielsku na podstawie przetłumaczonego zapytania."
+}

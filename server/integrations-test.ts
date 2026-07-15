@@ -19,14 +19,13 @@ export async function handleIntegrationTest(
   try {
     if (integrationId === 'openai') {
       const apiKey = values.apiKey || process.env.OPENAI_API_KEY;
-      if (!apiKey) {
-        sendJson(res, 400, { success: false, message: 'API key required', status: 'error' });
+      if (!apiKey || String(apiKey).startsWith('••••')) {
+        sendJson(res, 400, { success: false, message: 'OpenAI API key required', status: 'error' });
         return;
       }
-      const { default: OpenAI } = await import('openai');
-      const openai = new OpenAI({ apiKey });
-      await openai.models.list();
-      sendJson(res, 200, { success: true, message: 'OpenAI connection successful', status: 'connected' });
+      const { probeLLMConnection } = await import('./llm-connection');
+      await probeLLMConnection('openai', apiKey);
+      sendJson(res, 200, { success: true, message: 'Company AI Brain (OpenAI) connected', status: 'connected' });
       return;
     }
 

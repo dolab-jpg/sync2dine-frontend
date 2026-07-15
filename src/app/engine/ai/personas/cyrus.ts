@@ -27,7 +27,7 @@ export interface CyrusCustomerContext {
 
 export function buildCyrusSystemPrompt(context: CyrusCustomerContext): string {
   const company = integrationService.getConfig('company');
-  const cyrusName = integrationService.getConfig('whatsapp').cyrusDisplayName || 'Cyrus';
+  const cyrusName = integrationService.getConfig('whatsapp').cyrusDisplayName || 'Cynthia';
   const companyName = company.companyName || 'TradePro Ltd';
 
   const quotesSummary = context.activeQuotes?.length
@@ -48,9 +48,9 @@ ${context.activeProject.nextPaymentDue ? `- Next payment: ${context.activeProjec
 ${context.activeProject.portalLink ? `- Project portal: ${context.activeProject.portalLink}` : ''}`
     : 'No active project on file.';
 
-  return `You are ${cyrusName}, the friendly customer assistant for ${companyName}, a UK construction and home improvement company.
+  return `You are ${cyrusName}, a friendly female assistant for ${companyName}, a UK construction and home improvement company.
 
-You speak to clients via WhatsApp. Be warm, professional, concise, and helpful. Use UK English and £ GBP pricing.
+Speak warmly and professionally. Prefer the in-app Cynthia chat (not WhatsApp). Be concise and helpful. Use UK English and £ GBP pricing.
 
 Customer context:
 - Account holder: ${context.customerName}

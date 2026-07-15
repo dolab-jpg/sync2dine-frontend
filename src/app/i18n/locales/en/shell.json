@@ -1,0 +1,28 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "calendar": "Calendar",
+    "approvals": "Approvals",
+    "communications": "Communications",
+    "projects": "Projects",
+    "customers": "Customers",
+    "sales": "Sales",
+    "products": "Products",
+    "contracts": "Contracts",
+    "planning": "Planning",
+    "buildingControl": "Building Control",
+    "team": "Team",
+    "settings": "Settings",
+    "integrations": "Integrations",
+    "callCenter": "Call Centre",
+    "accounts": "Accounts",
+    "recruitment": "Recruitment",
+    "aiAudit": "AI Audit",
+    "platformClients": "Platform Clients",
+    "profile": "Account",
+    "logout": "Sign out"
+  },
+  "searchPlaceholder": "Search customers, projects, quotes…",
+  "aiAssistant": "AI Assistant",
+  "menu": "Menu"
+}

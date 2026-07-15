@@ -11,11 +11,14 @@ import {
   fetchMembers,
   fetchPendingInvites,
   removeMember,
+  updateMember,
   type OrgMember,
   type PendingInvite,
 } from '../auth/lib/authApi';
 import { getSupabase, isSupabaseConfigured } from '../../lib/supabase/client';
 import { toast } from 'sonner';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { LANG_OPTIONS, normalizeLang } from '../i18n/languages';
 
 type InviteRole = 'manager' | 'staff' | 'builder' | 'recruitment' | 'customer';
 
@@ -323,6 +326,45 @@ export default function TeamManagement() {
                             <span>{member.username}</span>
                           </div>
                         )}
+                        <div className="flex items-center gap-2 pt-2 max-w-xs">
+                          <Label className="text-xs text-gray-500 shrink-0">Language</Label>
+                          <Select
+                            value={normalizeLang(member.preferred_language)}
+                            onValueChange={(v) => {
+                              void (async () => {
+                                try {
+                                  const token = await getAccessToken();
+                                  if (!token) {
+                                    toast.error('Sign in with a real account first');
+                                    return;
+                                  }
+                                  const updated = await updateMember(
+                                    member.id,
+                                    { preferredLanguage: normalizeLang(v) },
+                                    token,
+                                  );
+                                  setTeamMembers((prev) =>
+                                    prev.map((m) => (m.id === member.id ? { ...m, ...updated } : m)),
+                                  );
+                                  toast.success('Language updated');
+                                } catch (err) {
+                                  toast.error(err instanceof Error ? err.message : 'Could not update language');
+                                }
+                              })();
+                            }}
+                          >
+                            <SelectTrigger className="h-8 bg-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {LANG_OPTIONS.map((opt) => (
+                                <SelectItem key={opt.code} value={opt.code}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     </div>
                     {member.id !== user.id && member.role !== 'platform_owner' && (

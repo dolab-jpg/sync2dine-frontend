@@ -56,29 +56,34 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
       .catch(() => setEmbedSnippet(''));
   }, [definition.id, expanded, savedAt, localValues.website]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (definition.fields.some(f => f.required) && !hasCredentials) {
       toast.error('Fill in all required fields before saving');
       return;
     }
 
-    integrationService.saveIntegrationValues(definition.id, localValues);
-    integrationService.logAudit(definition.id, userName);
-    setSavedAt(new Date().toLocaleString());
-    onUpdate();
+    try {
+      await integrationService.saveIntegrationValues(definition.id, localValues);
+      integrationService.logAudit(definition.id, userName);
+      setSavedAt(new Date().toLocaleString());
+      onUpdate();
 
-    if (hasCredentials && definition.id === 'openai') {
-      toast.success('OpenAI key saved for the whole company — staff, builders, and customers will use it');
-      // Cloud-sync warnings land on lastTestError asynchronously after PUT /api/org/openai-key.
-      window.setTimeout(() => {
-        const err = integrationService.getInstance('openai').lastTestError;
-        if (err) toast.warning(err);
-        onUpdate();
-      }, 600);
-    } else if (hasCredentials) {
-      toast.success(`${definition.name} settings saved — live mode enabled`);
-    } else {
-      toast.success(`${definition.name} settings saved`);
+      if (hasCredentials && definition.id === 'openai') {
+        const inst = integrationService.getInstance('openai');
+        if (inst.status === 'connected') {
+          toast.success('Company AI Brain connected — OpenAI key live for the whole company');
+        } else {
+          toast.error(inst.lastTestError || 'Saved but OpenAI did not connect — check the key');
+        }
+        if (inst.lastTestError && inst.status === 'connected') toast.warning(inst.lastTestError);
+      } else if (hasCredentials) {
+        toast.success(`${definition.name} settings saved — live mode enabled`);
+      } else {
+        toast.success(`${definition.name} settings saved`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Save failed');
+      onUpdate();
     }
   };
 
@@ -88,16 +93,22 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
       return;
     }
 
-    integrationService.saveIntegrationValues(definition.id, localValues);
     setTesting(true);
-    const result = await integrationService.testConnection(definition.id);
-    setTesting(false);
-    onUpdate();
+    try {
+      await integrationService.saveIntegrationValues(definition.id, localValues);
+      const result = await integrationService.testConnection(definition.id);
+      onUpdate();
 
-    if (result.success) {
-      toast.success(result.message || 'Connection successful');
-    } else {
-      toast.error(result.message || 'Connection failed');
+      if (result.success) {
+        toast.success(result.message || 'Connection successful');
+      } else {
+        toast.error(result.message || 'Connection failed');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Test failed');
+      onUpdate();
+    } finally {
+      setTesting(false);
     }
   };
 

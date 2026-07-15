@@ -26,40 +26,49 @@ export function pickHigherEnd(line: { low: number; typical: number; high: number
 }
 
 /**
- * Call the live price-research backend. Falls back to an empty result on failure;
- * the server itself returns deterministic mock ranges when no OpenAI key is present.
+ * Call the live price-research backend powered by the company OpenAI brain.
+ * Throws when OpenAI is not connected (no silent mock).
  */
 export async function researchPrices(req: PriceResearchRequest): Promise<PricingResearch> {
   const cfg = integrationService.getConfig('price_research');
   const openai = integrationService.getConfig('openai');
   const region = cfg.region || 'UK';
-  let lines: PricingResearchLine[] = [];
-  let provider = 'mock';
-  let summary: string | undefined;
 
-  try {
-    const res = await fetch('/api/ai/price-research', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tasks: req.tasks,
-        tradeName: req.tradeName,
-        postcode: req.postcode,
-        region,
-        provider: cfg.provider || 'openai_web',
-        searchApiKey: cfg.apiKey || undefined,
-        apiKey: integrationService.getLiveOpenAIApiKey(),
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      lines = Array.isArray(data.items) ? (data.items as PricingResearchLine[]) : [];
-      provider = data.provider ?? provider;
-      summary = data.note;
-    }
-  } catch {
-    // fall through to empty result
+  const res = await fetch('/api/ai/price-research', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tasks: req.tasks,
+      tradeName: req.tradeName,
+      postcode: req.postcode,
+      region,
+      provider: cfg.provider || 'openai_web',
+      searchApiKey: cfg.apiKey || undefined,
+      apiKey: integrationService.getLiveOpenAIApiKey(),
+      deepseekApiKey: openai.deepseekApiKey || undefined,
+      brainProvider: openai.provider || 'openai',
+    }),
+  });
+
+  const data = await res.json().catch(() => ({})) as {
+    items?: PricingResearchLine[];
+    provider?: string;
+    note?: string;
+    error?: string;
+  };
+
+  if (!res.ok) {
+    throw new Error(
+      data.error
+        || 'OpenAI not connected — add your API key in Settings → Integrations → Company AI Brain and Save.',
+    );
   }
 
-  return { provider, region, summary, lines, generatedAt: new Date().toISOString() };
+  return {
+    provider: data.provider ?? 'openai',
+    region,
+    summary: data.note,
+    lines: Array.isArray(data.items) ? data.items : [],
+    generatedAt: new Date().toISOString(),
+  };
 }

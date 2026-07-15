@@ -9,7 +9,7 @@ export interface OpenAIConnectionState {
 }
 
 const MISSING_MESSAGE =
-  'OpenAI not connected — add your API key in Settings → Integrations → OpenAI and Save.';
+  'OpenAI not connected — add your API key in Settings → Integrations → Company AI Brain and Save.';
 
 const MISSING_MESSAGE_NON_ADMIN =
   'Company AI not configured yet — ask your Super Admin to add an OpenAI key in Integrations.';

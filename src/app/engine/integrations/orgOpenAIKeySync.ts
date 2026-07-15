@@ -1,10 +1,16 @@
 import { loadIntegrationsStore, saveIntegrationsStore } from './integrationsStore';
+import { getActiveOrgId } from '../platform/orgContext';
 
 export interface OrgOpenAIKeyStatus {
   configured: boolean;
   maskedHint?: string;
   syncedToCloud?: boolean;
   cloudSyncWarning?: string;
+  connected?: boolean;
+  probeMessage?: string;
+  provider?: 'openai' | 'deepseek';
+  deepseekConfigured?: boolean;
+  deepseekMaskedHint?: string;
 }
 
 function isRealLocalApiKey(value: string | undefined): boolean {
@@ -26,14 +32,26 @@ async function fetchOrgOpenAIKeyStatus(role?: string): Promise<OrgOpenAIKeyStatu
   }
 }
 
-export async function saveOrgOpenAIKey(apiKey: string, role = 'super_admin'): Promise<OrgOpenAIKeyStatus> {
+export async function saveOrgOpenAIKey(
+  apiKey: string,
+  role = 'super_admin',
+  extras?: { deepseekApiKey?: string; provider?: string },
+): Promise<OrgOpenAIKeyStatus> {
   const res = await fetch('/api/org/openai-key', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       'X-User-Role': role,
     },
-    body: JSON.stringify({ apiKey, role }),
+    body: JSON.stringify({
+      apiKey,
+      openaiApiKey: apiKey,
+      deepseekApiKey: extras?.deepseekApiKey,
+      provider: extras?.provider,
+      role,
+      probe: true,
+      orgId: getActiveOrgId() || 'default',
+    }),
   });
   const data = (await res.json().catch(() => ({}))) as OrgOpenAIKeyStatus & { error?: string };
   if (!res.ok) {
@@ -48,23 +66,27 @@ export async function saveOrgOpenAIKey(apiKey: string, role = 'super_admin'): Pr
  */
 export async function initOrgOpenAIKey(role?: string): Promise<boolean> {
   const status = await fetchOrgOpenAIKeyStatus(role);
-  if (!status?.configured) return false;
+  if (!status?.configured && !status?.deepseekConfigured) return false;
 
   const store = loadIntegrationsStore();
   const current = store.integrations.openai;
   const localKey = current.values.apiKey;
+  const localDeepseek = current.values.deepseekApiKey;
   store.masterMockMode = false;
   store.integrations.openai = {
     ...current,
     enabled: true,
     mockMode: false,
-    status: 'connected',
+    status: status.configured || status.connected ? 'connected' : current.status,
     values: {
       ...current.values,
+      provider: status.provider || current.values.provider || 'openai',
       // Keep a real Super Admin typed key; clear previous masked placeholders.
       apiKey: isRealLocalApiKey(localKey) ? localKey!.trim() : '',
+      deepseekApiKey: isRealLocalApiKey(localDeepseek) ? localDeepseek!.trim() : '',
     },
+    lastTestError: status.probeMessage || status.cloudSyncWarning,
   };
   saveIntegrationsStore(store);
-  return true;
+  return Boolean(status.configured || status.deepseekConfigured);
 }

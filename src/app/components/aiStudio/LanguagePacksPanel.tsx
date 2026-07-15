@@ -12,6 +12,7 @@ const LANGS = [
   { code: 'en', label: 'English' },
   { code: 'sq', label: 'Albanian' },
   { code: 'uk', label: 'Ukrainian' },
+  { code: 'ru', label: 'Russian' },
   { code: 'zh', label: 'Chinese' },
   { code: 'es', label: 'Spanish' },
   { code: 'pl', label: 'Polish' },

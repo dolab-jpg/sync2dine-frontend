@@ -1,0 +1,23 @@
+{
+  "appName": "TradePro",
+  "save": "Guardar",
+  "cancel": "Cancelar",
+  "delete": "Eliminar",
+  "edit": "Editar",
+  "search": "Buscar",
+  "loading": "Cargando…",
+  "retry": "Reintentar",
+  "back": "Atrás",
+  "close": "Cerrar",
+  "confirm": "Confirmar",
+  "yes": "Sí",
+  "no": "No",
+  "language": "Idioma",
+  "englishOnlyHint": "Los mensajes a clientes, contratos y documentos permanecen en inglés.",
+  "translatedBadge": "Traducido",
+  "showEnglish": "Mostrar inglés",
+  "hideEnglish": "Ocultar inglés",
+  "online": "En línea",
+  "offline": "Sin conexión",
+  "errorGeneric": "Algo salió mal. Inténtalo de nuevo."
+}

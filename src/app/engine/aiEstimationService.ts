@@ -11,7 +11,7 @@ export interface EstimationResult {
 }
 
 async function resizeImage(dataUrl: string, maxSize = 1024): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
@@ -29,185 +29,109 @@ async function resizeImage(dataUrl: string, maxSize = 1024): Promise<string> {
       ctx?.drawImage(img, 0, 0, width, height);
       resolve(canvas.toDataURL('image/jpeg', 0.8));
     };
+    img.onerror = () => reject(new Error('Failed to load image'));
     img.src = dataUrl;
   });
 }
 
-function mockEstimation(tradeId: TradeId): EstimationResult {
-  const trade = getTrade(tradeId);
-  const mocks: Record<string, EstimationResult> = {
-    bathroom: {
-      suggestions: {
-        length: { value: 2.4, confidence: 0.72, reason: 'Estimated from room proportions' },
-        width: { value: 1.8, confidence: 0.68 },
-        floorLocation: { value: 'upstairs', confidence: 0.85 },
-        removal: { value: 'standard', confidence: 0.6 },
-        finish: { value: 'microcement-grey', confidence: 0.55 },
-      },
-      risks: ['Verify exact dimensions on site', 'Check for hidden water damage'],
-      summary: 'Small upstairs bathroom, approx 4.3m². Standard strip-out likely.',
-    },
-    kitchen: {
-      suggestions: {
-        length: { value: 4.2, confidence: 0.7 },
-        width: { value: 3.0, confidence: 0.65 },
-        floorLocation: { value: 'ground', confidence: 0.8 },
-        access: { value: 'easy', confidence: 0.7 },
-        removal: { value: 'standard', confidence: 0.6 },
-        finish: { value: 'quartz', confidence: 0.5 },
-      },
-      risks: ['Confirm appliance locations', 'Check gas supply'],
-      summary: 'L-shaped kitchen approximately 12.6m² floor area.',
-    },
-    electrical: {
-      suggestions: {
-        rooms: { value: 4, confidence: 0.7, reason: 'Typical 3-bed property' },
-        jobType: { value: 'partial-rewire', confidence: 0.55 },
-        consumerUnit: { value: 'rcd-split', confidence: 0.65 },
-        sockets: { value: 24, confidence: 0.5 },
-        lights: { value: 12, confidence: 0.5 },
-      },
-      risks: ['EICR recommended before work', 'Check earthing and bonding'],
-      summary: 'Partial rewire likely — consumer unit upgrade may be required.',
-    },
-    plumbing: {
-      suggestions: {
-        rooms: { value: 3, confidence: 0.65 },
-        boilerType: { value: 'combi', confidence: 0.6 },
-        radiators: { value: 8, confidence: 0.55 },
-        cylinder: { value: 'none', confidence: 0.7 },
-      },
-      risks: ['Confirm boiler age and flue route', 'Check water pressure'],
-      summary: 'Heating system upgrade — combi boiler replacement candidate.',
-    },
-    roofing: {
-      suggestions: {
-        area: { value: 65, confidence: 0.55 },
-        finish: { value: 'concrete-tile', confidence: 0.6 },
-        roofType: { value: 'pitched', confidence: 0.75 },
-        removal: { value: 'overlay', confidence: 0.5 },
-      },
-      risks: ['Check structure and battens', 'Scaffold access required'],
-      summary: 'Pitched roof approx 65m² — tile replacement or overlay.',
-    },
-    flooring: {
-      suggestions: {
-        length: { value: 5.0, confidence: 0.65 },
-        width: { value: 4.0, confidence: 0.6 },
-        finish: { value: 'laminate', confidence: 0.55 },
-        subfloor: { value: 'plywood', confidence: 0.5 },
-        rooms: { value: 2, confidence: 0.7 },
-      },
-      risks: ['Check subfloor moisture levels', 'Door clearance after install'],
-      summary: 'Two rooms, approx 20m² total — laminate over plywood subfloor.',
-    },
-    painting: {
-      suggestions: {
-        rooms: { value: 3, confidence: 0.7 },
-        length: { value: 4.5, confidence: 0.55 },
-        width: { value: 3.8, confidence: 0.55 },
-        prepLevel: { value: 'medium', confidence: 0.5 },
-        finish: { value: 'emulsion', confidence: 0.65 },
-      },
-      risks: ['Allow drying time between coats', 'Check for artex or wallpaper'],
-      summary: 'Three rooms — medium prep, emulsion walls and ceilings.',
-    },
-    plastering: {
-      suggestions: {
-        length: { value: 4.0, confidence: 0.6 },
-        width: { value: 3.5, confidence: 0.58 },
-        finish: { value: 'skim', confidence: 0.65 },
-        removal: { value: 'none', confidence: 0.7 },
-      },
-      risks: ['Check for blown plaster', 'Allow curing time before decorating'],
-      summary: 'Single room skim coat — approx 14m² wall area.',
-    },
-    extensions: {
-      suggestions: {
-        length: { value: 6.0, confidence: 0.55 },
-        width: { value: 4.0, confidence: 0.55 },
-        storeys: { value: 1, confidence: 0.8 },
-        specLevel: { value: 'standard', confidence: 0.5 },
-        access: { value: 'restricted', confidence: 0.6 },
-      },
-      risks: ['Building regs and planning may apply', 'Party wall agreement if terraced'],
-      summary: 'Single-storey rear extension approx 24m² footprint.',
-    },
-    windows: {
-      suggestions: {
-        windows: { value: 6, confidence: 0.65 },
-        doors: { value: 1, confidence: 0.7 },
-        finish: { value: 'upvc-white', confidence: 0.6 },
-      },
-      risks: ['FENSA certification required', 'Check trickle vents and fire egress'],
-      summary: 'Six windows and one door — UPVC replacement likely.',
-    },
-    loft: {
-      suggestions: {
-        area: { value: 35, confidence: 0.5 },
-        conversionType: { value: 'dormer', confidence: 0.55 },
-        rooms: { value: 2, confidence: 0.6 },
-        bathroom: { value: 'ensuite', confidence: 0.45 },
-      },
-      risks: ['Check head height and steels', 'Building regs sign-off required'],
-      summary: 'Dormer loft conversion — two rooms with ensuite potential.',
-    },
-    landscaping: {
-      suggestions: {
-        length: { value: 10, confidence: 0.55 },
-        width: { value: 6, confidence: 0.55 },
-        surfaceType: { value: 'patio', confidence: 0.6 },
-        linearMetres: { value: 12, confidence: 0.5 },
-        access: { value: 'side-gate', confidence: 0.65 },
-      },
-      risks: ['Check drainage falls', 'Waste skip access for delivery'],
-      summary: 'Rear garden patio approx 60m² with 12m fencing.',
-    },
-  };
-  return mocks[tradeId] ?? {
-    suggestions: { area: { value: 20, confidence: 0.5 } },
-    risks: ['AI mock mode — configure OPENAI_API_KEY for real analysis'],
-    summary: `Mock estimation for ${trade.name}. Upload photos with API key configured for real results.`,
-  };
+/** Convert PDF file first pages to JPEG data URLs for vision. */
+export async function pdfFileToImages(file: File, maxPages = 3): Promise<string[]> {
+  const pdfjs = await import('pdfjs-dist');
+  const { getDocument, GlobalWorkerOptions } = pdfjs;
+  GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url,
+  ).toString();
+
+  const data = await file.arrayBuffer();
+  const pdf = await getDocument({ data }).promise;
+  const pages = Math.min(pdf.numPages, maxPages);
+  const images: string[] = [];
+
+  for (let i = 1; i <= pages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) continue;
+    await page.render({ canvasContext: ctx, viewport, canvas } as Parameters<typeof page.render>[0]).promise;
+    images.push(canvas.toDataURL('image/jpeg', 0.85));
+  }
+  return images;
+}
+
+/** Extract plain text from a PDF for brain context. */
+export async function pdfFileToText(file: File, maxPages = 5): Promise<string> {
+  const pdfjs = await import('pdfjs-dist');
+  const { getDocument, GlobalWorkerOptions } = pdfjs;
+  GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url,
+  ).toString();
+
+  const data = await file.arrayBuffer();
+  const pdf = await getDocument({ data }).promise;
+  const pages = Math.min(pdf.numPages, maxPages);
+  const parts: string[] = [];
+  for (let i = 1; i <= pages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const text = content.items
+      .map((item) => ('str' in item ? String((item as { str: string }).str) : ''))
+      .join(' ');
+    if (text.trim()) parts.push(text.trim());
+  }
+  return parts.join('\n\n');
 }
 
 export async function estimateFromPhotos(
   tradeId: TradeId,
   images: string[],
-  context?: Record<string, unknown>
+  context?: Record<string, unknown> & { documentText?: string },
 ): Promise<EstimationResult> {
   const trade = getTrade(tradeId);
-  const openaiConfig = integrationService.getConfig('openai');
-  const resized = await Promise.all(images.slice(0, 5).map(img => resizeImage(img)));
+  const resized = images.length
+    ? await Promise.all(images.slice(0, 8).map((img) => resizeImage(img)))
+    : [];
+  const documentText = typeof context?.documentText === 'string' ? context.documentText : undefined;
 
-  try {
-    const res = await fetch('/api/ai/estimate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tradeId,
-        images: resized,
-        context,
-        systemPrompt: buildEstimationSystemPrompt(trade),
-        schema: buildExtractionSchema(trade),
-        apiKey: integrationService.getLiveOpenAIApiKey(),
-      }),
-    });
-
-    if (res.ok) {
-      return await res.json();
-    }
-  } catch {
-    // mock fallback
+  if (resized.length === 0 && !documentText?.trim()) {
+    throw new Error('Add at least one photo or PDF for AI to analyse');
   }
 
-  return mockEstimation(tradeId);
+  const res = await fetch('/api/ai/estimate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tradeId,
+      images: resized,
+      documentText,
+      context,
+      systemPrompt: buildEstimationSystemPrompt(trade),
+      schema: buildExtractionSchema(trade),
+      apiKey: integrationService.getLiveOpenAIApiKey(),
+      provider: integrationService.getConfig('openai').provider || 'openai',
+      deepseekApiKey: integrationService.getConfig('openai').deepseekApiKey || undefined,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(
+      data.error
+        || 'OpenAI not connected — add your API key in Settings → Integrations → Company AI Brain and Save.',
+    );
+  }
+
+  return await res.json() as EstimationResult;
 }
 
 export function clampSuggestion(
   tradeId: TradeId,
   key: string,
-  value: unknown
+  value: unknown,
 ): unknown {
   const n = typeof value === 'number' ? value : parseFloat(String(value));
   if (key === 'length' || key === 'width') return Number.isFinite(n) ? Math.min(30, Math.max(0.5, n)) : value;

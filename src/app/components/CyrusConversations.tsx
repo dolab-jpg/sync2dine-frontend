@@ -27,6 +27,7 @@ import {
 } from '../engine/cyrus/cyrusThreadApi';
 import { checkOpenAIConnection, type OpenAIConnectionState } from '../engine/ai/openaiConnectionService';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import { useVoiceOutput } from '../hooks/useVoiceOutput';
 import { toast } from 'sonner';
 
 function mergeThreads(server: ServerThread[], localFallback: ReturnType<typeof getAllConversationThreads>): ServerThread[] {
@@ -103,6 +104,7 @@ export default function CyrusConversations() {
     if (text) setComposer((prev) => (prev ? `${prev} ${text}` : text));
   }, []);
   const { isListening, startListening, stopListening, isSupported } = useVoiceInput(onVoice);
+  const { speak } = useVoiceOutput();
 
   if (!context) return null;
   const { customers, updateCustomer, user } = context;
@@ -164,9 +166,15 @@ export default function CyrusConversations() {
     if (!selectedThread || !composer.trim()) return;
     setSending(true);
     try {
-      await askCyrusOnThread(selectedThread.sessionId, composer.trim());
+      const data = await askCyrusOnThread(selectedThread.sessionId, composer.trim());
       setComposer('');
       await reload();
+      if (data.reply) {
+        const voiceMode = (integrationService.getConfig('openai').ttsVoice
+          ? 'openai'
+          : 'browser') as 'openai' | 'browser';
+        void speak(data.reply, voiceMode);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Cyrus failed — check OpenAI in Integrations');
       void checkOpenAIConnection({ role: userRole }).then(setOpenaiState);
@@ -419,7 +427,7 @@ export default function CyrusConversations() {
                         variant="outline"
                         size="icon"
                         onClick={() => (isListening ? stopListening() : startListening())}
-                        title="Speak"
+                        title="Dictate (Speak)"
                       >
                         {isListening ? <MicOff className="w-4 h-4 text-red-600" /> : <Mic className="w-4 h-4" />}
                       </Button>

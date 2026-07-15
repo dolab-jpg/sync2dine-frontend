@@ -96,8 +96,10 @@ export function installApiFetchInterceptor(): () => void {
       if (!orgId && !headers.has('X-Org-Id')) {
         orgId = await ensureActiveOrgId();
       }
+      // Always send an org id so server-side org OpenAI keys resolve (local default).
+      if (!orgId) orgId = 'default';
       const token = await getSupabaseAccessToken();
-      if (orgId && !headers.has('X-Org-Id')) headers.set('X-Org-Id', orgId);
+      if (!headers.has('X-Org-Id')) headers.set('X-Org-Id', orgId);
       if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
       return original(input, { ...init, headers });
     }

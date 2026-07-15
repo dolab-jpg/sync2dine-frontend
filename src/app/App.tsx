@@ -24,6 +24,7 @@ import SiteSurvey from './components/SiteSurvey';
 import FinanceApplication from './components/FinanceApplication';
 import CommunicationsHub from './components/CommunicationsHub';
 import CyrusConversations from './components/CyrusConversations';
+import CynthiaHome from './components/Cynthia/CynthiaHome';
 import IntegrationsHub from './components/integrations/IntegrationsHub';
 import CursorPastePage from './pages/CursorPastePage';
 import AIBathroomRender from './components/AIBathroomRender';
@@ -120,12 +121,14 @@ export interface Customer {
   tradeId?: TradeId;
   whatsappOptIn: boolean;
   preferredChannel: 'email' | 'whatsapp' | 'both' | 'phone';
-  /** Channel reply language pack: en | sq | uk | zh | es | pl | fa */
-  preferredLanguage?: 'en' | 'sq' | 'uk' | 'zh' | 'es' | 'pl' | 'fa';
+  /** Channel reply language pack: en | sq | uk | ru | zh | es | pl | fa */
+  preferredLanguage?: 'en' | 'sq' | 'uk' | 'ru' | 'zh' | 'es' | 'pl' | 'fa';
   whatsappId?: string;
   lastWhatsAppAt?: string;
   /** CRM lead fields */
   source?: 'facebook' | 'instagram' | 'google' | 'referral' | 'website' | 'phone' | 'walk-in' | 'email' | 'purchased';
+  /** Call Centre call id this lead was captured from (Aria auto-capture or staff "Create lead" action) */
+  sourceCallId?: string;
   campaign?: string;
   adSet?: string;
   leadScore?: number;
@@ -1113,7 +1116,16 @@ export default function App() {
                 element={<ProtectedRoute element={<CommunicationsHub />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route
-                path="/cyrus"
+                path="/cynthia"
+                element={<ProtectedRoute element={<CynthiaHome />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/cynthia/ingest"
+                element={<ProtectedRoute element={<CynthiaHome />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route path="/cyrus" element={<Navigate to="/cynthia" replace />} />
+              <Route
+                path="/cyrus/legacy"
                 element={<ProtectedRoute element={<CyrusConversations />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route

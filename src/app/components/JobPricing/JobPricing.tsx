@@ -18,7 +18,7 @@ import { getAllTrades, getTrade } from '../../config/trades';
 import type { TradeId } from '../../config/types';
 import { priceSmallJob } from '../../engine/pricing/smallJobsService';
 import { researchPrices, pickHigherEnd } from '../../engine/pricing/priceResearchService';
-import { estimateFromPhotos } from '../../engine/aiEstimationService';
+import { estimateFromPhotos, pdfFileToImages, pdfFileToText } from '../../engine/aiEstimationService';
 import { suggestionsToAnswers, buildIndicativeEstimate } from '../../engine/ai/indicativeEstimate';
 import { calculateQuote } from '../../engine/quoteCalculator';
 
@@ -45,6 +45,7 @@ export default function JobPricing() {
   const [taskText, setTaskText] = useState('');
   const [tradeId, setTradeId] = useState<TradeId>('bathroom');
   const [photos, setPhotos] = useState<string[]>([]);
+  const [documentText, setDocumentText] = useState('');
   const [details, setDetails] = useState('');
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState<PricedDraft | null>(null);
@@ -83,41 +84,113 @@ export default function JobPricing() {
         summary: `${result.taskList.length} task(s) priced at the higher end of local rates.`,
       });
       toast.success('Job priced — review and submit for approval');
-    } catch {
-      toast.error('Pricing failed');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Pricing failed — connect OpenAI in Integrations');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDocUpload = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setLoading(true);
+    try {
+      const nextPhotos = [...photos];
+      let textParts = documentText;
+      for (const file of Array.from(files)) {
+        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          const [imgs, text] = await Promise.all([
+            pdfFileToImages(file, 3),
+            pdfFileToText(file, 5),
+          ]);
+          nextPhotos.push(...imgs);
+          if (text.trim()) textParts = textParts ? `${textParts}\n\n${text}` : text;
+        } else if (file.type.startsWith('image/')) {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(new Error('Failed to read image'));
+            reader.readAsDataURL(file);
+          });
+          nextPhotos.push(dataUrl);
+        }
+      }
+      setPhotos(nextPhotos.slice(0, 12));
+      setDocumentText(textParts);
+      toast.success('Document added for AI pricing');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not read document');
     } finally {
       setLoading(false);
     }
   };
 
   const handlePricePhotos = async () => {
+    if (photos.length === 0 && !documentText.trim() && !details.trim()) {
+      toast.error('Add photos, a PDF, or details for the AI to price');
+      return;
+    }
     setLoading(true);
     try {
-      const estimation = await estimateFromPhotos(tradeId, photos, { details });
-      const answers = suggestionsToAnswers(estimation.suggestions);
-      const calc = calculateQuote(tradeId, answers, context.products, context.pricingRules);
-      const indicative = buildIndicativeEstimate(tradeId, answers, context.products, context.pricingRules);
+      const tradeName = getTrade(tradeId).name;
+      let estimation: Awaited<ReturnType<typeof estimateFromPhotos>> | null = null;
+      let calc = { items: [] as QuoteItem[], labour: [] as LabourItem[], extras: [] as ExtraItem[], total: 0 };
+      let indicativeHigh = 0;
+
+      if (photos.length > 0 || documentText.trim()) {
+        estimation = await estimateFromPhotos(tradeId, photos, {
+          details,
+          documentText: [documentText, details].filter(Boolean).join('\n\n') || undefined,
+        });
+        const answers = suggestionsToAnswers(estimation.suggestions);
+        calc = calculateQuote(tradeId, answers, context.products, context.pricingRules);
+        const indicative = buildIndicativeEstimate(tradeId, answers, context.products, context.pricingRules);
+        indicativeHigh = indicative.high;
+      }
+
       const research = await researchPrices({
-        tasks: [`${getTrade(tradeId).name} full installation`],
-        tradeName: getTrade(tradeId).name,
+        tasks: [
+          details.trim() || `${tradeName} full installation`,
+          ...(estimation?.summary ? [estimation.summary] : []),
+        ].filter(Boolean),
+        tradeName,
         postcode: customer?.address,
       });
       const researchedHigh = research.lines.length ? pickHigherEnd(research.lines[0]) : 0;
-      const total = Math.max(indicative.high, researchedHigh);
+      const total = Math.max(indicativeHigh, researchedHigh, calc.total);
+
+      if (!calc.items.length && research.lines.length) {
+        calc = {
+          items: research.lines.map((line, idx) => {
+            const price = pickHigherEnd(line);
+            return {
+              productId: `research-${idx}`,
+              name: line.task,
+              quantity: 1,
+              price,
+              total: price,
+            };
+          }),
+          labour: [],
+          extras: [],
+          total: research.lines.reduce((s, line) => s + pickHigherEnd(line), 0),
+        };
+      }
+
       setDraft({
         items: calc.items,
         labour: calc.labour,
         extras: calc.extras,
-        total,
+        total: total || calc.total,
         tradeId,
-        tradeName: getTrade(tradeId).name,
+        tradeName,
         pricingResearch: research.lines.length ? research : undefined,
-        summary: estimation.summary,
-        risks: estimation.risks,
+        summary: estimation?.summary || `Priced from details via Company AI Brain (${research.provider}).`,
+        risks: estimation?.risks,
       });
       toast.success('Estimated — review and submit for approval');
-    } catch {
-      toast.error('Estimation failed');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Estimation failed — connect OpenAI in Integrations');
     } finally {
       setLoading(false);
     }
@@ -221,6 +294,20 @@ export default function JobPricing() {
                 </Select>
               </div>
               <PhotoCapture photos={photos} onChange={setPhotos} />
+              <div>
+                <Label className="mb-2 block">Upload photos or PDF for the AI brain</Label>
+                <Input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  multiple
+                  onChange={(e) => void handleDocUpload(e.target.files)}
+                />
+                {documentText.trim() && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    PDF text extracted ({documentText.length.toLocaleString()} chars) — will be sent to OpenAI with photos.
+                  </p>
+                )}
+              </div>
               <div>
                 <Label className="mb-2 block">Details</Label>
                 <Textarea rows={4} value={details} onChange={(e) => setDetails(e.target.value)} placeholder="Anything the photos don't show — access, finishes, timescales..." />

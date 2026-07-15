@@ -5,9 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client';
 import { AuthFormError } from '../components/AuthFormError';
 import { UsernameField, validateUsername, normalizeUsername } from '../components/UsernameField';
+import { detectBrowserLang, LANG_OPTIONS, normalizeLang, type SupportedLang } from '../../i18n/languages';
+import { applyDocumentLanguage, changeAppLanguage } from '../../i18n';
 
 function roleLabel(role: string): string {
   return role.replace(/_/g, ' ');
@@ -21,6 +24,7 @@ export default function ProfilePage() {
 
   const [name, setName] = useState(user?.name ?? '');
   const [username, setUsername] = useState('');
+  const [preferredLanguage, setPreferredLanguage] = useState<SupportedLang>(detectBrowserLang());
   const [orgName, setOrgName] = useState('your company');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -32,12 +36,16 @@ export default function ProfilePage() {
       const supabase = getSupabase();
       const { data: profile } = await supabase
         .from('profiles')
-        .select('name, username, org_id')
+        .select('name, username, org_id, preferred_language')
         .eq('id', user.id)
         .maybeSingle();
       if (profile) {
         setName(profile.name || user.name);
         setUsername(profile.username || '');
+        const lang = normalizeLang(profile.preferred_language ?? detectBrowserLang());
+        setPreferredLanguage(lang);
+        await changeAppLanguage(lang);
+        applyDocumentLanguage(lang);
         if (profile.org_id) {
           const { data: org } = await supabase
             .from('organizations')
@@ -83,10 +91,18 @@ export default function ProfilePage() {
         .update({
           name: name.trim(),
           username: normalizeUsername(username),
+          preferred_language: preferredLanguage,
           updated_at: new Date().toISOString(),
         })
         .eq('id', user.id);
       if (updateError) throw updateError;
+      await changeAppLanguage(preferredLanguage);
+      applyDocumentLanguage(preferredLanguage);
+      try {
+        localStorage.setItem('tradepro.preferredLanguage', preferredLanguage);
+      } catch {
+        /* ignore */
+      }
       setInfo('Profile saved.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save profile');
@@ -123,6 +139,27 @@ export default function ProfilePage() {
               />
             </div>
             <UsernameField value={username} onChange={setUsername} />
+            <div>
+              <Label htmlFor="profile-language">App language</Label>
+              <Select
+                value={preferredLanguage}
+                onValueChange={(v) => setPreferredLanguage(normalizeLang(v))}
+              >
+                <SelectTrigger id="profile-language" className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LANG_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.code} value={opt.code}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500 mt-1">
+                Translates the app and AI chat for you. Customer messages, contracts, and documents stay in English.
+              </p>
+            </div>
             <div>
               <Label>Email</Label>
               <Input value={user.email} readOnly className="mt-1 bg-slate-100 text-slate-600" />

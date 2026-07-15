@@ -1,6 +1,6 @@
-# Aria Voice Setup (OpenAI brain + cloned Cockney accent)
+# Aria Voice Setup (Company AI Brain + cloned Cockney accent)
 
-Aria uses **OpenAI** for conversation logic and **Chatterbox TTS** for the spoken voice. You can clone a Cockney-style accent (e.g. Del Boy) from a reference WAV you own.
+Aria uses the **Company AI Brain** (OpenAI by default; optional DeepSeek for text) for conversation logic and **Chatterbox TTS** for the spoken voice. Photo pricing, vision, Whisper, and OpenAI TTS fallback always use the **OpenAI** key.
 
 ## 1. Environment variables
 

@@ -22,6 +22,7 @@ import { handleMailboxRoutes } from './mailbox-routes';
 import { handlePackageUpdatesRoute } from './mailbox/package-updates';
 import { handleChannelRoutes } from './channel-routes';
 import { handleCyrusRoutes } from './cyrus-routes';
+import { handleCynthiaRoutes } from './cynthia-routes';
 import { handleLeadsRoutes } from './leads-routes';
 import { handleAgentCredentialsRoutes } from './agent-credentials-routes';
 import { handleOrgOpenAIKeyRoutes } from './org-openai-key-routes';
@@ -102,6 +103,7 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
   if (await handleChannelRoutes(req, res, pathname)) return;
 
   if (await handleCyrusRoutes(req, res, pathname)) return;
+  if (await handleCynthiaRoutes(req, res, pathname)) return;
 
   if (await handleLeadsRoutes(req, res, pathname, url)) return;
 

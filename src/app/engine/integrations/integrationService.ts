@@ -105,7 +105,7 @@ export const integrationService = {
     const def = getIntegrationDefinition(id);
     if (!def) return false;
     const credentialFields = def.fields.filter(
-      f => f.required || f.type === 'password' || f.key === 'apiKey'
+      (f) => f.required === true || (f.key === 'apiKey' && f.type === 'password'),
     );
     if (credentialFields.length === 0) {
       return def.fields.some(f => Boolean(values[f.key]?.trim()));
@@ -116,14 +116,16 @@ export const integrationService = {
   /**
    * Save integration field values and switch to live mode when credentials are present.
    * OpenAI keys are also persisted org-wide so every user in the company uses them.
+   * Returns a promise when OpenAI org sync + health probe runs.
    */
-  saveIntegrationValues(id: IntegrationId, values: Record<string, string>): void {
+  async saveIntegrationValues(id: IntegrationId, values: Record<string, string>): Promise<void> {
     const updates: Partial<IntegrationInstanceState> = { values };
     if (integrationService.hasCredentials(id, values)) {
       updates.enabled = true;
       updates.mockMode = false;
       if (id === 'openai') {
         integrationService.setMasterMockMode(false);
+        updates.mockMode = false;
       }
     }
     integrationService.updateIntegration(id, updates);
@@ -137,21 +139,53 @@ export const integrationService = {
     if (id === 'openai' && integrationService.hasCredentials(id, values)) {
       const apiKey = values.apiKey?.trim();
       if (integrationService.isLiveOpenAIApiKey(apiKey)) {
-        void saveOrgOpenAIKey(apiKey!, 'super_admin')
-          .then((status) => {
-            integrationService.updateIntegration('openai', {
-              status: 'connected',
-              lastTestError: status.cloudSyncWarning,
-            });
-            notify();
-          })
-          .catch((err) => {
-            const message = err instanceof Error ? err.message : 'Failed to activate org OpenAI key';
-            integrationService.updateIntegration('openai', {
-              status: 'error',
-              lastTestError: message,
-            });
+        try {
+          const status = await saveOrgOpenAIKey(apiKey!, 'super_admin', {
+            deepseekApiKey: values.deepseekApiKey,
+            provider: values.provider || 'openai',
           });
+          const probeFailed = status.probeMessage && status.connected === false;
+          integrationService.updateIntegration('openai', {
+            enabled: true,
+            mockMode: false,
+            status: probeFailed ? 'error' : 'connected',
+            lastTestedAt: new Date().toISOString(),
+            lastTestError: status.probeMessage || status.cloudSyncWarning,
+          });
+          // Confirm live with health endpoint (org key, not only body key).
+          if (!probeFailed) {
+            const health = await fetch('/api/ai/health', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ apiKey, provider: values.provider || 'openai' }),
+            });
+            const healthData = await health.json().catch(() => ({})) as {
+              connected?: boolean;
+              message?: string;
+            };
+            if (healthData.connected) {
+              integrationService.updateIntegration('openai', {
+                status: 'connected',
+                lastTestError: status.cloudSyncWarning,
+              });
+            } else {
+              integrationService.updateIntegration('openai', {
+                status: 'error',
+                lastTestError: healthData.message || 'OpenAI health check failed',
+              });
+            }
+          }
+          notify();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Failed to activate org OpenAI key';
+          integrationService.updateIntegration('openai', {
+            status: 'error',
+            lastTestError: message,
+            lastTestedAt: new Date().toISOString(),
+          });
+          notify();
+          throw err;
+        }
       }
     }
   },
@@ -159,7 +193,14 @@ export const integrationService = {
   getStatus(id: IntegrationId): IntegrationStatus {
     const inst = loadIntegrationsStore().integrations[id];
     if (!inst) return 'not_configured';
-    if (integrationService.isMockMode(id) && inst.enabled) return 'mock';
+    // OpenAI / Company AI Brain: prefer live connected status over mock when credentials exist.
+    if (id === 'openai' && inst.status === 'connected' && !integrationService.isMasterMockMode()) {
+      return 'connected';
+    }
+    if (integrationService.isMockMode(id) && inst.enabled && id !== 'openai') return 'mock';
+    if (id === 'openai' && integrationService.isMasterMockMode() && inst.status !== 'connected') {
+      return 'mock';
+    }
     return inst.status;
   },
 
@@ -214,7 +255,7 @@ export const integrationService = {
       return { success: false, message: 'Unknown integration', status: 'error' };
     }
 
-    if (store.masterMockMode || inst.mockMode) {
+    if ((store.masterMockMode || inst.mockMode) && id !== 'openai') {
       const message = store.masterMockMode
         ? 'Master mock mode is on — turn it off at the top of Integrations, then test again.'
         : 'Mock mode is on for this integration — turn off the Mock mode switch, then test again.';
@@ -229,6 +270,49 @@ export const integrationService = {
         lastTestError: message,
       });
       return result;
+    }
+
+    if (id === 'openai') {
+      // Use org-aware health probe (same path as live AI routes).
+      try {
+        const apiKey = inst.values.apiKey?.trim();
+        const res = await fetch('/api/ai/health', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiKey: integrationService.isLiveOpenAIApiKey(apiKey) ? apiKey : undefined,
+            deepseekApiKey: inst.values.deepseekApiKey || undefined,
+            provider: inst.values.provider || 'openai',
+          }),
+        });
+        const data = await res.json() as { connected?: boolean; message?: string };
+        if (data.connected) {
+          integrationService.updateIntegration(id, {
+            status: 'connected',
+            lastTestedAt: new Date().toISOString(),
+            lastTestError: undefined,
+            mockMode: false,
+            enabled: true,
+          });
+          integrationService.setMasterMockMode(false);
+          return { success: true, message: 'Company AI Brain connected (OpenAI live)', status: 'connected' };
+        }
+        const message = data.message || 'OpenAI connection failed';
+        integrationService.updateIntegration(id, {
+          status: 'error',
+          lastTestedAt: new Date().toISOString(),
+          lastTestError: message,
+        });
+        return { success: false, message, status: 'error' };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'OpenAI health check failed';
+        integrationService.updateIntegration(id, {
+          status: 'error',
+          lastTestedAt: new Date().toISOString(),
+          lastTestError: message,
+        });
+        return { success: false, message, status: 'error' };
+      }
     }
 
     if (id === 'supabase') {

@@ -1,10 +1,11 @@
-import { NavLink } from 'react-router';
+import { NavLink, useNavigate } from 'react-router';
 import {
   Home, Calendar, ClipboardCheck, ClipboardList, Mail, Image, Settings, TrendingUp,
   Sparkles, Users, BarChart3, Wrench, FolderKanban, UserPlus, UserCircle, LogOut,
   ChevronDown, ChevronLeft, ChevronRight, MessageCircle, PenLine, GitBranch, ShieldCheck, DollarSign, Menu, Phone,
-  Landmark, Calculator, BadgeCheck, FileSignature, ScrollText, Building2, Plug, Package, Palette, CreditCard,
+  Landmark, Calculator, BadgeCheck, FileSignature, ScrollText, Building2, Plug, Package, Palette, CreditCard, MoreHorizontal,
 } from 'lucide-react';
+import { isNativeBridgeAvailable } from '../bridge/nativeBridge';
 import OrgActingAsPicker from './platform/OrgActingAsPicker';
 import { AppContext, canAccessAccounts, hasSuperAdminAccess } from '../App';
 import { getActiveOrgId, setActiveOrgId } from '../engine/platform/orgContext';
@@ -28,6 +29,7 @@ import type { Customer } from '../App';
 import { BrandLogo } from './BrandLogo';
 import { integrationService } from '../engine/integrations/integrationService';
 import { OnlineStatusBanner } from './OnlineStatusBanner';
+import { useTranslation } from 'react-i18next';
 
 interface AppShellProps {
   children: ReactNode;
@@ -39,6 +41,7 @@ const AI_DOCK_MIN_WIDTH = 1024;
 
 export default function AppShell({ children }: AppShellProps) {
   const context = useContext(AppContext);
+  const { t } = useTranslation('shell');
   const { isOpen: aiOpen, setIsOpen: setAiOpen, settings: aiSettings, updateSettings: updateAiSettings } = useAIAssistant();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -47,6 +50,21 @@ export default function AppShell({ children }: AppShellProps) {
   );
   const isMobile = useIsMobile();
   const location = useLocation();
+  const navigate = useNavigate();
+  const isStaffHomeRole =
+    !!context?.user &&
+    (context.user.role === 'super_admin' ||
+      context.user.role === 'manager' ||
+      context.user.role === 'staff');
+
+  /** APK / mobile staff land on Cynthia as the main screen. */
+  useEffect(() => {
+    if (!isStaffHomeRole) return;
+    if (location.pathname !== '/') return;
+    if (isMobile || isNativeBridgeAvailable()) {
+      navigate('/cynthia', { replace: true });
+    }
+  }, [isStaffHomeRole, location.pathname, isMobile, navigate]);
 
   useEffect(() => {
     const mql = window.matchMedia(`(min-width: ${AI_DOCK_MIN_WIDTH}px)`);
@@ -185,28 +203,28 @@ export default function AppShell({ children }: AppShellProps) {
 
     if (user.role === 'builder') {
       return [
-        { to: '/builder', icon: Home, label: 'Dashboard' },
-        { to: '/projects', icon: FolderKanban, label: 'Projects' },
-        { to: '/building-control', icon: ShieldCheck, label: 'BC' },
+        { to: '/builder', icon: Home, label: t('nav.dashboard') },
+        { to: '/projects', icon: FolderKanban, label: t('nav.projects') },
+        { to: '/building-control', icon: ShieldCheck, label: t('nav.buildingControl') },
         { to: '/changes', icon: GitBranch, label: 'Changes' },
       ];
     }
     if (user.role === 'customer') {
       return [
-        { to: '/projects', icon: FolderKanban, label: 'My Project' },
+        { to: '/projects', icon: FolderKanban, label: t('nav.projects') },
         { to: '/changes', icon: GitBranch, label: 'Changes' },
         { to: '/portfolio', icon: Image, label: 'Gallery' },
       ];
     }
     if (user.role === 'recruitment') {
       return [
-        { to: '/recruitment', icon: UserPlus, label: 'Recruitment' },
+        { to: '/recruitment', icon: UserPlus, label: t('nav.recruitment') },
       ];
     }
     return [
-      { to: '/', icon: Home, label: 'Dashboard' },
+      { to: '/', icon: Home, label: t('nav.dashboard') },
       { to: '/crm', icon: TrendingUp, label: 'CRM' },
-      { to: '/customers', icon: Users, label: 'Customers' },
+      { to: '/customers', icon: Users, label: t('nav.customers') },
       { to: '/booking', icon: Calendar, label: 'Book' },
       { to: '/site-survey', icon: ClipboardCheck, label: 'Survey' },
       { to: '/designer', icon: Palette, label: 'Designer' },
@@ -218,48 +236,48 @@ export default function AppShell({ children }: AppShellProps) {
         ? [{ to: '/finance', icon: CreditCard, label: 'Finance' }]
         : []),
       ...(hasSuperAdminAccess(user.role) || user.role === 'manager'
-        ? [{ to: '/approvals', icon: BadgeCheck, label: 'Approvals' }]
+        ? [{ to: '/approvals', icon: BadgeCheck, label: t('nav.approvals') }]
         : []),
-      { to: '/contracts', icon: FileSignature, label: 'Contracts' },
-      { to: '/projects', icon: FolderKanban, label: 'Projects' },
-      { to: '/planning', icon: ScrollText, label: 'Planning' },
-      { to: '/building-control', icon: ShieldCheck, label: 'BC' },
+      { to: '/contracts', icon: FileSignature, label: t('nav.contracts') },
+      { to: '/projects', icon: FolderKanban, label: t('nav.projects') },
+      { to: '/planning', icon: ScrollText, label: t('nav.planning') },
+      { to: '/building-control', icon: ShieldCheck, label: t('nav.buildingControl') },
       { to: '/changes', icon: GitBranch, label: 'Changes' },
-      { to: '/communications', icon: Mail, label: 'Comms' },
-      { to: '/cyrus', icon: MessageCircle, label: 'Cyrus' },
-      { to: '/calls', icon: Phone, label: 'Calls' },
+      { to: '/communications', icon: Mail, label: t('nav.communications') },
+      { to: '/cynthia', icon: MessageCircle, label: 'Cynthia' },
+      { to: '/calls', icon: Phone, label: t('nav.callCenter') },
       { to: '/portfolio', icon: Image, label: 'Portfolio' },
       ...(user.role === 'platform_owner'
-        ? [{ to: '/platform/clients', icon: Building2, label: 'Clients' }]
+        ? [{ to: '/platform/clients', icon: Building2, label: t('nav.platformClients') }]
         : []),
       ...(hasSuperAdminAccess(user.role)
         ? [
-            { to: '/products', icon: Package, label: 'Products' },
-            { to: '/integrations', icon: Plug, label: 'Integrations' },
+            { to: '/products', icon: Package, label: t('nav.products') },
+            { to: '/integrations', icon: Plug, label: t('nav.integrations') },
             { to: '/builder-management', icon: Wrench, label: 'Builders' },
             { to: '/costing', icon: DollarSign, label: 'Costing' },
-            { to: '/accounts', icon: Landmark, label: 'Accounts' },
-            { to: '/sales', icon: BarChart3, label: 'Sales' },
-            { to: '/team', icon: Users, label: 'Team' },
-            { to: '/recruitment', icon: UserPlus, label: 'Recruit' },
-            { to: '/ai-audit', icon: ShieldCheck, label: 'AI Audit' },
-            { to: '/settings', icon: Settings, label: 'Settings' },
+            { to: '/accounts', icon: Landmark, label: t('nav.accounts') },
+            { to: '/sales', icon: BarChart3, label: t('nav.sales') },
+            { to: '/team', icon: Users, label: t('nav.team') },
+            { to: '/recruitment', icon: UserPlus, label: t('nav.recruitment') },
+            { to: '/ai-audit', icon: ShieldCheck, label: t('nav.aiAudit') },
+            { to: '/settings', icon: Settings, label: t('nav.settings') },
           ]
         : []),
       ...(user.role === 'manager'
-        ? [{ to: '/ai-audit', icon: ShieldCheck, label: 'AI Audit' }]
+        ? [{ to: '/ai-audit', icon: ShieldCheck, label: t('nav.aiAudit') }]
         : []),
       ...((user.role === 'staff') && canAccessAccounts(user.role, accountsAccess)
-        ? [{ to: '/accounts', icon: Landmark, label: 'Accounts' }]
+        ? [{ to: '/accounts', icon: Landmark, label: t('nav.accounts') }]
         : []),
       ...(user.role === 'manager'
         ? [{ to: '/costing', icon: DollarSign, label: 'Costing' }]
         : []),
       ...(user.role === 'manager' && canAccessAccounts(user.role, accountsAccess)
-        ? [{ to: '/accounts', icon: Landmark, label: 'Accounts' }]
+        ? [{ to: '/accounts', icon: Landmark, label: t('nav.accounts') }]
         : []),
       ...((user.role === 'staff' || user.role === 'manager') && recruitmentAccess[user.role]
-        ? [{ to: '/recruitment', icon: UserPlus, label: 'Recruit' }]
+        ? [{ to: '/recruitment', icon: UserPlus, label: t('nav.recruitment') }]
         : []),
     ];
   };
@@ -501,7 +519,14 @@ export default function AppShell({ children }: AppShellProps) {
         )}
 
         <div ref={contentRowRef} className="flex-1 flex min-h-0 overflow-hidden relative">
-          <main ref={mainRef} className="flex-1 overflow-x-hidden overflow-y-auto min-w-0 transition-[margin] duration-300">{children}</main>
+          <main
+            ref={mainRef}
+            className={`flex-1 overflow-x-hidden overflow-y-auto min-w-0 transition-[margin] duration-300 ${
+              isStaffHomeRole ? 'pb-16 md:pb-0' : ''
+            }`}
+          >
+            {children}
+          </main>
           {aiSettings.enabled && aiSettings.showOverlay && aiOpen && (
             <>
               <div
@@ -527,6 +552,41 @@ export default function AppShell({ children }: AppShellProps) {
             </>
           )}
         </div>
+
+        {isStaffHomeRole && (
+          <nav
+            className="md:hidden fixed bottom-0 inset-x-0 z-40 flex items-stretch justify-around border-t border-slate-200 bg-white/95 backdrop-blur safe-area-pb h-14"
+            aria-label="Primary"
+          >
+            {[
+              { to: '/cynthia', icon: MessageCircle, label: 'Cynthia' },
+              { to: '/projects', icon: FolderKanban, label: 'Jobs' },
+              { to: '/quotes', icon: ClipboardList, label: 'Quotes' },
+              { to: '/crm', icon: TrendingUp, label: 'CRM' },
+            ].map(({ to, icon: Icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium ${
+                    isActive ? 'text-emerald-700' : 'text-slate-500'
+                  }`
+                }
+              >
+                <Icon className="h-5 w-5" />
+                {label}
+              </NavLink>
+            ))}
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-slate-500"
+            >
+              <MoreHorizontal className="h-5 w-5" />
+              More
+            </button>
+          </nav>
+        )}
       </div>
     </div>
     </div>

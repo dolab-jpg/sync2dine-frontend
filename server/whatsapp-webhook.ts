@@ -510,7 +510,7 @@ export async function handleWhatsAppWebhookPost(
 
 export async function handleMessageSend(req: IncomingMessage, res: ServerResponse) {
   const body = JSON.parse(await readBody(req));
-  const { channel, to, body: text, config, templateId, templateVars, attachment, groupId } = body;
+  const { channel, to, body: text, config, templateId, templateVars, attachment, groupId, sourceLang } = body;
 
   if (channel === 'whatsapp') {
     const token = config?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
@@ -520,11 +520,22 @@ export async function handleMessageSend(req: IncomingMessage, res: ServerRespons
       return;
     }
 
+    // This is a manually composed message (e.g. from a CRM/staff UI) that may have been typed
+    // by a non-English-speaking worker — it must be canonical English before it reaches a
+    // customer's WhatsApp.
+    const { ensureEnglishForCustomerSend } = await import('./outbound-english-guard');
+    const guard = await ensureEnglishForCustomerSend(String(text ?? ''), sourceLang, getRequestOrgId());
+    if (!guard.ok) {
+      sendJson(res, 502, { success: false, error: 'Could not translate message to English before sending — message was not sent.' });
+      return;
+    }
+    const englishText = guard.english;
+
     const inWindow = isWithin24hWindow(to);
     const portalLink = templateVars?.portalLink ?? '';
 
     if (groupId) {
-      await sendWhatsAppText(phoneId, token, groupId, text, 'group');
+      await sendWhatsAppText(phoneId, token, groupId, englishText, 'group');
       sendJson(res, 200, { success: true, mode: 'group' });
       return;
     }
@@ -532,13 +543,13 @@ export async function handleMessageSend(req: IncomingMessage, res: ServerRespons
     if (!inWindow && templateId) {
       const vars = templateVars
         ? [templateVars.name ?? '', templateVars.summary ?? portalLink, portalLink].filter(Boolean)
-        : [text.slice(0, 100), portalLink];
+        : [englishText.slice(0, 100), portalLink];
       await sendWhatsAppTemplate(phoneId, token, to, templateId, vars);
       sendJson(res, 200, { success: true, mode: 'template', templateId });
       return;
     }
 
-    await sendWhatsAppText(phoneId, token, to, text);
+    await sendWhatsAppText(phoneId, token, to, englishText);
     if (attachment?.content && inWindow) {
       await sendWhatsAppPayload(phoneId, token, {
         to: to.replace(/\D/g, ''),
@@ -546,7 +557,7 @@ export async function handleMessageSend(req: IncomingMessage, res: ServerRespons
         document: {
           link: attachment.url ?? undefined,
           filename: attachment.filename,
-          caption: text.slice(0, 100),
+          caption: englishText.slice(0, 100),
         },
       });
     }
@@ -568,6 +579,7 @@ export async function handleMessageSend(req: IncomingMessage, res: ServerRespons
         body: text || '',
         attachment: attachment,
         config: config,
+        sourceLang,
       }, toAddr);
       sendJson(res, result.success ? 200 : 500, result);
     } catch (err) {

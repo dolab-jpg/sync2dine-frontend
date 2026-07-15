@@ -29,6 +29,8 @@ export interface TradeProNativeApi {
   stopVoiceRecording: () => Promise<NativeVoiceResult>;
   requestNotifications: () => Promise<{ ok: boolean; error?: string; dryRun?: boolean }>;
   navigate: (route: string) => Promise<{ ok: boolean }>;
+  /** Syncs the Flutter shell UI locale with the web profile language. */
+  setPreferredLanguage?: (lang: string) => Promise<{ ok: boolean; lang?: string; error?: string }>;
 }
 
 declare global {
@@ -102,5 +104,21 @@ export async function openNativeSoftPhone(): Promise<void> {
     await window.TradeProNative!.navigate('/calls?tab=softphone');
   } catch {
     window.location.href = '/calls?tab=softphone';
+  }
+}
+
+/**
+ * Ask the Flutter shell to apply (and persist) a UI locale so native chrome
+ * matches the worker's preferred language. No-op outside the APK WebView or
+ * on older shells that lack the method.
+ */
+export async function setPreferredLanguage(lang: string): Promise<void> {
+  if (!isNativeBridgeAvailable()) return;
+  const fn = window.TradeProNative?.setPreferredLanguage;
+  if (typeof fn !== 'function') return;
+  try {
+    await fn(lang);
+  } catch {
+    // Older APK or bridge error — web i18n still applies inside the WebView.
   }
 }

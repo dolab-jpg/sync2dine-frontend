@@ -1,0 +1,12 @@
+{
+  "title": "AI Assistant",
+  "placeholder": "Ask in your language — customer sends stay in English…",
+  "thinking": "Thinking…",
+  "send": "Send",
+  "voice": "Voice",
+  "englishPreview": "English preview (customer / documents)",
+  "willSendEnglish": "This will be sent to the customer in English:",
+  "blockedNoEnglish": "Could not convert to English. Message was not sent.",
+  "workerReply": "Shown to you in your language",
+  "searchTranslated": "Search ran in English using your translated query."
+}

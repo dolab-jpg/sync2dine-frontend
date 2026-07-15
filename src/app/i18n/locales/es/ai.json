@@ -1,0 +1,12 @@
+{
+  "title": "Asistente de IA",
+  "placeholder": "Pregunta en tu idioma — los envíos al cliente van en inglés…",
+  "thinking": "Pensando…",
+  "send": "Enviar",
+  "voice": "Voz",
+  "englishPreview": "Vista previa en inglés (cliente / documentos)",
+  "willSendEnglish": "Esto se enviará al cliente en inglés:",
+  "blockedNoEnglish": "No se pudo convertir al inglés. El mensaje no se envió.",
+  "workerReply": "Mostrado en tu idioma",
+  "searchTranslated": "La búsqueda se ejecutó en inglés con tu consulta traducida."
+}

@@ -41,11 +41,24 @@ export function resolveInboundChannel(phone: string, orgId?: string): ChannelRou
   const members = listTeamMembers(orgId);
   const staffMatch = members.find((m) => normalizePhoneExport(m.phone) === normalized);
   if (staffMatch) {
+    const preferredLanguage = staffMatch.preferredLanguage
+      ? String(staffMatch.preferredLanguage)
+      : null;
+    if (staffMatch.role === 'builder') {
+      return {
+        mode: 'foreman',
+        role: 'builder',
+        userId: staffMatch.userId,
+        name: staffMatch.name,
+        preferredLanguage,
+      };
+    }
     return {
       mode: 'staff',
       role: staffMatch.role,
       userId: staffMatch.userId,
       name: staffMatch.name,
+      preferredLanguage,
     };
   }
 
@@ -65,6 +78,9 @@ export function resolveInboundChannel(phone: string, orgId?: string): ChannelRou
       builderId: String(builderMatch.id ?? ''),
       name: String(builderMatch.name ?? builderMatch.companyName ?? 'Builder'),
       projectId: activeProject ? String(activeProject.id) : null,
+      preferredLanguage: builderMatch.preferredLanguage
+        ? String(builderMatch.preferredLanguage)
+        : null,
     };
   }
 
@@ -84,6 +100,9 @@ export function resolveInboundChannel(phone: string, orgId?: string): ChannelRou
         builderId: String(match.id ?? ''),
         name: assignedBuilder,
         projectId: String(project.id),
+        preferredLanguage: match.preferredLanguage
+          ? String(match.preferredLanguage)
+          : null,
       };
     }
   }

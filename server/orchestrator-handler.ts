@@ -1077,6 +1077,109 @@ const EMAIL_TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'generateQuotePdf',
+      description: 'Generate a quote PDF for inline display in Cynthia chat',
+      parameters: {
+        type: 'object',
+        properties: {
+          customerName: { type: 'string' },
+          total: { type: 'number' },
+          tradeName: { type: 'string' },
+          quoteId: { type: 'string' },
+          lineItems: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                description: { type: 'string' },
+                amount: { type: 'number' },
+              },
+            },
+          },
+        },
+        required: ['customerName', 'total'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'generateOpsReport',
+      description: 'Create an operations report (sales, pipeline, jobs) for Cynthia chat',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          reportType: {
+            type: 'string',
+            enum: ['sales_week', 'pipeline', 'jobs_on_site', 'quotes_awaiting', 'custom'],
+          },
+          markdown: { type: 'string', description: 'Optional pre-written report body in markdown' },
+        },
+        required: ['title'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'placeOutboundCall',
+      description: 'Place an outbound phone call to a customer (requires staff confirmation)',
+      parameters: {
+        type: 'object',
+        properties: {
+          to: { type: 'string' },
+          customerName: { type: 'string' },
+          reason: { type: 'string' },
+        },
+        required: ['to'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'sendToStaffCynthia',
+      description:
+        'Push a rich card (address, amount, Call) into the staff Cynthia APK inbox — use when staff say send it to me',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          customerName: { type: 'string' },
+          phone: { type: 'string' },
+          address: { type: 'string' },
+          amount: { type: 'number' },
+          summary: { type: 'string' },
+          notes: { type: 'string' },
+          quoteId: { type: 'string' },
+          projectId: { type: 'string' },
+          customerId: { type: 'string' },
+          staffUserId: { type: 'string' },
+        },
+        required: ['title'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'requestCodeFix',
+      description: 'Offer a Cursor-powered code fix for a bug reported in chat',
+      parameters: {
+        type: 'object',
+        properties: {
+          errorCode: { type: 'string' },
+          description: { type: 'string' },
+          route: { type: 'string' },
+        },
+        required: ['description'],
+      },
+    },
+  },
 ];
 
 const CUSTOMER_TOOLS = [
@@ -2706,7 +2809,8 @@ async function runPhoneOrchestrator(
 export async function handleOrchestrator(body: OrchestratorRequest): Promise<OrchestratorResult> {
   const messages = Array.isArray(body.messages) ? body.messages : [];
   const lastMessage = messages[messages.length - 1]?.content ?? '';
-  const { mapOpenAIError, createOpenAIClientForOrg } = await import('./openai-connection');
+  const { mapOpenAIError } = await import('./openai-connection');
+  const { createLLMClientForOrg } = await import('./llm-connection');
   const { resolveOrgIdFromBody } = await import('./org-context');
   const orgId = resolveOrgIdFromBody(body as { orgId?: string });
   const mode = resolveMode(body);
@@ -2721,7 +2825,11 @@ export async function handleOrchestrator(body: OrchestratorRequest): Promise<Orc
   }
 
   try {
-    const openai = await createOpenAIClientForOrg(orgId, '/api/ai/orchestrate', body.apiKey);
+    const { client: openai } = await createLLMClientForOrg(orgId, '/api/ai/orchestrate', {
+      bodyOpenAIApiKey: body.apiKey,
+      bodyDeepSeekApiKey: (body as { deepseekApiKey?: string }).deepseekApiKey,
+      provider: (body as { provider?: string }).provider,
+    });
 
     if (mode === 'customer' || mode === 'cyrus') {
       return await runCustomerOrchestrator(openai as unknown as Parameters<typeof runCustomerOrchestrator>[0], body, messages);

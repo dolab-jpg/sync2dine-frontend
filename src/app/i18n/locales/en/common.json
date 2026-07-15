@@ -1,0 +1,23 @@
+{
+  "appName": "TradePro",
+  "save": "Save",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "edit": "Edit",
+  "search": "Search",
+  "loading": "Loading…",
+  "retry": "Retry",
+  "back": "Back",
+  "close": "Close",
+  "confirm": "Confirm",
+  "yes": "Yes",
+  "no": "No",
+  "language": "Language",
+  "englishOnlyHint": "Customer messages, contracts, and documents stay in English.",
+  "translatedBadge": "Translated",
+  "showEnglish": "Show English",
+  "hideEnglish": "Hide English",
+  "online": "Online",
+  "offline": "Offline",
+  "errorGeneric": "Something went wrong. Please try again."
+}

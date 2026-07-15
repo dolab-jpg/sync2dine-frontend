@@ -14,6 +14,7 @@ import { handleChannelInbound } from './channel-inbound-handler';
 import { OpenAIConnectionError, mapOpenAIError } from './openai-connection';
 import { DEFAULT_ORG_ID, getDataStore, setRequestOrgId } from './data-store';
 import type { ConversationHandoffMode } from './data-store';
+import { ensureEnglishForCustomerSend } from './outbound-english-guard';
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -200,12 +201,22 @@ export async function handleCyrusRoutes(
         sendJson(res, 400, { error: 'text is required' });
         return true;
       }
+      // Staff/workers may type this reply in their own language — it must be canonical
+      // English before it goes out to a customer over WhatsApp.
+      const guard = await ensureEnglishForCustomerSend(text, undefined, orgId);
+      if (!guard.ok) {
+        sendJson(res, 502, {
+          error: 'Could not translate your reply to English — message was not sent. Please try again or send it in English.',
+        });
+        return true;
+      }
+      const englishText = guard.english;
       const thread = getThread(orgId, sessionId);
       const channel = thread?.channel ?? 'whatsapp';
       appendConversationMessage(orgId, sessionId, {
         role: 'assistant',
         content: text,
-        bodyEnglish: text,
+        bodyEnglish: englishText,
         channel,
         fromRole: 'staff',
       }, { channel, contactName: body.staffName });
@@ -215,7 +226,7 @@ export async function handleCyrusRoutes(
       }
       let whatsappSent = false;
       if (channel === 'whatsapp') {
-        whatsappSent = await maybeSendWhatsApp(sessionId, text);
+        whatsappSent = await maybeSendWhatsApp(sessionId, englishText);
       }
       sendJson(res, 200, {
         ok: true,

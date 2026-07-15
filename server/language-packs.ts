@@ -5,8 +5,19 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKS_PATH = join(__dirname, 'data', 'language-packs.json');
 
-export const SUPPORTED_LANGS = ['en', 'sq', 'uk', 'zh', 'es', 'pl', 'fa'] as const;
+export const SUPPORTED_LANGS = ['en', 'sq', 'uk', 'ru', 'zh', 'es', 'pl', 'fa'] as const;
 export type SupportedLang = (typeof SUPPORTED_LANGS)[number];
+
+export const LANG_LABELS: Record<SupportedLang, string> = {
+  en: 'English',
+  sq: 'Albanian',
+  uk: 'Ukrainian',
+  ru: 'Russian',
+  zh: 'Chinese',
+  es: 'Spanish',
+  pl: 'Polish',
+  fa: 'Farsi / Persian',
+};
 
 export interface LanguagePack {
   label: string;
@@ -35,6 +46,10 @@ const EMPTY_PACK: LanguagePack = {
 export function normalizeLang(code: string | null | undefined): SupportedLang {
   const c = (code ?? 'en').toLowerCase().split('-')[0];
   return (SUPPORTED_LANGS as readonly string[]).includes(c) ? (c as SupportedLang) : 'en';
+}
+
+export function isRtlLang(lang?: string | null): boolean {
+  return normalizeLang(lang) === 'fa';
 }
 
 function ensureFile(): void {
@@ -88,6 +103,23 @@ export function getPack(lang?: string | null): LanguagePack {
 
 export function getSystemInstruction(lang?: string | null): string {
   return getPack(lang).systemInstruction;
+}
+
+/** Deepgram nova-2 language code per pack; 'multi' triggers Deepgram's multilingual mode. */
+const DEEPGRAM_LANG_BY_PACK: Record<SupportedLang, string> = {
+  en: 'en-GB',
+  es: 'es',
+  pl: 'pl',
+  zh: 'zh',
+  uk: 'uk',
+  ru: 'ru',
+  fa: 'multi',
+  sq: 'multi',
+};
+
+export function deepgramLanguageForPack(lang?: string | null): string {
+  const code = normalizeLang(lang);
+  return DEEPGRAM_LANG_BY_PACK[code] ?? 'multi';
 }
 
 /**
