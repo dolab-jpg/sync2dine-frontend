@@ -22,35 +22,6 @@ type FoodOrder = {
   etaMinutes?: number;
 };
 
-const FALLBACK_ORDERS: FoodOrder[] = [
-  {
-    id: 'ord-101',
-    number: '101',
-    customer: 'Walk-in kiosk',
-    phone: '+447700900101',
-    type: 'collection',
-    status: 'new',
-    payment: 'unpaid',
-    total: 24.5,
-    items: ['Chicken biryani', 'Garlic naan', 'Mango lassi'],
-    createdAt: new Date(Date.now() - 4 * 60_000).toISOString(),
-  },
-  {
-    id: 'ord-102',
-    number: '102',
-    customer: 'Amina',
-    phone: '+447700900102',
-    type: 'delivery',
-    status: 'delivery',
-    payment: 'card',
-    total: 31.2,
-    address: '24 Market Street, SW1',
-    items: ['Lamb curry', 'Pilau rice', 'Onion bhaji'],
-    createdAt: new Date(Date.now() - 9 * 60_000).toISOString(),
-    etaMinutes: 35,
-  },
-];
-
 function statusLabel(status: OrderStatus) {
   if (status === 'coming') return 'Coming to order';
   if (status === 'paid') return 'Paid';
@@ -156,9 +127,9 @@ function exportOrdersCsv(orders: FoodOrder[]) {
 
 export default function RestaurantOrders() {
   const [tab, setTab] = useState<'kitchen' | 'till' | 'delivery'>('kitchen');
-  const [orders, setOrders] = useState<FoodOrder[]>(FALLBACK_ORDERS);
+  const [orders, setOrders] = useState<FoodOrder[]>([]);
   const [nowTick, setNowTick] = useState(0);
-  const knownIdsRef = useRef<Set<string>>(new Set(FALLBACK_ORDERS.map((o) => o.id)));
+  const knownIdsRef = useRef<Set<string>>(new Set());
   const orgId = getActiveOrgId();
 
   const patchOrder = useCallback(async (id: string, patch: Partial<FoodOrder>) => {
@@ -196,14 +167,14 @@ export default function RestaurantOrders() {
         if (!res.ok) return;
         const data = await res.json() as { orders?: Array<Record<string, unknown>> };
         const next = Array.isArray(data.orders) ? data.orders.map(mapApiOrder) : [];
-        if (cancelled || !next.length) return;
+        if (cancelled) return;
         const prevIds = knownIdsRef.current;
         const fresh = next.filter((o) => o.status === 'new' && !prevIds.has(o.id));
         if (fresh.length > 0) playKitchenAlert();
         knownIdsRef.current = new Set(next.map((o) => o.id));
         setOrders(next);
       } catch {
-        // Keep demo fallback when API is unavailable
+        // Keep last successful list when API is unavailable (do not invent demo tickets)
       }
     }
     void loadOrders();

@@ -419,7 +419,7 @@ interface ProtectedRouteProps {
 
 function ProtectedRoute({ element, allowedRoles, user }: ProtectedRouteProps): ReactElement {
   if (!roleAllowed(user.role, allowedRoles)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={user.role === 'kiosk' ? '/front' : '/'} replace />;
   }
   return element;
 }
@@ -1207,7 +1207,10 @@ export default function App() {
       <BrowserRouter>
         <AppShell>
             <Routes>
-              <Route path="/" element={<Dashboard />} />
+              <Route
+                path="/"
+                element={user.role === 'kiosk' ? <Navigate to="/front" replace /> : <Dashboard />}
+              />
               <Route
                 path="/booking"
                 element={<ProtectedRoute element={<BookingSystem />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
@@ -1242,7 +1245,7 @@ export default function App() {
               />
               <Route
                 path="/products"
-                element={<ProtectedRoute element={<ProductCatalog />} allowedRoles={['super_admin']} user={user} />}
+                element={<ProtectedRoute element={<ProductCatalog />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route
                 path="/quote/:tradeId?/:customerId?"
@@ -1386,7 +1389,10 @@ export default function App() {
               />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/profile/password" element={<ChangePasswordPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route
+                path="*"
+                element={<Navigate to={user.role === 'kiosk' ? '/front' : '/'} replace />}
+              />
             </Routes>
           <Toaster />
         </AppShell>
