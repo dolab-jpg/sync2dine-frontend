@@ -1,8 +1,24 @@
-# TradePro / Builder Diddies — Application Master Audit
+# Builder Diddies — Application Master Audit
 
 **Audit date:** 2026-07-15 (evening UK)  
 **Method:** Code walk → live probes → then cross-check existing docs (never the reverse).  
 **Purpose:** Single place to open before searching the codebase. Update markers when shipping.
+
+---
+
+## Brand (display vs legacy infra)
+
+| Item | Value |
+|------|--------|
+| Display name | **Builder Diddies** |
+| Marketing site | **https://b-diddies.com** (`info@b-diddies.com`) |
+| App / API | **https://app.b-diddies.com** |
+
+**Rules for AI and product copy**
+
+1. Never present the product as TradePro to customers, staff UI, emails, voice, or WhatsApp.
+2. Cynthia works for Builder Diddies; never call herself TradePro AI.
+3. Names like `tradepro-frontend`, `tradepro-backend`, `tradepro-api`, `/etc/tradepro-api.env`, `TradeProNative`, and `tradepro_*` storage keys are **legacy infra / codenames only** — use them in ops docs and code identifiers, not as the display brand.
 
 ---
 
@@ -726,6 +742,7 @@ Successful production calls used **Vapi + ElevenLabs Cockney (Lizzie `EQx6HGDYjk
 | Vapi | `transferCall` destinations + tool `transferToHuman` resolve via `server/transfer-numbers.ts` (settings first, then `VOICE_TRANSFER_*` env) |
 | Inbound DID | Soho66 **Ring my IP phone** → VPS Asterisk REGISTER bridge (`docker/soho66-vapi-bridge`) → Vapi/Lizzie — no SIP-URL forward, no in-app softphone required |
 | Constraint | Only **one** REGISTER on SIP user `1005090093` — keep VOIS logged out while the bridge owns inbound |
+| Smoke (2026-07-16) | Outbound Vapi call had `transferCall` ×5 → `+447576442345`; live control transfer returned `200 ok` with destination set (`endedReason: call.in-progress.sip-completed-call`). Env fallback `VOICE_TRANSFER_NUMBER` set on VPS. |
 
 ---
 
