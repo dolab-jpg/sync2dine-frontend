@@ -89,7 +89,7 @@ Inbound: a small Asterisk REGISTER bridge on the VPS acts as the “IP phone” 
 | Voice (English) | ElevenLabs Lizzie `EQx6HGDYjkDpcli6vorJ` (locked) |
 | Voice (other langs) | `server/phone-voices.ts` map — see table above; identity always Cynthia |
 
-Keep Soho66 Routing Wizard as **Ring my IP phone** (then voicemail if needed). Staff mid-call divert: Call Centre **Call Transfer Destinations** → mobile (prod all depts → `+447576442345`). No Force/Forward and no web softphone required — resolution is `transfer-numbers.ts` / `transferToHuman` / Vapi `transferCall`.
+Keep Soho66 Routing Wizard as **Ring my IP phone** (then voicemail if needed). Staff mid-call divert: Call Centre **Call Transfer Destinations** → mobile (prod all depts → `+447576442345`). **Warm consult** (`warm-transfer-experimental`): caller on hold → dial staff → Cynthia briefs → bridge. No Force/Forward and no web softphone required — `transfer-numbers.ts` / `transferToHuman` / Vapi `transferCall` + `transferPlan`.
 
 **Ops:** `docker compose -f …/tradepro-sip-bridge/docker-compose.yml ps` · `asterisk -rx 'pjsip show registrations'` inside the container must show **Registered**.
 

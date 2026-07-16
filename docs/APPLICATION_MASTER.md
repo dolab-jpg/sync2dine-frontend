@@ -708,7 +708,7 @@ Frontend registry card `voice_telephony` stores UI overrides; **Vapi + ElevenLab
 | POST | `/api/concierge/outbound` | Queue outbound |
 | GET | `/api/contacts/lookup` | Caller match |
 
-**Key files:** `server/vapi-routes.ts`, `vapi-client.ts`, `vapi-assistant.ts`, `phone-voices.ts`, `phone-language.ts`, `phone-webhook.ts`, `phone-brain.ts`, `phone-orchestrator.ts`, `phone-tools.ts`, `phone-session.ts`, `phone-auth.ts`, `phone-prompt.ts` (`buildCynthiaPhoneSystemPrompt`), `tts.ts`, `ivr-handler.ts`, `agent-routes.ts`, `telephony/{vapi,soho66,twilio,mock}Adapter.ts`, `lineRegistry.ts`, `provider-gates.ts`.
+**Key files:** `server/vapi-routes.ts`, `vapi-client.ts`, `vapi-assistant.ts`, `transfer-numbers.ts`, `phone-voices.ts`, `phone-language.ts`, `phone-webhook.ts`, `phone-brain.ts`, `phone-orchestrator.ts`, `phone-tools.ts`, `phone-session.ts`, `phone-auth.ts`, `phone-prompt.ts` (`buildCynthiaPhoneSystemPrompt`), `tts.ts`, `ivr-handler.ts`, `agent-routes.ts`, `telephony/{vapi,soho66,twilio,mock}Adapter.ts`, `lineRegistry.ts`, `provider-gates.ts`.
 
 ### 16.5 Mid-call language + per-language voices (AUDITED 2026-07-16)
 
@@ -747,19 +747,23 @@ Frontend registry card `voice_telephony` stores UI overrides; **Vapi + ElevenLab
 
 Successful production calls used **Vapi + ElevenLabs Cockney (Lizzie `EQx6HGDYjkDpcli6vorJ`)**, not local STT/TTS. Retest: outbound to registered staff mobile + PIN, then inbound from a second phone to `SOHO66_FROM_NUMBER` / company DID. See [VOICE_SETUP.md](./VOICE_SETUP.md) §3.
 
-### 16.9 Mid-call divert (Cynthia → staff mobile) — LIVE
+### 16.9 Mid-call divert (Cynthia → staff mobile) — LIVE (warm consult)
 
 **Not** Soho66 Force/Forward and **not** a web softphone. Cynthia answers first; human handoff uses Call Centre transfer destinations.
+
+**Mode:** Vapi **`warm-transfer-experimental`** (not blind). Flow: tell caller they are on a short hold → dial staff mobile → Cynthia briefs staff → `transferSuccessful` bridges caller, or `transferCancel` / `fallbackPlan` returns to Cynthia. Built in `server/transfer-numbers.ts` (`buildWarmTransferPlan` / `resolveTransferDestination`).
 
 | Piece | Detail |
 |-------|--------|
 | UI | `/calls` → Phone Lines → **Call Transfer Destinations** (`general` / `sales` / `projects` / `recruitment` / `accounts`) |
 | API | `GET` / `PATCH` `/api/agent/transfer-numbers` → `agentSettings.transferNumbers` |
 | Prod dest | All departments → `+447576442345` (admin mobile) |
-| Vapi | `transferCall` destinations + tool `transferToHuman` resolve via `server/transfer-numbers.ts` (settings first, then `VOICE_TRANSFER_*` env) |
+| Vapi | `transferCall` destinations + tool `transferToHuman` include `transferPlan.mode: warm-transfer-experimental` + `transferAssistant` (settings first, then `VOICE_TRANSFER_*` env) |
+| Hold audio | `VOICE_TRANSFER_HOLD_AUDIO_URL` or default `https://music.vapi.ai/waiting-ringtone.mp3` |
 | Inbound DID | Soho66 **Ring my IP phone** → VPS Asterisk REGISTER bridge (`docker/soho66-vapi-bridge`) → Vapi/Lizzie — no SIP-URL forward, no in-app softphone required |
 | Constraint | Only **one** REGISTER on SIP user `1005090093` — keep VOIS logged out while the bridge owns inbound |
-| Smoke (2026-07-16) | Outbound Vapi call had `transferCall` ×5 → `+447576442345`; live control transfer returned `200 ok` with destination set (`endedReason: call.in-progress.sip-completed-call`). Env fallback `VOICE_TRANSFER_NUMBER` set on VPS. |
+| Risk | Warm consult needs a second dial leg while holding the first; if Soho66/SIP rejects it, `fallbackPlan` keeps the caller with Cynthia |
+| Smoke (2026-07-16) | Blind control transfer previously OK. Warm plan: destinations include `transferPlan` — retest staff answers Cynthia first, then bridge. |
 
 ---
 
