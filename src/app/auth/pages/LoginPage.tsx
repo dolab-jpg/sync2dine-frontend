@@ -18,7 +18,7 @@ interface LoginProps {
     id: string;
     name: string;
     email: string;
-    role: 'platform_owner' | 'super_admin' | 'manager' | 'staff' | 'builder' | 'recruitment' | 'customer';
+    role: 'platform_owner' | 'super_admin' | 'manager' | 'staff' | 'builder' | 'recruitment' | 'customer' | 'kiosk';
   }) => void;
 }
 
@@ -197,7 +197,7 @@ export default function LoginPage({ onLogin }: LoginProps) {
     <AuthLayout wide>
       <Card className="shadow-2xl rounded-2xl border-0">
         <CardHeader className="bg-gradient-to-r from-slate-800 to-slate-900 text-white">
-          <CardTitle className="text-center text-2xl">Sign in to Builder Diddies</CardTitle>
+          <CardTitle className="text-center text-2xl">Sign in to Sync2Dine</CardTitle>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
           <form onSubmit={(e) => void handleCredentialSubmit(e)} className="space-y-4">

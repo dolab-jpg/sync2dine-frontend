@@ -191,6 +191,7 @@ export default function AppShell({ children }: AppShellProps) {
       builder: 'Builder',
       recruitment: 'Recruitment',
       customer: 'Customer',
+      kiosk: 'Kiosk',
     };
     return roleMap[role] || role;
   };
@@ -232,8 +233,14 @@ export default function AppShell({ children }: AppShellProps) {
         { to: '/recruitment', icon: UserPlus, label: t('nav.recruitment') },
       ];
     }
+    if (user.role === 'kiosk') {
+      return [
+        { to: '/front', icon: Phone, label: 'Front kiosk' },
+      ];
+    }
     return [
       { to: '/', icon: Home, label: t('nav.dashboard') },
+      { to: '/orders', icon: ClipboardList, label: 'Orders' },
       { to: '/crm', icon: TrendingUp, label: 'CRM' },
       { to: '/customers', icon: Users, label: t('nav.customers') },
       { to: '/booking', icon: Calendar, label: 'Book' },
@@ -296,6 +303,10 @@ export default function AppShell({ children }: AppShellProps) {
   const navItems = getNavItems();
   const expanded = sidebar.isOpen && !isMobile;
   const aiDockedInline = aiOpen && aiSettings.panelDocked && isWideViewport;
+
+  if (user.role === 'kiosk' || location.pathname.startsWith('/front')) {
+    return <>{children}</>;
+  }
 
   const renderNavLinks = (showLabels: boolean, onNavigate?: () => void) =>
     navItems.map(({ to, icon: Icon, label }) => (

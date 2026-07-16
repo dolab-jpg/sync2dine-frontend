@@ -2,7 +2,7 @@ import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client'
 import { getSupabaseAccessToken } from './orgContext';
 
 export type OrgStatus = 'trial' | 'active' | 'past_due' | 'suspended' | 'cancelled';
-export type OrgPlan = 'starter' | 'pro' | 'enterprise';
+export type OrgPlan = 'starter' | 'pro' | 'enterprise' | 'sync2dine_platform' | 'sync2dine_kiosk';
 
 export interface PlatformOrganization {
   id: string;
@@ -43,12 +43,16 @@ export interface CreateOrganizationResult {
   organization: PlatformOrganization;
   mainUserEmail?: string;
   mainUserCreated?: boolean;
+  stripeCheckoutUrl?: string;
+  stripeWarning?: string;
 }
 
 export const PLAN_LABELS: Record<OrgPlan, string> = {
   starter: 'Starter',
   pro: 'Pro',
   enterprise: 'Enterprise',
+  sync2dine_platform: 'Sync2Dine Platform',
+  sync2dine_kiosk: 'Sync2Dine Kiosk Screen',
 };
 
 async function parseJson<T>(res: Response): Promise<T> {

@@ -7,7 +7,8 @@ export type StoredUserRole =
   | 'staff'
   | 'builder'
   | 'recruitment'
-  | 'customer';
+  | 'customer'
+  | 'kiosk';
 
 export interface StoredUser {
   id: string;
@@ -48,7 +49,7 @@ export function parseDemoRoleFromUrl(): StoredUserRole | null {
   if (typeof window === 'undefined') return null;
   const role = new URLSearchParams(window.location.search).get('demoRole');
   const allowed: StoredUserRole[] = [
-    'platform_owner', 'super_admin', 'manager', 'staff', 'builder', 'recruitment', 'customer',
+    'platform_owner', 'super_admin', 'manager', 'staff', 'builder', 'recruitment', 'customer', 'kiosk',
   ];
   return allowed.includes(role as StoredUserRole) ? (role as StoredUserRole) : null;
 }

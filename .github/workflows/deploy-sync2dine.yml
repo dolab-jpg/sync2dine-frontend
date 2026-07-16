@@ -1,0 +1,45 @@
+name: Deploy Sync2Dine frontend
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || '' }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_DEMO_LOGIN: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sync2dine-spa
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ vars.SYNC2DINE_DOCROOT != '' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sync2dine-spa
+          path: dist
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: dist/*
+          target: ${{ vars.SYNC2DINE_DOCROOT }}
+          strip_components: 1

@@ -7,7 +7,7 @@ const username = process.env.E2E_USER_USERNAME || 'john.smith';
 test.describe('auth login', () => {
   test('shows credential login and no demo when demo off', async ({ page }) => {
     await page.goto('/login', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: /Sign in to Builder Diddies/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Sign in to Sync2Dine/i })).toBeVisible();
     await expect(page.getByLabel(/Email or username/i)).toBeVisible();
     await expect(page.getByRole('button', { name: /^Sign in$/i })).toBeVisible();
     await expect(page.getByText(/Developer demo/i)).toHaveCount(0);

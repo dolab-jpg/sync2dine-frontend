@@ -48,8 +48,8 @@ export function parseGoogleOAuthClientJson(raw: unknown): GoogleOAuthClientJson 
   };
 }
 
-export const PRODUCTION_MAILBOX_REDIRECT_URI = 'https://app.b-diddies.com/api/mailbox/callback';
-export const PRODUCTION_MAILBOX_ORIGIN = 'https://app.b-diddies.com';
+export const PRODUCTION_MAILBOX_REDIRECT_URI = 'https://app.sync2dine.io/api/mailbox/callback';
+export const PRODUCTION_MAILBOX_ORIGIN = 'https://app.sync2dine.io';
 
 export function validateGoogleOAuthForProduction(parsed: GoogleOAuthClientJson): string[] {
   const warnings: string[] = [];

@@ -10,9 +10,9 @@ interface BrandLogoProps {
 }
 
 const iconDimensions: Record<BrandLogoSize, { width: number; height: number }> = {
-  sm: { width: 28, height: 20 },
-  md: { width: 36, height: 25 },
-  lg: { width: 52, height: 36 },
+  sm: { width: 28, height: 28 },
+  md: { width: 36, height: 36 },
+  lg: { width: 52, height: 52 },
 };
 
 const wordmarkClasses: Record<BrandLogoSize, string> = {
@@ -21,10 +21,10 @@ const wordmarkClasses: Record<BrandLogoSize, string> = {
   lg: 'text-2xl sm:text-3xl',
 };
 
-function TwinEyeIcon({ width, height }: { width: number; height: number }) {
+function Sync2DineMark({ width, height }: { width: number; height: number }) {
   return (
     <svg
-      viewBox="0 0 52 36"
+      viewBox="0 0 52 52"
       width={width}
       height={height}
       className="flex-shrink-0"
@@ -32,14 +32,21 @@ function TwinEyeIcon({ width, height }: { width: number; height: number }) {
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
-      <circle cx="13" cy="18" r="11" fill="#4a044e" stroke="#f5d0a8" strokeWidth="1.5" />
-      <circle cx="13" cy="18" r="6" fill="#f59e0b" />
-      <circle cx="13" cy="18" r="3" fill="#0a0a0a" />
-      <circle cx="39" cy="18" r="11" fill="#4a044e" stroke="#f5d0a8" strokeWidth="1.5" />
-      <circle cx="39" cy="18" r="6" fill="#f59e0b" />
-      <circle cx="39" cy="18" r="3" fill="#0a0a0a" />
-      <circle cx="11" cy="15" r="1.2" fill="#ffffff" opacity="0.6" />
-      <circle cx="37" cy="15" r="1.2" fill="#ffffff" opacity="0.6" />
+      <rect x="4" y="4" width="44" height="44" rx="14" fill="#0f3d3e" />
+      <path
+        d="M14 29c6.5-8.5 17.5-8.5 24 0"
+        stroke="#e8c26a"
+        strokeWidth="4"
+        strokeLinecap="round"
+      />
+      <path
+        d="M17 22c4.8-4.8 13.2-4.8 18 0"
+        stroke="#fff7df"
+        strokeWidth="3"
+        strokeLinecap="round"
+        opacity="0.95"
+      />
+      <circle cx="26" cy="31" r="3.6" fill="#e8c26a" />
     </svg>
   );
 }
@@ -54,7 +61,7 @@ export function BrandLogo({
 
   return (
     <div className={cn('flex items-center gap-2.5 min-w-0', className)}>
-      <TwinEyeIcon width={width} height={height} />
+      <Sync2DineMark width={width} height={height} />
       {(showWordmark || subtitle) && (
         <div className="min-w-0">
           {showWordmark && (
@@ -64,7 +71,7 @@ export function BrandLogo({
                 wordmarkClasses[size],
               )}
             >
-              Builder Diddies
+              Sync2Dine
             </p>
           )}
           {subtitle && (

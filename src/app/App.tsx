@@ -77,6 +77,8 @@ import ConversationAudit from './components/aiStudio/ConversationAudit';
 import CallCenter from './components/CallCenter/CallCenter';
 import AppShell from './components/AppShell';
 import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
+import FrontKiosk from './components/FrontKiosk';
+import RestaurantOrders from './components/RestaurantOrders';
 import { ensureActiveOrgId, installApiFetchInterceptor, syncActiveOrgFromProfile } from './engine/platform/orgContext';
 import { integrationService } from './engine/integrations/integrationService';
 import { Toaster } from './components/ui/sonner';
@@ -108,7 +110,7 @@ function unionById<T extends { id: string }>(primary: T[], secondary: T[]): T[] 
   return [...map.values()];
 }
 
-export type UserRole = 'platform_owner' | 'super_admin' | 'manager' | 'staff' | 'builder' | 'recruitment' | 'customer';
+export type UserRole = 'platform_owner' | 'super_admin' | 'manager' | 'staff' | 'builder' | 'recruitment' | 'customer' | 'kiosk';
 
 export interface User {
   id: string;
@@ -1221,6 +1223,14 @@ export default function App() {
               <Route
                 path="/customers"
                 element={<ProtectedRoute element={<CustomerManagement />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/front"
+                element={<ProtectedRoute element={<FrontKiosk />} allowedRoles={['kiosk', 'super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/orders"
+                element={<ProtectedRoute element={<RestaurantOrders />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route
                 path="/ai-render/:tradeId?"

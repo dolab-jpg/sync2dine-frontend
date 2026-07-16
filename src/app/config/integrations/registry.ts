@@ -86,28 +86,28 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
         },
         {
           label: 'Name (console only)',
-          value: 'Builder Diddies Mailbox',
+          value: 'Sync2Dine Mailbox',
           note: 'Only shown in Google Cloud Console — not shown to end users.',
         },
         {
           label: 'Authorized JavaScript origins',
-          value: 'https://app.b-diddies.com',
+          value: 'https://app.sync2dine.io',
           note: 'For browser requests from the live app. Domains are also added to the OAuth consent screen.',
         },
         {
           label: 'Authorized redirect URIs',
-          value: 'https://app.b-diddies.com/api/mailbox/callback',
+          value: 'https://app.sync2dine.io/api/mailbox/callback',
           note: 'Must match exactly. Google may take 5 minutes to a few hours to apply changes.',
         },
         {
           label: 'Optional local origin (dev only)',
           value: 'http://localhost:5174',
-          note: 'Only if testing against a local SPA. Production connect uses app.b-diddies.com.',
+          note: 'Only if testing against a local SPA. Production connect uses app.sync2dine.io.',
         },
         {
           label: 'Optional local redirect (dev only)',
           value: 'http://localhost:3001/api/mailbox/callback',
-          note: 'Only if the API runs locally. Live VPS must use the https://app.b-diddies.com callback above.',
+          note: 'Only if the API runs locally. Live VPS must use the https://app.sync2dine.io callback above.',
         },
       ],
       footer:
@@ -121,7 +121,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
       { key: 'microsoftTenantId', label: 'Microsoft Tenant ID', type: 'text', placeholder: 'common' },
       { key: 'yahooClientId', label: 'Yahoo Client ID', type: 'text' },
       { key: 'yahooClientSecret', label: 'Yahoo Client Secret', type: 'password' },
-      { key: 'redirectUri', label: 'OAuth Redirect URI (must match Google Console)', type: 'readonly', placeholder: 'https://app.b-diddies.com/api/mailbox/callback' },
+      { key: 'redirectUri', label: 'OAuth Redirect URI (must match Google Console)', type: 'readonly', placeholder: 'https://app.sync2dine.io/api/mailbox/callback' },
     ],
   },
   {
@@ -302,15 +302,15 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     description: 'Used by Cynthia, templates, and invoice/quote/receipt PDFs',
     category: 'general',
     fields: [
-      { key: 'companyName', label: 'Company Name', type: 'text', placeholder: 'Builder Diddies' },
-      { key: 'website', label: 'Website', type: 'url', placeholder: 'https://b-diddies.com' },
+      { key: 'companyName', label: 'Company Name', type: 'text', placeholder: 'Sync2Dine' },
+      { key: 'website', label: 'Website', type: 'url', placeholder: 'https://sync2dine.io' },
       { key: 'companyRegistrationNumber', label: 'Company registration number', type: 'text', placeholder: '12345678' },
       { key: 'vatNumber', label: 'VAT number', type: 'text', placeholder: 'GB123456789' },
       { key: 'phone', label: 'Phone', type: 'text', placeholder: '020 3745 3233' },
-      { key: 'email', label: 'Email', type: 'text', placeholder: 'info@b-diddies.com' },
+      { key: 'email', label: 'Email', type: 'text', placeholder: 'info@sync2dine.io' },
       { key: 'address', label: 'Address', type: 'text' },
       { key: 'logoUrl', label: 'Logo URL', type: 'url', placeholder: 'Upload below or paste image URL' },
-      { key: 'accountName', label: 'Bank account name', type: 'text', placeholder: 'Builder Diddies' },
+      { key: 'accountName', label: 'Bank account name', type: 'text', placeholder: 'Sync2Dine' },
       { key: 'sortCode', label: 'Sort code', type: 'text', placeholder: '20-00-00' },
       { key: 'accountNumber', label: 'Account number', type: 'text', placeholder: '12345678' },
       {
@@ -350,22 +350,22 @@ export function getDefaultFieldValues(def: IntegrationDefinition): Record<string
     values.cyrusDisplayName = 'Cynthia';
   }
   if (def.id === 'company') {
-    values.companyName = 'Builder Diddies';
-    values.website = 'https://b-diddies.com';
+    values.companyName = 'Sync2Dine';
+    values.website = 'https://sync2dine.io';
     values.phone = '020 3745 3233';
-    values.email = 'info@b-diddies.com';
+    values.email = 'info@sync2dine.io';
     values.address = '';
     values.autoSendReceiptOnPaid = 'true';
   }
   if (def.id === 'email_oauth') {
     values.microsoftTenantId = 'common';
-    values.redirectUri = 'https://app.b-diddies.com/api/mailbox/callback';
+    values.redirectUri = 'https://app.sync2dine.io/api/mailbox/callback';
   }
   if (def.id === 'email_smtp') {
     values.host = 'smtp.gmail.com';
     values.port = '587';
     values.secure = 'true';
-    values.fromName = 'Builder Diddies';
+    values.fromName = 'Sync2Dine';
   }
   if (def.id === 'storage') {
     values.provider = 'supabase';

@@ -166,6 +166,8 @@ export async function fetchPendingInvites(accessToken: string, orgId?: string): 
 
 export function homePathForRole(role: string): string {
   switch (role) {
+    case 'kiosk':
+      return '/front';
     case 'builder':
       return '/builder';
     case 'recruitment':

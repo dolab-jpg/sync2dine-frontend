@@ -145,6 +145,11 @@ export default function PlatformClientsCRM() {
         `${org.name} ready — main Super Admin login: ${mainEmail}`,
         { duration: 10_000 },
       );
+      if (result.stripeCheckoutUrl) {
+        window.open(result.stripeCheckoutUrl, '_blank');
+      } else if (result.stripeWarning) {
+        toast.warning(`Client created, but Stripe needs attention: ${result.stripeWarning}`, { duration: 10_000 });
+      }
       setIsAddOpen(false);
       setForm({
         name: '', contactName: '', contactEmail: '', contactPhone: '', address: '',
