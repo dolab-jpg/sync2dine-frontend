@@ -763,7 +763,7 @@ Successful production calls used **Vapi + ElevenLabs Cockney (Lizzie `EQx6HGDYjk
 | Inbound DID | Soho66 **Ring my IP phone** → VPS Asterisk REGISTER bridge (`docker/soho66-vapi-bridge`) → Vapi/Lizzie — no SIP-URL forward, no in-app softphone required |
 | Constraint | Only **one** REGISTER on SIP user `1005090093` — keep VOIS logged out while the bridge owns inbound |
 | Risk | Warm consult needs a second dial leg while holding the first; if Soho66/SIP rejects it, `fallbackPlan` keeps the caller with Cynthia |
-| Smoke (2026-07-16) | Blind control transfer previously OK. Warm plan: destinations include `transferPlan` — retest staff answers Cynthia first, then bridge. |
+| Smoke (2026-07-16) | Assistant destinations = `warm-transfer-experimental` ×5; live control transfer with full `transferPlan` → `200 ok` (`endedReason: call.in-progress.sip-completed-call`). |
 
 ---
 
