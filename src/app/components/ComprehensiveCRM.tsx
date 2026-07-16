@@ -31,6 +31,7 @@ import { findPlanningApplicationsByCustomerId } from '../engine/planning/plannin
 import { stageLabel } from '../engine/planning/types';
 import { CallThisPersonDialog } from './crm/CallThisPersonDialog';
 import { ScrapeLeadImportDialog } from './crm/ScrapeLeadImportDialog';
+import { SalesCsvDialPanel } from './crm/SalesCsvDialPanel';
 
 type Lead = Customer & {
   source: NonNullable<Customer['source']>;
@@ -437,6 +438,7 @@ export default function ComprehensiveCRM() {
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
               <ScrapeLeadImportDialog onImport={handleImportScrapedLeads} />
+              <SalesCsvDialPanel onImport={handleImportScrapedLeads} />
               {isSuperAdmin && (
               <Dialog open={isAddLeadOpen} onOpenChange={setIsAddLeadOpen}>
                 <DialogTrigger asChild>

@@ -15,7 +15,7 @@ import {
   Phone, PhoneIncoming, PhoneOutgoing, Clock, MessageSquare,
   RefreshCw, Play, Send, AlertCircle, Voicemail, Mic, Search,
   ChevronDown, ChevronUp, User, ExternalLink, Power, Volume2, Plus, Trash2, Radio,
-  PhoneForwarded, ShieldCheck, Globe, UserPlus,
+  PhoneForwarded, ShieldCheck, Globe, UserPlus, Pause, Square,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SoftPhonePanel } from './SoftPhonePanel';
@@ -180,6 +180,9 @@ const CAMPAIGN_TEMPLATES = [
   { value: 'recruitment_screening', label: 'Recruitment Screening' },
   { value: 'satisfaction_check', label: 'Satisfaction Check' },
   { value: 'lead_callback', label: 'Lead Callback' },
+  { value: 'customer_review', label: 'Customer Review' },
+  { value: 'customer_reorder', label: 'Reorder Reminder' },
+  { value: 'lapse_winback', label: 'Lapse Win-back' },
 ];
 
 function formatPhone(phone?: string | null): string {
@@ -277,6 +280,8 @@ export default function CallCenter() {
   const [callQueueRetryMinutes, setCallQueueRetryMinutes] = useState(60);
   const [callQueueQuietStart, setCallQueueQuietStart] = useState('20:00');
   const [callQueueQuietEnd, setCallQueueQuietEnd] = useState('08:00');
+  const [callQueueMaxConcurrent, setCallQueueMaxConcurrent] = useState(2);
+  const [outboundQueueState, setOutboundQueueState] = useState<'running' | 'paused' | 'stopped'>('running');
   const [queueSettingsSaving, setQueueSettingsSaving] = useState(false);
 
   const app = useContext(AppContext);
@@ -327,6 +332,12 @@ export default function CallCenter() {
       if (Number.isFinite(Number(data.callQueueRetryMinutes))) setCallQueueRetryMinutes(Number(data.callQueueRetryMinutes));
       if (typeof data.callQueueQuietStart === 'string') setCallQueueQuietStart(data.callQueueQuietStart);
       if (typeof data.callQueueQuietEnd === 'string') setCallQueueQuietEnd(data.callQueueQuietEnd);
+      if (Number.isFinite(Number(data.callQueueMaxConcurrent))) {
+        setCallQueueMaxConcurrent(Math.max(1, Math.min(5, Number(data.callQueueMaxConcurrent))));
+      }
+      if (data.outboundQueueState === 'paused' || data.outboundQueueState === 'stopped' || data.outboundQueueState === 'running') {
+        setOutboundQueueState(data.outboundQueueState);
+      }
     } catch {
       // keep defaults
     }
@@ -653,6 +664,8 @@ export default function CallCenter() {
           callQueueRetryMinutes,
           callQueueQuietStart,
           callQueueQuietEnd,
+          callQueueMaxConcurrent,
+          outboundQueueState,
         }),
       });
       const data = await res.json();
@@ -663,6 +676,27 @@ export default function CallCenter() {
       toast.success('Call Queue / AI dial settings saved');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save settings');
+    } finally {
+      setQueueSettingsSaving(false);
+    }
+  }
+
+  async function setOutboundQueueControl(state: 'running' | 'paused' | 'stopped') {
+    setQueueSettingsSaving(true);
+    try {
+      const res = await fetch('/api/agent/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outboundQueueState: state }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to update queue');
+      setOutboundQueueState(data.outboundQueueState ?? state);
+      const labels = { running: 'resumed', paused: 'paused', stopped: 'stopped' };
+      toast.success(`Outbound queue ${labels[state]}`);
+      if (state === 'running') fetchCalls();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update queue');
     } finally {
       setQueueSettingsSaving(false);
     }
@@ -1307,6 +1341,59 @@ export default function CallCenter() {
                     placeholder="08:00"
                   />
                 </div>
+                <div>
+                  <Label>Max concurrent dials</Label>
+                  <Select
+                    value={String(callQueueMaxConcurrent)}
+                    onValueChange={(v) => setCallQueueMaxConcurrent(Number(v))}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <SelectItem key={n} value={String(n)}>{n} at a time</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Label className="w-full sm:w-auto">Outbound queue</Label>
+                <Badge variant={outboundQueueState === 'running' ? 'default' : outboundQueueState === 'paused' ? 'secondary' : 'destructive'}>
+                  {outboundQueueState}
+                </Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={queueSettingsSaving || outboundQueueState === 'running'}
+                  onClick={() => setOutboundQueueControl('running')}
+                >
+                  <Play className="w-4 h-4 mr-1" />
+                  Resume
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={queueSettingsSaving || outboundQueueState === 'paused'}
+                  onClick={() => setOutboundQueueControl('paused')}
+                >
+                  <Pause className="w-4 h-4 mr-1" />
+                  Pause
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={queueSettingsSaving || outboundQueueState === 'stopped'}
+                  onClick={() => {
+                    if (confirm('Stop outbound queue and cancel queued dials?')) {
+                      void setOutboundQueueControl('stopped');
+                    }
+                  }}
+                >
+                  <Square className="w-4 h-4 mr-1" />
+                  Stop
+                </Button>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={saveCallQueueSettings} disabled={queueSettingsSaving}>
