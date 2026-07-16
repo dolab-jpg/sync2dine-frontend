@@ -186,8 +186,8 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   },
   {
     id: 'chatterbox_tts',
-    name: 'Chatterbox TTS',
-    description: 'Cloned voice TTS for Cynthia phone — upload a Cockney/Del Boy reference WAV on the Call Centre page',
+    name: 'Chatterbox TTS (legacy)',
+    description: 'Legacy / mock clone TTS only — live Cynthia phone voice is Vapi + ElevenLabs (see VOICE_SETUP.md). WAV upload on Call Centre does not change real calls.',
     category: 'ai',
     fields: [
       { key: 'baseUrl', label: 'Base URL', type: 'url', placeholder: 'http://VPS_IP:8004', required: true },

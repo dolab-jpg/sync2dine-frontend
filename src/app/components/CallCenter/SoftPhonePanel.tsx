@@ -116,9 +116,11 @@ export function SoftPhonePanel(_props: { lines?: PhoneLine[] }) {
     try {
       uaRef.current?.stop();
       const JsSIP = (await import('jssip')).default;
-      const socket = new JsSIP.WebSocketInterface(
-        `wss://${myLine.sipDomain.replace(/^sip\./, 'ws.')}/ws`,
-      );
+      // Soho66 public WSS host is ws.soho66.co.uk — not sbc./sip. hostnames.
+      const wssHost = myLine.sipDomain
+        .replace(/^sbc\./i, 'ws.')
+        .replace(/^sip\./i, 'ws.');
+      const socket = new JsSIP.WebSocketInterface(`wss://${wssHost}/ws`);
       const ua = new JsSIP.UA({
         sockets: [socket],
         uri: `sip:${myLine.sipUsername}@${myLine.sipDomain}`,

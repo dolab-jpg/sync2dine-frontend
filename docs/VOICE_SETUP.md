@@ -1,73 +1,122 @@
-# Cynthia phone setup (Company AI Brain + cloned Cockney accent)
+# Cynthia phone setup (Vapi + ElevenLabs)
 
-> **Inventory SoT:** [APPLICATION_MASTER.md](./APPLICATION_MASTER.md) §16 (voice) + §27 (mobile softphone). This file is an ops checklist only.
+> **Inventory SoT:** [APPLICATION_MASTER.md](./APPLICATION_MASTER.md) §16. Sibling deep-dive: `tradepro-backend/docs/VAPI_SIP.md`.
 
-Cynthia uses the **Company AI Brain** (OpenAI by default; optional DeepSeek for text) for conversation logic and **Chatterbox TTS** / ElevenLabs for the spoken voice. Photo pricing, vision, Whisper, and OpenAI TTS fallback always use the **OpenAI** key.
+**Production phone voice path (the one that has worked on live calls):**
 
-## 0. Production voice path (Vapi only)
-
-**Cynthia answers via Vapi + Soho66 SIP trunk** (`VOICE_PROVIDER=vapi` on tradepro-backend). There is **no sip-bridge / local_realtime rollback** — misconfigured providers fail closed.
-
-- Webhooks: `POST /webhooks/vapi` on the API host (production: `https://app.b-diddies.com`)
-- In-app Cynthia mic: `POST /api/vapi/web-session`
-- CRM caller match happens in Vapi webhooks (`resolveContactByPhone`) and shows on Call Centre → Live Call Status
-- Soft Phone (JsSIP) is an **optional** staff browser channel — Soho66 public WSS is often unavailable; use desk phone / VOIS for humans
-
-See `tradepro-backend/docs/VAPI_SIP.md` for the accurate setup.
-For routes that live only on the API host, see [BACKEND_DEPS.md](./BACKEND_DEPS.md).
-
-## 1. Environment variables
-
-Copy `.env.example` to `.env.local` and set:
-
-```env
-OPENAI_API_KEY=sk-...
-VOICE_PROVIDER=vapi
-
-CHATTERBOX_BASE_URL=http://YOUR_VPS_IP:8004
-CHATTERBOX_API_KEY=optional-if-your-server-requires-it
-CHATTERBOX_TTS_PATH=/tts
-
-WEBHOOK_BASE_URL=https://your-public-server.com
-APP_BASE_URL=http://localhost:5174
+```text
+Caller ↔ Soho66 SIP ↔ Vapi (media) ↔ ElevenLabs (female Cockney) ↔ POST /webhooks/vapi ↔ Cynthia phone-brain
 ```
 
-- `CHATTERBOX_TTS_PATH` — adjust if your Chatterbox server uses a different synth route.
-- `WEBHOOK_BASE_URL` — must be publicly reachable for TTS/play URLs on real calls.
+- Provider: `VOICE_PROVIDER=vapi` (required)
+- Spoken voice: **ElevenLabs** via Vapi (`provider: '11labs'`) — female British / Cockney (**Lizzie** voice id `EQx6HGDYjkDpcli6vorJ` when configured on the API host)
+- Webhooks: `POST /webhooks/vapi` on `https://app.b-diddies.com`
+- In-app Cynthia mic: `POST /api/vapi/web-session`
+- Soft Phone (JsSIP) is optional for **humans** only — not used for Cynthia AI answering
 
-You can also configure Chatterbox under **Settings → Integrations → Chatterbox TTS**.
+There is **no** sip-bridge / `local_realtime` / turn-by-turn local STT→TTS rollback for AI answering. Misconfigured providers fail closed.
 
-## 2. Clone a Cockney / Del Boy voice
+---
 
-1. Record or obtain a **short WAV sample** (10–30 seconds) of the accent you want. Use audio you have rights to — do not use copyrighted TV clips.
-2. Open **Call Centre → Dashboard → Voice Settings**.
-3. Enter a name (e.g. `Del Boy`) and upload the WAV.
-4. Click the voice card to set it as **active**.
+## 1. Environment (API host / `/etc/tradepro-api.env`)
 
-The mock test tab will auto-play Cynthia's replies in that voice.
+```env
+VOICE_PROVIDER=vapi
+VAPI_PRIVATE_KEY=••••
+VAPI_PUBLIC_KEY=••••
+VAPI_REGION=eu
+VAPI_WEBHOOK_BASE_URL=https://app.b-diddies.com
+VAPI_PHONE_NUMBER_ID=••••
+VAPI_SIP_CREDENTIAL_ID=••••
+ELEVENLABS_API_KEY=••••
+VAPI_ELEVENLABS_VOICE_ID=EQx6HGDYjkDpcli6vorJ
+ELEVENLABS_VOICE_ID=EQx6HGDYjkDpcli6vorJ
+SOHO66_SIP_*=••••
+SOHO66_FROM_NUMBER=02037453233
+OPENAI_API_KEY=••••
+```
 
-## 3. Test in the dashboard
+Also paste the ElevenLabs key into **Vapi dashboard → Integrations** if your org requires it.
 
-1. Go to **Call Centre → Test Call (Mock)**.
-2. Speak or type a caller turn.
-3. Cynthia replies with OpenAI logic; audio plays via `/api/agent/tts` using your cloned voice.
-4. Use the speaker icon on any Cynthia line to replay.
+Provision trunk + DID into Vapi from `tradepro-backend`:
 
-## 4. Live answering
+```powershell
+cd tradepro-backend
+npm run vapi:setup
+```
 
-1. Call Centre → toggle **Cynthia is answering inbound calls**.
-2. AI lines use purpose `aria` (compat alias) labeled **Cynthia AI (Vapi)** in Phone Lines.
-3. Transfer numbers: set departments where Cynthia should hand off to a human.
+Confirm: `GET /api/vapi/health` → `{ "ok": true, "provider": "vapi" }`.
 
-## 5. Softphones (humans)
+Full SIP / REGISTER notes: `tradepro-backend/docs/VAPI_SIP.md`.
 
-Human softphones are separate from Cynthia AI:
+---
 
-- Staff lines use `purpose: 'staff'`
+## 2. Live answering
+
+1. Open **Call Centre** (`/calls`).
+2. Toggle **Cynthia is answering inbound calls** = ON.
+3. AI lines use purpose `aria` (compat alias), labeled **Cynthia AI (Vapi)** on Phone Lines.
+4. Set transfer numbers for human handoff where needed.
+
+**Inbound DID (same Soho66 + Vapi + Lizzie — no softphone required):**
+
+Outbound: Vapi dials via Soho66 BYO trunk.  
+Inbound: a small Asterisk REGISTER bridge on the VPS acts as the “IP phone” for Soho66 **Ring my IP phone**, then bridges to Vapi (ElevenLabs Lizzie / Cynthia). Branding: **Builder Diddies**.
+
+| Item | Value |
+|------|--------|
+| DID | `02037453233` / `+442037453233` |
+| Bridge | VPS Docker `tradepro-sip-bridge` (`/var/www/vhosts/b-diddies.com/tradepro-sip-bridge`) |
+| REGISTER | `1005090093@sbc.soho66.co.uk:8060` (only one REGISTER — log out VOIS on that user) |
+| Vapi | phone + Cynthia assistant + webhook `https://app.b-diddies.com/webhooks/vapi` |
+| Voice | ElevenLabs Lizzie `EQx6HGDYjkDpcli6vorJ` |
+
+Keep Soho66 Routing Wizard as **Ring my IP phone** (then voicemail if needed). Staff transfers: Call Centre transfer numbers → mobile (no second softphone required).
+
+**Ops:** `docker compose -f …/tradepro-sip-bridge/docker-compose.yml ps` · `asterisk -rx 'pjsip show registrations'` inside the container must show **Registered**.
+
+---
+
+## 3. Live retest checklist
+
+### A — Outbound to staff mobile (PIN)
+
+1. Confirm super_admin mobile is registered (e.g. `+447576442345`) with PIN (e.g. `1234`) under **Settings → Team**.
+2. `/calls?tab=outbound` → dial that E.164 → template `lead_callback`  
+   (or `POST /api/calls/outbound` with the same body).
+3. On answer: voice must be the **female Cockney ElevenLabs** voice (same as prior successful calls).
+4. Speak PIN to unlock staff tools; exercise CRM lookups / snapshot.
+
+### B — Inbound from a random / second phone
+
+1. Leave answering ON.
+2. From a **different** handset, dial the company DID.
+3. Confirm same ElevenLabs voice and customer/lead path (no staff PIN required).
+
+If the voice sounds like generic OpenAI TTS or the old mock pipeline, stop — fix `VAPI_ELEVENLABS_VOICE_ID` / Vapi Integrations before continuing.
+
+---
+
+## 4. Softphones (humans only)
+
+- Staff lines: `purpose: 'staff'`
 - Soft Phone tab: `/calls?tab=softphone`
+- Soho66 public WSS is often unavailable; prefer desk phone / VOIS for humans
 
-**WSS note:** `wss://ws.soho66.co.uk/ws` often does not complete a SIP WebSocket session. Use Soho66 VOIS or a desk phone for staff.
+---
 
-## 6. Optional IVR
+## 5. Optional IVR
 
 Set `IVR_ENABLED=1` to play a DTMF menu before Cynthia on inbound calls.
+
+---
+
+## 6. Retired / not for live phone AI
+
+| Path | Status |
+|------|--------|
+| sip-bridge / `VOICE_PROVIDER=local_realtime` / `soho66` AI answering | Unsupported — fail closed |
+| Chatterbox WAV clone + `/api/agent/tts` turn pipeline | **Not** the live phone media path (mock / legacy UI only) |
+| Call Centre **Test Call (Mock)** tab | Local simulation only — does not place a real Vapi call |
+
+Do not document Chatterbox as how Cynthia speaks on real phone calls. Live media TTS is ElevenLabs through Vapi.

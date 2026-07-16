@@ -32,7 +32,7 @@ const emptyForm = (): SoftphoneForm => ({
   label: '',
   sipUsername: '',
   sipPassword: '',
-  sipDomain: 'sip.soho66.co.uk',
+  sipDomain: 'sbc.soho66.co.uk',
   did: '',
   assignedUserId: '',
   enabled: true,
@@ -82,7 +82,7 @@ export function StaffSoftphones() {
       label: line.label,
       sipUsername: line.sipUsername,
       sipPassword: '',
-      sipDomain: line.sipDomain || 'sip.soho66.co.uk',
+      sipDomain: line.sipDomain || 'sbc.soho66.co.uk',
       did: line.did,
       assignedUserId: line.assignedUserId ?? '',
       enabled: line.enabled !== false,
@@ -105,7 +105,7 @@ export function StaffSoftphones() {
       const body: Record<string, unknown> = {
         label: form.label.trim(),
         sipUsername: form.sipUsername.trim(),
-        sipDomain: form.sipDomain.trim() || 'sip.soho66.co.uk',
+        sipDomain: form.sipDomain.trim() || 'sbc.soho66.co.uk',
         did: form.did.trim(),
         assignedUserId: form.assignedUserId.trim(),
         purpose: 'staff',
@@ -176,7 +176,7 @@ export function StaffSoftphones() {
           </div>
           <div>
             <Label>SIP Domain</Label>
-            <Input value={form.sipDomain} onChange={(e) => setForm((f) => ({ ...f, sipDomain: e.target.value }))} placeholder="sip.soho66.co.uk" />
+            <Input value={form.sipDomain} onChange={(e) => setForm((f) => ({ ...f, sipDomain: e.target.value }))} placeholder="sbc.soho66.co.uk" />
           </div>
           <div>
             <Label>Assigned user ID</Label>

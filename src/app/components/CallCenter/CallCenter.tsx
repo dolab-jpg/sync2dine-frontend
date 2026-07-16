@@ -253,7 +253,7 @@ export default function CallCenter() {
     label: '',
     sipUsername: '',
     sipPassword: '',
-    sipDomain: 'sip.soho66.co.uk',
+    sipDomain: 'sbc.soho66.co.uk',
     did: '',
     assignedUserId: '',
     purpose: 'staff' as 'staff' | 'aria',
@@ -434,7 +434,7 @@ export default function CallCenter() {
       const res = await fetch('/api/agent/voices', { method: 'POST', body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Upload failed');
-      toast.success('Voice uploaded to Chatterbox');
+      toast.success('Voice uploaded to Chatterbox (legacy — does not change live phone TTS)');
       setVoiceUploadName('');
       setVoiceUploadFile(null);
       fetchVoices();
@@ -535,7 +535,7 @@ export default function CallCenter() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to save line');
       toast.success(editingLineId ? 'Line updated' : 'Line added');
-      setLineForm({ label: '', sipUsername: '', sipPassword: '', sipDomain: 'sip.soho66.co.uk', did: '', assignedUserId: '', purpose: 'staff' });
+      setLineForm({ label: '', sipUsername: '', sipPassword: '', sipDomain: 'sbc.soho66.co.uk', did: '', assignedUserId: '', purpose: 'staff' });
       setEditingLineId(null);
       fetchLines();
     } catch (err) {
@@ -588,7 +588,7 @@ export default function CallCenter() {
       label: line.label,
       sipUsername: line.sipUsername,
       sipPassword: line.sipPassword === '••••••' ? '' : line.sipPassword,
-      sipDomain: line.sipDomain || 'sip.soho66.co.uk',
+      sipDomain: line.sipDomain || 'sbc.soho66.co.uk',
       did: line.did,
       assignedUserId: line.assignedUserId ?? '',
       purpose: line.purpose === 'aria' ? 'aria' : 'staff',
@@ -1049,10 +1049,13 @@ export default function CallCenter() {
                   ))}
                 </div>
                 <div className="border-t pt-4 space-y-3">
-                  <p className="text-sm font-medium text-slate-700">Upload cloned voice (WAV)</p>
+                  <p className="text-sm font-medium text-slate-700">Live phone voice</p>
                   <p className="text-xs text-slate-500">
-                    For a Cockney / Del Boy accent, upload a short WAV sample you own. Requires Chatterbox on your VPS — see docs/VOICE_SETUP.md.
+                    Real calls use <strong>Vapi + ElevenLabs</strong> (female Cockney). Configure
+                    <code className="mx-1">VAPI_ELEVENLABS_VOICE_ID</code> on the API host — see docs/VOICE_SETUP.md.
+                    Chatterbox WAV upload below is legacy / mock only and does not change live phone TTS.
                   </p>
+                  <p className="text-sm font-medium text-slate-700 pt-2">Legacy: upload cloned voice (WAV)</p>
                   <Input
                     placeholder="Voice name"
                     value={voiceUploadName}
@@ -1063,8 +1066,8 @@ export default function CallCenter() {
                     accept=".wav,audio/wav"
                     onChange={e => setVoiceUploadFile(e.target.files?.[0] ?? null)}
                   />
-                  <Button onClick={uploadVoice} disabled={uploadingVoice} className="w-full">
-                    {uploadingVoice ? 'Uploading…' : 'Upload to Chatterbox'}
+                  <Button onClick={uploadVoice} disabled={uploadingVoice} variant="outline" className="w-full">
+                    {uploadingVoice ? 'Uploading…' : 'Upload to Chatterbox (legacy)'}
                   </Button>
                 </div>
               </CardContent>
@@ -1229,7 +1232,7 @@ export default function CallCenter() {
                 </div>
                 <div>
                   <Label>SIP Domain</Label>
-                  <Input value={lineForm.sipDomain} onChange={e => setLineForm(f => ({ ...f, sipDomain: e.target.value }))} placeholder="sip.soho66.co.uk" />
+                  <Input value={lineForm.sipDomain} onChange={e => setLineForm(f => ({ ...f, sipDomain: e.target.value }))} placeholder="sbc.soho66.co.uk" />
                 </div>
                 <div>
                   <Label>Purpose</Label>
@@ -1257,7 +1260,7 @@ export default function CallCenter() {
                   {editingLineId ? 'Update line' : 'Add line'}
                 </Button>
                 {editingLineId && (
-                  <Button variant="outline" onClick={() => { setEditingLineId(null); setLineForm({ label: '', sipUsername: '', sipPassword: '', sipDomain: 'sip.soho66.co.uk', did: '', assignedUserId: '', purpose: 'staff' }); }}>
+                  <Button variant="outline" onClick={() => { setEditingLineId(null); setLineForm({ label: '', sipUsername: '', sipPassword: '', sipDomain: 'sbc.soho66.co.uk', did: '', assignedUserId: '', purpose: 'staff' }); }}>
                     Cancel
                   </Button>
                 )}

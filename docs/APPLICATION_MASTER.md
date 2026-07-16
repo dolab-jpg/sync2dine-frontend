@@ -63,6 +63,8 @@ flowchart LR
 
 **Ship note (2026-07-15 WhatsApp Path B):** Meta Cloud API disabled permanently (`WHATSAPP_META_ENABLED` off). Sole LIVE transport = WhatsApp Web.js QR (§18). Leave Meta secrets blank on VPS.
 
+**Ship note (2026-07-15 Language boundary):** SPA UI English-only; phone/WhatsApp speech may use `SUPPORTED_LANGS`; brain + emails/contracts/quotes stay English (§3.6, §19.12). Vapi STT = Deepgram `multi`; `setCallLanguage` persists preferred language.
+
 **DO_NOT_SHIP:** `.cursor/local/*.py`, `debug-login.png`, `playwright-report/`, `test-results/`, backend `server/data/*`, `_patch_*.cjs`, `_tmp_*.cjs`, `tmp-aria-lizzie.mp3`.
 
 ### 1B — VPS (`https://app.b-diddies.com`)
@@ -246,9 +248,29 @@ Source: `src/app/App.tsx`.
 
 `src/app/config/trades/`: bathroom, kitchen, plumbing, electrical, roofing, remaining + playbooks/shared/renderOptions.
 
-### 3.6 i18n
+### 3.6 Language policy (English UI + multilingual speech)
 
-Locales: `en`, `es`, `pl`, `ru`, `uk`, `zh`, `fa`, `sq` under `src/app/i18n/`.
+**Product rule (authoritative):**
+
+| Layer | Language |
+|-------|----------|
+| **SPA UI** (menus, labels, screens) | **English only** — full UI i18n is not a ship goal; locale JSON trees under `src/app/i18n/locales/` are partial (AppShell chrome) / legacy |
+| **Phone / WhatsApp / AI chat spoken replies** | Any `SUPPORTED_LANGS`: `en`, `sq`, `uk`, `ru`, `zh`, `es`, `pl`, `fa` |
+| **Orchestrator / CRM / tool inputs** | Canonical **English** via `normalizeInboundText` → `translateToEnglish` |
+| **Customer artifacts** (emails, contracts, quotes, invoices, “send this to them”) | **English only** via prompts + `ensureEnglishForCustomerSend` |
+
+```mermaid
+flowchart LR
+  spoken[Spoken_or_chat_non_EN] --> stt[STT_Deepgram_multi]
+  stt --> norm[normalizeInboundText_to_EN]
+  norm --> brain[Orchestrator_tools_CRM_EN]
+  brain --> speak[Spoken_reply_localized]
+  brain --> docs[Emails_contracts_pricing_EN_guard]
+```
+
+- Profile / team **preferred language** = AI chat & phone preference, **not** app UI translation.
+- Language packs panel = channel phrases + spoken-reply instructions (§19.12), not SPA strings.
+- See §19.12 for APIs, local JSON storage, and phone `setCallLanguage`.
 
 ### 3.7 Frontend env (browser-safe)
 
@@ -610,29 +632,29 @@ curl.exe -sS -o NUL -w "%{http_code}" https://app.b-diddies.com/api/whatsapp-web
 
 ## 16. Voice / Cynthia phone / Vapi / Soho66 (full setup)
 
-**Status:** LIVE (Vapi path on VPS). Softphone WSS and Chatterbox = PARTIAL. Frontend `server/` = LEGACY for this surface.
+**Status:** LIVE (Vapi + ElevenLabs on VPS). Softphone WSS = PARTIAL. Chatterbox / local `/api/agent/tts` = **not** live phone media (mock/legacy only). Frontend `server/` = LEGACY for this surface.
 
 **Ops docs:** [VOICE_SETUP.md](./VOICE_SETUP.md) · sibling backend `tradepro-backend/docs/VAPI_SIP.md`
 
-**Policy:** Cynthia phone AI is **Vapi only**. `VOICE_PROVIDER=local_realtime` / `soho66` / sip-bridge AI answering are **unsupported** and fail closed. `tradepro-backend/sip-bridge/` is historical only.
+**Policy:** Cynthia phone AI is **Vapi only**, with spoken voice via **ElevenLabs** (`provider: '11labs'`). Prior successful live calls used the female Cockney **Lizzie** voice (`VAPI_ELEVENLABS_VOICE_ID=EQx6HGDYjkDpcli6vorJ`). `VOICE_PROVIDER=local_realtime` / `soho66` / sip-bridge AI answering are **unsupported** and fail closed. `tradepro-backend/sip-bridge/` is historical only.
 
 ### 16.1 Architecture
 
 ```
-Caller ↔ Soho66 SIP ↔ Vapi (media) ↔ POST /webhooks/vapi ↔ Cynthia phone-brain + phone tools
+Caller ↔ Soho66 SIP ↔ Vapi (media) ↔ ElevenLabs (female Cockney) ↔ POST /webhooks/vapi ↔ Cynthia phone-brain + phone tools
 Browser Cynthia mic → POST /api/vapi/web-session → @vapi-ai/web
 ```
 
-Required: `VOICE_PROVIDER=vapi`.
+Required: `VOICE_PROVIDER=vapi` + configured `VAPI_ELEVENLABS_VOICE_ID` (or `ELEVENLABS_VOICE_ID`) + `ELEVENLABS_API_KEY`.
 
 ### 16.2 Go-live steps
 
-1. On API host set `VOICE_PROVIDER=vapi`, `VAPI_*`, `ELEVENLABS_*`, `SOHO66_*` (trunk), `WEBHOOK_BASE_URL` / `VAPI_WEBHOOK_BASE_URL`, `OPENAI_API_KEY`.
+1. On API host set `VOICE_PROVIDER=vapi`, `VAPI_*`, `ELEVENLABS_*` / `VAPI_ELEVENLABS_VOICE_ID`, `SOHO66_*` (trunk), `WEBHOOK_BASE_URL` / `VAPI_WEBHOOK_BASE_URL`, `OPENAI_API_KEY`.
 2. Public HTTPS API (prod: `https://app.b-diddies.com`).
 3. From tradepro-backend: `npm run vapi:setup` (`scripts/setup-vapi-soho66.ts`) — writes `VAPI_PHONE_NUMBER_ID` / `VAPI_SIP_CREDENTIAL_ID`.
 4. Restart `tradepro-api`. Confirm `GET /api/vapi/health` → 200; `POST /api/vapi/web-session` responds (auth).
-5. Call Centre `/calls` → live status (labeled Cynthia); optional mock tab for UI tests only.
-6. Optional: `IVR_ENABLED=1`; Chatterbox WAV for cloned TTS; Twilio only if explicitly chosen (`TELEPHONY_PROVIDER=twilio`).
+5. Call Centre `/calls` → live status (labeled Cynthia). Place real tests via Outbound Queue or inbound DID — not the Mock tab.
+6. Optional: `IVR_ENABLED=1`; Twilio only if explicitly chosen (`TELEPHONY_PROVIDER=twilio`). Do **not** use Chatterbox for live phone TTS.
 
 ### 16.3 Env keys (API host — never frontend Vite)
 
@@ -640,13 +662,13 @@ Required: `VOICE_PROVIDER=vapi`.
 |-------|------|
 | Provider | `VOICE_PROVIDER=vapi` (required), `TELEPHONY_PROVIDER` |
 | Vapi | `VAPI_PRIVATE_KEY`, `VAPI_PUBLIC_KEY`, `VAPI_REGION`, `VAPI_WEBHOOK_BASE_URL`, `VAPI_SERVER_SECRET`, `VAPI_PHONE_NUMBER_ID`, `VAPI_SIP_CREDENTIAL_ID`, `VAPI_ASSISTANT_ID`, `VAPI_ELEVENLABS_VOICE_ID`, `VAPI_LLM_MODEL` |
-| ElevenLabs | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` |
+| ElevenLabs (live phone voice) | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` — prod Cockney Lizzie `EQx6HGDYjkDpcli6vorJ` |
 | Soho66 trunk | `SOHO66_SIP_*`, `SOHO66_FROM_NUMBER` (feed Vapi SIP — not local sip-bridge AI) |
 | Ops | `VOICE_TRANSFER_NUMBER`, `VOICE_WEBHOOK_VERIFY_TOKEN`, `VOICE_AFTER_HOURS`, `VOICE_BUSINESS_HOURS_*` |
-| Chatterbox | `CHATTERBOX_BASE_URL`, `CHATTERBOX_API_KEY`, `CHATTERBOX_TTS_PATH` |
+| Legacy (not live phone) | `CHATTERBOX_*` — mock/clone UI only; unused for Vapi media |
 | Gates | `ALLOW_TELEPHONY_MOCK`, `FAIL_CLOSED`, `IVR_ENABLED`, `WEBHOOK_BASE_URL`, `APP_BASE_URL` |
 
-Frontend registry cards `voice_telephony` / `chatterbox_tts` store UI overrides; **Vapi keys belong on the API**, not `VITE_*`.
+Frontend registry card `voice_telephony` stores UI overrides; **Vapi + ElevenLabs keys belong on the API**, not `VITE_*`. `chatterbox_tts` is not the production phone voice path.
 
 ### 16.4 API routes (canonical backend)
 
@@ -677,16 +699,20 @@ Frontend registry cards `voice_telephony` / `chatterbox_tts` store UI overrides;
 | Softphone tab | `CallCenter/SoftPhonePanel.tsx` | JsSIP → `wss://ws.{domain}/ws` — **PARTIAL** (Soho66 public WSS often broken) |
 | `/cynthia` mic | `hooks/useCynthiaVapiVoice.ts` | Uses `/api/vapi/web-session` |
 | Settings | `settings/StaffSoftphones.tsx`, `StaffPhoneRegistration.tsx` | SIP assign + PIN |
-| Integrations | `voice_telephony`, `chatterbox_tts` cards | Cynthia phone branding |
+| Integrations | `voice_telephony` card | Cynthia phone / Vapi branding; `chatterbox_tts` = legacy UI only |
 
 ### 16.6 Known voice gaps
 
 | Item | Status |
 |------|--------|
 | Softphone JsSIP WSS | PARTIAL |
-| Chatterbox TTS | PARTIAL (needs `CHATTERBOX_*` + WAV) |
-| Mock calls | Intentional — blocked in prod unless `ALLOW_TELEPHONY_MOCK` |
+| Chatterbox TTS | LEGACY for phone — not used for Vapi media; mock/clone UI only |
+| Mock calls (`/api/agent/tts`, Test Call tab) | Intentional non-live — blocked in prod unless `ALLOW_TELEPHONY_MOCK` |
 | Outbound worker URL mismatch | Worker may call `/api/phone/outbound` while live route is `/api/calls/outbound` — treat queue as PARTIAL until confirmed |
+
+### 16.7 Proven live stack (retest baseline)
+
+Successful production calls used **Vapi + ElevenLabs Cockney (Lizzie `EQx6HGDYjkDpcli6vorJ`)**, not local STT/TTS. Retest: outbound to registered staff mobile + PIN, then inbound from a second phone to `SOHO66_FROM_NUMBER` / company DID. See [VOICE_SETUP.md](./VOICE_SETUP.md) §3.
 
 ---
 
@@ -798,7 +824,7 @@ Source: `server/action-registry.ts` → `PHONE_ACTION_REGISTRY` (both repos; pro
 | Tool | PIN | Confirm | Risk |
 |------|-----|---------|------|
 | `verifyStaffPhonePin` | no | no | read |
-| `setCallLanguage` | no | no | read |
+| `setCallLanguage` | no | no | read — saves `callLanguage` + CRM/profile preferred language; STT is Deepgram `multi` (§19.12) |
 | `transferToHuman` | no | no | outbound |
 | `captureMessage` | no | no | low_write |
 | `endCall` | no | no | read |
@@ -1034,9 +1060,14 @@ Meta webhook is inert while Path B is cold. Also: frontend `engine/messaging/mes
 | | |
 |---|---|
 | **Status** | LIVE |
-| **UI** | AI Studio Language packs; staff preferred language; i18n locales §3.6 |
-| **API** | `GET/PUT /api/language-packs`; `POST /api/translate/detect|to-english|from-english` |
-| **Data** | `language-packs.json`; profile `preferred_language` |
+| **Product rule** | §3.6 — spoken/chat may be non-English; SPA UI + customer artifacts stay English |
+| **UI** | AI Studio → Language packs (`LanguagePacksPanel`); Profile/Team preferred language = chat/phone only |
+| **API** | `GET/PUT /api/language-packs`; `POST /api/translate/detect\|to-english\|from-english` |
+| **Gateway** | `server/translation-service.ts` (OpenAI `gpt-4o-mini`); `server/outbound-english-guard.ts` on customer sends |
+| **Channel flow** | Inbound → `normalizeInboundText` (English for brain); conversational outbound → `localizeOutboundText`; emails/contracts/quotes → English guard |
+| **Phone STT** | Vapi + Deepgram Nova `language: multi` (mid-call code-switch); `setCallLanguage` saves `call.metadata.callLanguage` + CRM/profile preferred language |
+| **Data** | Packs = local `server/data/language-packs.json` on API host (gitignored, **not** Supabase); staff `profiles.preferred_language`; customer `preferredLanguage` on CRM record |
+| **Note** | Frontend companion `server/data/` twin is not production — save packs via API on VPS / keep backend file in sync |
 
 ---
 
@@ -1183,6 +1214,7 @@ Legend: **DONE** = detailed in this MD · **THIN** = mentioned only (routes tabl
 | Settings hub (Pricing/Stages/AI/API/Email/Import/Business/Team) | YES | DONE | §28.5 |
 | AI Studio (humour, commands, knowledge, autonomy) | YES | DONE | §28.4 |
 | Language packs panel | YES | DONE | §19.12, §28.4 |
+| English UI + multilingual speech boundary | YES | DONE | §3.6, §19.12 |
 | Conversation audit + code fixes UI | YES | DONE | §19.9 |
 | Import/export data packs | YES | DONE | §28.6 |
 | Company profile + logo + embed snippet | YES | DONE | §20 |
@@ -1193,7 +1225,7 @@ Legend: **DONE** = detailed in this MD · **THIN** = mentioned only (routes tabl
 | Native bridge / push | YES | DONE | §27, §19.8 |
 | Flutter WebView shell | YES (sibling repo) | DONE | §27 |
 | Auth signup modes | YES | DONE | §28.12 |
-| i18n locales | YES | DONE | §3.6, §27 locale bridge |
+| i18n locales (partial AppShell only; UI English-only policy) | YES | PARTIAL | §3.6, §27 locale bridge |
 
 ### 23.2 Backend / API surfaces
 
@@ -1347,7 +1379,7 @@ Each feature row: **UI → Components → Engine → API file(s) → Data**.
 | Storage | uploads | — | `storage/storageService.ts` | Supabase Storage + `/api/files/upload` (offline) | Supabase Storage (local fallback) |
 | Cloud persist | all CRUD | App context | `data/supabaseStore.ts`, `cloudPersist.ts` | Supabase REST + `/api/data/sync` | Supabase tables + synced-data.json |
 | Native push | bridge | `bridge/nativeBridge.ts` | — | `/api/push/*` | `device_tokens` / device-tokens.json |
-| i18n | app-wide | `i18n/` | languages.ts | `/api/language-packs`, `/api/translate/*` | language-packs.json |
+| Language / translate | AI Studio packs; Profile preferred lang | `LanguagePacksPanel`, Profile | `translation-service`, `outbound-english-guard`, `language-packs` | `/api/language-packs`, `/api/translate/*`, phone `setCallLanguage` | `language-packs.json` (local); `preferred_language` |
 
 ---
 
