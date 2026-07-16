@@ -69,11 +69,11 @@ flowchart LR
 | Repo | Local path | Remote | Branch | Local HEAD = `origin/master` |
 |------|------------|--------|--------|------------------------------|
 | Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ ccaed41` |
-| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 1085f0b` |
+| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 6271370` |
 
 **Frontend tip commit:** `ccaed41` — CRM Add Lead + conversation notes/activities; platform_owner Cynthia CRM tools.
 
-**Backend tip commit:** `1085f0b` — outbound worker → `/api/calls/outbound`; `getLeadBrief` / `addLeadNote`; aim-aware call logging.
+**Backend tip commit:** `6271370` — stale open-call expiry (45m) so Call Centre Live Status stops showing ghost cards.
 
 **Ship note (2026-07-15 Cynthia unify):** Cyrus + Aria collapsed into **Cynthia channels** (§4.1). Phone AI is Vapi-only; `/api/cyrus/*` + `cyrus-widget.js` remain transport aliases; new embeds use `cynthia-widget.js`.
 
@@ -86,6 +86,8 @@ flowchart LR
 **Ship note (2026-07-16 Warm consult transfer — AUDITED):** LIVE. Cynthia mid-call handoff is **not** blind: Vapi `transferPlan.mode: warm-transfer-experimental` (hold caller → dial staff → brief → bridge / cancel). Code: `tradepro-backend/server/transfer-numbers.ts` + `transferToHuman` in `vapi-routes.ts` / `phone-tools.ts`; prompts in `phone-brain.ts`. Destinations = Call Centre `/api/agent/transfer-numbers` (prod all → `+447576442345`). Smoke: assistant destinations include warm plan ×5; live transfer with `transferPlan` → `200 ok`. See §16.9 + [VOICE_SETUP.md](./VOICE_SETUP.md) + backend `docs/VAPI_SIP.md`.
 
 **Ship note (2026-07-16 Lead management + Cynthia sales calls — AUDITED):** LIVE on SPA + `tradepro-api`. `/crm` Add Lead form works (was stub); lead detail **Conversation notes** timeline with aim + detail; callbacks strip with Call next / Mark done. `platform_owner` mapped in frontend agent context/rolePermissions like super_admin for CRM tools. Cynthia tools: `getLeadBrief`, `addLeadNote`, `listPendingCallbacks`; phone brain injects notes/activities into account memory. Outbound context carries `aim` + `customerId`; EOC writes `activities[]`. Outbound worker fixed → `POST /api/calls/outbound` with `fromWorker:true` (no re-queue loop). `POST /api/leads/from-call` returns 4xx on capture errors. Live probe: platform owner created “Acme Trade SaaS Lead” with notes; callbacks strip visible.
+
+**Ship note (2026-07-16 Ghost active calls — AUDITED):** LIVE on `tradepro-api` `@ 6271370`. Call Centre **Live Call Status** is **not** live SIP presence — it lists open `calls` rows with `status` `ringing` | `in_progress` from `GET /api/agent/status` (`getAgentStatusSnapshot`). Missed Vapi end-of-call left multi-hour “On call…” cards (debug: 4 ghosts, `elapsedSec` 46k–446k). Fix: `expireStaleOpenCalls()` closes open rows older than **45 minutes** (`outcome: stale_timeout`, env `STALE_OPEN_CALL_MAX_MS`); also applied to lines `onCall`. Vapi hang/EOC/status-update expanded to always force `completed` + `endedAt`. Re-probe: `activeCalls: []`. See §16.7 / §16.10.
 
 **DO_NOT_SHIP:** `.cursor/local/*.py`, `debug-login.png`, `playwright-report/`, `test-results/`, backend `server/data/*`, `_patch_*.cjs`, `_tmp_*.cjs`, `tmp-aria-lizzie.mp3`.
 
@@ -206,7 +208,7 @@ Source: `src/app/App.tsx`.
 | `/cynthia`, `/cynthia/ingest` | Cynthia home | staff+ | `CynthiaHome` | LIVE |
 | `/cyrus` | Redirect | — | → `/cynthia` | LIVE |
 | `/cyrus/legacy` | Cynthia website/portal threads (legacy inbox UI) | staff+ | `CyrusConversations` | LEGACY UI |
-| `/calls` | Call Centre (Cynthia phone) | staff+ | `CallCenter` | LIVE |
+| `/calls` | Call Centre (Cynthia phone) | staff+ | `CallCenter` | LIVE — Live Call Status = open `calls` rows (not SIP); stale auto-expire 45m |
 | `/agent` | Redirect | — | → `/calls` | LIVE |
 | `/integrations` | Integrations hub | super_admin | `IntegrationsHub` | LIVE |
 | `/settings` | Settings | super_admin | `Settings` | LIVE |
@@ -732,7 +734,7 @@ Frontend registry card `voice_telephony` stores UI overrides; **Vapi + ElevenLab
 
 | Route / UI | Component | Notes |
 |------------|-----------|-------|
-| `/calls` | `CallCenter/CallCenter.tsx` | Call Centre — Cynthia; tabs: dashboard, lines, test, softphone, outbound (`?tab=`) |
+| `/calls` | `CallCenter/CallCenter.tsx` | Call Centre — Cynthia; tabs: dashboard, lines, test, softphone, outbound (`?tab=`). **Live Call Status** polls `/api/agent/status` → open `ringing`/`in_progress` rows only (not live SIP) |
 | Softphone tab | `CallCenter/SoftPhonePanel.tsx` | JsSIP → `wss://ws.{domain}/ws` — **PARTIAL** (Soho66 public WSS often broken) |
 | `/cynthia` mic | `hooks/useCynthiaVapiVoice.ts` | Uses `/api/vapi/web-session` |
 | Settings | `settings/StaffSoftphones.tsx`, `StaffPhoneRegistration.tsx` | SIP assign + PIN |
@@ -746,6 +748,7 @@ Frontend registry card `voice_telephony` stores UI overrides; **Vapi + ElevenLab
 | Chatterbox TTS | LEGACY for phone — not used for Vapi media; mock/clone UI only |
 | Mock calls (`/api/agent/tts`, Test Call tab) | Intentional non-live — blocked in prod unless `ALLOW_TELEPHONY_MOCK` |
 | Outbound worker URL | **LIVE** — worker dials `POST /api/calls/outbound` with `fromWorker:true` (fixed 2026-07-16; was `/api/phone/outbound`) |
+| Ghost “On call” cards | **LIVE fixed 2026-07-16** — stale `ringing`/`in_progress` auto-expire at 45m (`expireStaleOpenCalls` / `stale_timeout`); was unbounded open rows |
 
 ### 16.8 Proven live stack (retest baseline)
 
@@ -768,6 +771,18 @@ Successful production calls used **Vapi + ElevenLabs Cockney (Lizzie `EQx6HGDYjk
 | Constraint | Only **one** REGISTER on SIP user `1005090093` — keep VOIS logged out while the bridge owns inbound |
 | Risk | Warm consult needs a second dial leg while holding the first; if Soho66/SIP rejects it, `fallbackPlan` keeps the caller with Cynthia |
 | Smoke (2026-07-16) | Assistant destinations = `warm-transfer-experimental` ×5; live control transfer with full `transferPlan` → `200 ok` (`endedReason: call.in-progress.sip-completed-call`). |
+
+### 16.10 Live Call Status (how it works)
+
+| Piece | Detail |
+|-------|--------|
+| UI | `/calls` dashboard amber cards (“On call with…”) |
+| API | `GET /api/agent/status` → `activeCalls` / `activeCall` |
+| Source of truth | Persisted `calls[]` in `data-store` with `status` ∈ `{ringing, in_progress}` |
+| Elapsed | `computeCallDurationSec` = now − `startedAt` when no `endedAt` (inflates if webhook missed) |
+| Stale TTL | `STALE_OPEN_CALL_MAX_MS` default **45 minutes** — closed with `outcome: stale_timeout` on status poll |
+| Today stats | Separate filter (started today + completed) — can show “1 call today” while old ghosts previously still appeared as active |
+| Not | Softphone registration / Soho66 line presence |
 
 ---
 
