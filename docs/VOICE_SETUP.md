@@ -125,7 +125,7 @@ If the voice sounds like generic OpenAI TTS or the old mock pipeline, stop — f
 
 | Check | Result |
 |-------|--------|
-| `origin/master` frontend | `89ca686` → `dolab-jpg/tradepro-frontend` |
+| `origin/master` frontend | `49e51da` → `dolab-jpg/tradepro-frontend` |
 | `origin/master` backend | `3438f2f` → `dolab-jpg/tradepro-backend` (voice code `d3e348f`) |
 | VPS `tradepro-api` | **active**; `GET /api/vapi/health` → `{ ok: true, provider: "vapi" }` |
 | VPS files | `phone-voices.ts` + `phone-language.ts` present; `getVapiVoiceConfigForLang` wired; no `en-GB ONLY` hard block |

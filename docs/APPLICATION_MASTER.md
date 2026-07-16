@@ -68,10 +68,10 @@ flowchart LR
 
 | Repo | Local path | Remote | Branch | Local HEAD = `origin/master` |
 |------|------------|--------|--------|------------------------------|
-| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 89ca686` |
+| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 49e51da` |
 | Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 3438f2f` |
 
-**Frontend tip commit:** `89ca686` — Audited mid-call language + per-lang Cynthia voices docs (§16.5 / VOICE_SETUP).
+**Frontend tip commit:** `49e51da` — Audited mid-call language + per-lang Cynthia voices docs (§16.5 / VOICE_SETUP).
 
 **Backend tip commit:** `3438f2f` — VAPI_SIP docs for per-lang voices; voice code `d3e348f` (`phone-voices.ts` live on VPS).
 
