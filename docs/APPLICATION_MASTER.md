@@ -68,12 +68,12 @@ flowchart LR
 
 | Repo | Local path | Remote | Branch | Local HEAD = `origin/master` |
 |------|------------|--------|--------|------------------------------|
-| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 370e7d4` |
-| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ d3e348f` |
+| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 4579b5f` |
+| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 3438f2f` |
 
-**Frontend tip commit:** `370e7d4` — Mid-call language switch + per-lang Cynthia voices (docs mirror).
+**Frontend tip commit:** `4579b5f` — Audited mid-call language + per-lang Cynthia voices docs (§16.5 / VOICE_SETUP).
 
-**Backend tip commit:** `d3e348f` — Mid-call language switch + per-lang Cynthia voices (`phone-voices.ts` live on VPS).
+**Backend tip commit:** `3438f2f` — VAPI_SIP docs for per-lang voices; code tip `d3e348f` (`phone-voices.ts` live on VPS).
 
 **Ship note (2026-07-15 Cynthia unify):** Cyrus + Aria collapsed into **Cynthia channels** (§4.1). Phone AI is Vapi-only; `/api/cyrus/*` + `cyrus-widget.js` remain transport aliases; new embeds use `cynthia-widget.js`.
 
@@ -743,11 +743,11 @@ Frontend registry card `voice_telephony` stores UI overrides; **Vapi + ElevenLab
 | Mock calls (`/api/agent/tts`, Test Call tab) | Intentional non-live — blocked in prod unless `ALLOW_TELEPHONY_MOCK` |
 | Outbound worker URL mismatch | Worker may call `/api/phone/outbound` while live route is `/api/calls/outbound` — treat queue as PARTIAL until confirmed |
 
-### 16.7 Proven live stack (retest baseline)
+### 16.8 Proven live stack (retest baseline)
 
 Successful production calls used **Vapi + ElevenLabs Cockney (Lizzie `EQx6HGDYjkDpcli6vorJ`)**, not local STT/TTS. Retest: outbound to registered staff mobile + PIN, then inbound from a second phone to `SOHO66_FROM_NUMBER` / company DID. See [VOICE_SETUP.md](./VOICE_SETUP.md) §3.
 
-### 16.8 Mid-call divert (Cynthia → staff mobile) — LIVE
+### 16.9 Mid-call divert (Cynthia → staff mobile) — LIVE
 
 **Not** Soho66 Force/Forward and **not** a web softphone. Cynthia answers first; human handoff uses Call Centre transfer destinations.
 
