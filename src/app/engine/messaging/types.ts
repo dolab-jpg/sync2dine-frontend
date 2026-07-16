@@ -16,6 +16,10 @@ export interface DocumentAttachment {
   filename: string;
   mimeType: string;
   content: string; // base64 or text stub
+  /** Public or data URL for preview / Meta document.link when available */
+  url?: string;
+  /** Supabase/local storage path when persisted under a project */
+  storagePath?: string;
 }
 
 export interface OutboundMessage {

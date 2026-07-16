@@ -208,9 +208,10 @@ export async function generateQuotePdf(
 export async function generateQuotePdfStub(
   customerName: string,
   total: number,
-  tradeName?: string
+  tradeName?: string,
+  lineItems?: Array<{ description: string; amount: number }>
 ): Promise<DocumentAttachment> {
-  return generateQuotePdf(customerName, total, tradeName);
+  return generateQuotePdf(customerName, total, tradeName, lineItems);
 }
 
 export async function generateInvoicePdf(

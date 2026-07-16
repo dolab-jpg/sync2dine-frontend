@@ -319,9 +319,6 @@ export default function CynthiaHome() {
   const runSend = async (text: string, source: 'cynthia' | 'voice' | 'paste' | 'share' = 'cynthia') => {
     const trimmed = text.trim();
     const images = pendingAttachments.map((a) => a.dataUrl).filter((u) => u.startsWith('data:image'));
-    // #region agent log
-    fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'pre-fix',hypothesisId:'A',location:'CynthiaHome.tsx:runSend:entry',message:'chat send attempted',data:{source,textLen:trimmed.length,imageCount:images.length,sending,hasApp:!!app,role:app?.user?.role ?? null,customerCount:app?.customers?.length ?? 0,quoteCount:app?.quotes?.length ?? 0},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if ((!trimmed && images.length === 0) || sending || !app) return;
     setSending(true);
     setComposer('');
@@ -384,18 +381,12 @@ export default function CynthiaHome() {
         ...(orchestratorResult.autoActions ?? []),
         ...(orchestratorResult.proposedActions ?? []),
       ];
-      // #region agent log
-      fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'pre-fix',hypothesisId:'B',location:'CynthiaHome.tsx:runSend:orchestrator',message:'orchestrator returned',data:{replyLen:(orchestratorResult.content||'').length,phase:orchestratorResult.phase ?? null,autoCount:orchestratorResult.autoActions?.length ?? 0,proposedCount:orchestratorResult.proposedActions?.length ?? 0,actionNames:allActions.map((a)=>a.action),hasContent:!!orchestratorResult.content},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
 
       if (allActions.length) {
         const toolRun = await processToolActions(allActions, buildRuntimeContext(), {
           role: agentContext.role,
           requireConfirmCustomerMessages: true,
         });
-        // #region agent log
-        fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'pre-fix',hypothesisId:'C',location:'CynthiaHome.tsx:runSend:toolRun',message:'processToolActions finished',data:{executedCount:toolRun.executed.length,pendingSafetyCount:toolRun.pendingSafety.length,summaryCount:toolRun.summaries.length,executed:toolRun.executed.map((r)=>({action:r.action,ok:r.executed,summary:(r.summary||'').slice(0,120)})),pendingSafety:toolRun.pendingSafety.map((a)=>a.action),summaries:toolRun.summaries.map((s)=>s.slice(0,120))},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         if (toolRun.executed.length) {
           setToolResults((prev) => [...toolRun.executed, ...prev].slice(0, 30));
           await handleToolOutputs(toolRun.executed);
@@ -422,9 +413,6 @@ export default function CynthiaHome() {
       void reloadThread();
     } catch (err) {
       const msg = err instanceof Error ? err.message : `${name} could not process that.`;
-      // #region agent log
-      fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'pre-fix',hypothesisId:'D',location:'CynthiaHome.tsx:runSend:catch',message:'orchestrator/chat error',data:{error:msg.slice(0,240)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       toast.error(msg);
       setBubbles((prev) => [
         ...prev,

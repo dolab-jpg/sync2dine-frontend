@@ -2,7 +2,8 @@ import type { Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'http';
 
 const API_PREFIXES = ['/api/', '/webhooks/'];
-const DEFAULT_API_BASE = 'http://localhost:3001';
+// Prefer IPv4 loopback — `localhost` can resolve to ::1 and 502 when the backend listens on IPv4 only.
+const DEFAULT_API_BASE = 'http://127.0.0.1:3001';
 
 /**
  * Proxies API/webhook routes to the tradepro-backend Node companion

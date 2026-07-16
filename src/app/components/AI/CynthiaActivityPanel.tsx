@@ -84,7 +84,10 @@ export default function CynthiaActivityPanel({ userId }: { userId: string }) {
   const newestFirst = [...events].reverse().slice(0, 30);
 
   return (
-    <div className="fixed right-3 z-40 bottom-[calc(3.5rem+var(--safe-area-bottom,0px)+0.75rem)] md:bottom-4 flex flex-col items-end pointer-events-none">
+    <div
+      className="fixed left-14 z-40 bottom-[calc(3.5rem+var(--safe-area-bottom,0px)+0.75rem)] md:bottom-4 flex flex-col items-start pointer-events-none"
+      data-agent-note="left-side so it does not cover Cynthia Send"
+    >
       {expanded && (
         <div className="pointer-events-auto mb-2 w-[min(20rem,calc(100vw-1.5rem))] rounded-2xl border border-slate-200/80 bg-white/95 backdrop-blur shadow-2xl overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gradient-to-r from-slate-900/95 to-slate-800/95 text-amber-100">

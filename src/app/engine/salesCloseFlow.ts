@@ -7,6 +7,7 @@ import { sendContractEmail } from './contracts/contractSend';
 import { createProjectFromQuote, loadProjects, updateProject } from './project/projectStore';
 import { messagingHub } from './messaging/messagingHub';
 import { renderTemplate } from './messaging/templateRenderer';
+import { buildQuotePdfAttachment } from './messaging/quotePdfHelpers';
 
 export const APPROVAL_TOTAL_THRESHOLD = 5000;
 export const APPROVAL_DISCOUNT_THRESHOLD = 10;
@@ -128,10 +129,10 @@ export async function sendPricePack(opts: {
     return { success: false, error: sendResult.error, contract };
   }
 
-  // Also send a short quote summary email when email is available
-  if (opts.customer.email) {
+  // Quote summary + branded PDF (email and WhatsApp when available)
+  if (opts.customer.email || opts.customer.phone) {
     const body = renderTemplate(
-      `Dear {CUSTOMER_NAME},\n\nYour quotation for {TRADE_NAME} is £{QUOTE_TOTAL}.\nBooking deposit: £{DEPOSIT_AMOUNT}.\n\nYour contract signing link is in a separate message.\n\nKind regards,\n{USER_NAME}`,
+      `Dear {CUSTOMER_NAME},\n\nYour quotation for {TRADE_NAME} is £{QUOTE_TOTAL}.\nBooking deposit: £{DEPOSIT_AMOUNT}.\n\nPlease find your quotation PDF attached. Your contract signing link is in a separate message.\n\nKind regards,\n{USER_NAME}`,
       {
         CUSTOMER_NAME: opts.customer.name,
         TRADE_NAME: opts.quote.tradeName ?? 'works',
@@ -140,9 +141,13 @@ export async function sendPricePack(opts: {
         USER_NAME: opts.userName,
       },
     );
+    const attachment = await buildQuotePdfAttachment(opts.quote);
+    const channels: Array<'email' | 'whatsapp'> = [];
+    if (opts.customer.email) channels.push('email');
+    if (opts.customer.phone) channels.push('whatsapp');
     await messagingHub.send(
       {
-        channels: ['email'],
+        channels,
         to: {
           email: opts.customer.email,
           phone: opts.customer.phone,
@@ -153,6 +158,7 @@ export async function sendPricePack(opts: {
         body,
         eventType: 'quote_sent',
         templateId: 'quote_sent',
+        attachment,
       },
       opts.customer,
     );

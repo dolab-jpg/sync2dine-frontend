@@ -18,6 +18,7 @@ import { sendToStaffCynthiaInternal } from './cynthia-routes';
 import { actionRequiresConfirmation } from './action-registry';
 import { formatSpokenGbp } from './spoken-money';
 import { resolvePhoneCallerIdentity } from './phone-auth';
+import { ensureEnglishForCustomerSend } from './outbound-english-guard';
 
 function firstString(...values: unknown[]): string | undefined {
   for (const value of values) {
@@ -624,18 +625,31 @@ export async function executePhoneTool(
         spokenHint: 'That is a staff number — give me the customer number to message.',
       };
     }
+    const englishGuard = await ensureEnglishForCustomerSend(
+      message,
+      null,
+      body.orgId || getRequestOrgId(),
+    );
+    if (!englishGuard.ok) {
+      return {
+        sent: false,
+        error: 'english_guard_failed',
+        spokenHint: 'I could not prepare that customer message in English, so it was not sent.',
+      };
+    }
+    const englishMessage = englishGuard.english;
     try {
       const { isMetaWhatsAppEnabled, sendWhatsAppText } = await import('./whatsapp-webhook');
       const waToken = process.env.WHATSAPP_ACCESS_TOKEN?.trim();
       const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
       if (isMetaWhatsAppEnabled() && waToken && waPhoneId) {
-        await sendWhatsAppText(waPhoneId, waToken, to.startsWith('+') ? to : `+${to}`, message);
+        await sendWhatsAppText(waPhoneId, waToken, to.startsWith('+') ? to : `+${to}`, englishMessage);
         const customerId = firstString(input.customerId);
         if (customerId && callId) {
           appendCustomerCallActivity({
             customerId,
             callId,
-            summary: `WhatsApp sent: ${message.slice(0, 180)}`,
+            summary: `WhatsApp sent: ${englishMessage.slice(0, 180)}`,
             outcome: 'message_sent',
           });
         }
@@ -655,7 +669,7 @@ export async function executePhoneTool(
         title: 'Customer message (WhatsApp not configured)',
         customerName: firstString(input.customerName),
         phone: to,
-        summary: message,
+        summary: englishMessage,
         customerId: firstString(input.customerId),
         source: 'phone',
       });
@@ -894,6 +908,23 @@ export async function executePhoneTool(
     const staffUserId = firstString(input.assignedStaffUserId, body.staffContext?.userId);
     const fromStaffContext = Boolean(body.staffContext?.userId || body.staffContext?.role);
 
+    let customerMessage = firstString(input.customerMessage);
+    if (customerMessage) {
+      const msgGuard = await ensureEnglishForCustomerSend(
+        customerMessage,
+        null,
+        body.orgId || getRequestOrgId(),
+      );
+      if (!msgGuard.ok) {
+        return {
+          delivered: false,
+          error: 'english_guard_failed',
+          spokenHint: 'I could not prepare the customer follow-up in English, so it was not sent.',
+        };
+      }
+      customerMessage = msgGuard.english;
+    }
+
     const staffResult = sendToStaffCynthiaInternal({
       orgId: body.orgId || getRequestOrgId(),
       userId: staffUserId,
@@ -908,7 +939,7 @@ export async function executePhoneTool(
       customerId,
       projectId,
       source: 'phone',
-      notes: firstString(input.customerMessage),
+      notes: customerMessage,
     });
     followUps.push({
       type: 'staff_cynthia',
@@ -919,7 +950,6 @@ export async function executePhoneTool(
     });
 
     let portalDelivered = false;
-    const customerMessage = firstString(input.customerMessage);
     if (customerMessage && (projectId || customerId)) {
       const store = getDataStore();
       const project = projectId

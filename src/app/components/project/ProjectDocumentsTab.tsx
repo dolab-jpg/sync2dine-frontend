@@ -4,6 +4,7 @@ import { FileText, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import type { UnifiedProject } from '../../engine/project/types';
 import { generateInvoicePdf, generateContractPdf } from '../../engine/messaging/pdfGenerator';
+import { persistGeneratedPdf, pdfPathFromAttachment } from '../../engine/messaging/documentPersist';
 import { messagingHub } from '../../engine/messaging/messagingHub';
 import { updateProject } from '../../engine/project/projectStore';
 
@@ -20,12 +21,15 @@ export function ProjectDocumentsTab({ project, customerPhone, customerWhatsappOp
   const sendInvoice = async (invoiceId: string) => {
     const inv = project.invoices.find(i => i.id === invoiceId);
     if (!inv) return;
-    const pdf = await generateInvoicePdf(
-      project.customerName,
-      project.projectName,
-      inv.lineItems,
-      inv.total,
-      inv.id
+    const pdf = await persistGeneratedPdf(
+      await generateInvoicePdf(
+        project.customerName,
+        project.projectName,
+        inv.lineItems,
+        inv.total,
+        inv.id
+      ),
+      { projectId: project.id, uploadedBy: 'invoice-send' }
     );
     await messagingHub.send({
       channels: ['email', 'whatsapp'],
@@ -36,14 +40,14 @@ export function ProjectDocumentsTab({ project, customerPhone, customerWhatsappOp
         customerName: project.customerName,
       },
       subject: `Invoice ${inv.id} — ${project.projectName}`,
-      body: `Your invoice for ${project.projectName} is ready. Total: £${inv.total.toFixed(2)}. View full details: ${portalUrl}`,
+      body: `Your invoice for ${project.projectName} is ready. Total: £${inv.total.toFixed(2)}. Please find the PDF attached. View full details: ${portalUrl}`,
       eventType: 'invoice',
       attachment: pdf,
       templateId: 'invoice_ready',
     }, { whatsappOptIn: customerWhatsappOptIn ?? true, email: project.customerEmail, phone: customerPhone ?? '', preferredChannel: 'both' });
 
     const invoices = project.invoices.map(i =>
-      i.id === invoiceId ? { ...i, status: 'sent' as const, sentAt: new Date().toISOString(), pdfPath: pdf.filename } : i
+      i.id === invoiceId ? { ...i, status: 'sent' as const, sentAt: new Date().toISOString(), pdfPath: pdfPathFromAttachment(pdf) } : i
     );
     onUpdate(updateProject(project.id, { invoices })!);
     toast.success('Invoice sent');
@@ -52,7 +56,10 @@ export function ProjectDocumentsTab({ project, customerPhone, customerWhatsappOp
   const sendContract = async (contractId: string) => {
     const con = project.contracts.find(c => c.id === contractId);
     if (!con) return;
-    const pdf = await generateContractPdf(project.customerName, project.projectName, con.terms, project.totalCustomerCost);
+    const pdf = await persistGeneratedPdf(
+      await generateContractPdf(project.customerName, project.projectName, con.terms, project.totalCustomerCost),
+      { projectId: project.id, uploadedBy: 'contract-send' }
+    );
     await messagingHub.send({
       channels: ['email', 'whatsapp'],
       to: {
@@ -62,14 +69,14 @@ export function ProjectDocumentsTab({ project, customerPhone, customerWhatsappOp
         customerName: project.customerName,
       },
       subject: `Contract — ${project.projectName}`,
-      body: `Please review your contract for ${project.projectName}. Portal: ${portalUrl}`,
+      body: `Please review your contract for ${project.projectName} (PDF attached). Portal: ${portalUrl}`,
       eventType: 'custom',
       attachment: pdf,
       templateId: 'contract_ready',
     }, { whatsappOptIn: customerWhatsappOptIn ?? true, email: project.customerEmail, phone: customerPhone ?? '', preferredChannel: 'both' });
 
     const contracts = project.contracts.map(c =>
-      c.id === contractId ? { ...c, status: 'sent' as const, pdfPath: pdf.filename } : c
+      c.id === contractId ? { ...c, status: 'sent' as const, pdfPath: pdfPathFromAttachment(pdf) } : c
     );
     onUpdate(updateProject(project.id, { contracts })!);
     toast.success('Contract sent');

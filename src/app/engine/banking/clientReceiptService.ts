@@ -6,6 +6,7 @@ import type { BankTransaction, ClientReceipt } from './types';
 import { messagingHub } from '../messaging/messagingHub';
 import type { MessageChannel } from '../messaging/types';
 import { generateReceiptPdf } from '../messaging/pdfGenerator';
+import { persistGeneratedPdf, pdfPathFromAttachment } from '../messaging/documentPersist';
 
 export interface IssueReceiptInput {
   transactionId: string;
@@ -95,11 +96,14 @@ export async function issueClientReceipt(input: IssueReceiptInput): Promise<Issu
 
   const channels: MessageChannel[] = input.channels ?? ['email'];
   const body = buildReceiptBody(input.customer, project, tx.amount, stage?.name);
-  const pdf = await generateReceiptPdf(
-    input.customer.name,
-    project.projectName,
-    tx.amount,
-    stage?.name
+  const pdf = await persistGeneratedPdf(
+    await generateReceiptPdf(
+      input.customer.name,
+      project.projectName,
+      tx.amount,
+      stage?.name
+    ),
+    { projectId: project.id, uploadedBy: 'receipt-send' }
   );
   const sendResult = await messagingHub.send(
     {
@@ -129,7 +133,7 @@ export async function issueClientReceipt(input: IssueReceiptInput): Promise<Issu
     transactionId: tx.id,
     amount: tx.amount,
     date: paidDate,
-    pdfPath: pdf.filename,
+    pdfPath: pdfPathFromAttachment(pdf),
     sentVia: channels.length > 1 ? 'both' : channels[0] === 'whatsapp' ? 'whatsapp' : 'email',
     sentAt: sendResult.success ? new Date().toISOString() : undefined,
   });

@@ -7,8 +7,14 @@ import type { Customer, Quote } from '../../App';
 
 const notifiedSigned = new Set<string>();
 
+function isCloudPersist(): boolean {
+  return Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+}
+
 function patchLocalQuotes(quoteId: string, projectId: string): void {
   try {
+    // Cloud mode: React + Supabase are source of truth — never clobber via localStorage.
+    if (isCloudPersist()) return;
     const raw = localStorage.getItem('quotes');
     if (!raw) return;
     const quotes = JSON.parse(raw) as Quote[];
@@ -24,6 +30,7 @@ function patchLocalQuotes(quoteId: string, projectId: string): void {
 
 function patchLocalCustomerWon(customerId: string): void {
   try {
+    if (isCloudPersist()) return;
     const raw = localStorage.getItem('customers');
     if (!raw) return;
     const customers = JSON.parse(raw) as Customer[];

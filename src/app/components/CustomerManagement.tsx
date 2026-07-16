@@ -348,7 +348,7 @@ export default function CustomerManagement() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-green-800 mt-1">
-                    Language for worker-facing channel replies. Customer documents stay English.
+                    Spoken/chat language for phone and WhatsApp. Emails, contracts, quotes, and documents stay English.
                   </p>
                 </div>
                 <p className="text-xs text-green-800">Phone format: UK mobile e.g. 07700 900000 or +447700900000</p>

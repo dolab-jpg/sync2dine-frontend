@@ -30,7 +30,6 @@
 4. **§§27–28 (Part D)** = Flutter / mobile + how-it-works for former gaps (additive).
 5. Status markers are authoritative for this audit date; re-probe VPS/Supabase after major deploys.
 6. When you add a feature: update §23 matrix, §24 atlas row, and §25 API line in the same session.
-7. Production SPA must **not** call localhost debug ingest (`127.0.0.1:7261`); strip session agent-log fetches before ship.
 
 ### Status markers
 
@@ -196,10 +195,10 @@ Source: `src/app/App.tsx`.
 | `/ai-estimate/:tradeId?/:customerId?` | AI estimate (same builder) | staff+ | `QuoteBuilder` | LIVE |
 | `/quote-lines/:customerId?` | Line editor | staff+ | `QuoteLineBuilder` | LIVE |
 | `/quotes` | Quotes list | staff+ | `QuotesList` | LIVE |
-| `/products` | Catalog (all products; search + category; no trade list filter) | super_admin | `ProductCatalog` | LIVE |
+| `/products` | Catalog | super_admin | `ProductCatalog` | LIVE |
 | `/designer` | Bathroom designer | staff+ | `BathroomDesigner` | LIVE |
 | `/ai-render/:tradeId?` | AI render | staff+ | `AIBathroomRender` | LIVE |
-| `/booking` | Booking (null-safe customer name/email/phone match) | staff+ | `BookingSystem` | LIVE |
+| `/booking` | Booking | staff+ | `BookingSystem` | LIVE |
 | `/site-survey` | Site survey | staff+ | `SiteSurvey` | LIVE |
 | `/communications`, `/email` | Comms hub | staff+ | `CommunicationsHub` | LIVE |
 | `/cynthia`, `/cynthia/ingest` | Cynthia home | staff+ | `CynthiaHome` | LIVE |
@@ -1424,8 +1423,8 @@ Each feature row: **UI → Components → Engine → API file(s) → Data**.
 | Designer | `/designer` | `BathroomDesigner.tsx` | trades | — | — |
 | AI render | `/ai-render/:tradeId?` | `AIBathroomRender.tsx` | `ai/renderService.ts`, `renderOptions.ts` | `/api/ai/render` | — |
 | Site survey | `/site-survey` | `SiteSurvey.tsx` | `surveyScorer.ts` | — | — |
-| Booking | `/booking` | `BookingSystem.tsx` | google_calendar integration; null-safe customer search/match (missing name/email/phone must not crash) | — | — |
-| Products | `/products` | `ProductCatalog.tsx` | `data/tradeProducts`; catalog lists all products (search + category only — no trade filter UI); `tradeId` remains on product records for quoting | — | `products` |
+| Booking | `/booking` | `BookingSystem.tsx` | google_calendar integration | — | — |
+| Products | `/products` | `ProductCatalog.tsx` | `data/tradeProducts` | — | `products` |
 | Product import | *(no route)* | `ProductImportSystem.tsx` | — | — | ORPHAN |
 | Import/export | Settings → Import/Export | `settings/ImportExportPanel.tsx` | `data/dataImportExportService.ts` | `/api/data/sync` | packs |
 | Settings pricing/stages/business | `/settings` tabs | `Settings.tsx` | pricingRules / stages context | — | local + integrations company |

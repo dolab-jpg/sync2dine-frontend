@@ -150,9 +150,9 @@ export default function ComprehensiveCRM() {
   const filteredLeads = leads.filter(lead => {
     const matchesStatus = activeTab === 'all' || lead.status === activeTab;
     const matchesSource = filterSource === 'all' || lead.source === filterSource;
-    const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          lead.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          lead.phone.includes(searchTerm);
+    const matchesSearch = String(lead.name ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          String(lead.email ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          String(lead.phone ?? '').includes(searchTerm);
     return matchesStatus && matchesSource && matchesSearch;
   });
 

@@ -293,5 +293,6 @@ export async function sendOrchestratorMessage(
     throw new Error(detail);
   }
 
-  return response.json() as Promise<OrchestratorResponse>;
+  const parsed = await response.json() as OrchestratorResponse;
+  return parsed;
 }

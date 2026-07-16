@@ -415,7 +415,7 @@ export function AIStudioPanel() {
           <div className="flex items-center justify-between">
             <Label>Auto-start surgical self-heal fixes</Label>
             <Switch
-              checked={config.selfHealAutoStart !== false}
+              checked={config.selfHealAutoStart === true}
               onCheckedChange={(v) => update({ selfHealAutoStart: v })}
             />
           </div>

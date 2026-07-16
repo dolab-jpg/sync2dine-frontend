@@ -29,6 +29,7 @@ import { testBuilders } from '../data/testData';
 import { loadProjects, loadProjectsAsync, saveProjects, updateProject, syncToServer, subscribeProjectsCache, getProject } from '../engine/project/projectStore';
 import type { UnifiedProject, PaymentStage, Invoice, PaymentStageStatus } from '../engine/project/types';
 import { generateInvoicePdf } from '../engine/messaging/pdfGenerator';
+import { persistGeneratedPdf, pdfPathFromAttachment } from '../engine/messaging/documentPersist';
 import { sendReceiptForStage as sendStageReceipt, autoSendReceiptAfterMarkPaid } from '../engine/banking/paymentReceiptService';
 import { uploadProjectFile } from '../engine/storage/storageService';
 import { getContactsForCustomer } from '../engine/contacts/contactStore';
@@ -359,15 +360,18 @@ export default function BuilderProjectManagement() {
         createdAt: new Date().toISOString(),
       };
     }
-    const pdf = await generateInvoicePdf(
-      selectedProject.customerName,
-      selectedProject.description || selectedProject.customerName,
-      invoice.lineItems,
-      invoice.total,
-      invoice.id
+    const pdf = await persistGeneratedPdf(
+      await generateInvoicePdf(
+        selectedProject.customerName,
+        selectedProject.description || selectedProject.customerName,
+        invoice.lineItems,
+        invoice.total,
+        invoice.id
+      ),
+      { projectId: selectedProject.id, uploadedBy: 'invoice-send' }
     );
     await messagingHub.send({
-      channels: ['email'],
+      channels: ['email', 'whatsapp'],
       to: {
         email: selectedProject.customerEmail,
         phone: customer.phone,
@@ -375,12 +379,12 @@ export default function BuilderProjectManagement() {
         customerName: selectedProject.customerName,
       },
       subject: `Invoice ${invoice.id} — ${stage.name}`,
-      body: `Please find your invoice for ${stage.name}. Amount due: £${invoice.total.toFixed(2)}.`,
+      body: `Please find your invoice for ${stage.name} (PDF attached). Amount due: £${invoice.total.toFixed(2)}.`,
       eventType: 'invoice',
       attachment: pdf,
       templateId: 'invoice_ready',
     }, customer);
-    const invoices = [...selectedProject.invoices.filter((i) => i.id !== invoice!.id), { ...invoice, status: 'sent' as const, sentAt: new Date().toISOString(), pdfPath: pdf.filename }];
+    const invoices = [...selectedProject.invoices.filter((i) => i.id !== invoice!.id), { ...invoice, status: 'sent' as const, sentAt: new Date().toISOString(), pdfPath: pdfPathFromAttachment(pdf) }];
     patchProjectPayments({ invoices });
     toast.success('Invoice sent');
   };

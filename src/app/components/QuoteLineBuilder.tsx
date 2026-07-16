@@ -15,7 +15,9 @@ import { Checkbox } from './ui/checkbox';
 import { toast } from 'sonner';
 import { messagingHub } from '../engine/messaging/messagingHub';
 import { renderTemplate, buildQuoteVariables } from '../engine/messaging/templateRenderer';
-import { generateQuotePdfStub } from '../engine/messaging/pdfGenerator';
+import { generateQuotePdf } from '../engine/messaging/pdfGenerator';
+import { quoteLinesToPdfItems } from '../engine/messaging/quotePdfHelpers';
+import { persistGeneratedPdf, pdfPathFromAttachment } from '../engine/messaging/documentPersist';
 import type { MessageChannel } from '../engine/messaging/types';
 
 export default function QuoteLineBuilder() {
@@ -35,7 +37,7 @@ export default function QuoteLineBuilder() {
   const [showPreview, setShowPreview] = useState(false);
   const [sendEmail, setSendEmail] = useState(true);
   const [sendWhatsApp, setSendWhatsApp] = useState(true);
-  const [attachPdf, setAttachPdf] = useState(false);
+  const [attachPdf, setAttachPdf] = useState(true);
 
   useEffect(() => {
     if (customerId) setSelectedCustomerId(customerId);
@@ -75,6 +77,7 @@ export default function QuoteLineBuilder() {
       discount,
       total: totals.total,
       status,
+      pdfPath: undefined as string | undefined,
     };
   };
 
@@ -113,16 +116,31 @@ export default function QuoteLineBuilder() {
     }
 
     const quoteData = buildQuotePayload('sent');
-    addQuote(quoteData);
-
     const channels: MessageChannel[] = [];
     if (sendEmail) channels.push('email');
     if (sendWhatsApp) channels.push('whatsapp');
 
+    const lineItems = quoteLinesToPdfItems(lines);
+    const attachment = attachPdf
+      ? await persistGeneratedPdf(
+          await generateQuotePdf(
+            customer.name,
+            totals.total,
+            quoteData.tradeName,
+            lineItems.length ? lineItems : undefined
+          ),
+          { uploadedBy: user.name || 'quote-lines' }
+        )
+      : undefined;
+    if (attachment) {
+      quoteData.pdfPath = pdfPathFromAttachment(attachment);
+    }
+    addQuote(quoteData);
+
     if (channels.length > 0) {
       const vars = buildQuoteVariables(customer, quoteData, user.name, discount);
       const body = renderTemplate(
-        `Dear {CUSTOMER_NAME},\n\nYour quote total is £{QUOTE_TOTAL}, valid until {QUOTE_EXPIRY}.\n\nReply to this email or call us with any questions.\n\n{COMPANY_NAME}`,
+        `Dear {CUSTOMER_NAME},\n\nYour quote total is £{QUOTE_TOTAL}, valid until {QUOTE_EXPIRY}.\n\n${attachPdf ? 'Please find your quotation PDF attached.\n\n' : ''}Reply to this email or call us with any questions.\n\n{COMPANY_NAME}`,
         vars
       );
       const result = await messagingHub.send({
@@ -136,7 +154,7 @@ export default function QuoteLineBuilder() {
         subject: renderTemplate('Your Quote from {COMPANY_NAME}', vars),
         body,
         eventType: 'quote_sent',
-        attachment: attachPdf ? await generateQuotePdfStub(customer.name, totals.total) : undefined,
+        attachment,
         templateId: 'quote_ready',
       }, customer);
 

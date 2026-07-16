@@ -96,6 +96,11 @@ async function saveEntities(table: string, items: Array<Record<string, unknown>>
   if (!orgId) {
     const msg = `save ${table} skipped: no org id`;
     console.warn(`[supabase] ${msg}`);
+    // #region agent log
+    if (table === 'quotes') {
+      fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'cycle',hypothesisId:'Q2',location:'supabaseStore.ts:saveEntities',message:'quotes save skipped no org',data:{itemCount:items.length},timestamp:Date.now()})}).catch(()=>{});
+    }
+    // #endregion
     return msg;
   }
   const supabase = getSupabase();
@@ -106,8 +111,18 @@ async function saveEntities(table: string, items: Array<Record<string, unknown>>
   const { error } = await supabase.from(table).upsert(payload, { onConflict: 'org_id,id' });
   if (error) {
     console.warn(`[supabase] save ${table} failed:`, error.message);
+    // #region agent log
+    if (table === 'quotes') {
+      fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'cycle',hypothesisId:'Q2',location:'supabaseStore.ts:saveEntities',message:'quotes upsert failed',data:{err:error.message,itemCount:items.length,orgId},timestamp:Date.now()})}).catch(()=>{});
+    }
+    // #endregion
     return error.message;
   }
+  // #region agent log
+  if (table === 'quotes') {
+    fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'cycle',hypothesisId:'Q2',location:'supabaseStore.ts:saveEntities',message:'quotes upsert OK',data:{itemCount:items.length,orgId,ids:payload.slice(-2).map((p)=>p.id)},timestamp:Date.now()})}).catch(()=>{});
+  }
+  // #endregion
   return null;
 }
 

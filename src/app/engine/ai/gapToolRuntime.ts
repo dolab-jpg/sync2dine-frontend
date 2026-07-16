@@ -172,7 +172,12 @@ export async function executeGapTool(
         }))
       : [{ description: 'Amount due', amount: total }];
     try {
-      const pdf = await generateInvoicePdf(customerName, projectName, lineItems, total, invoiceId);
+      const { persistGeneratedPdf } = await import('../messaging/documentPersist');
+      const projectId = str(output.projectId) || ctx.projectId || undefined;
+      const pdf = await persistGeneratedPdf(
+        await generateInvoicePdf(customerName, projectName, lineItems, total, invoiceId),
+        { projectId, uploadedBy: 'cynthia-invoice' }
+      );
       return {
         action: name,
         summary: `Invoice PDF ready (${invoiceId}).`,
@@ -180,8 +185,9 @@ export async function executeGapTool(
         output: {
           ...output,
           invoiceId,
-          pdfDataUrl: `data:${pdf.mimeType};base64,${pdf.content}`,
+          pdfDataUrl: pdf.url || `data:${pdf.mimeType};base64,${pdf.content}`,
           pdfFilename: pdf.filename,
+          pdfPath: pdf.storagePath || pdf.filename,
         },
         executed: true,
       };
@@ -197,15 +203,21 @@ export async function executeGapTool(
     const terms = str(output.terms) || 'Standard terms apply.';
     const total = num(output.total) ?? 0;
     try {
-      const pdf = await generateContractPdf(customerName, projectName, terms, total);
+      const { persistGeneratedPdf } = await import('../messaging/documentPersist');
+      const projectId = str(output.projectId) || ctx.projectId || undefined;
+      const pdf = await persistGeneratedPdf(
+        await generateContractPdf(customerName, projectName, terms, total),
+        { projectId, uploadedBy: 'cynthia-contract' }
+      );
       return {
         action: name,
         summary: `Contract PDF ready for ${customerName}.`,
         openRoute: '/cynthia',
         output: {
           ...output,
-          pdfDataUrl: `data:${pdf.mimeType};base64,${pdf.content}`,
+          pdfDataUrl: pdf.url || `data:${pdf.mimeType};base64,${pdf.content}`,
           pdfFilename: pdf.filename,
+          pdfPath: pdf.storagePath || pdf.filename,
         },
         executed: true,
       };
@@ -242,7 +254,12 @@ export async function executeGapTool(
         }
       }
     }
-    const pdf = await generateQuotePdf(customerName, total, tradeName, lineItems);
+    const { persistGeneratedPdf } = await import('../messaging/documentPersist');
+    const projectId = str(output.projectId) || ctx.projectId || undefined;
+    const pdf = await persistGeneratedPdf(
+      await generateQuotePdf(customerName, total, tradeName, lineItems),
+      { projectId, uploadedBy: 'cynthia-send-quote' }
+    );
     const subject = str(output.subject) || `Quotation for ${customerName}`;
     const body = str(output.body) || `Please find your quotation attached.\n\nTotal: £${total.toFixed(2)}`;
     const sent = await sendMailWithAttachments(ctx, {
@@ -256,7 +273,7 @@ export async function executeGapTool(
       action: name,
       summary: sent.ok ? `Quote emailed to ${to}.` : sent.summary,
       openRoute: '/cynthia',
-      output: { ...output, to, sent: sent.ok, pdfFilename: pdf.filename },
+      output: { ...output, to, sent: sent.ok, pdfFilename: pdf.filename, pdfPath: pdf.storagePath || pdf.filename },
       executed: sent.ok,
     };
   }
@@ -275,7 +292,12 @@ export async function executeGapTool(
           amount: Number(i.amount ?? 0),
         }))
       : [{ description: 'Amount due', amount: total }];
-    const pdf = await generateInvoicePdf(customerName, projectName, lineItems, total, invoiceId);
+    const { persistGeneratedPdf } = await import('../messaging/documentPersist');
+    const projectId = str(output.projectId) || ctx.projectId || undefined;
+    const pdf = await persistGeneratedPdf(
+      await generateInvoicePdf(customerName, projectName, lineItems, total, invoiceId),
+      { projectId, uploadedBy: 'cynthia-send-invoice' }
+    );
     const subject = str(output.subject) || `Invoice ${invoiceId}`;
     const body = str(output.body) || `Please find invoice ${invoiceId} attached.\n\nAmount due: £${total.toFixed(2)}`;
     const sent = await sendMailWithAttachments(ctx, {
@@ -289,7 +311,7 @@ export async function executeGapTool(
       action: name,
       summary: sent.ok ? `Invoice emailed to ${to}.` : sent.summary,
       openRoute: '/projects',
-      output: { ...output, to, invoiceId, sent: sent.ok },
+      output: { ...output, to, invoiceId, sent: sent.ok, pdfPath: pdf.storagePath || pdf.filename },
       executed: sent.ok,
     };
   }

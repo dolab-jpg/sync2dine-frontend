@@ -120,7 +120,7 @@ export function StaffPhoneRegistration() {
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="447..." />
           </div>
           <div>
-            <Label>Language</Label>
+            <Label>Phone / AI language</Label>
             <Select
               value={preferredLanguage}
               onValueChange={(v) => setPreferredLanguage(normalizeLang(v))}
@@ -132,6 +132,7 @@ export function StaffPhoneRegistration() {
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-slate-500 mt-1">Spoken replies on phone/AI. App UI and customer documents stay English.</p>
           </div>
           <div>
             <Label>Role</Label>

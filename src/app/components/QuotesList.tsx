@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from 'sonner';
 import { messagingHub } from '../engine/messaging/messagingHub';
 import { renderTemplate, buildQuoteVariables } from '../engine/messaging/templateRenderer';
+import { buildQuotePdfAttachment } from '../engine/messaging/quotePdfHelpers';
+import { pdfPathFromAttachment } from '../engine/messaging/documentPersist';
 import { AddressMapLink } from './ui/AddressMapLink';
 import { getAllTrades } from '../config/trades';
 import { createProjectFromQuote, getProject, syncToServer } from '../engine/project/projectStore';
@@ -79,7 +81,8 @@ export default function QuotesList() {
     }
     setSendingId(quote.id);
     try {
-      updateQuote(quote.id, { status: 'sent' });
+      const attachment = await buildQuotePdfAttachment(quote);
+      updateQuote(quote.id, { status: 'sent', pdfPath: pdfPathFromAttachment(attachment) });
       const vars = buildQuoteVariables(customer, quote, undefined, quote.discount);
       const result = await messagingHub.send({
         channels: ['email', 'whatsapp'],
@@ -91,17 +94,20 @@ export default function QuotesList() {
         },
         subject: renderTemplate('Your Quote from {COMPANY_NAME}', vars),
         body: renderTemplate(
-          `Dear {CUSTOMER_NAME},\n\nYour quote for £{QUOTE_TOTAL} is ready. Valid until {QUOTE_EXPIRY}.\n\nReply to this email or call us with any questions.`,
+          `Dear {CUSTOMER_NAME},\n\nYour quote for £{QUOTE_TOTAL} is ready. Valid until {QUOTE_EXPIRY}.\n\nPlease find your quotation PDF attached.\n\nReply to this email or call us with any questions.`,
           vars
         ),
         eventType: 'quote_sent',
         templateId: 'quote_ready',
+        attachment,
       }, customer);
       const mode = result.logs[0]?.status === 'mock' ? ' (mock)' : '';
-      toast.success(`Quote sent to ${quote.customerName}${mode}`);
+      toast.success(`Quote PDF sent to ${quote.customerName}${mode}`);
       if (selectedQuote?.id === quote.id) {
-        setSelectedQuote({ ...quote, status: 'sent' });
+        setSelectedQuote({ ...quote, status: 'sent', pdfPath: pdfPathFromAttachment(attachment) });
       }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not generate or send quote PDF');
     } finally {
       setSendingId(null);
     }

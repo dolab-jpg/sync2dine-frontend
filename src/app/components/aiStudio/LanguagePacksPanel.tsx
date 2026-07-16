@@ -120,7 +120,8 @@ export function LanguagePacksPanel() {
           Language packs
         </CardTitle>
         <p className="text-sm text-slate-600 font-normal">
-          Saved phrases and reply instructions — change anytime. WhatsApp/phone uses these instead of live translation.
+          Channel phrases and spoken-reply instructions for WhatsApp/phone. Does not translate the app UI.
+          Business outputs (emails, contracts, quotes, pricing) stay English.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">

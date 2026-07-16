@@ -532,15 +532,57 @@ export async function handleWhatsAppWebhookPost(
   }
 }
 
+function resolveTradeproBackendUrl(): string | null {
+  const raw = (
+    process.env.TRADEPRO_BACKEND_URL ||
+    process.env.WHATSAPP_BACKEND_URL ||
+    process.env.VITE_API_BASE_URL ||
+    process.env.API_BASE_URL ||
+    ''
+  ).trim().replace(/\/$/, '');
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    const selfPort = String(process.env.PORT || 3001);
+    if ((u.hostname === 'localhost' || u.hostname === '127.0.0.1') && u.port === selfPort) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return raw;
+}
+
 export async function handleMessageSend(req: IncomingMessage, res: ServerResponse) {
   const body = JSON.parse(await readBody(req));
   const { channel, to, body: text, config, templateId, templateVars, attachment, groupId, sourceLang } = body;
 
   if (channel === 'whatsapp') {
-    // Legacy frontend server has no WWeb — Path B Meta is cold; use tradepro-backend for live WhatsApp
+    // Prefer tradepro-backend WhatsApp Web when Meta is cold (production path)
     if (!isMetaWhatsAppEnabled()) {
+      const backend = resolveTradeproBackendUrl();
+      if (backend) {
+        try {
+          const upstream = await fetch(`${backend}/api/messages/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const data = await upstream.json().catch(() => ({ error: 'Invalid upstream response' }));
+          sendJson(res, upstream.status, data);
+          return;
+        } catch (err) {
+          sendJson(res, 502, {
+            success: false,
+            error: `Could not reach tradepro-backend WhatsApp at ${backend}`,
+            detail: err instanceof Error ? err.message : String(err),
+          });
+          return;
+        }
+      }
       sendJson(res, 400, {
-        error: 'WhatsApp Meta API disabled — send via tradepro-backend WhatsApp Web (QR in Integrations)',
+        error:
+          'WhatsApp Meta API disabled — set TRADEPRO_BACKEND_URL to the tradepro-backend origin (WhatsApp Web QR in Integrations), or point the Vite proxy VITE_API_BASE_URL at that backend',
       });
       return;
     }

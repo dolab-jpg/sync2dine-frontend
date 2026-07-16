@@ -30,6 +30,9 @@ export async function checkOpenAIConnection(options?: {
     });
 
     if (!response.ok) {
+      if (apiKey) {
+        return { status: 'connected' };
+      }
       return {
         status: 'missing',
         message: options?.role === 'super_admin' ? MISSING_MESSAGE : MISSING_MESSAGE_NON_ADMIN,
@@ -53,6 +56,12 @@ export async function checkOpenAIConnection(options?: {
       };
     }
 
+    // Client has a key that will be sent on /api/ai/orchestrate — don't lock the
+    // overlay when the health probe only checks server env and reports missing.
+    if (apiKey) {
+      return { status: 'connected' };
+    }
+
     const fallback =
       options?.role === 'super_admin' || options?.role === 'platform_owner'
         ? MISSING_MESSAGE
@@ -63,6 +72,11 @@ export async function checkOpenAIConnection(options?: {
       message: data.message ?? fallback,
     };
   } catch {
+    // Health probe can 502 when the Vite proxy flaps — if a live key is already
+    // configured locally, allow chat (main Cynthia / overlay share the same key).
+    if (apiKey) {
+      return { status: 'connected' };
+    }
     return {
       status: 'missing',
       message: options?.role === 'super_admin' ? MISSING_MESSAGE : MISSING_MESSAGE_NON_ADMIN,
@@ -79,7 +93,12 @@ export function connectionFromOrchestratorError(err: unknown): OpenAIConnectionS
   if (/openai key rejected/i.test(message)) {
     return { status: 'rejected', message };
   }
-  if (/503|ai service unavailable/i.test(message)) {
+  // Only treat as "OpenAI missing" when the 503 is actually about the AI key/service —
+  // not when a tool/orchestrator bug returns a generic HTTP 503 with an unrelated message.
+  if (
+    /ai service unavailable/i.test(message)
+    || (/503/.test(message) && /openai|api key|not connected|not configured/i.test(message))
+  ) {
     return { status: 'missing', message: MISSING_MESSAGE };
   }
   return null;

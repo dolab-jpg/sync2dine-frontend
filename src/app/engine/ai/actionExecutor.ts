@@ -123,8 +123,9 @@ export interface SearchResult {
   route?: string;
 }
 
-function includesQuery(value: string, query: string): boolean {
-  return value.toLowerCase().includes(query.toLowerCase());
+function includesQuery(value: string | null | undefined, query: string): boolean {
+  if (value == null) return false;
+  return String(value).toLowerCase().includes(query.toLowerCase());
 }
 
 export function searchCustomers(app: AppContextType, query: string, limit = 5): SearchResult[] {

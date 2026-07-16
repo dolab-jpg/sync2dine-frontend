@@ -2,6 +2,7 @@ import type { Customer } from '../../App';
 import { loadProjects, updateProject } from '../project/projectStore';
 import { addClientReceipt, loadClientReceipts } from './bankingStore';
 import { generateReceiptPdf } from '../messaging/pdfGenerator';
+import { persistGeneratedPdf, pdfPathFromAttachment } from '../messaging/documentPersist';
 import { messagingHub } from '../messaging/messagingHub';
 import type { MessageChannel } from '../messaging/types';
 import { integrationService } from '../integrations/integrationService';
@@ -66,11 +67,14 @@ export async function sendReceiptForStage(
   }
 
   const projectName = project.projectName || project.description || project.customerName;
-  const pdf = await generateReceiptPdf(
-    input.customer.name,
-    projectName,
-    stage.amount,
-    stage.name
+  const pdf = await persistGeneratedPdf(
+    await generateReceiptPdf(
+      input.customer.name,
+      projectName,
+      stage.amount,
+      stage.name
+    ),
+    { projectId: project.id, uploadedBy: 'receipt-send' }
   );
 
   const channels: MessageChannel[] = input.channels ?? ['email'];
@@ -84,7 +88,7 @@ export async function sendReceiptForStage(
         customerName: input.customer.name,
       },
       subject: `Payment receipt — ${stage.name}`,
-      body: `Thank you for your payment of £${stage.amount.toFixed(2)} for ${stage.name}.`,
+      body: `Thank you for your payment of £${stage.amount.toFixed(2)} for ${stage.name}. Please find your receipt PDF attached.`,
       eventType: 'receipt',
       attachment: pdf,
       templateId: 'payment_receipt',
@@ -101,7 +105,7 @@ export async function sendReceiptForStage(
     stageId: stage.id,
     amount: stage.amount,
     date: paidDate,
-    pdfPath: pdf.filename,
+    pdfPath: pdfPathFromAttachment(pdf),
     sentVia: channels.length > 1 ? 'both' : channels[0] === 'whatsapp' ? 'whatsapp' : 'email',
     sentAt: sendResult.success ? new Date().toISOString() : undefined,
   });

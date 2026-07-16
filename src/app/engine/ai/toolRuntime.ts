@@ -252,20 +252,29 @@ function executeLinkCustomer(output: Record<string, unknown>, ctx: ToolRuntimeCo
     return { action: 'linkCustomer', summary: 'Customer save failed — app not ready.', output, executed: false };
   }
   const trades = (output.interestedTrades as TradeId[]) ?? (ctx.tradeId ? [ctx.tradeId] : []);
-  if (output.customerId && typeof output.customerId === 'string') {
-    app.updateCustomer(output.customerId, { interestedTrades: trades });
-    const existing = app.customers.find((c) => c.id === output.customerId);
+  const existing = resolveCustomerFromOutput(app, output);
+  const name = readOptionalString(output.name) ?? existing?.name;
+  // Update existing when id/name resolves, instead of creating a duplicate lead.
+  if (existing) {
+    const patch: Record<string, unknown> = {};
+    if (trades.length) patch.interestedTrades = trades;
+    const email = readOptionalString(output.email);
+    const phone = readOptionalString(output.phone);
+    const address = readOptionalString(output.address);
+    if (email) patch.email = email;
+    if (phone) patch.phone = phone;
+    if (address) patch.address = address;
+    if (Object.keys(patch).length) app.updateCustomer(existing.id, patch);
     return {
       action: 'linkCustomer',
-      summary: `Updated customer ${existing?.name ?? output.customerId}.`,
-      entityLabel: existing?.name ?? String(output.customerId),
-      entityId: output.customerId,
+      summary: `Updated customer ${existing.name}.`,
+      entityLabel: existing.name,
+      entityId: existing.id,
       openRoute: '/crm',
-      output,
+      output: { ...output, customerId: existing.id },
       executed: true,
     };
   }
-  const name = readOptionalString(output.name);
   if (!name) {
     return { action: 'linkCustomer', summary: 'Customer name missing — not saved.', output, executed: false };
   }
@@ -301,18 +310,11 @@ function executeSaveQuote(output: Record<string, unknown>, ctx: ToolRuntimeConte
   if (!tradeId || !isValidTradeId(tradeId)) {
     return { action: 'saveQuote', summary: 'Quote needs a valid tradeId.', output, executed: false };
   }
-  let customerId = readOptionalString(output.customerId);
-  let customerName = readOptionalString(output.customerName);
-  if (!customerId) {
-    customerName = customerName ?? readOptionalString(output.name);
-    const match = customerName
-      ? app.customers.find((c) => c.name.toLowerCase().includes(customerName!.toLowerCase()))
-      : undefined;
-    customerId = match?.id;
-    customerName = match?.name ?? customerName;
-  } else {
-    customerName = customerName ?? app.customers.find((c) => c.id === customerId)?.name ?? 'Customer';
-  }
+  const matchedCustomer = resolveCustomerFromOutput(app, output);
+  const customerId = matchedCustomer?.id;
+  const customerName = matchedCustomer?.name
+    ?? readOptionalString(output.customerName)
+    ?? readOptionalString(output.name);
   if (!customerId || !customerName) {
     return { action: 'saveQuote', summary: 'Quote needs a customer — save or link customer first.', output, executed: false };
   }
@@ -330,9 +332,7 @@ function executeSaveQuote(output: Record<string, unknown>, ctx: ToolRuntimeConte
   const status = (readOptionalString(output.status) ?? 'draft') as Quote['status'];
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 14);
-  const quotesBefore = app.quotes.length;
-
-  app.addQuote({
+  const created = app.addQuote({
     tradeId,
     tradeName: getTrade(tradeId).name,
     customerId,
@@ -348,7 +348,7 @@ function executeSaveQuote(output: Record<string, unknown>, ctx: ToolRuntimeConte
     aiAcceptedFields: (output.wizardAnswers as Record<string, unknown>) ?? undefined,
     jobGroupId: readOptionalString(output.jobGroupId),
   });
-  const quoteId = app.quotes[quotesBefore]?.id ?? String(quotesBefore + 1);
+  const quoteId = created.id;
   const openAfter = output.openQuote !== false;
   const route = `${buildQuoteRoute(tradeId, customerId)}?prefill=ai`;
 
@@ -480,10 +480,16 @@ function resolveCustomerFromOutput(
     const byId = app.customers.find((c) => c.id === customerId);
     if (byId) return byId;
   }
-  const name = readOptionalString(output.customerName) ?? readOptionalString(output.name);
+  // Models often put the display name in customerId — fall back to name match.
+  const name =
+    readOptionalString(output.customerName)
+    ?? readOptionalString(output.name)
+    ?? customerId;
   if (name) {
     const lower = name.toLowerCase();
-    return app.customers.find((c) => c.name.toLowerCase().includes(lower));
+    const exact = app.customers.find((c) => String(c.name ?? '').toLowerCase() === lower);
+    if (exact) return exact;
+    return app.customers.find((c) => String(c.name ?? '').toLowerCase().includes(lower));
   }
   return undefined;
 }
@@ -748,11 +754,11 @@ function executeSearchLeads(output: Record<string, unknown>, ctx: ToolRuntimeCon
       if (sourceFilter && String(c.source ?? '').toLowerCase() !== sourceFilter) return false;
       if (!query) return true;
       return (
-        c.name.toLowerCase().includes(query)
-        || c.email.toLowerCase().includes(query)
-        || c.phone.toLowerCase().includes(query)
+        String(c.name ?? '').toLowerCase().includes(query)
+        || String(c.email ?? '').toLowerCase().includes(query)
+        || String(c.phone ?? '').toLowerCase().includes(query)
         || String(c.source ?? '').toLowerCase().includes(query)
-        || c.notes.toLowerCase().includes(query)
+        || String(c.notes ?? '').toLowerCase().includes(query)
         || status.includes(query)
       );
     })
@@ -778,18 +784,17 @@ function executeSearchLeads(output: Record<string, unknown>, ctx: ToolRuntimeCon
 function executeUpdateLeadStatus(output: Record<string, unknown>, ctx: ToolRuntimeContext): ToolExecutionResult {
   const { app } = ctx;
   if (!app) return { action: 'updateLeadStatus', summary: 'App not ready.', output, executed: false };
-  const customerId = readOptionalString(output.customerId);
   const status = readOptionalString(output.status) as 'lead' | 'quoted' | 'won' | 'lost' | undefined;
-  if (!customerId || !status) {
-    return { action: 'updateLeadStatus', summary: 'Need customerId and status.', output, executed: false };
+  if (!status) {
+    return { action: 'updateLeadStatus', summary: 'Need status (lead|quoted|won|lost).', output, executed: false };
   }
-  const customer = app.customers.find((c) => c.id === customerId);
+  const customer = resolveCustomerFromOutput(app, output);
   if (!customer) {
     return { action: 'updateLeadStatus', summary: 'Customer not found.', output, executed: false };
   }
   const note = readOptionalString(output.note);
   const notes = note ? `${customer.notes}\n${note}`.trim() : customer.notes;
-  app.updateCustomer(customerId, {
+  app.updateCustomer(customer.id, {
     status,
     notes,
     lastContact: new Date().toISOString(),
@@ -797,9 +802,9 @@ function executeUpdateLeadStatus(output: Record<string, unknown>, ctx: ToolRunti
   return {
     action: 'updateLeadStatus',
     summary: `Updated ${customer.name} to ${status}.`,
-    entityId: customerId,
+    entityId: customer.id,
     openRoute: '/crm',
-    output: { ...output, customerId, status },
+    output: { ...output, customerId: customer.id, status },
     executed: true,
   };
 }
@@ -807,18 +812,14 @@ function executeUpdateLeadStatus(output: Record<string, unknown>, ctx: ToolRunti
 function executeLogFollowUp(output: Record<string, unknown>, ctx: ToolRuntimeContext): ToolExecutionResult {
   const { app } = ctx;
   if (!app) return { action: 'logFollowUp', summary: 'App not ready.', output, executed: false };
-  const customerId = readOptionalString(output.customerId);
-  if (!customerId) {
-    return { action: 'logFollowUp', summary: 'Need customerId.', output, executed: false };
-  }
-  const customer = app.customers.find((c) => c.id === customerId);
+  const customer = resolveCustomerFromOutput(app, output);
   if (!customer) {
     return { action: 'logFollowUp', summary: 'Customer not found.', output, executed: false };
   }
   const note = readOptionalString(output.note) ?? 'Follow-up logged via AI';
   const nextFollowUp = readOptionalString(output.nextFollowUp);
   const notes = `${customer.notes}\n[${new Date().toISOString().slice(0, 10)}] ${note}`.trim();
-  app.updateCustomer(customerId, {
+  app.updateCustomer(customer.id, {
     notes,
     lastContact: new Date().toISOString(),
     ...(nextFollowUp ? { nextFollowUp } : {}),
@@ -826,9 +827,9 @@ function executeLogFollowUp(output: Record<string, unknown>, ctx: ToolRuntimeCon
   return {
     action: 'logFollowUp',
     summary: `Follow-up logged for ${customer.name}${nextFollowUp ? ` — next: ${nextFollowUp}` : ''}.`,
-    entityId: customerId,
+    entityId: customer.id,
     openRoute: '/crm',
-    output: { ...output, customerId, nextFollowUp: nextFollowUp ?? null },
+    output: { ...output, customerId: customer.id, nextFollowUp: nextFollowUp ?? null },
     executed: true,
   };
 }
@@ -1352,8 +1353,13 @@ async function dispatchSingleTool(
         }))
       : undefined;
     try {
-      const pdf = await generateQuotePdf(customerName, total, tradeName, lineItems);
-      const dataUrl = `data:${pdf.mimeType};base64,${pdf.content}`;
+      const { persistGeneratedPdf } = await import('../messaging/documentPersist');
+      const projectId = readOptionalString(output.projectId) || undefined;
+      const pdf = await persistGeneratedPdf(
+        await generateQuotePdf(customerName, total, tradeName, lineItems),
+        { projectId, uploadedBy: 'cynthia-quote' }
+      );
+      const dataUrl = pdf.url || `data:${pdf.mimeType};base64,${pdf.content}`;
       return {
         action: name,
         summary: `Quote PDF ready for ${customerName} (£${total.toLocaleString('en-GB')}).`,
@@ -1363,6 +1369,7 @@ async function dispatchSingleTool(
           title: `Quote — ${customerName}`,
           pdfDataUrl: dataUrl,
           pdfFilename: pdf.filename,
+          pdfPath: pdf.storagePath || pdf.filename,
         },
         executed: true,
       };

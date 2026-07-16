@@ -672,7 +672,6 @@ export function AIChatPanel() {
   const handleSend = async (text?: string): Promise<string | undefined> => {
     const content = (text ?? input).trim();
     if (!content && photos.length === 0) return undefined;
-
     // Yes/No for pending self-heal offers does not require OpenAI
     const pendingOfferMsg = [...messages].reverse().find((m) => m.fixOffer && !m.fixOffer.resolved);
     if (pendingOfferMsg?.fixOffer && /^(yes|y|yeah|yep|ok|okay|fix it|please fix)$/i.test(content)) {
@@ -709,8 +708,12 @@ export function AIChatPanel() {
     }
 
     if (!isChatConnected) {
-      toast.error(connection.message ?? 'Chat is not connected to OpenAI.');
-      return undefined;
+      // Re-probe before blocking — a prior tool 503 must not leave the overlay stuck offline.
+      const refreshed = await refreshConnection();
+      if (refreshed.status !== 'connected') {
+        toast.error(refreshed.message ?? connection.message ?? 'Chat is not connected to OpenAI.');
+        return undefined;
+      }
     }
 
     setInput('');

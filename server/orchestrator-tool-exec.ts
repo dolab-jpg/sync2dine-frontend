@@ -24,8 +24,8 @@ function firstString(...values: unknown[]): string | undefined {
   return undefined;
 }
 
-function includesQuery(value: string, query: string): boolean {
-  return value.toLowerCase().includes(query.toLowerCase());
+function includesQuery(value: string | undefined | null, query: string): boolean {
+  return String(value ?? '').toLowerCase().includes(String(query ?? '').toLowerCase());
 }
 
 function scrubOutput(output: Record<string, unknown>, role: string): Record<string, unknown> {

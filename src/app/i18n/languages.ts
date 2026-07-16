@@ -1,4 +1,4 @@
-/** Supported worker/admin UI languages. Customer docs stay English. */
+/** Supported AI chat / phone spoken languages. App UI stays English; customer docs stay English. */
 export const SUPPORTED_LANGS = ['en', 'sq', 'uk', 'ru', 'zh', 'es', 'pl', 'fa'] as const;
 export type SupportedLang = (typeof SUPPORTED_LANGS)[number];
 
