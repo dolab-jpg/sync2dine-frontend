@@ -71,7 +71,7 @@ Inbound: a small Asterisk REGISTER bridge on the VPS acts as the “IP phone” 
 | Vapi | phone + Cynthia assistant + webhook `https://app.b-diddies.com/webhooks/vapi` |
 | Voice | ElevenLabs Lizzie `EQx6HGDYjkDpcli6vorJ` |
 
-Keep Soho66 Routing Wizard as **Ring my IP phone** (then voicemail if needed). Staff transfers: Call Centre transfer numbers → mobile (no second softphone required).
+Keep Soho66 Routing Wizard as **Ring my IP phone** (then voicemail if needed). Staff mid-call divert: Call Centre **Call Transfer Destinations** → mobile (prod all depts → `+447576442345`). No Force/Forward and no web softphone required — resolution is `transfer-numbers.ts` / `transferToHuman` / Vapi `transferCall`.
 
 **Ops:** `docker compose -f …/tradepro-sip-bridge/docker-compose.yml ps` · `asterisk -rx 'pjsip show registrations'` inside the container must show **Registered**.
 

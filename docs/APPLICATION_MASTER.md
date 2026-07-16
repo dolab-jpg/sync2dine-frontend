@@ -714,6 +714,19 @@ Frontend registry card `voice_telephony` stores UI overrides; **Vapi + ElevenLab
 
 Successful production calls used **Vapi + ElevenLabs Cockney (Lizzie `EQx6HGDYjkDpcli6vorJ`)**, not local STT/TTS. Retest: outbound to registered staff mobile + PIN, then inbound from a second phone to `SOHO66_FROM_NUMBER` / company DID. See [VOICE_SETUP.md](./VOICE_SETUP.md) §3.
 
+### 16.8 Mid-call divert (Cynthia → staff mobile) — LIVE
+
+**Not** Soho66 Force/Forward and **not** a web softphone. Cynthia answers first; human handoff uses Call Centre transfer destinations.
+
+| Piece | Detail |
+|-------|--------|
+| UI | `/calls` → Phone Lines → **Call Transfer Destinations** (`general` / `sales` / `projects` / `recruitment` / `accounts`) |
+| API | `GET` / `PATCH` `/api/agent/transfer-numbers` → `agentSettings.transferNumbers` |
+| Prod dest | All departments → `+447576442345` (admin mobile) |
+| Vapi | `transferCall` destinations + tool `transferToHuman` resolve via `server/transfer-numbers.ts` (settings first, then `VOICE_TRANSFER_*` env) |
+| Inbound DID | Soho66 **Ring my IP phone** → VPS Asterisk REGISTER bridge (`docker/soho66-vapi-bridge`) → Vapi/Lizzie — no SIP-URL forward, no in-app softphone required |
+| Constraint | Only **one** REGISTER on SIP user `1005090093` — keep VOIS logged out while the bridge owns inbound |
+
 ---
 
 ## 17. Complete AI tools inventory
