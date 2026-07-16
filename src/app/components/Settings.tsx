@@ -514,12 +514,12 @@ export default function Settings() {
             <CardContent className="space-y-4">
               <div>
                 <Label>Company Name</Label>
-                <Input defaultValue="Builder Diddies" />
+                <Input defaultValue="Sync2Dine" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Email</Label>
-                  <Input type="email" defaultValue="info@b-diddies.com" />
+                  <Input type="email" defaultValue="info@sync2dine.io" />
                 </div>
                 <div>
                   <Label>Phone</Label>

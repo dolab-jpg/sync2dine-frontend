@@ -238,6 +238,17 @@ export default function AppShell({ children }: AppShellProps) {
         { to: '/front', icon: Phone, label: 'Front kiosk' },
       ];
     }
+    const restaurantMode =
+      location.pathname.startsWith('/orders')
+      || (typeof localStorage !== 'undefined' && localStorage.getItem('sync2dine_mode') === 'restaurant');
+    if (restaurantMode) {
+      return [
+        { to: '/orders', icon: ClipboardList, label: 'Orders' },
+        { to: '/products', icon: Package, label: 'Menu' },
+        { to: '/calls', icon: Phone, label: t('nav.callCenter') },
+        { to: '/settings', icon: Settings, label: t('nav.settings') },
+      ];
+    }
     return [
       { to: '/', icon: Home, label: t('nav.dashboard') },
       { to: '/orders', icon: ClipboardList, label: 'Orders' },
@@ -262,7 +273,7 @@ export default function AppShell({ children }: AppShellProps) {
       { to: '/building-control', icon: ShieldCheck, label: t('nav.buildingControl') },
       { to: '/changes', icon: GitBranch, label: 'Changes' },
       { to: '/communications', icon: Mail, label: t('nav.communications') },
-      { to: '/cynthia', icon: MessageCircle, label: 'Cynthia' },
+      { to: '/cynthia', icon: MessageCircle, label: 'Lizzie' },
       { to: '/calls', icon: Phone, label: t('nav.callCenter') },
       { to: '/portfolio', icon: Image, label: 'Portfolio' },
       ...(user.role === 'platform_owner'
@@ -300,9 +311,13 @@ export default function AppShell({ children }: AppShellProps) {
     ];
   };
 
+  const restaurantMode =
+    location.pathname.startsWith('/orders')
+    || (typeof localStorage !== 'undefined' && localStorage.getItem('sync2dine_mode') === 'restaurant');
   const navItems = getNavItems();
   const expanded = sidebar.isOpen && !isMobile;
   const aiDockedInline = aiOpen && aiSettings.panelDocked && isWideViewport;
+  const brandSubtitle = restaurantMode ? 'Takeaway Phone & Orders' : 'AI Phone & Ordering';
 
   if (user.role === 'kiosk' || location.pathname.startsWith('/front')) {
     return <>{children}</>;
@@ -353,7 +368,7 @@ export default function AppShell({ children }: AppShellProps) {
           <BrandLogo
             size={expanded ? 'md' : 'sm'}
             showWordmark={expanded}
-            subtitle={expanded ? 'Construction Estimation' : undefined}
+            subtitle={expanded ? brandSubtitle : undefined}
           />
         </div>
 
@@ -416,7 +431,7 @@ export default function AppShell({ children }: AppShellProps) {
             <SheetDescription>Main app navigation</SheetDescription>
           </SheetHeader>
           <div className="p-4 border-b border-white/5 flex items-center gap-3">
-          <BrandLogo size="md" showWordmark subtitle="Construction Estimation" />
+          <BrandLogo size="md" showWordmark subtitle={brandSubtitle} />
           </div>
           <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
             {renderNavLinks(true, () => setMobileNavOpen(false))}
@@ -585,12 +600,20 @@ export default function AppShell({ children }: AppShellProps) {
             aria-label="Primary"
             data-testid="staff-bottom-nav"
           >
-            {[
-              { to: '/cynthia', icon: MessageCircle, label: 'Cynthia' },
-              { to: '/projects', icon: FolderKanban, label: 'Jobs' },
-              { to: '/quotes', icon: ClipboardList, label: 'Quotes' },
-              { to: '/crm', icon: TrendingUp, label: 'CRM' },
-            ].map(({ to, icon: Icon, label }) => (
+            {(restaurantMode
+              ? [
+                  { to: '/orders', icon: ClipboardList, label: 'Orders' },
+                  { to: '/products', icon: Package, label: 'Menu' },
+                  { to: '/calls', icon: Phone, label: 'Calls' },
+                  { to: '/settings', icon: Settings, label: 'Settings' },
+                ]
+              : [
+                  { to: '/cynthia', icon: MessageCircle, label: 'Lizzie' },
+                  { to: '/projects', icon: FolderKanban, label: 'Jobs' },
+                  { to: '/quotes', icon: ClipboardList, label: 'Quotes' },
+                  { to: '/crm', icon: TrendingUp, label: 'CRM' },
+                ]
+            ).map(({ to, icon: Icon, label }) => (
               <NavLink
                 key={to}
                 to={to}

@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react';
-import { Clock, CreditCard, MapPin, Phone, Receipt, Truck, Utensils } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Clock, CreditCard, Download, MapPin, Phone, Receipt, Truck, Utensils } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
+import { getActiveOrgId } from '../engine/platform/orgContext';
 
-type OrderStatus = 'new' | 'coming' | 'paid' | 'preparing' | 'ready' | 'delivery';
+type OrderStatus = 'new' | 'coming' | 'paid' | 'preparing' | 'ready' | 'delivery' | 'completed' | 'cancelled';
 type PaymentStatus = 'unpaid' | 'cash' | 'card';
 
-type DemoOrder = {
+type FoodOrder = {
   id: string;
   number: string;
   customer: string;
@@ -18,9 +19,10 @@ type DemoOrder = {
   address?: string;
   items: string[];
   createdAt: string;
+  etaMinutes?: number;
 };
 
-const demoOrders: DemoOrder[] = [
+const FALLBACK_ORDERS: FoodOrder[] = [
   {
     id: 'ord-101',
     number: '101',
@@ -31,7 +33,7 @@ const demoOrders: DemoOrder[] = [
     payment: 'unpaid',
     total: 24.5,
     items: ['Chicken biryani', 'Garlic naan', 'Mango lassi'],
-    createdAt: '12:08',
+    createdAt: new Date(Date.now() - 4 * 60_000).toISOString(),
   },
   {
     id: 'ord-102',
@@ -44,7 +46,8 @@ const demoOrders: DemoOrder[] = [
     total: 31.2,
     address: '24 Market Street, SW1',
     items: ['Lamb curry', 'Pilau rice', 'Onion bhaji'],
-    createdAt: '12:13',
+    createdAt: new Date(Date.now() - 9 * 60_000).toISOString(),
+    etaMinutes: 35,
   },
 ];
 
@@ -55,19 +58,168 @@ function statusLabel(status: OrderStatus) {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+function elapsedLabel(iso: string): string {
+  const started = Date.parse(iso);
+  if (!Number.isFinite(started)) return iso;
+  const mins = Math.max(0, Math.floor((Date.now() - started) / 60_000));
+  if (mins < 1) return 'just now';
+  if (mins === 1) return '1 min';
+  return `${mins} min`;
+}
+
+function deliveryTimerLabel(order: FoodOrder): string {
+  const elapsed = elapsedLabel(order.createdAt);
+  if (order.type !== 'delivery') return elapsed;
+  const eta = order.etaMinutes ?? 40;
+  const started = Date.parse(order.createdAt);
+  const minsGone = Number.isFinite(started) ? Math.max(0, Math.floor((Date.now() - started) / 60_000)) : 0;
+  const left = Math.max(0, eta - minsGone);
+  if (left === 0) return `${elapsed} · ETA due`;
+  return `${elapsed} · ${left} min left`;
+}
+
+function playKitchenAlert() {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = 880;
+    gain.gain.value = 0.08;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.stop(ctx.currentTime + 0.4);
+    setTimeout(() => void ctx.close(), 500);
+  } catch {
+    // Audio may be blocked until a user gesture
+  }
+}
+
+function mapApiOrder(raw: Record<string, unknown>): FoodOrder {
+  const itemsRaw = raw.items;
+  const items = Array.isArray(itemsRaw)
+    ? itemsRaw.map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object') {
+          const row = item as Record<string, unknown>;
+          const name = String(row.name ?? row.title ?? 'Item');
+          const qty = Number(row.qty ?? row.quantity ?? 1);
+          return qty > 1 ? `${qty}× ${name}` : name;
+        }
+        return String(item);
+      })
+    : [];
+  return {
+    id: String(raw.id ?? ''),
+    number: String(raw.orderNumber ?? raw.number ?? ''),
+    customer: String(raw.customerName ?? raw.customer ?? 'Guest'),
+    phone: String(raw.customerPhone ?? raw.phone ?? ''),
+    type: (String(raw.orderType ?? raw.type ?? 'collection') as FoodOrder['type']),
+    status: (String(raw.status ?? 'new') as OrderStatus),
+    payment: (String(raw.paymentStatus ?? raw.payment ?? 'unpaid') as PaymentStatus),
+    total: Number(raw.total ?? 0),
+    address: raw.deliveryAddress ? String(raw.deliveryAddress) : undefined,
+    items,
+    createdAt: String(raw.createdAt ?? new Date().toISOString()),
+    etaMinutes: raw.etaMinutes != null ? Number(raw.etaMinutes) : undefined,
+  };
+}
+
+function exportOrdersCsv(orders: FoodOrder[]) {
+  const header = ['number', 'customer', 'phone', 'type', 'status', 'payment', 'total', 'address', 'items', 'createdAt'];
+  const rows = orders.map((o) => [
+    o.number,
+    o.customer,
+    o.phone,
+    o.type,
+    o.status,
+    o.payment,
+    o.total.toFixed(2),
+    o.address ?? '',
+    o.items.join('; '),
+    o.createdAt,
+  ]);
+  const csv = [header, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sync2dine-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function RestaurantOrders() {
   const [tab, setTab] = useState<'kitchen' | 'till' | 'delivery'>('kitchen');
-  const [orders, setOrders] = useState(demoOrders);
+  const [orders, setOrders] = useState<FoodOrder[]>(FALLBACK_ORDERS);
+  const [nowTick, setNowTick] = useState(0);
+  const knownIdsRef = useRef<Set<string>>(new Set(FALLBACK_ORDERS.map((o) => o.id)));
+  const orgId = getActiveOrgId();
+
+  const patchOrder = useCallback(async (id: string, patch: Partial<FoodOrder>) => {
+    setOrders((prev) => prev.map((order) => (order.id === id ? { ...order, ...patch } : order)));
+    try {
+      await fetch(`/api/orders/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(orgId ? { 'x-org-id': orgId } : {}),
+        },
+        body: JSON.stringify({
+          status: patch.status,
+          paymentStatus: patch.payment,
+          paymentMethod: patch.payment === 'unpaid' ? undefined : patch.payment,
+        }),
+      });
+    } catch {
+      // Local UI already updated; API may be offline
+    }
+  }, [orgId]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTick((n) => n + 1), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadOrders() {
+      try {
+        const res = await fetch('/api/orders', {
+          headers: orgId ? { 'x-org-id': orgId } : {},
+        });
+        if (!res.ok) return;
+        const data = await res.json() as { orders?: Array<Record<string, unknown>> };
+        const next = Array.isArray(data.orders) ? data.orders.map(mapApiOrder) : [];
+        if (cancelled || !next.length) return;
+        const prevIds = knownIdsRef.current;
+        const fresh = next.filter((o) => o.status === 'new' && !prevIds.has(o.id));
+        if (fresh.length > 0) playKitchenAlert();
+        knownIdsRef.current = new Set(next.map((o) => o.id));
+        setOrders(next);
+      } catch {
+        // Keep demo fallback when API is unavailable
+      }
+    }
+    void loadOrders();
+    const poll = window.setInterval(() => void loadOrders(), 8_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(poll);
+    };
+  }, [orgId]);
 
   const visibleOrders = useMemo(() => {
+    void nowTick;
     if (tab === 'delivery') return orders.filter((o) => o.type === 'delivery');
     if (tab === 'till') return orders.filter((o) => o.payment === 'unpaid' || o.status === 'coming');
     return orders;
-  }, [orders, tab]);
-
-  function updateOrder(id: string, patch: Partial<DemoOrder>) {
-    setOrders((prev) => prev.map((order) => (order.id === id ? { ...order, ...patch } : order)));
-  }
+  }, [orders, tab, nowTick]);
 
   return (
     <main className="min-h-screen bg-slate-100 p-3 sm:p-5">
@@ -78,27 +230,38 @@ export default function RestaurantOrders() {
               <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-200">Sync2Dine staff tablet</p>
               <h1 className="mt-1 text-3xl font-black tracking-tight sm:text-4xl">Orders, till and delivery</h1>
             </div>
-            <div className="grid grid-cols-3 gap-2 rounded-2xl bg-white/10 p-1">
-              {[
-                ['kitchen', Utensils, 'Kitchen'],
-                ['till', CreditCard, 'Till'],
-                ['delivery', Truck, 'Delivery'],
-              ].map(([id, Icon, label]) => {
-                const ActiveIcon = Icon as typeof Utensils;
-                return (
-                  <button
-                    key={id as string}
-                    type="button"
-                    onClick={() => setTab(id as typeof tab)}
-                    className={`flex min-h-[56px] items-center justify-center gap-2 rounded-xl px-3 text-base font-bold transition ${
-                      tab === id ? 'bg-amber-200 text-emerald-950' : 'text-white hover:bg-white/10'
-                    }`}
-                  >
-                    <ActiveIcon className="h-5 w-5" />
-                    {label as string}
-                  </button>
-                );
-              })}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-[52px] rounded-xl border-white/30 bg-white/10 text-base font-bold text-white hover:bg-white/20"
+                onClick={() => exportOrdersCsv(orders)}
+              >
+                <Download className="mr-2 h-5 w-5" />
+                Export CSV
+              </Button>
+              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-white/10 p-1">
+                {[
+                  ['kitchen', Utensils, 'Kitchen'],
+                  ['till', CreditCard, 'Till'],
+                  ['delivery', Truck, 'Delivery'],
+                ].map(([id, Icon, label]) => {
+                  const ActiveIcon = Icon as typeof Utensils;
+                  return (
+                    <button
+                      key={id as string}
+                      type="button"
+                      onClick={() => setTab(id as typeof tab)}
+                      className={`flex min-h-[56px] items-center justify-center gap-2 rounded-xl px-3 text-base font-bold transition ${
+                        tab === id ? 'bg-amber-200 text-emerald-950' : 'text-white hover:bg-white/10'
+                      }`}
+                    >
+                      <ActiveIcon className="h-5 w-5" />
+                      {label as string}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -136,7 +299,7 @@ export default function RestaurantOrders() {
                 <div className="rounded-2xl bg-slate-950 p-4 text-center text-white">
                   <p className="flex items-center justify-center gap-1 text-sm text-slate-300">
                     <Clock className="h-4 w-4" />
-                    {order.createdAt}
+                    {deliveryTimerLabel(order)}
                   </p>
                   <p className="mt-3 text-3xl font-black">£{order.total.toFixed(2)}</p>
                 </div>
@@ -146,7 +309,7 @@ export default function RestaurantOrders() {
                 <Button
                   type="button"
                   className="min-h-[52px] rounded-xl bg-amber-400 text-base font-bold text-emerald-950 hover:bg-amber-300"
-                  onClick={() => updateOrder(order.id, { status: 'coming' })}
+                  onClick={() => void patchOrder(order.id, { status: 'coming' })}
                 >
                   <Receipt className="mr-2 h-5 w-5" />
                   Coming to order
@@ -154,18 +317,25 @@ export default function RestaurantOrders() {
                 <Button
                   type="button"
                   className="min-h-[52px] rounded-xl bg-emerald-950 text-base font-bold text-white hover:bg-emerald-900"
-                  onClick={() => updateOrder(order.id, { status: 'paid', payment: 'cash' })}
+                  onClick={() => void patchOrder(order.id, { status: 'paid', payment: 'cash' })}
                 >
                   Cash paid
                 </Button>
                 <Button
                   type="button"
                   className="min-h-[52px] rounded-xl bg-emerald-950 text-base font-bold text-white hover:bg-emerald-900"
-                  onClick={() => updateOrder(order.id, { status: 'paid', payment: 'card' })}
+                  onClick={() => void patchOrder(order.id, { status: 'paid', payment: 'card' })}
                 >
                   Card paid
                 </Button>
-                <Button type="button" variant="outline" className="min-h-[52px] rounded-xl text-base font-bold">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-[52px] rounded-xl text-base font-bold"
+                  onClick={() => {
+                    if (order.phone) window.location.href = `tel:${order.phone}`;
+                  }}
+                >
                   <Phone className="mr-2 h-5 w-5" />
                   Call them
                 </Button>
