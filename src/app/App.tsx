@@ -147,6 +147,19 @@ export interface Customer {
   budget?: string;
   timeline?: string;
   tags?: string[];
+  /** Conversation / call timeline (notes with aim + detail for Cynthia) */
+  activities?: Array<{
+    id: string;
+    type: string;
+    aim?: string;
+    detail?: string;
+    summary?: string;
+    outcome?: string;
+    callSessionId?: string;
+    callId?: string;
+    createdAt: string;
+    createdBy?: string;
+  }>;
 }
 
 export interface Product {

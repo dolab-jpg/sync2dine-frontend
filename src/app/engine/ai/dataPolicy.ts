@@ -59,15 +59,17 @@ export const SENSITIVE_FIELD_KEYS = new Set([
   'accountsAccess',
 ]);
 
-const STAFF_ROLES = new Set<AgentRole>(['super_admin', 'manager', 'staff']);
+const STAFF_ROLES = new Set<AgentRole>(['platform_owner', 'super_admin', 'manager', 'staff']);
 
 const READ_MATRIX: Record<AgentRole, Set<DataCollection> | '*'> = {
+  platform_owner: '*',
   super_admin: '*',
   manager: '*',
   staff: '*',
   recruitment: new Set(['customers', 'quotes', 'projects', 'recruitmentAccess']),
   builder: new Set(['projects']),
   customer: new Set(['customers', 'quotes', 'projects', 'contracts']),
+  agent: new Set(['customers', 'quotes', 'projects']),
   unknown: new Set(),
 };
 
@@ -79,6 +81,18 @@ const ACCOUNTS_COLLECTIONS = new Set<DataCollection>([
 ]);
 
 const WRITE_MATRIX: Record<AgentRole, Partial<Record<DataCollection, Set<WriteOperation>>>> = {
+  platform_owner: {
+    customers: new Set(['create', 'update', 'delete']),
+    quotes: new Set(['create', 'update', 'delete']),
+    products: new Set(['create', 'update', 'delete']),
+    pricingRules: new Set(['create', 'update', 'delete']),
+    projects: new Set(['create', 'update', 'delete']),
+    builders: new Set(['create', 'update', 'delete']),
+    contracts: new Set(['create', 'update', 'delete']),
+    contractTemplates: new Set(['create', 'update', 'delete']),
+    recruitmentAccess: new Set(['update']),
+    accountsAccess: new Set(['update']),
+  },
   super_admin: {
     customers: new Set(['create', 'update', 'delete']),
     quotes: new Set(['create', 'update', 'delete']),
@@ -122,6 +136,9 @@ const WRITE_MATRIX: Record<AgentRole, Partial<Record<DataCollection, Set<WriteOp
   customer: {
     projects: new Set(['update']),
   },
+  agent: {
+    customers: new Set(['create', 'update']),
+  },
   unknown: {},
 };
 
@@ -137,7 +154,7 @@ function canAccessCollection(
 
 export function canReadCollection(role: AgentRole, collection: DataCollection): boolean {
   if (ACCOUNTS_COLLECTIONS.has(collection)) {
-    return role === 'super_admin' || role === 'manager' || role === 'staff';
+    return role === 'platform_owner' || role === 'super_admin' || role === 'manager' || role === 'staff';
   }
   return canAccessCollection(READ_MATRIX, role, collection);
 }

@@ -560,7 +560,7 @@ function executeApproveQuote(output: Record<string, unknown>, ctx: ToolRuntimeCo
   const action = approved ? 'approveQuote' : 'rejectQuote';
   const { app } = ctx;
   if (!app) return { action, summary: 'App not ready.', output, executed: false };
-  if (ctx.role !== 'super_admin' && ctx.role !== 'manager') {
+  if (ctx.role !== 'super_admin' && ctx.role !== 'platform_owner' && ctx.role !== 'manager') {
     return { action, summary: 'Only a manager or admin can approve or reject prices.', output, executed: false };
   }
   const quoteId = readOptionalString(output.quoteId);
@@ -718,7 +718,7 @@ function parseQuoteLines(raw: unknown): QuoteLine[] {
 }
 
 function executeGetTeamPerformance(ctx: ToolRuntimeContext): ToolExecutionResult {
-  if (ctx.role !== 'super_admin' && ctx.role !== 'manager') {
+  if (ctx.role !== 'super_admin' && ctx.role !== 'platform_owner' && ctx.role !== 'manager') {
     return {
       action: 'getTeamPerformance',
       summary: 'Team performance is available to managers and admins only.',
@@ -830,6 +830,124 @@ function executeLogFollowUp(output: Record<string, unknown>, ctx: ToolRuntimeCon
     entityId: customer.id,
     openRoute: '/crm',
     output: { ...output, customerId: customer.id, nextFollowUp: nextFollowUp ?? null },
+    executed: true,
+  };
+}
+
+function executeGetLeadBrief(output: Record<string, unknown>, ctx: ToolRuntimeContext): ToolExecutionResult {
+  const { app } = ctx;
+  if (!app) return { action: 'getLeadBrief', summary: 'App not ready.', output, executed: false };
+  const customer = resolveCustomerFromOutput(app, output)
+    ?? (readOptionalString(output.query) || readOptionalString(output.name)
+      ? app.customers.find((c) => {
+          const q = (readOptionalString(output.query) || readOptionalString(output.name) || '').toLowerCase();
+          return c.name.toLowerCase().includes(q)
+            || c.email.toLowerCase().includes(q)
+            || c.phone.includes(q);
+        })
+      : undefined);
+  if (!customer) {
+    return { action: 'getLeadBrief', summary: 'Lead not found.', output, executed: false };
+  }
+  const activities = Array.isArray(customer.activities) ? customer.activities.slice(0, 8) : [];
+  const lines = activities.map((a) => {
+    const row = a as Record<string, unknown>;
+    const detail = String(row.detail ?? row.summary ?? '').slice(0, 200);
+    const aim = row.aim ? ` [${row.aim}]` : '';
+    return `${String(row.createdAt ?? '').slice(0, 10)}${aim}: ${detail}`;
+  }).filter(Boolean);
+  const spokenHint = [
+    `${customer.name} is ${customer.status}.`,
+    lines.length ? `Recent: ${lines.slice(0, 3).join(' | ')}` : (customer.notes ? `Notes: ${customer.notes.slice(0, 200)}` : 'No prior notes.'),
+  ].join(' ');
+  return {
+    action: 'getLeadBrief',
+    summary: spokenHint,
+    entityId: customer.id,
+    openRoute: '/crm',
+    output: {
+      ...output,
+      found: true,
+      customerId: customer.id,
+      name: customer.name,
+      status: customer.status,
+      phone: customer.phone,
+      nextFollowUp: customer.nextFollowUp ?? null,
+      notesPreview: customer.notes?.slice(0, 400) ?? null,
+      activities,
+      spokenHint,
+    },
+    executed: true,
+  };
+}
+
+function executeAddLeadNote(output: Record<string, unknown>, ctx: ToolRuntimeContext): ToolExecutionResult {
+  const { app } = ctx;
+  if (!app) return { action: 'addLeadNote', summary: 'App not ready.', output, executed: false };
+  const customer = resolveCustomerFromOutput(app, output);
+  if (!customer) {
+    return { action: 'addLeadNote', summary: 'Customer not found.', output, executed: false };
+  }
+  const detail = readOptionalString(output.detail) || readOptionalString(output.summary) || readOptionalString(output.notes);
+  if (!detail) {
+    return { action: 'addLeadNote', summary: 'Note detail required.', output, executed: false };
+  }
+  const aim = readOptionalString(output.aim);
+  const stamp = new Date().toISOString();
+  const activity = {
+    id: `LA${Date.now()}`,
+    type: 'note',
+    aim: aim ?? undefined,
+    detail,
+    outcome: readOptionalString(output.outcome) ?? undefined,
+    createdAt: stamp,
+    createdBy: 'cynthia',
+  };
+  const prev = Array.isArray(customer.activities) ? customer.activities : [];
+  const line = `[Note ${stamp.slice(0, 16).replace('T', ' ')}]${aim ? ` (${aim})` : ''} ${detail}`;
+  app.updateCustomer(customer.id, {
+    activities: [activity, ...prev].slice(0, 50),
+    notes: customer.notes ? `${line}\n${customer.notes}` : line,
+    lastContact: stamp,
+  });
+  return {
+    action: 'addLeadNote',
+    summary: `Note saved on ${customer.name}.`,
+    entityId: customer.id,
+    openRoute: '/crm',
+    output: { ...output, customerId: customer.id, saved: true },
+    executed: true,
+  };
+}
+
+function executeListPendingCallbacks(ctx: ToolRuntimeContext): ToolExecutionResult {
+  const { app } = ctx;
+  if (!app) return { action: 'listPendingCallbacks', summary: 'App not ready.', output: {}, executed: false };
+  const now = Date.now();
+  const week = now + 7 * 86400000;
+  const callbacks = app.customers
+    .filter((c) => {
+      const next = c.nextFollowUp ? Date.parse(c.nextFollowUp) : NaN;
+      const acts = Array.isArray(c.activities) ? c.activities : [];
+      const openCb = acts.some((a) => {
+        const row = a as Record<string, unknown>;
+        return String(row.type) === 'callback' && !row.outcome;
+      });
+      return openCb || (Number.isFinite(next) && next <= week);
+    })
+    .slice(0, 15)
+    .map((c) => ({
+      customerId: c.id,
+      name: c.name,
+      phone: c.phone,
+      nextFollowUp: c.nextFollowUp ?? null,
+      status: c.status,
+    }));
+  return {
+    action: 'listPendingCallbacks',
+    summary: callbacks.length ? `${callbacks.length} pending callbacks.` : 'No pending callbacks.',
+    openRoute: '/crm',
+    output: { count: callbacks.length, callbacks },
     executed: true,
   };
 }
@@ -1257,6 +1375,9 @@ async function dispatchSingleTool(
   if (name === 'searchLeads') return executeSearchLeads(output, ctx);
   if (name === 'updateLeadStatus') return executeUpdateLeadStatus(output, ctx);
   if (name === 'logFollowUp') return executeLogFollowUp(output, ctx);
+  if (name === 'getLeadBrief') return executeGetLeadBrief(output, ctx);
+  if (name === 'addLeadNote') return executeAddLeadNote(output, ctx);
+  if (name === 'listPendingCallbacks') return executeListPendingCallbacks(ctx);
   if (name === 'addQuoteLines') return executeAddQuoteLines(output, ctx);
   if (name === 'updateQuoteLines') return executeUpdateQuoteLines(output, ctx);
   if (name === 'completeHandover') return executeCompleteHandover(output, ctx);
@@ -1435,7 +1556,9 @@ async function dispatchSingleTool(
       readOptionalString(output.template)
       || 'lead_callback';
     const customerName = readOptionalString(output.customerName);
-    const reason = readOptionalString(output.reason) || 'Staff requested from Cynthia';
+    const customerId = readOptionalString(output.customerId);
+    const aim = readOptionalString(output.aim) || readOptionalString(output.reason) || 'other';
+    const reason = readOptionalString(output.reason) || `Staff requested from Cynthia — aim ${aim}`;
     try {
       const res = await fetch('/api/calls/outbound', {
         method: 'POST',
@@ -1445,6 +1568,8 @@ async function dispatchSingleTool(
           template,
           context: {
             customerName,
+            customerId,
+            aim,
             reason,
             source: 'cynthia',
           },

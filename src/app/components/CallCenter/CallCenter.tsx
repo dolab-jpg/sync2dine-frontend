@@ -242,7 +242,14 @@ export default function CallCenter() {
   const [testTranscript, setTestTranscript] = useState<Array<{ role: string; content: string }>>([]);
   const [testRunning, setTestRunning] = useState(false);
   const [outboundTo, setOutboundTo] = useState(() => searchParams.get('to') || '');
-  const [outboundTemplate, setOutboundTemplate] = useState('quote_chase');
+  const [outboundTemplate, setOutboundTemplate] = useState(() => {
+    const aim = searchParams.get('aim');
+    if (aim === 'callback') return 'lead_callback';
+    if (aim === 'quote_chase') return 'quote_chase';
+    return 'quote_chase';
+  });
+  const [outboundAim, setOutboundAim] = useState(() => searchParams.get('aim') || 'other');
+  const [outboundCustomerId] = useState(() => searchParams.get('customerId') || '');
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [phoneLines, setPhoneLines] = useState<PhoneLine[]>([]);
@@ -623,7 +630,15 @@ export default function CallCenter() {
       const res = await fetch('/api/calls/outbound', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: outboundTo, template: outboundTemplate }),
+        body: JSON.stringify({
+          to: outboundTo,
+          template: outboundTemplate,
+          context: {
+            aim: outboundAim,
+            customerId: outboundCustomerId || undefined,
+            source: 'call_centre',
+          },
+        }),
       });
       const data = await res.json();
       if (data.success) {
@@ -668,7 +683,7 @@ export default function CallCenter() {
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error ?? 'Failed to create lead');
+      if (!res.ok || !data.success) throw new Error(data.message ?? data.error ?? 'Failed to create lead');
       toast.success(`Lead created for ${leadFormName.trim()} — visible in CRM`);
       if (app?.upsertCustomer && data.customer?.id) {
         app.upsertCustomer(data.customer as Parameters<typeof app.upsertCustomer>[0]);
@@ -1369,6 +1384,17 @@ export default function CallCenter() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <Label>Call aim</Label>
+                  <Input
+                    value={outboundAim}
+                    onChange={(e) => setOutboundAim(e.target.value)}
+                    placeholder="discovery, callback, trial_followup…"
+                  />
+                  {outboundCustomerId && (
+                    <p className="text-xs text-slate-500 mt-1">Linked CRM lead: {outboundCustomerId}</p>
+                  )}
                 </div>
                 <Button onClick={queueOutbound} className="w-full">
                   <PhoneOutgoing className="w-4 h-4 mr-2" />

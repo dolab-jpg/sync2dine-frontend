@@ -1,5 +1,5 @@
-import { useState, useContext, useMemo } from 'react';
-import { useNavigate } from 'react-router';
+import { useState, useContext, useMemo, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import { AppContext, Customer } from '../App';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -7,15 +7,20 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Badge } from './ui/badge';
-import { Facebook, Instagram, Search as GoogleIcon, Phone, PhoneCall, Mail, User, MapPin, Calendar, TrendingUp, Filter, Plus, MessageSquare, Video, ExternalLink } from 'lucide-react';
+import { Facebook, Instagram, Search as GoogleIcon, Phone, PhoneCall, Mail, User, MapPin, Calendar, TrendingUp, Plus, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { AddressMapLink } from './ui/AddressMapLink';
-import { getAllTrades } from '../config/trades';
-import type { TradeId } from '../config/types';
 import { getDueFollowUps, isLeadCustomer } from '../engine/leads/leadService';
+import {
+  AIM_LABELS,
+  LEAD_AIMS,
+  createLeadActivity,
+  normalizeLeadActivities,
+  type LeadAim,
+} from '../engine/leads/leadActivity';
 import { findPlanningApplicationsByCustomerId } from '../engine/planning/planningStore';
 import { stageLabel } from '../engine/planning/types';
 
@@ -24,6 +29,8 @@ type Lead = Customer & {
   leadScore: number;
   tags: string[];
 };
+
+type LeadSource = NonNullable<Customer['source']>;
 
 function toLead(c: Customer): Lead | null {
   if (!isLeadCustomer(c)) return null;
@@ -38,8 +45,8 @@ function toLead(c: Customer): Lead | null {
   };
 }
 
-function inferTradeFromTags(tags: string[]): TradeId {
-  const map: Record<string, TradeId> = {
+function inferTradeFromTags(tags: string[]): import('../config/types').TradeId {
+  const map: Record<string, import('../config/types').TradeId> = {
     kitchen: 'kitchen', wetroom: 'bathroom', microcement: 'bathroom', rewire: 'electrical',
     loft: 'loft', roofing: 'roofing', extension: 'extensions',
   };
@@ -50,9 +57,23 @@ function inferTradeFromTags(tags: string[]): TradeId {
   return 'bathroom';
 }
 
+const EMPTY_LEAD_FORM = {
+  name: '',
+  phone: '',
+  email: '',
+  address: '',
+  source: 'website' as LeadSource,
+  tags: '',
+  notes: '',
+  nextFollowUp: '',
+  budget: '',
+  timeline: '',
+};
+
 export default function ComprehensiveCRM() {
   const context = useContext(AppContext);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   if (!context) return null;
 
   const { user, customers, updateCustomer, addCustomer } = context;
@@ -64,6 +85,57 @@ export default function ComprehensiveCRM() {
   );
 
   const dueFollowUps = useMemo(() => getDueFollowUps(customers), [customers]);
+
+  const pendingCallbacks = useMemo(() => {
+    return leads
+      .filter((l) => {
+        const acts = normalizeLeadActivities(l.activities);
+        const hasOpenCb = acts.some((a) => a.type === 'callback' && !a.outcome);
+        const due = l.nextFollowUp && new Date(l.nextFollowUp).getTime() <= Date.now() + 7 * 86400000;
+        return hasOpenCb || Boolean(due && l.phone);
+      })
+      .sort((a, b) => String(a.nextFollowUp ?? '').localeCompare(String(b.nextFollowUp ?? '')));
+  }, [leads]);
+
+  const [activeTab, setActiveTab] = useState('all');
+  const [filterSource, setFilterSource] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [leadForm, setLeadForm] = useState(EMPTY_LEAD_FORM);
+  const [savingLead, setSavingLead] = useState(false);
+  const [noteDetail, setNoteDetail] = useState('');
+  const [noteAim, setNoteAim] = useState<string>('other');
+
+  const customerPlanningApps = useMemo(
+    () => (selectedLead ? findPlanningApplicationsByCustomerId(selectedLead.id) : []),
+    [selectedLead?.id],
+  );
+
+  const selectedActivities = useMemo(
+    () => (selectedLead ? normalizeLeadActivities(selectedLead.activities) : []),
+    [selectedLead],
+  );
+
+  // Deep-link from lead inbox: /crm?lead=ID
+  useEffect(() => {
+    const leadId = searchParams.get('lead');
+    if (!leadId) return;
+    const found = customers.find((c) => c.id === leadId);
+    const lead = found ? toLead(found) : null;
+    if (lead) {
+      setSelectedLead(lead);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, customers, setSearchParams]);
+
+  // Keep selected lead in sync with store updates
+  useEffect(() => {
+    if (!selectedLead) return;
+    const fresh = customers.find((c) => c.id === selectedLead.id);
+    const lead = fresh ? toLead(fresh) : null;
+    if (lead) setSelectedLead(lead);
+  }, [customers, selectedLead?.id]);
 
   const handleScheduleVisit = () => {
     if (!selectedLead) return;
@@ -94,7 +166,17 @@ export default function ComprehensiveCRM() {
 
   const handleMarkLost = () => {
     if (!selectedLead) return;
-    updateCustomer(selectedLead.id, { status: 'lost', lastContact: new Date().toISOString() });
+    const activity = createLeadActivity({
+      type: 'status_change',
+      detail: 'Marked as lost',
+      createdBy: user.id || 'staff',
+    });
+    const prev = normalizeLeadActivities(selectedLead.activities);
+    updateCustomer(selectedLead.id, {
+      status: 'lost',
+      lastContact: new Date().toISOString(),
+      activities: [activity, ...prev].slice(0, 50),
+    });
     toast.info(`${selectedLead.name} marked as lost`);
     setActiveTab('lost');
     setSelectedLead(null);
@@ -110,23 +192,133 @@ export default function ComprehensiveCRM() {
     });
     toast.success('Follow-up logged — next reminder in 3 days');
   };
-  const [activeTab, setActiveTab] = useState('all');
-  const [filterSource, setFilterSource] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
 
-  const customerPlanningApps = useMemo(
-    () => (selectedLead ? findPlanningApplicationsByCustomerId(selectedLead.id) : []),
-    [selectedLead?.id],
-  );
+  const handleCreateLead = () => {
+    const name = leadForm.name.trim();
+    const phone = leadForm.phone.trim();
+    if (!name) {
+      toast.error('Name is required');
+      return;
+    }
+    if (!phone && !leadForm.email.trim()) {
+      toast.error('Phone or email is required');
+      return;
+    }
+    setSavingLead(true);
+    try {
+      const tags = leadForm.tags
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean);
+      const initialNotes = leadForm.notes.trim();
+      const activities = initialNotes
+        ? [createLeadActivity({ type: 'note', detail: initialNotes, aim: 'discovery', createdBy: user.id || 'staff' })]
+        : [];
+      const created = addCustomer({
+        name,
+        phone,
+        email: leadForm.email.trim(),
+        address: leadForm.address.trim(),
+        status: 'lead',
+        notes: initialNotes,
+        photos: [],
+        whatsappOptIn: false,
+        preferredChannel: 'email',
+        source: leadForm.source,
+        tags,
+        leadScore: 50,
+        budget: leadForm.budget.trim() || undefined,
+        timeline: leadForm.timeline.trim() || undefined,
+        nextFollowUp: leadForm.nextFollowUp
+          ? new Date(leadForm.nextFollowUp).toISOString()
+          : undefined,
+        lastContact: new Date().toISOString(),
+        activities,
+      });
+      toast.success(`Lead created: ${created.name}`);
+      setIsAddLeadOpen(false);
+      setLeadForm(EMPTY_LEAD_FORM);
+      const lead = toLead(created);
+      if (lead) {
+        setSelectedLead(lead);
+        setActiveTab('lead');
+      }
+    } finally {
+      setSavingLead(false);
+    }
+  };
+
+  const handleAddNote = () => {
+    if (!selectedLead) return;
+    const detail = noteDetail.trim();
+    if (!detail) {
+      toast.error('Enter conversation / note details');
+      return;
+    }
+    const activity = createLeadActivity({
+      type: 'note',
+      detail,
+      aim: noteAim as LeadAim,
+      createdBy: user.id || user.name || 'staff',
+    });
+    const prev = normalizeLeadActivities(selectedLead.activities);
+    const stamp = `[Note ${activity.createdAt.slice(0, 16).replace('T', ' ')}] ${detail}`;
+    const prevNotes = selectedLead.notes?.trim() ?? '';
+    updateCustomer(selectedLead.id, {
+      activities: [activity, ...prev].slice(0, 50),
+      notes: prevNotes ? `${stamp}\n${prevNotes}` : stamp,
+      lastContact: new Date().toISOString(),
+    });
+    setNoteDetail('');
+    toast.success('Note saved — Cynthia can see this on the next call');
+  };
+
+  const handleCallWithAim = (aim: string, leadOverride?: Lead) => {
+    const lead = leadOverride ?? selectedLead;
+    if (!lead?.phone) {
+      toast.error('Lead has no phone number');
+      return;
+    }
+    const activity = createLeadActivity({
+      type: 'callback',
+      detail: `Outbound requested with aim: ${AIM_LABELS[aim] ?? aim}`,
+      aim,
+      createdBy: user.id || 'staff',
+    });
+    const prev = normalizeLeadActivities(lead.activities);
+    updateCustomer(lead.id, {
+      activities: [activity, ...prev].slice(0, 50),
+      lastContact: new Date().toISOString(),
+    });
+    const q = new URLSearchParams({
+      tab: 'outbound',
+      to: lead.phone,
+      customerId: lead.id,
+      aim,
+    });
+    setSelectedLead(null);
+    navigate(`/calls?${q.toString()}`);
+  };
+
+  const handleMarkCallbackDone = (lead: Lead) => {
+    const prev = normalizeLeadActivities(lead.activities);
+    const updated = prev.map((a) =>
+      a.type === 'callback' && !a.outcome ? { ...a, outcome: 'completed' } : a,
+    );
+    updateCustomer(lead.id, {
+      activities: updated,
+      lastContact: new Date().toISOString(),
+      nextFollowUp: undefined,
+    });
+    toast.success(`Callback cleared for ${lead.name}`);
+  };
 
   const [metaSettings, setMetaSettings] = useState({
     accessToken: '',
     pageId: '',
     formId: '',
     webhookUrl: '',
-    autoSync: true
+    autoSync: true,
   });
 
   const getSourceIcon = (source: Lead['source']) => {
@@ -147,22 +339,21 @@ export default function ComprehensiveCRM() {
     return 'bg-gray-400';
   };
 
-  const filteredLeads = leads.filter(lead => {
+  const filteredLeads = leads.filter((lead) => {
     const matchesStatus = activeTab === 'all' || lead.status === activeTab;
     const matchesSource = filterSource === 'all' || lead.source === filterSource;
-    const matchesSearch = String(lead.name ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          String(lead.email ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          String(lead.phone ?? '').includes(searchTerm);
+    const matchesSearch = String(lead.name ?? '').toLowerCase().includes(searchTerm.toLowerCase())
+      || String(lead.email ?? '').toLowerCase().includes(searchTerm.toLowerCase())
+      || String(lead.phone ?? '').includes(searchTerm);
     return matchesStatus && matchesSource && matchesSearch;
   });
 
   const stats = {
     total: leads.length,
-    facebook: leads.filter(l => l.source === 'facebook').length,
-    instagram: leads.filter(l => l.source === 'instagram').length,
-    google: leads.filter(l => l.source === 'google').length,
-    conversionRate: leads.length ? ((leads.filter(l => l.status === 'won').length / leads.length) * 100).toFixed(1) : '0',
-    avgLeadScore: leads.length ? (leads.reduce((sum, l) => sum + l.leadScore, 0) / leads.length).toFixed(0) : '0',
+    facebook: leads.filter((l) => l.source === 'facebook').length,
+    instagram: leads.filter((l) => l.source === 'instagram').length,
+    google: leads.filter((l) => l.source === 'google').length,
+    conversionRate: leads.length ? ((leads.filter((l) => l.status === 'won').length / leads.length) * 100).toFixed(1) : '0',
     followUpsDue: dueFollowUps.length,
   };
 
@@ -179,7 +370,7 @@ export default function ComprehensiveCRM() {
                 <h1 className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-amber-400 to-amber-200 bg-clip-text text-transparent">
                   Lead Management CRM
                 </h1>
-                <p className="text-amber-100 mt-1 text-sm sm:text-lg">Track leads from social media & all sources</p>
+                <p className="text-amber-100 mt-1 text-sm sm:text-lg">Track leads, conversation notes & callbacks</p>
               </div>
             </div>
 
@@ -191,29 +382,147 @@ export default function ComprehensiveCRM() {
                     Add Lead
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle className="text-2xl">Add New Lead</DialogTitle>
                   </DialogHeader>
-                  <p className="text-gray-600">Manual lead entry form would go here</p>
+                  <div className="space-y-4 pt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="font-semibold">Name *</Label>
+                        <Input
+                          value={leadForm.name}
+                          onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })}
+                          placeholder="Contact or company name"
+                          className="mt-1 min-h-11"
+                        />
+                      </div>
+                      <div>
+                        <Label className="font-semibold">Phone *</Label>
+                        <Input
+                          value={leadForm.phone}
+                          onChange={(e) => setLeadForm({ ...leadForm, phone: e.target.value })}
+                          placeholder="+44…"
+                          className="mt-1 min-h-11"
+                        />
+                      </div>
+                      <div>
+                        <Label className="font-semibold">Email</Label>
+                        <Input
+                          type="email"
+                          value={leadForm.email}
+                          onChange={(e) => setLeadForm({ ...leadForm, email: e.target.value })}
+                          placeholder="name@company.com"
+                          className="mt-1 min-h-11"
+                        />
+                      </div>
+                      <div>
+                        <Label className="font-semibold">Source</Label>
+                        <Select
+                          value={leadForm.source}
+                          onValueChange={(v) => setLeadForm({ ...leadForm, source: v as LeadSource })}
+                        >
+                          <SelectTrigger className="mt-1 min-h-11">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="website">Website</SelectItem>
+                            <SelectItem value="phone">Phone</SelectItem>
+                            <SelectItem value="referral">Referral</SelectItem>
+                            <SelectItem value="facebook">Facebook</SelectItem>
+                            <SelectItem value="instagram">Instagram</SelectItem>
+                            <SelectItem value="google">Google</SelectItem>
+                            <SelectItem value="email">Email</SelectItem>
+                            <SelectItem value="walk-in">Walk-in</SelectItem>
+                            <SelectItem value="purchased">Purchased</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="font-semibold">Address</Label>
+                      <Input
+                        value={leadForm.address}
+                        onChange={(e) => setLeadForm({ ...leadForm, address: e.target.value })}
+                        placeholder="Site or company address"
+                        className="mt-1 min-h-11"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="font-semibold">Tags (comma-separated)</Label>
+                        <Input
+                          value={leadForm.tags}
+                          onChange={(e) => setLeadForm({ ...leadForm, tags: e.target.value })}
+                          placeholder="saas, builder-diddies"
+                          className="mt-1 min-h-11"
+                        />
+                      </div>
+                      <div>
+                        <Label className="font-semibold">Next follow-up</Label>
+                        <Input
+                          type="date"
+                          value={leadForm.nextFollowUp}
+                          onChange={(e) => setLeadForm({ ...leadForm, nextFollowUp: e.target.value })}
+                          className="mt-1 min-h-11"
+                        />
+                      </div>
+                      <div>
+                        <Label className="font-semibold">Budget</Label>
+                        <Input
+                          value={leadForm.budget}
+                          onChange={(e) => setLeadForm({ ...leadForm, budget: e.target.value })}
+                          placeholder="e.g. £2k–5k / month"
+                          className="mt-1 min-h-11"
+                        />
+                      </div>
+                      <div>
+                        <Label className="font-semibold">Timeline</Label>
+                        <Input
+                          value={leadForm.timeline}
+                          onChange={(e) => setLeadForm({ ...leadForm, timeline: e.target.value })}
+                          placeholder="e.g. This month"
+                          className="mt-1 min-h-11"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="font-semibold">Initial conversation notes</Label>
+                      <Textarea
+                        value={leadForm.notes}
+                        onChange={(e) => setLeadForm({ ...leadForm, notes: e.target.value })}
+                        placeholder="What was discussed, aims, context Cynthia should know…"
+                        className="mt-1 min-h-[100px]"
+                      />
+                    </div>
+                    <Button
+                      size="lg"
+                      className="w-full min-h-11 bg-gradient-to-r from-amber-500 to-amber-600"
+                      disabled={savingLead}
+                      onClick={handleCreateLead}
+                    >
+                      {savingLead ? 'Saving…' : 'Create Lead'}
+                    </Button>
+                  </div>
                 </DialogContent>
               </Dialog>
             )}
           </div>
         </div>
 
-        {/* Follow-ups due */}
-        {dueFollowUps.length > 0 && (
-          <Card className="shadow-lg rounded-2xl border-amber-200 bg-amber-50 mb-6">
+        {/* Callbacks walkthrough */}
+        {pendingCallbacks.length > 0 && (
+          <Card className="shadow-lg rounded-2xl border-indigo-200 bg-indigo-50 mb-6">
             <CardContent className="p-4">
-              <p className="font-semibold text-amber-900 mb-2">{dueFollowUps.length} follow-up{dueFollowUps.length > 1 ? 's' : ''} due</p>
-              <div className="flex flex-wrap gap-2">
-                {dueFollowUps.slice(0, 6).map((c) => (
-                  <div key={c.id} className="flex flex-wrap gap-1 items-center">
+              <p className="font-semibold text-indigo-900 mb-2">
+                {pendingCallbacks.length} callback{pendingCallbacks.length > 1 ? 's' : ''} / follow-ups to work
+              </p>
+              <div className="space-y-2">
+                {pendingCallbacks.slice(0, 8).map((c) => (
+                  <div key={c.id} className="flex flex-wrap gap-2 items-center bg-white/80 rounded-xl p-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="bg-white"
                       onClick={() => {
                         const lead = toLead(c);
                         if (lead) setSelectedLead(lead);
@@ -221,25 +530,28 @@ export default function ComprehensiveCRM() {
                     >
                       {c.name}
                     </Button>
+                    <span className="text-xs text-indigo-700">
+                      {c.nextFollowUp
+                        ? `Due ${new Date(c.nextFollowUp).toLocaleString('en-GB')}`
+                        : 'Callback queued'}
+                    </span>
                     <Button
                       variant="ghost"
                       size="sm"
                       className="text-xs h-8"
-                      onClick={() => {
-                        window.location.href = `/communications?customerId=${encodeURIComponent(c.id)}&template=quote_chase`;
-                      }}
+                      onClick={() => handleCallWithAim('callback', c)}
+                      disabled={!c.phone}
                     >
-                      Email chase
+                      <PhoneCall className="w-3 h-3 mr-1" />
+                      Call next
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       className="text-xs h-8"
-                      onClick={() => {
-                        window.location.href = `/calls?tab=outbound&to=${encodeURIComponent(c.phone || '')}`;
-                      }}
+                      onClick={() => handleMarkCallbackDone(c)}
                     >
-                      Call chase
+                      Mark done
                     </Button>
                   </div>
                 ))}
@@ -248,60 +560,63 @@ export default function ComprehensiveCRM() {
           </Card>
         )}
 
-        {/* Stats Cards */}
+        {dueFollowUps.length > 0 && pendingCallbacks.length === 0 && (
+          <Card className="shadow-lg rounded-2xl border-amber-200 bg-amber-50 mb-6">
+            <CardContent className="p-4">
+              <p className="font-semibold text-amber-900 mb-2">{dueFollowUps.length} follow-up{dueFollowUps.length > 1 ? 's' : ''} due</p>
+              <div className="flex flex-wrap gap-2">
+                {dueFollowUps.slice(0, 6).map((c) => (
+                  <Button
+                    key={c.id}
+                    variant="outline"
+                    size="sm"
+                    className="bg-white"
+                    onClick={() => {
+                      const lead = toLead(c);
+                      if (lead) setSelectedLead(lead);
+                    }}
+                  >
+                    {c.name}
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           <Card className="shadow-lg rounded-2xl border-0">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm text-gray-600">Total Leads</p>
-                <TrendingUp className="w-4 h-4 text-gray-400" />
-              </div>
+              <p className="text-sm text-gray-600 mb-2">Total Leads</p>
               <p className="text-3xl font-bold">{stats.total}</p>
             </CardContent>
           </Card>
-
           <Card className="shadow-lg rounded-2xl border-0 bg-gradient-to-br from-blue-50 to-blue-100">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm text-blue-900">Facebook</p>
-                <Facebook className="w-4 h-4 text-blue-600" />
-              </div>
+              <p className="text-sm text-blue-900 mb-2">Facebook</p>
               <p className="text-3xl font-bold text-blue-900">{stats.facebook}</p>
             </CardContent>
           </Card>
-
           <Card className="shadow-lg rounded-2xl border-0 bg-gradient-to-br from-pink-50 to-pink-100">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm text-pink-900">Instagram</p>
-                <Instagram className="w-4 h-4 text-pink-600" />
-              </div>
+              <p className="text-sm text-pink-900 mb-2">Instagram</p>
               <p className="text-3xl font-bold text-pink-900">{stats.instagram}</p>
             </CardContent>
           </Card>
-
           <Card className="shadow-lg rounded-2xl border-0 bg-gradient-to-br from-red-50 to-red-100">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm text-red-900">Google Ads</p>
-                <GoogleIcon className="w-4 h-4 text-red-600" />
-              </div>
+              <p className="text-sm text-red-900 mb-2">Google Ads</p>
               <p className="text-3xl font-bold text-red-900">{stats.google}</p>
             </CardContent>
           </Card>
-
           <Card className="shadow-lg rounded-2xl border-0 bg-gradient-to-br from-green-50 to-green-100">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm text-green-900">Conversion</p>
-                <TrendingUp className="w-4 h-4 text-green-600" />
-              </div>
+              <p className="text-sm text-green-900 mb-2">Conversion</p>
               <p className="text-3xl font-bold text-green-900">{stats.conversionRate}%</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Filters & Tabs */}
         <Card className="shadow-xl rounded-3xl border-0 mb-6">
           <CardContent className="p-6">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -318,7 +633,7 @@ export default function ComprehensiveCRM() {
               <Input
                 placeholder="Search leads..."
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="flex-1 text-base sm:text-lg p-4 sm:p-6 border-2 rounded-2xl min-h-11"
               />
               <Select value={filterSource} onValueChange={setFilterSource}>
@@ -339,14 +654,13 @@ export default function ComprehensiveCRM() {
           </CardContent>
         </Card>
 
-        {/* Leads List */}
         <div className="space-y-4">
           {filteredLeads.length === 0 ? (
             <Card className="shadow-lg rounded-2xl border-0">
               <CardContent className="text-center py-12">
                 <TrendingUp className="w-14 h-14 text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-600 font-medium">No leads match your filters</p>
-                <p className="text-sm text-gray-400 mt-1">Try a different tab, search term, or source</p>
+                <p className="text-sm text-gray-400 mt-1">Try Add Lead, or clear filters</p>
                 <Button
                   variant="outline"
                   className="mt-4 min-h-11"
@@ -360,7 +674,7 @@ export default function ComprehensiveCRM() {
                 </Button>
               </CardContent>
             </Card>
-          ) : filteredLeads.map(lead => (
+          ) : filteredLeads.map((lead) => (
             <Card key={lead.id} className="shadow-lg rounded-2xl border-0 hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setSelectedLead(lead)}>
               <CardContent className="p-6">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -373,15 +687,14 @@ export default function ComprehensiveCRM() {
                         {lead.status.toUpperCase()}
                       </Badge>
                     </div>
-
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                       <div className="flex items-center gap-2">
                         <Mail className="w-4 h-4 text-gray-400" />
-                        <span>{lead.email}</span>
+                        <span>{lead.email || '—'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Phone className="w-4 h-4 text-gray-400" />
-                        <span>{lead.phone}</span>
+                        <span>{lead.phone || '—'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <MapPin className="w-4 h-4 text-gray-400" />
@@ -392,47 +705,19 @@ export default function ComprehensiveCRM() {
                         <span>{new Date(lead.createdAt).toLocaleDateString('en-GB')}</span>
                       </div>
                     </div>
-
-                    {lead.campaign && (
-                      <div className="mt-3 flex items-center gap-2 text-xs">
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                          {lead.campaign}
-                        </Badge>
-                        {lead.adSet && (
-                          <Badge variant="outline" className="bg-purple-50 text-purple-700">
-                            {lead.adSet}
-                          </Badge>
-                        )}
-                      </div>
-                    )}
-
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {lead.tags.map(tag => (
-                        <Badge key={tag} variant="secondary" className="text-xs">
-                          {tag}
-                        </Badge>
+                      {lead.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
                       ))}
                     </div>
-
                     {lead.notes && (
                       <p className="mt-3 text-gray-700 text-sm line-clamp-2">{lead.notes}</p>
                     )}
                   </div>
-
                   <div className="text-left sm:text-right sm:ml-6 shrink-0">
                     <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white px-4 py-2 rounded-full font-bold mb-2">
                       Score: {lead.leadScore}
                     </div>
-                    {lead.budget && (
-                      <div className="text-sm text-gray-600 mb-1">
-                        <strong>Budget:</strong> {lead.budget}
-                      </div>
-                    )}
-                    {lead.timeline && (
-                      <div className="text-sm text-gray-600">
-                        <strong>Timeline:</strong> {lead.timeline}
-                      </div>
-                    )}
                   </div>
                 </div>
               </CardContent>
@@ -440,33 +725,22 @@ export default function ComprehensiveCRM() {
           ))}
         </div>
 
-        {/* Meta Integration Settings (Super Admin Only) */}
         {isSuperAdmin && (
           <Card className="shadow-xl rounded-3xl border-0 mt-6">
             <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-3xl">
               <CardTitle className="text-2xl">Meta Lead Integration</CardTitle>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-2xl border-2 border-blue-200">
-                <h3 className="font-bold text-blue-900 mb-2">📱 Connect Facebook & Instagram Leads</h3>
-                <p className="text-blue-800 text-sm mb-3">
-                  Automatically sync leads from Facebook & Instagram ad campaigns directly into your CRM.
-                </p>
-                <ul className="text-sm text-blue-700 space-y-1">
-                  <li>• Auto-import leads from Facebook Lead Forms</li>
-                  <li>• Track Instagram DMs and comment leads</li>
-                  <li>• Real-time webhook notifications</li>
-                  <li>• Campaign & ad set attribution</li>
-                </ul>
-              </div>
-
+              <p className="text-sm text-slate-600">
+                Meta lead sync is not connected yet — settings below are for future setup only.
+              </p>
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <Label className="text-lg font-bold mb-2 block">Access Token</Label>
                   <Input
                     type="password"
                     value={metaSettings.accessToken}
-                    onChange={e => setMetaSettings({ ...metaSettings, accessToken: e.target.value })}
+                    onChange={(e) => setMetaSettings({ ...metaSettings, accessToken: e.target.value })}
                     placeholder="EAAxxxxxxxxxxxxx"
                     className="text-base p-4"
                   />
@@ -475,66 +749,24 @@ export default function ComprehensiveCRM() {
                   <Label className="text-lg font-bold mb-2 block">Page ID</Label>
                   <Input
                     value={metaSettings.pageId}
-                    onChange={e => setMetaSettings({ ...metaSettings, pageId: e.target.value })}
+                    onChange={(e) => setMetaSettings({ ...metaSettings, pageId: e.target.value })}
                     placeholder="123456789012345"
                     className="text-base p-4"
                   />
                 </div>
-                <div>
-                  <Label className="text-lg font-bold mb-2 block">Form ID</Label>
-                  <Input
-                    value={metaSettings.formId}
-                    onChange={e => setMetaSettings({ ...metaSettings, formId: e.target.value })}
-                    placeholder="Lead form ID"
-                    className="text-base p-4"
-                  />
-                </div>
-                <div>
-                  <Label className="text-lg font-bold mb-2 block">Webhook URL</Label>
-                  <Input
-                    value={metaSettings.webhookUrl}
-                    onChange={e => setMetaSettings({ ...metaSettings, webhookUrl: e.target.value })}
-                    placeholder="https://your-api.com/webhooks/meta"
-                    className="text-base p-4"
-                  />
-                </div>
               </div>
-
-              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl">
-                <input
-                  type="checkbox"
-                  checked={metaSettings.autoSync}
-                  onChange={e => setMetaSettings({ ...metaSettings, autoSync: e.target.checked })}
-                  className="w-6 h-6"
-                  id="autoSync"
-                />
-                <Label htmlFor="autoSync" className="text-lg">Auto-sync leads every 5 minutes</Label>
-              </div>
-
               <Button
-                onClick={() => toast.success('Meta integration settings saved!')}
+                onClick={() => toast.message('Meta integration is not wired yet — use Add Lead for now.')}
                 size="lg"
                 className="w-full text-xl py-8 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700"
               >
                 Save Meta Integration
               </Button>
-
-              <div className="bg-gradient-to-br from-amber-50 to-amber-100 p-6 rounded-2xl border-2 border-amber-200">
-                <h4 className="font-bold text-amber-900 mb-3">Setup Guide</h4>
-                <ol className="text-sm text-amber-800 space-y-2 list-decimal list-inside">
-                  <li>Create a Facebook App in Meta Business Suite</li>
-                  <li>Get your Access Token from Graph API Explorer</li>
-                  <li>Subscribe to 'leadgen' webhook events</li>
-                  <li>Configure your webhook endpoint URL</li>
-                  <li>Test the connection and verify leads are syncing</li>
-                </ol>
-              </div>
             </CardContent>
           </Card>
         )}
       </div>
 
-      {/* Lead Detail Modal */}
       <Dialog open={!!selectedLead} onOpenChange={() => setSelectedLead(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           {selectedLead && (
@@ -559,6 +791,14 @@ export default function ComprehensiveCRM() {
                     </div>
                   </div>
                   <div>
+                    <Label className="font-bold">Phone</Label>
+                    <p className="mt-1">{selectedLead.phone || '—'}</p>
+                  </div>
+                  <div>
+                    <Label className="font-bold">Email</Label>
+                    <p className="mt-1">{selectedLead.email || '—'}</p>
+                  </div>
+                  <div>
                     <Label className="font-bold">Budget</Label>
                     <p className="mt-1">{selectedLead.budget || 'Not specified'}</p>
                   </div>
@@ -568,19 +808,73 @@ export default function ComprehensiveCRM() {
                   </div>
                 </div>
 
-                {selectedLead.campaign && (
-                  <div>
-                    <Label className="font-bold">Campaign Details</Label>
-                    <div className="mt-2 space-y-2">
-                      <p><strong>Campaign:</strong> {selectedLead.campaign}</p>
-                      {selectedLead.adSet && <p><strong>Ad Set:</strong> {selectedLead.adSet}</p>}
+                {/* Conversation notes */}
+                <div className="border rounded-2xl p-4 bg-slate-50 space-y-4">
+                  <Label className="font-bold text-lg">Conversation notes</Label>
+                  <p className="text-xs text-slate-500">
+                    Cynthia reads these notes when speaking to this lead. Add aims and detail after every touch.
+                  </p>
+                  <div className="space-y-2 max-h-56 overflow-y-auto">
+                    {selectedActivities.length === 0 ? (
+                      <p className="text-sm text-slate-400">No conversation notes yet.</p>
+                    ) : (
+                      selectedActivities.map((a) => (
+                        <div key={a.id} className="bg-white rounded-xl border p-3 text-sm">
+                          <div className="flex flex-wrap gap-2 items-center mb-1">
+                            <Badge variant="secondary" className="text-xs">{a.type}</Badge>
+                            {a.aim && (
+                              <Badge variant="outline" className="text-xs">
+                                {AIM_LABELS[a.aim] ?? a.aim}
+                              </Badge>
+                            )}
+                            <span className="text-xs text-slate-400">
+                              {new Date(a.createdAt).toLocaleString('en-GB')} · {a.createdBy}
+                            </span>
+                          </div>
+                          <p className="text-slate-800 whitespace-pre-wrap">{a.detail}</p>
+                          {a.outcome && <p className="text-xs text-slate-500 mt-1">Outcome: {a.outcome}</p>}
+                          {a.callSessionId && (
+                            <Button
+                              variant="link"
+                              className="px-0 h-auto text-xs"
+                              onClick={() => {
+                                const id = a.callSessionId;
+                                setSelectedLead(null);
+                                navigate(`/calls?callId=${id}`);
+                              }}
+                            >
+                              View call
+                            </Button>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-2">
+                    <Textarea
+                      value={noteDetail}
+                      onChange={(e) => setNoteDetail(e.target.value)}
+                      placeholder="Conversation detail — what was said, objections, next step…"
+                      className="min-h-[80px] bg-white"
+                    />
+                    <div className="space-y-2">
+                      <Select value={noteAim} onValueChange={setNoteAim}>
+                        <SelectTrigger className="min-h-11 bg-white">
+                          <SelectValue placeholder="Aim" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LEAD_AIMS.map((aim) => (
+                            <SelectItem key={aim} value={aim}>
+                              {AIM_LABELS[aim] ?? aim}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button className="w-full min-h-11" onClick={handleAddNote}>
+                        Add note
+                      </Button>
                     </div>
                   </div>
-                )}
-
-                <div>
-                  <Label className="font-bold">Notes</Label>
-                  <p className="mt-2 bg-gray-50 p-4 rounded-lg">{selectedLead.notes}</p>
                 </div>
 
                 {customerPlanningApps.length > 0 && (
@@ -613,6 +907,23 @@ export default function ComprehensiveCRM() {
                   </Button>
                   <Button variant="outline" className="flex-1 min-w-[140px]" onClick={handleLogFollowUp}>
                     Log Follow-up
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 min-w-[140px]"
+                    onClick={() => handleCallWithAim('discovery')}
+                    disabled={!selectedLead.phone}
+                  >
+                    <PhoneCall className="w-4 h-4 mr-2" />
+                    Call (discovery)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 min-w-[140px]"
+                    onClick={() => handleCallWithAim('callback')}
+                    disabled={!selectedLead.phone}
+                  >
+                    Call (callback)
                   </Button>
                   {selectedLead.sourceCallId && (
                     <Button

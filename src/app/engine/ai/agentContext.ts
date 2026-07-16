@@ -1,4 +1,5 @@
 export type AgentRole =
+  | 'platform_owner'
   | 'super_admin'
   | 'manager'
   | 'staff'
@@ -42,7 +43,10 @@ function readOptionalString(value: unknown): string | null {
 
 export function buildAgentContext(pageContext: Record<string, unknown>): AgentContext {
   const roleValue = readOptionalString(pageContext.userRole) ?? 'unknown';
+  // platform_owner has the same CRM/ops tool surface as super_admin when acting in an org
+  const normalizedRole = roleValue === 'platform_owner' ? 'platform_owner' : roleValue;
   const role = ([
+    'platform_owner',
     'super_admin',
     'manager',
     'staff',
@@ -51,8 +55,8 @@ export function buildAgentContext(pageContext: Record<string, unknown>): AgentCo
     'customer',
     'agent',
     'unknown',
-  ] as const).includes(roleValue as AgentRole)
-    ? (roleValue as AgentRole)
+  ] as const).includes(normalizedRole as AgentRole)
+    ? (normalizedRole as AgentRole)
     : 'unknown';
 
   return {

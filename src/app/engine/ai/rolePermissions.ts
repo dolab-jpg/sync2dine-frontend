@@ -26,6 +26,9 @@ const SALES_QUOTING = new Set([
   'searchLeads',
   'updateLeadStatus',
   'logFollowUp',
+  'getLeadBrief',
+  'addLeadNote',
+  'listPendingCallbacks',
   'addQuoteLines',
   'updateQuoteLines',
   'navigateTo',
@@ -251,6 +254,27 @@ const ROLE_ACTIONS: Record<AgentRole, Set<string>> = {
     ...CYNTHIA_OPS,
     'requestCodeFix',
   ]),
+  // Same allow-list as super_admin — home-org / act-as CRM for selling Builder Diddies
+  platform_owner: new Set([
+    ...CUSTOMER_SELF_SERVICE,
+    'indicativeEstimate',
+    ...SALES_QUOTING,
+    ...PROJECT_PM,
+    ...FINANCIAL,
+    ...FOREMAN,
+    ...COSTING,
+    ...COSTING_ADMIN,
+    ...ACCOUNTS,
+    ...PHONE_RECEPTION,
+    ...RECRUITMENT,
+    ...CONTRACTS_PRICING,
+    ...APPROVALS,
+    ...MANAGER_INSIGHTS,
+    ...PLANNING,
+    ...EMAIL,
+    ...CYNTHIA_OPS,
+    'requestCodeFix',
+  ]),
   builder: new Set([
     ...FOREMAN,
     ...COSTING,
@@ -289,12 +313,13 @@ export function blockedActionMessage(role: AgentRole): string {
 }
 
 export function isStaffRole(role: AgentRole): boolean {
-  return role === 'staff' || role === 'manager' || role === 'super_admin';
+  return role === 'staff' || role === 'manager' || role === 'super_admin' || role === 'platform_owner';
 }
 
 /** Company-wide settings (pricing, margins, business info) — admin only for internal accounts. */
 export function canManageCompanySettings(role: AgentRole): boolean {
-  return role === 'super_admin';
+  // platform_owner has the same company-settings access as super_admin when acting as a client org
+  return role === 'super_admin' || role === 'platform_owner';
 }
 
 export function canViewAudit(role: AgentRole): boolean {
