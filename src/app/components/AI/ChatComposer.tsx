@@ -17,6 +17,8 @@ interface ChatComposerProps {
   trailing?: ReactNode;
   /** Show the Enter/Shift+Enter hint under the row. Default false for cleaner UI. */
   showHint?: boolean;
+  /** Override send enablement (e.g. allow send with attachments only). */
+  canSend?: boolean;
 }
 
 export function ChatComposer({
@@ -29,6 +31,7 @@ export function ChatComposer({
   leading,
   trailing,
   showHint = false,
+  canSend: canSendProp,
 }: ChatComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const wasLoadingRef = useRef(false);
@@ -48,18 +51,23 @@ export function ChatComposer({
     wasLoadingRef.current = loading;
   }, [loading]);
 
+  const canSend =
+    canSendProp ?? (!disabled && !loading && Boolean(value.trim()));
+
+  const trySend = () => {
+    if (canSend) onSend();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (value.trim() && !loading && !disabled) onSend();
+      trySend();
     }
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      if (value.trim() && !loading && !disabled) onSend();
+      trySend();
     }
   };
-
-  const canSend = !disabled && !loading && Boolean(value.trim());
 
   return (
     <div className="space-y-1">
@@ -94,7 +102,7 @@ export function ChatComposer({
           type="button"
           size="icon"
           onMouseDown={(e) => e.preventDefault()}
-          onClick={onSend}
+          onClick={trySend}
           disabled={!canSend}
           className="shrink-0 size-11 rounded-full"
           aria-label="Send message"

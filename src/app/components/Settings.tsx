@@ -7,6 +7,7 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Switch } from './ui/switch';
 import { Plus, Edit, Trash2, Settings as SettingsIcon, DollarSign, Sparkles, Plug, Upload } from 'lucide-react';
 import ImportExportPanel from './settings/ImportExportPanel';
 import IntegrationsHub from './integrations/IntegrationsHub';
@@ -25,6 +26,20 @@ import { BDIDDIES_HOME_ORG_ID } from '../engine/platform/homeOrg';
 
 export default function Settings() {
   const context = useContext(AppContext);
+  const { settings: aiSettings, updateSettings: updateAiSettings } = useAIAssistant();
+  const trades = getAllTrades();
+
+  const [filterTrade, setFilterTrade] = useState<string>('all');
+  const [isAddRuleDialogOpen, setIsAddRuleDialogOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<PricingRule | null>(null);
+  const [ruleForm, setRuleForm] = useState({
+    name: '',
+    type: 'per_sqm' as PricingRule['type'],
+    basePrice: 0,
+    category: 'labour',
+    tradeId: null as string | null,
+  });
+
   if (!context) return null;
 
   const { pricingRules, addPricingRule, updatePricingRule, deletePricingRule, user } = context;
@@ -41,20 +56,6 @@ export default function Settings() {
       </div>
     );
   }
-  const { settings: aiSettings, updateSettings: updateAiSettings } = useAIAssistant();
-  const trades = getAllTrades();
-
-  const [filterTrade, setFilterTrade] = useState<string>('all');
-  const [isAddRuleDialogOpen, setIsAddRuleDialogOpen] = useState(false);
-  const [editingRule, setEditingRule] = useState<PricingRule | null>(null);
-
-  const [ruleForm, setRuleForm] = useState({
-    name: '',
-    type: 'per_sqm' as PricingRule['type'],
-    basePrice: 0,
-    category: 'labour',
-    tradeId: null as string | null,
-  });
 
   const categories = [
     { value: 'labour', label: 'Labour' },

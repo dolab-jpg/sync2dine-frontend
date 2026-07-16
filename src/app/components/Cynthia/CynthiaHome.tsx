@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
-  Mic, MicOff, Paperclip, Send, ClipboardPaste, Image as ImageIcon, Loader2, Wrench,
+  Mic, MicOff, Paperclip, ClipboardPaste, Image as ImageIcon, Loader2, Wrench,
 } from 'lucide-react';
 import { AppContext } from '../../App';
 import { Button } from '../ui/button';
@@ -15,6 +15,7 @@ import {
 } from '../../engine/ai/toolRuntime';
 import { getHumanActionLabel } from '../../engine/ai/actionPolicy';
 import { ChatMarkdown } from '../AI/ChatMarkdown';
+import { ChatComposer } from '../AI/ChatComposer';
 import { ToolResultPanel } from '../AI/ToolResultPanel';
 import { StaffActionCard } from './StaffActionCard';
 import { ArtifactViewer, type OpenArtifact } from './ArtifactViewer';
@@ -318,6 +319,9 @@ export default function CynthiaHome() {
   const runSend = async (text: string, source: 'cynthia' | 'voice' | 'paste' | 'share' = 'cynthia') => {
     const trimmed = text.trim();
     const images = pendingAttachments.map((a) => a.dataUrl).filter((u) => u.startsWith('data:image'));
+    // #region agent log
+    fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'pre-fix',hypothesisId:'A',location:'CynthiaHome.tsx:runSend:entry',message:'chat send attempted',data:{source,textLen:trimmed.length,imageCount:images.length,sending,hasApp:!!app,role:app?.user?.role ?? null,customerCount:app?.customers?.length ?? 0,quoteCount:app?.quotes?.length ?? 0},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if ((!trimmed && images.length === 0) || sending || !app) return;
     setSending(true);
     setComposer('');
@@ -380,12 +384,18 @@ export default function CynthiaHome() {
         ...(orchestratorResult.autoActions ?? []),
         ...(orchestratorResult.proposedActions ?? []),
       ];
+      // #region agent log
+      fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'pre-fix',hypothesisId:'B',location:'CynthiaHome.tsx:runSend:orchestrator',message:'orchestrator returned',data:{replyLen:(orchestratorResult.content||'').length,phase:orchestratorResult.phase ?? null,autoCount:orchestratorResult.autoActions?.length ?? 0,proposedCount:orchestratorResult.proposedActions?.length ?? 0,actionNames:allActions.map((a)=>a.action),hasContent:!!orchestratorResult.content},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       if (allActions.length) {
         const toolRun = await processToolActions(allActions, buildRuntimeContext(), {
           role: agentContext.role,
           requireConfirmCustomerMessages: true,
         });
+        // #region agent log
+        fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'pre-fix',hypothesisId:'C',location:'CynthiaHome.tsx:runSend:toolRun',message:'processToolActions finished',data:{executedCount:toolRun.executed.length,pendingSafetyCount:toolRun.pendingSafety.length,summaryCount:toolRun.summaries.length,executed:toolRun.executed.map((r)=>({action:r.action,ok:r.executed,summary:(r.summary||'').slice(0,120)})),pendingSafety:toolRun.pendingSafety.map((a)=>a.action),summaries:toolRun.summaries.map((s)=>s.slice(0,120))},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         if (toolRun.executed.length) {
           setToolResults((prev) => [...toolRun.executed, ...prev].slice(0, 30));
           await handleToolOutputs(toolRun.executed);
@@ -412,6 +422,9 @@ export default function CynthiaHome() {
       void reloadThread();
     } catch (err) {
       const msg = err instanceof Error ? err.message : `${name} could not process that.`;
+      // #region agent log
+      fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'pre-fix',hypothesisId:'D',location:'CynthiaHome.tsx:runSend:catch',message:'orchestrator/chat error',data:{error:msg.slice(0,240)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       toast.error(msg);
       setBubbles((prev) => [
         ...prev,
@@ -657,7 +670,7 @@ export default function CynthiaHome() {
         )}
       </div>
 
-      <div className="shrink-0 bg-[#f0f2f5] px-2 py-2 flex items-end gap-1.5 border-t border-slate-200">
+      <div className="shrink-0 relative bg-white px-3 py-3 border-t border-slate-200 space-y-2">
         <input
           ref={fileRef}
           type="file"
@@ -685,19 +698,13 @@ export default function CynthiaHome() {
             })();
           }}
         />
-        <Button type="button" size="icon" variant="ghost" className="shrink-0 rounded-full min-h-11 min-w-11 touch-manipulation" onClick={() => void pasteFromClipboard()} title="Paste" aria-label="Paste from clipboard">
-          <ClipboardPaste className="h-5 w-5 text-slate-600" />
-        </Button>
-        <Button type="button" size="icon" variant="ghost" className="shrink-0 rounded-full min-h-11 min-w-11 touch-manipulation" onClick={() => void attachPhoto()} title="Attach" aria-label="Attach photo">
-          {isNativeBridgeAvailable() ? <ImageIcon className="h-5 w-5 text-slate-600" /> : <Paperclip className="h-5 w-5 text-slate-600" />}
-        </Button>
         {pendingAttachments.length > 0 && (
-          <div className="absolute left-14 bottom-14 flex flex-wrap gap-1 max-w-[70%]">
+          <div className="flex flex-wrap gap-1.5">
             {pendingAttachments.map((a) => (
               <button
                 key={a.name + a.dataUrl.slice(-12)}
                 type="button"
-                className="text-[10px] bg-white border border-slate-200 rounded-full px-2 py-1 shadow-sm"
+                className="text-[10px] bg-slate-50 border border-slate-200 rounded-full px-2.5 py-1 shadow-sm"
                 onClick={() => setPendingAttachments((prev) => prev.filter((x) => x.dataUrl !== a.dataUrl))}
                 title="Remove attachment"
               >
@@ -706,47 +713,59 @@ export default function CynthiaHome() {
             ))}
           </div>
         )}
-        <textarea
+        <ChatComposer
           value={composer}
-          onChange={(e) => setComposer(e.target.value)}
-          rows={1}
+          onChange={setComposer}
+          onSend={() => void runSend(composer, 'cynthia')}
+          loading={sending}
+          disabled={sending}
           placeholder={`Message ${name}…`}
-          className="flex-1 resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-base max-h-28 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              void runSend(composer, 'cynthia');
-            }
-          }}
+          canSend={!sending && (Boolean(composer.trim()) || pendingAttachments.length > 0)}
+          leading={
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                className="inline-flex items-center justify-center size-9 rounded-full text-slate-500 hover:bg-slate-200/70 hover:text-slate-700 transition-colors"
+                onClick={() => void pasteFromClipboard()}
+                title="Paste"
+                aria-label="Paste from clipboard"
+              >
+                <ClipboardPaste className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center justify-center size-9 rounded-full text-slate-500 hover:bg-slate-200/70 hover:text-slate-700 transition-colors"
+                onClick={() => void attachPhoto()}
+                title="Attach"
+                aria-label="Attach photo"
+              >
+                {isNativeBridgeAvailable() ? <ImageIcon className="h-4 w-4" /> : <Paperclip className="h-4 w-4" />}
+              </button>
+            </div>
+          }
+          trailing={
+            <button
+              type="button"
+              disabled={sending || vapiStatus === 'connecting'}
+              className={`inline-flex items-center justify-center size-9 rounded-full transition-colors disabled:opacity-50 ${
+                vapiActive
+                  ? 'bg-red-100 text-red-600'
+                  : 'text-slate-500 hover:bg-slate-200/70 hover:text-slate-700'
+              }`}
+              title={vapiActive ? 'End Cynthia voice' : 'Talk to Cynthia (same phone voice)'}
+              aria-label={vapiActive ? 'End Cynthia voice' : 'Talk to Cynthia'}
+              onClick={() => { void toggleVapi(); }}
+            >
+              {vapiStatus === 'connecting' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : vapiActive ? (
+                <MicOff className="h-4 w-4" />
+              ) : (
+                <Mic className="h-4 w-4" />
+              )}
+            </button>
+          }
         />
-        <Button
-          type="button"
-          size="icon"
-          className="shrink-0 rounded-full min-h-11 min-w-11 touch-manipulation bg-[#075e54] text-white hover:bg-[#064e46]"
-          disabled={sending || (!composer.trim() && pendingAttachments.length === 0)}
-          onClick={() => void runSend(composer, 'cynthia')}
-          aria-label="Send"
-        >
-          {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          disabled={sending || vapiStatus === 'connecting'}
-          className={`shrink-0 rounded-full min-h-11 min-w-11 touch-manipulation ${vapiActive ? 'bg-red-100 text-red-600' : ''}`}
-          title={vapiActive ? 'End Cynthia voice' : 'Talk to Cynthia (same phone voice)'}
-          aria-label={vapiActive ? 'End Cynthia voice' : 'Talk to Cynthia'}
-          onClick={() => { void toggleVapi(); }}
-        >
-          {vapiStatus === 'connecting' ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : vapiActive ? (
-            <MicOff className="h-5 w-5" />
-          ) : (
-            <Mic className="h-5 w-5 text-slate-600" />
-          )}
-        </Button>
       </div>
 
       {artifact && <ArtifactViewer artifact={artifact} onClose={() => setArtifact(null)} />}

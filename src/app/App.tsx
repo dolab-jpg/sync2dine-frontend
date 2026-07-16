@@ -98,7 +98,8 @@ import { useCloudPersistence } from './engine/data/cloudPersist';
 
 const CLOUD_MODE = isSupabaseConfigured();
 
-function mergeById<T extends { id: string }>(primary: T[], secondary: T[]): T[] {
+/** Prefer primary rows; append secondary ids not already present. */
+function unionById<T extends { id: string }>(primary: T[], secondary: T[]): T[] {
   const map = new Map<string, T>();
   for (const item of primary) map.set(item.id, item);
   for (const item of secondary) {
@@ -242,6 +243,8 @@ export interface Quote {
   jobGroupId?: string;
   approval?: QuoteApproval;
   pricingResearch?: PricingResearch;
+  /** Filename or storage path of last generated quote PDF */
+  pdfPath?: string;
 }
 
 export interface QuoteItem {
@@ -680,13 +683,13 @@ export default function App() {
         ]);
         if (remoteCustomers.length) {
           const remote = migrateCustomers(remoteCustomers as Customer[]);
-          setCustomers((prev) => (prev.length ? mergeById(remote, prev) : remote));
+          setCustomers((prev) => (prev.length ? unionById(remote, prev) : remote));
         } else if (!CLOUD_MODE) {
           setCustomers((prev) => (prev.length ? prev : mergeCrmLeads(migrateCustomers(testCustomers as Customer[]))));
         }
         if (remoteQuotes.length) {
           const remote = migrateQuotes(remoteQuotes as Quote[]);
-          setQuotes((prev) => (prev.length ? mergeById(remote, prev) : remote));
+          setQuotes((prev) => (prev.length ? unionById(remote, prev) : remote));
         }
         if (remoteProducts.length) setProducts(migrateProducts(remoteProducts as Product[]));
         else if (!CLOUD_MODE && remoteProducts.length === 0) setProducts((prev) => (prev.length ? prev : allTradeProducts));
