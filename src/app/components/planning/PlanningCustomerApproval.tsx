@@ -22,9 +22,6 @@ export default function PlanningCustomerApproval() {
   const load = useCallback(() => {
     if (!token) { setLoading(false); return; }
     const found = getPlanningApplicationByApprovalToken(token) ?? null;
-    // #region agent log
-    fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'71adf4'},body:JSON.stringify({sessionId:'71adf4',location:'PlanningCustomerApproval.tsx:load',message:'Token lookup',data:{tokenPrefix:token.slice(0,12),found:!!found,appId:found?.id},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
     setApp(found);
     setLoading(false);
   }, [token]);

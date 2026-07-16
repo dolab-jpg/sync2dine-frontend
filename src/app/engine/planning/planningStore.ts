@@ -60,9 +60,6 @@ function writeAll(applications: PlanningApplication[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(applications.slice(0, 200)));
   const snapshot = [...applications];
   subscribers.forEach((fn) => fn(snapshot));
-  // #region agent log
-  fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'71adf4'},body:JSON.stringify({sessionId:'71adf4',location:'planningStore.ts:writeAll',message:'Planning apps persisted to localStorage',data:{count:applications.length,ids:applications.slice(0,5).map(a=>a.id)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-  // #endregion
   void syncPlanning();
 }
 

@@ -8,7 +8,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Plus, Link2, Search, Trash2, Edit, Package } from 'lucide-react';
 import { toast } from 'sonner';
-import { getAllTrades } from '../config/trades';
 import type { TradeId } from '../config/types';
 
 export default function ProductCatalog() {
@@ -53,7 +52,6 @@ export default function ProductCatalog() {
     tradeId: 'bathroom' as TradeId,
   });
 
-  const trades = getAllTrades();
   const categories = [
     { value: 'toilet', label: 'Toilets' },
     { value: 'basin', label: 'Basins' },
@@ -134,11 +132,12 @@ export default function ProductCatalog() {
     }
   };
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = String(product.name ?? '')
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategory === 'all' || product.category === filterCategory;
-    const matchesTrade = filterTrade === 'all' || product.tradeId === filterTrade || (!product.tradeId && filterTrade === 'bathroom');
-    return matchesSearch && matchesCategory && matchesTrade;
+    return matchesSearch && matchesCategory;
   });
 
   return (
@@ -293,17 +292,6 @@ export default function ProductCatalog() {
             className="pl-10"
           />
         </div>
-        <Select value={filterTrade} onValueChange={setFilterTrade}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Trade" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Trades</SelectItem>
-            {trades.map(t => (
-              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Select value={filterCategory} onValueChange={setFilterCategory}>
           <SelectTrigger className="w-48">
             <SelectValue />

@@ -155,7 +155,8 @@ export function SelfHealErrorBridge() {
             // ignore
           }
 
-          const shouldAutoStart = studio.selfHealAutoStart !== false && job.scope === 'surgical';
+          // Require explicit opt-in (default is false). `!== false` treated unset as on.
+          const shouldAutoStart = studio.selfHealAutoStart === true && job.scope === 'surgical';
 
           if (shouldAutoStart) {
             const result = await enqueueCodeFix({

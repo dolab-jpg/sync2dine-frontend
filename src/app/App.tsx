@@ -709,12 +709,15 @@ export default function App() {
     const onQuotes = () => {
       try {
         const saved = localStorage.getItem('quotes');
+        // In cloud mode, localStorage is not the source of truth — ignore to avoid clobber.
+        if (CLOUD_MODE) return;
         if (saved) setQuotes(migrateQuotes(JSON.parse(saved)));
       } catch { /* ignore */ }
     };
     const onCustomers = () => {
       try {
         const saved = localStorage.getItem('customers');
+        if (CLOUD_MODE) return;
         if (saved) setCustomers(mergeCrmLeads(migrateCustomers(JSON.parse(saved))));
       } catch { /* ignore */ }
     };
@@ -772,10 +775,19 @@ export default function App() {
   }, [pricingRules]);
 
   useEffect(() => {
-    if (useCloudPersistence()) {
+    const cloud = useCloudPersistence();
+    if (cloud) {
       if (!cloudHydratedRef.current && quotes.length === 0) return;
       void import('./engine/data/supabaseStore').then(({ saveQuotesToSupabase }) => {
-        void saveQuotesToSupabase(quotes as unknown as Record<string, unknown>[]);
+        void saveQuotesToSupabase(quotes as unknown as Record<string, unknown>[]).then((err) => {
+          if (err) {
+            window.dispatchEvent(
+              new CustomEvent('tradepro:persist-error', {
+                detail: { table: 'quotes', error: err },
+              }),
+            );
+          }
+        });
       });
     } else {
       localStorage.setItem('quotes', JSON.stringify(quotes));
@@ -870,7 +882,24 @@ export default function App() {
       id: Date.now().toString(),
       createdAt: new Date().toISOString(),
     };
-    setQuotes((prev) => [...prev, newQuote]);
+    setQuotes((prev) => {
+      const next = [...prev, newQuote];
+      // Eager cloud persist (parity with addCustomer) so refresh does not lose the row
+      if (useCloudPersistence()) {
+        void import('./engine/data/supabaseStore').then(({ saveQuotesToSupabase }) => {
+          void saveQuotesToSupabase(next as unknown as Record<string, unknown>[]).then((err) => {
+            if (err) {
+              window.dispatchEvent(
+                new CustomEvent('tradepro:persist-error', {
+                  detail: { table: 'quotes', error: err },
+                }),
+              );
+            }
+          });
+        });
+      }
+      return next;
+    });
     if (quote.customerId && quote.status) {
       setCustomers((prev) => {
         const patch = syncCustomerStatusFromQuote(quote.customerId!, quote.status!, prev);

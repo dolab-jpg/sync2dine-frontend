@@ -76,9 +76,6 @@ export function useAIContextSync() {
       quoteTradeId: quote?.tradeId ?? null,
       customerInterestedTrades,
     });
-    // #region agent log
-    fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a8afb5'},body:JSON.stringify({sessionId:'a8afb5',location:'useAIContext.ts:sync',message:'AI page context synced',data:{pathname:location.pathname,userRole},timestamp:Date.now(),hypothesisId:'F'})}).catch(()=>{});
-    // #endregion
   }, [
     location.pathname,
     location.search,

@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppContext, Customer } from '../App';
 import { useLocation, useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -37,6 +37,18 @@ export default function BookingSystem() {
     sendEmail: true
   });
 
+  const lower = (v: unknown) => String(v ?? '').toLowerCase();
+
+  const filteredExistingCustomers = useMemo(() => {
+    const q = lower(searchTerm);
+    return customers.filter(
+      (c) =>
+        lower(c.name).includes(q) ||
+        lower(c.email).includes(q) ||
+        String(c.phone ?? '').includes(searchTerm),
+    );
+  }, [customers, searchTerm]);
+
   const timeSlots = [
     '09:00 - 10:00',
     '10:00 - 11:00',
@@ -49,19 +61,20 @@ export default function BookingSystem() {
   ];
 
   const prefillCustomer = (customer: BookingCustomerState) => {
-    const addressParts = customer.address.split(',');
+    const address = String(customer.address ?? '');
+    const addressParts = address.split(',');
     const existing = customers.find(
-      c => c.id === customer.id || c.email.toLowerCase() === customer.email.toLowerCase()
+      (c) => c.id === customer.id || lower(c.email) === lower(customer.email),
     );
 
     setCustomerMode('existing');
     setSelectedCustomerId(existing?.id ?? '');
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      name: customer.name,
-      email: customer.email,
-      phone: customer.phone,
-      address: addressParts[0]?.trim() || customer.address,
+      name: customer.name ?? '',
+      email: customer.email ?? '',
+      phone: customer.phone ?? '',
+      address: addressParts[0]?.trim() || address,
       postcode: addressParts[addressParts.length - 1]?.trim() || '',
     }));
     setStep(1);
@@ -111,10 +124,11 @@ export default function BookingSystem() {
 
     const appointmentNotes = `Site Visit: ${formData.preferredDate} at ${formData.preferredTime}\n${formData.notes}`;
 
-    const existingCustomer = customers.find(c =>
-      (selectedCustomerId && c.id === selectedCustomerId) ||
-      c.email.toLowerCase() === formData.email.toLowerCase() ||
-      c.phone === formData.phone
+    const existingCustomer = customers.find(
+      (c) =>
+        (selectedCustomerId && c.id === selectedCustomerId) ||
+        lower(c.email) === lower(formData.email) ||
+        String(c.phone ?? '') === String(formData.phone ?? ''),
     );
 
     let customerId = existingCustomer?.id ?? '';
@@ -166,19 +180,24 @@ export default function BookingSystem() {
           BOOKING_TIME: formData.preferredTime,
         }
       );
-      await messagingHub.send({
-        channels,
-        to: {
-          email: customer.email,
-          phone: customer.phone,
-          customerId: customer.id,
-          customerName: customer.name,
-        },
-        subject: renderTemplate('Booking Confirmed - {COMPANY_NAME}', { CUSTOMER_NAME: customer.name }),
-        body,
-        eventType: 'booking_confirmed',
-        templateId: 'booking_confirmed',
-      }, customer);
+      try {
+        await messagingHub.send({
+          channels,
+          to: {
+            email: customer.email,
+            phone: customer.phone,
+            customerId: customer.id,
+            customerName: customer.name,
+          },
+          subject: renderTemplate('Booking Confirmed - {COMPANY_NAME}', { CUSTOMER_NAME: customer.name }),
+          body,
+          eventType: 'booking_confirmed',
+          templateId: 'booking_confirmed',
+        }, customer);
+      } catch (err) {
+        console.error('[BookingSystem] confirmation message failed', err);
+        toast.error('Booking saved, but confirmation message failed to send');
+      }
     }
 
     toast.success('Appointment booked successfully!');
@@ -283,14 +302,7 @@ export default function BookingSystem() {
                 </div>
 
                 <div className="max-h-96 overflow-y-auto space-y-2">
-                  {customers
-                    .filter(c =>
-                      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      c.phone.includes(searchTerm)
-                    )
-                    .slice(0, 10)
-                    .map(customer => (
+                  {filteredExistingCustomers.slice(0, 10).map(customer => (
                       <button
                         key={customer.id}
                         onClick={() => handleSelectCustomer(customer)}
@@ -319,11 +331,7 @@ export default function BookingSystem() {
                         </div>
                       </button>
                     ))}
-                  {customers.filter(c =>
-                    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    c.phone.includes(searchTerm)
-                  ).length === 0 && (
+                  {filteredExistingCustomers.length === 0 && (
                     <div className="text-center py-8 text-gray-500">
                       <User className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                       <p>No customers found</p>

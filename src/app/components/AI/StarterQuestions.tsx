@@ -37,9 +37,6 @@ export function StarterQuestions({ role, onSelect, visible = true }: StarterQues
   if (!visible) return null;
 
   if (!studioConfig.starterQuestionsEnabled) {
-    // #region agent log
-    fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a8afb5'},body:JSON.stringify({sessionId:'a8afb5',location:'StarterQuestions.tsx:disabled',message:'starter chips hidden — toggle off',data:{role,starterQuestionsEnabled:false},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     return null;
   }
 
@@ -48,10 +45,6 @@ export function StarterQuestions({ role, onSelect, visible = true }: StarterQues
     studioCommands.length > 0
       ? studioCommands.map((c) => ({ label: c.label, prompt: c.prompt }))
       : (BUILTIN[role] ?? []);
-
-  // #region agent log
-  fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a8afb5'},body:JSON.stringify({sessionId:'a8afb5',location:'StarterQuestions.tsx:render',message:'starter chips resolved',data:{role,starterQuestionsEnabled:true,studioCommandCount:studioCommands.length,chipCount:chips.length,chipSource:studioCommands.length>0?'studio':'builtin'},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
 
   if (chips.length === 0) return null;
 

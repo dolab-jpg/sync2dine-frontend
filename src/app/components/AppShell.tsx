@@ -95,10 +95,12 @@ export default function AppShell({ children }: AppShellProps) {
   });
 
   useEffect(() => {
-    if ((isMobile || !isWideViewport) && sidebar.isOpen) {
+    // Only collapse the desktop rail when switching to the mobile sheet nav.
+    // Do not gate expand on AI_DOCK_MIN_WIDTH — that made the chevron a no-op at 768–1023px.
+    if (isMobile && sidebar.isOpen) {
       sidebar.close();
     }
-  }, [isMobile, isWideViewport, sidebar.isOpen, sidebar.close]);
+  }, [isMobile, sidebar.isOpen, sidebar.close]);
 
   useEffect(() => {
     if (!context?.user || context.user.role === 'customer' || context.user.role === 'builder') return;
@@ -351,7 +353,9 @@ export default function AppShell({ children }: AppShellProps) {
         <div className="p-2 border-t border-white/5 space-y-0.5">
           <button
             type="button"
-            onClick={sidebar.toggle}
+            onClick={() => {
+              sidebar.toggle();
+            }}
             className={`w-full flex items-center gap-3 rounded-xl text-amber-100/80 hover:bg-white/8 hover:text-white transition-all duration-200 text-sm min-h-11 touch-manipulation ${
               expanded ? 'px-3' : 'justify-center'
             }`}

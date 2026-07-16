@@ -74,9 +74,6 @@ function buildContext(app: PlanningApplication) {
 }
 
 export async function runPlanningAgent(opts: RunOptions): Promise<{ content: string; applied: string[]; mockMode?: boolean }> {
-  // #region agent log
-  fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'71adf4'},body:JSON.stringify({sessionId:'71adf4',location:'planningAiService.ts:runPlanningAgent:start',message:'Planning agent request',data:{appId:opts.application.id,msgCount:opts.messages.length,hasSourceEmail:!!opts.sourceEmail},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-  // #endregion
   const res = await fetch('/api/ai/planning', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -91,17 +88,11 @@ export async function runPlanningAgent(opts: RunOptions): Promise<{ content: str
     }),
   });
   if (!res.ok) {
-    // #region agent log
-    fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'71adf4'},body:JSON.stringify({sessionId:'71adf4',location:'planningAiService.ts:runPlanningAgent:error',message:'Planning AI HTTP error',data:{status:res.status},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
     throw new Error(`Planning AI error: ${res.status}`);
   }
   const data = (await res.json()) as PlanningAgentResponse;
 
   const applied = await executePlanningActions(opts.application.id, data.actions, opts.userName ?? 'AI');
-  // #region agent log
-  fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'71adf4'},body:JSON.stringify({sessionId:'71adf4',location:'planningAiService.ts:runPlanningAgent:done',message:'Planning agent completed',data:{actionCount:data.actions?.length??0,appliedCount:applied.length,mockMode:!!data.mockMode,actionNames:(data.actions??[]).map(a=>a.action)},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-  // #endregion
   return { content: data.content, applied, mockMode: data.mockMode };
 }
 
