@@ -83,6 +83,8 @@ flowchart LR
 
 **Ship note (2026-07-16 Mid-call language + voices — AUDITED):** LIVE on `tradepro-api`. English TTS = **Lizzie locked** (`EQx6HGDYjkDpcli6vorJ`). Non-English = `server/phone-voices.ts` map (es Aerisita, pl Aleksandra, ru Klava, uk Kira, zh Zicai, fa Laura, sq Veronica). Identity always **Cynthia**. Tool `setCallLanguage` unchanged schema: persist preferred language + best-effort `PATCH /call/{id}` voice + speak-next nudge. Call-start prompt no longer hard-blocks non-English (“en-GB ONLY” removed). No mid-call system-prompt rebuild; CRM tools unchanged. See §16.5 + [VOICE_SETUP.md](./VOICE_SETUP.md).
 
+**Ship note (2026-07-16 Warm consult transfer — AUDITED):** LIVE. Cynthia mid-call handoff is **not** blind: Vapi `transferPlan.mode: warm-transfer-experimental` (hold caller → dial staff → brief → bridge / cancel). Code: `tradepro-backend/server/transfer-numbers.ts` + `transferToHuman` in `vapi-routes.ts` / `phone-tools.ts`; prompts in `phone-brain.ts`. Destinations = Call Centre `/api/agent/transfer-numbers` (prod all → `+447576442345`). Smoke: assistant destinations include warm plan ×5; live transfer with `transferPlan` → `200 ok`. See §16.9 + [VOICE_SETUP.md](./VOICE_SETUP.md) + backend `docs/VAPI_SIP.md`.
+
 **DO_NOT_SHIP:** `.cursor/local/*.py`, `debug-login.png`, `playwright-report/`, `test-results/`, backend `server/data/*`, `_patch_*.cjs`, `_tmp_*.cjs`, `tmp-aria-lizzie.mp3`.
 
 ### 1B — VPS (`https://app.b-diddies.com`)
