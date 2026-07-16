@@ -79,7 +79,7 @@ flowchart LR
 
 **Ship note (2026-07-15 WhatsApp Path B):** Meta Cloud API disabled permanently (`WHATSAPP_META_ENABLED` off). Sole LIVE transport = WhatsApp Web.js QR (§18). Leave Meta secrets blank on VPS.
 
-**Ship note (2026-07-15 Language boundary):** SPA UI English-only; phone/WhatsApp speech may use `SUPPORTED_LANGS`; brain + emails/contracts/quotes stay English (§3.6, §19.12). Vapi STT = Deepgram `multi`; `setCallLanguage` persists preferred language.
+**Ship note (2026-07-15 Language boundary):** SPA UI English-only; phone/WhatsApp speech may use `SUPPORTED_LANGS`; brain + emails/contracts/quotes stay English (§3.6, §19.12). Vapi STT = Deepgram `multi`; `setCallLanguage` persists preferred language + best-effort per-lang ElevenLabs voice (`phone-voices.ts`; English = Lizzie locked; identity always Cynthia).
 
 **DO_NOT_SHIP:** `.cursor/local/*.py`, `debug-login.png`, `playwright-report/`, `test-results/`, backend `server/data/*`, `_patch_*.cjs`, `_tmp_*.cjs`, `tmp-aria-lizzie.mp3`.
 
@@ -854,7 +854,7 @@ Source: `server/action-registry.ts` → `PHONE_ACTION_REGISTRY` (both repos; pro
 | Tool | PIN | Confirm | Risk |
 |------|-----|---------|------|
 | `verifyStaffPhonePin` | no | no | read |
-| `setCallLanguage` | no | no | read — saves `callLanguage` + CRM/profile preferred language; STT is Deepgram `multi` (§19.12) |
+| `setCallLanguage` | no | no | read — saves `callLanguage` + CRM/profile preferred language; best-effort Vapi voice PATCH from `phone-voices.ts` (en=Lizzie locked); STT Deepgram `multi` (§19.12) |
 | `transferToHuman` | no | no | outbound |
 | `captureMessage` | no | no | low_write |
 | `endCall` | no | no | read |
@@ -1095,7 +1095,7 @@ Meta webhook is inert while Path B is cold. Also: frontend `engine/messaging/mes
 | **API** | `GET/PUT /api/language-packs`; `POST /api/translate/detect\|to-english\|from-english` |
 | **Gateway** | `server/translation-service.ts` (OpenAI `gpt-4o-mini`); `server/outbound-english-guard.ts` on customer sends |
 | **Channel flow** | Inbound → `normalizeInboundText` (English for brain); conversational outbound → `localizeOutboundText`; emails/contracts/quotes → English guard |
-| **Phone STT** | Vapi + Deepgram Nova `language: multi` (mid-call code-switch); `setCallLanguage` saves `call.metadata.callLanguage` + CRM/profile preferred language |
+| **Phone STT** | Vapi + Deepgram Nova `language: multi` (mid-call code-switch); `setCallLanguage` saves `call.metadata.callLanguage` + CRM/profile preferred language + `callVoiceId` (en=Lizzie locked; always Cynthia) |
 | **Data** | Packs = local `server/data/language-packs.json` on API host (gitignored, **not** Supabase); staff `profiles.preferred_language`; customer `preferredLanguage` on CRM record |
 | **Note** | Frontend companion `server/data/` twin is not production — save packs via API on VPS / keep backend file in sync |
 

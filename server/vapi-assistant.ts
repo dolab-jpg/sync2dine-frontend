@@ -13,7 +13,8 @@ import {
   type PhoneCallerIdentity,
 } from './phone-auth';
 import { deepgramLanguageForPack } from './language-packs';
-import { getVapiVoiceConfig, getVapiWebhookBaseUrl, toE164Uk } from './vapi-client';
+import { getVapiVoiceConfigForLang } from './phone-voices';
+import { getVapiWebhookBaseUrl, toE164Uk } from './vapi-client';
 
 function transferNumberFor(dept: 'general' | 'sales' | 'projects' | 'recruitment' | 'accounts'): string | undefined {
   const settings = getAgentSettings().transferNumbers ?? {};
@@ -149,10 +150,11 @@ export function buildVapiAssistantForParty(opts: {
       messages: [{ role: 'system', content: instructions }],
       tools: [...nativeTools, ...functionTools],
     },
-    voice: getVapiVoiceConfig(),
+    voice: getVapiVoiceConfigForLang(language),
     transcriber: {
       provider: 'deepgram',
-      model: 'nova-2',
+      // Multilingual STT so callers can flip language mid-call (Vapi + Deepgram multi).
+      model: process.env.VAPI_DEEPGRAM_MODEL?.trim() || 'nova-2',
       language: deepgramLanguageForPack(language),
     },
     silenceTimeoutSeconds: 45,

@@ -9,7 +9,7 @@ Caller ↔ Soho66 SIP ↔ Vapi (media) ↔ ElevenLabs (female Cockney) ↔ POST 
 ```
 
 - Provider: `VOICE_PROVIDER=vapi` (required)
-- Spoken voice: **ElevenLabs** via Vapi (`provider: '11labs'`) — female British / Cockney (**Lizzie** voice id `EQx6HGDYjkDpcli6vorJ` when configured on the API host)
+- Spoken voice: **ElevenLabs** via Vapi (`provider: '11labs'`) — female British / Cockney (**Lizzie** voice id `EQx6HGDYjkDpcli6vorJ` when configured on the API host). **English stays Lizzie (do not change).** Non-English calls use a per-language female funny/sassy map in `server/phone-voices.ts` (Aerisita/Aleksandra/Klava/Kira/Zicai/Laura/Veronica). She always says her name is **Cynthia**. Mid-call switch: tool `setCallLanguage` (persist + best-effort voice PATCH).
 - Webhooks: `POST /webhooks/vapi` on `https://app.b-diddies.com`
 - In-app Cynthia mic: `POST /api/vapi/web-session`
 - Soft Phone (JsSIP) is optional for **humans** only — not used for Cynthia AI answering
@@ -31,10 +31,27 @@ VAPI_SIP_CREDENTIAL_ID=••••
 ELEVENLABS_API_KEY=••••
 VAPI_ELEVENLABS_VOICE_ID=EQx6HGDYjkDpcli6vorJ
 ELEVENLABS_VOICE_ID=EQx6HGDYjkDpcli6vorJ
+# Optional: override non-English voices only (never override en / Lizzie)
+# VAPI_ELEVENLABS_VOICE_ID_ES=03vEurziQfq3V8WZhQvn
+# VAPI_ELEVENLABS_VOICE_MAP={"es":"…","pl":"…"}
+ELEVENLABS_MODEL_ID=eleven_turbo_v2_5
 SOHO66_SIP_*=••••
 SOHO66_FROM_NUMBER=02037453233
 OPENAI_API_KEY=••••
 ```
+
+| Lang | Default voice | Voice id |
+|------|---------------|----------|
+| en | **Lizzie (locked)** | `EQx6HGDYjkDpcli6vorJ` |
+| es | Aerisita — Sassy and Comedic | `03vEurziQfq3V8WZhQvn` |
+| pl | Aleksandra — dynamic Polish | `NOWYzprzTwfZQqU76pBX` |
+| ru | Klava — energetic | `bi0tSQTrp58MDdPUkrEl` |
+| uk | Kira — Ukrainian female | `2HWb7sZSrZqPB8HOI0KI` |
+| zh | Zicai — sitcom / comedic | `DVE92KG0Yd4X7RoMqy8J` |
+| fa | Laura — quirky | `FGY2WhTYpPnrIDTdsKH5` |
+| sq | Veronica — Sassy & Energetic | `ejl43bbp2vjkAFGSmAMa` |
+
+Library voices must be available on the ElevenLabs account used by Vapi. Missing voice → fall back to Lizzie + multilingual model (log `voiceUpdated: false`).
 
 Also paste the ElevenLabs key into **Vapi dashboard → Integrations** if your org requires it.
 
