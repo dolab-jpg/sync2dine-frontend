@@ -104,6 +104,12 @@ export const integrationService = {
   hasCredentials(id: IntegrationId, values: Record<string, string>): boolean {
     const def = getIntegrationDefinition(id);
     if (!def) return false;
+    if (id === 'email_oauth') {
+      const google = Boolean(values.googleClientId?.trim() && values.googleClientSecret?.trim());
+      const microsoft = Boolean(values.microsoftClientId?.trim() && values.microsoftClientSecret?.trim());
+      const yahoo = Boolean(values.yahooClientId?.trim() && values.yahooClientSecret?.trim());
+      return google || microsoft || yahoo;
+    }
     const credentialFields = def.fields.filter(
       (f) => f.required === true || (f.key === 'apiKey' && f.type === 'password'),
     );

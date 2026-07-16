@@ -5,28 +5,27 @@ import {
   getAgentStatusSnapshot,
   getPhoneLineByAssignedUserId,
   getPhoneLineById,
-  getTransferNumbers,
   listPhoneLines,
   lookupContactByPhone,
   maskPhoneLine,
   savePhoneLine,
   updateAgentSettings,
-  updateTransferNumbers,
   type PhoneLinePurpose,
-  type TransferNumbers,
 } from './data-store';
 import {
   getChatterboxConfig,
   resolveTtsTextFromCall,
   synthesizeSpeech,
 } from './tts';
+import { transcribeAudioBuffer } from './stt';
 import {
   getSipBridgeUrl,
   registerAllEnabledLines,
   testLineConnection,
   unregisterLine,
 } from './telephony/lineRegistry';
-import { authenticateRequest } from './auth';
+import { authenticateRequest, resolveOrgIdForRequest } from './auth';
+import { handleRealtimeRoutes } from './realtime-routes';
 
 function resolveUserIdFromRequest(req: IncomingMessage): string | null {
   const auth = authenticateRequest(req);
@@ -113,8 +112,44 @@ async function handlePatchSettings(req: IncomingMessage, res: ServerResponse) {
   const patch: Record<string, unknown> = {};
   if (typeof body.isActive === 'boolean') patch.isActive = body.isActive;
   if (typeof body.activeVoiceId === 'string') patch.activeVoiceId = body.activeVoiceId;
+  if (
+    body.leadCallbackPolicy === 'alert_only'
+    || body.leadCallbackPolicy === 'outbound_first'
+    || body.leadCallbackPolicy === 'inbound_only'
+  ) {
+    patch.leadCallbackPolicy = body.leadCallbackPolicy;
+  }
+  if (typeof body.defaultOutboundBrief === 'string') patch.defaultOutboundBrief = body.defaultOutboundBrief;
+  if (typeof body.postCallNotePrompt === 'string') patch.postCallNotePrompt = body.postCallNotePrompt;
+  if (typeof body.callQueueMaxAttempts === 'number' && Number.isFinite(body.callQueueMaxAttempts)) {
+    patch.callQueueMaxAttempts = Math.max(1, Math.min(10, Math.round(body.callQueueMaxAttempts)));
+  }
+  if (typeof body.callQueueRetryMinutes === 'number' && Number.isFinite(body.callQueueRetryMinutes)) {
+    patch.callQueueRetryMinutes = Math.max(5, Math.round(body.callQueueRetryMinutes));
+  }
+  if (typeof body.callQueueQuietStart === 'string') patch.callQueueQuietStart = body.callQueueQuietStart;
+  if (typeof body.callQueueQuietEnd === 'string') patch.callQueueQuietEnd = body.callQueueQuietEnd;
   const updated = updateAgentSettings(patch);
   sendJson(res, 200, updated);
+}
+
+async function handleGetTransferNumbers(_req: IncomingMessage, res: ServerResponse) {
+  sendJson(res, 200, { transferNumbers: getAgentSettings().transferNumbers ?? {} });
+}
+
+async function handlePatchTransferNumbers(req: IncomingMessage, res: ServerResponse) {
+  const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+  const keys = ['general', 'sales', 'projects', 'recruitment', 'accounts'] as const;
+  const current = getAgentSettings().transferNumbers ?? {};
+  const next: Record<string, string | undefined> = { ...current };
+  for (const key of keys) {
+    if (typeof body[key] === 'string') {
+      const trimmed = body[key].trim();
+      next[key] = trimmed || undefined;
+    }
+  }
+  const updated = updateAgentSettings({ transferNumbers: next });
+  sendJson(res, 200, { transferNumbers: updated.transferNumbers ?? {} });
 }
 
 async function handleGetStatus(_req: IncomingMessage, res: ServerResponse) {
@@ -259,7 +294,14 @@ async function resolveTtsRequestInput(
 async function handleAgentTts(req: IncomingMessage, res: ServerResponse, url: URL) {
   try {
     const { text, voiceId } = await resolveTtsRequestInput(req, url);
-    const result = await synthesizeSpeech(text, voiceId);
+    const formatParam = (url.searchParams.get('format') || 'mp3').toLowerCase();
+    const format =
+      formatParam === 'mulaw' || formatParam === 'ulaw' || formatParam === 'pcmu'
+        ? 'mulaw'
+        : formatParam === 'pcm'
+          ? 'pcm'
+          : 'mp3';
+    const result = await synthesizeSpeech(text, voiceId, format);
     res.statusCode = 200;
     res.setHeader('Content-Type', result.contentType);
     res.setHeader('Cache-Control', 'no-store');
@@ -267,6 +309,49 @@ async function handleAgentTts(req: IncomingMessage, res: ServerResponse, url: UR
     res.end(result.buffer);
   } catch (err) {
     sendJson(res, 400, { error: err instanceof Error ? err.message : 'TTS failed' });
+  }
+}
+
+async function readBinaryBody(req: IncomingMessage): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+async function handleAgentStt(req: IncomingMessage, res: ServerResponse) {
+  try {
+    const orgId = resolveOrgIdForRequest(req);
+    // Do not mutate global request org — that breaks CRM data on concurrent phone calls.
+    const buffer = await readBinaryBody(req);
+    if (!buffer.length) {
+      sendJson(res, 400, { error: 'Empty audio body' });
+      return;
+    }
+
+    const contentType = String(req.headers['content-type'] ?? 'audio/wav');
+    let filename = 'utterance.wav';
+    let mime = 'audio/wav';
+    if (contentType.includes('basic') || contentType.includes('mulaw') || contentType.includes('pcmu')) {
+      filename = 'utterance.ulaw';
+      mime = 'audio/basic';
+    } else if (contentType.includes('mpeg') || contentType.includes('mp3')) {
+      filename = 'utterance.mp3';
+      mime = 'audio/mpeg';
+    } else if (contentType.includes('ogg')) {
+      filename = 'utterance.ogg';
+      mime = 'audio/ogg';
+    } else if (contentType.includes('webm')) {
+      filename = 'utterance.webm';
+      mime = 'audio/webm';
+    }
+
+    const text = await transcribeAudioBuffer(buffer, filename, mime, orgId);
+    sendJson(res, 200, { text });
+  } catch (err) {
+    sendJson(res, 400, { error: err instanceof Error ? err.message : 'STT failed' });
   }
 }
 
@@ -378,12 +463,23 @@ export async function handleAgentRoutes(
   pathname: string,
   url: URL,
 ): Promise<boolean> {
+  if (await handleRealtimeRoutes(req, res, pathname)) {
+    return true;
+  }
   if (pathname === '/api/agent/settings' && req.method === 'GET') {
     await handleGetSettings(req, res);
     return true;
   }
   if (pathname === '/api/agent/settings' && req.method === 'PATCH') {
     await handlePatchSettings(req, res);
+    return true;
+  }
+  if (pathname === '/api/agent/transfer-numbers' && req.method === 'GET') {
+    await handleGetTransferNumbers(req, res);
+    return true;
+  }
+  if (pathname === '/api/agent/transfer-numbers' && req.method === 'PATCH') {
+    await handlePatchTransferNumbers(req, res);
     return true;
   }
   if (pathname === '/api/agent/status' && req.method === 'GET') {
@@ -404,6 +500,10 @@ export async function handleAgentRoutes(
   }
   if (pathname === '/api/agent/tts' && (req.method === 'GET' || req.method === 'POST')) {
     await handleAgentTts(req, res, url);
+    return true;
+  }
+  if (pathname === '/api/agent/stt' && req.method === 'POST') {
+    await handleAgentStt(req, res);
     return true;
   }
   if (pathname === '/api/agent/lines' && req.method === 'GET') {
@@ -438,21 +538,5 @@ export async function handleAgentRoutes(
       return true;
     }
   }
-
-  if (pathname === '/api/agent/transfer-numbers' && req.method === 'GET') {
-    sendJson(res, 200, { transferNumbers: getTransferNumbers() });
-    return true;
-  }
-  if (pathname === '/api/agent/transfer-numbers' && (req.method === 'PATCH' || req.method === 'POST')) {
-    try {
-      const body = JSON.parse(await readBody(req) || '{}') as TransferNumbers;
-      const transferNumbers = updateTransferNumbers(body);
-      sendJson(res, 200, { transferNumbers });
-    } catch (err) {
-      sendJson(res, 400, { error: err instanceof Error ? err.message : 'Invalid transfer numbers payload' });
-    }
-    return true;
-  }
-
   return false;
 }

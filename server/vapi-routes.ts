@@ -6,9 +6,11 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import {
   appendCallTurn,
   appendCustomerCallActivity,
+  completeOutboundJobsForCall,
   computeCallDurationSec,
   computeCallSentiment,
   DEFAULT_ORG_ID,
+  getAgentSettings,
   getCallById,
   getCallByProviderId,
   getDataStore,
@@ -17,6 +19,7 @@ import {
   saveCall,
   setRequestOrgId,
 } from './data-store';
+import { mapEndedReasonToDisposition } from './lead-call-disposition';
 import { appendConversationMessage } from './conversation-store';
 import {
   executeCustomerTool,
@@ -33,7 +36,8 @@ import {
   vapiFetch,
 } from './vapi-client';
 import { buildStaffOrchBody } from './phone-session';
-import { buildVapiAssistantForParty, resolveTransferNumber } from './vapi-assistant';
+import { buildVapiAssistantForParty } from './vapi-assistant';
+import { resolveTransferDestination, resolveTransferNumber } from './transfer-numbers';
 import { assertVapiProductionReady, isProductionRuntime } from './provider-gates';
 import {
   isToolAllowedForPhoneSession,
@@ -53,6 +57,9 @@ import { getVapiVoiceConfigForLang, voiceIdForLang } from './phone-voices';
 const CUSTOMER_TOOL_NAMES = new Set([
   'lookupCustomerByPhone',
   'getAccountBriefing',
+  'getLeadBrief',
+  'addLeadNote',
+  'listPendingCallbacks',
   'lookupQuote',
   'lookupProjectStatus',
   'getPortalLink',
@@ -65,6 +72,8 @@ const STAFF_READ_TOOL_NAMES = new Set([
   'searchProjects',
   'searchQuotes',
   'searchLeads',
+  'getLeadBrief',
+  'listPendingCallbacks',
   'getBusinessSnapshot',
   'getTeamPerformance',
 ]);
@@ -286,28 +295,79 @@ function finalizeVapiCall(
   const endedReason = String(message.endedReason || message.ended_reason || message.reason || '');
 
   const after = getCallById(callId);
+  const afterMeta = (after?.metadata as Record<string, unknown> | undefined) || {};
+  const transferredTo = String(
+    after?.transferredTo
+    || afterMeta.transferredTo
+    || afterMeta.transferNumber
+    || '',
+  ).trim() || undefined;
+  const toolOutcome = String(after?.outcome || afterMeta.toolOutcome || '');
+  const disposition = mapEndedReasonToDisposition(endedReason, {
+    transferred: Boolean(transferredTo) || toolOutcome.toLowerCase().includes('transfer'),
+    toolOutcome,
+  });
+
+  const fallbackSummary = (() => {
+    if (summary) return summary;
+    const turns = Array.isArray(after?.transcript) ? after!.transcript as Array<{ role?: string; content?: string }> : [];
+    const snippet = turns
+      .slice(-4)
+      .map((t) => String(t.content ?? '').trim())
+      .filter(Boolean)
+      .join(' | ')
+      .slice(0, 300);
+    if (snippet) return snippet;
+    if (endedReason) return `Call ended: ${endedReason}`;
+    return 'Outbound call completed (no summary from provider).';
+  })();
+
   saveCall({
     id: callId,
     status: 'completed',
     endedAt: new Date().toISOString(),
     recordingUrl: recordingUrl || (after?.recordingUrl as string | undefined),
-    outcome: endedReason || (after?.outcome as string | undefined),
+    outcome: disposition || endedReason || (after?.outcome as string | undefined),
+    transferredTo,
     sentiment: after ? computeCallSentiment(after) : undefined,
     durationSec: after ? computeCallDurationSec(after) : undefined,
     metadata: {
-      ...((after?.metadata as Record<string, unknown> | undefined) || {}),
+      ...afterMeta,
       vapiEndedReason: endedReason || undefined,
       vapiSummary: summary || undefined,
+      disposition,
+      brief: afterMeta.brief ?? afterMeta.aim,
     },
   });
 
+  completeOutboundJobsForCall(callId, { disposition, endedReason: endedReason || undefined });
+
   const resolved = resolveContactByPhone(partyPhone);
-  if (resolved.customerId && summary) {
+  const customerId = resolved.customerId
+    || (afterMeta.customerId != null ? String(afterMeta.customerId) : null)
+    || (after?.customerId != null ? String(after.customerId) : null);
+
+  if (customerId) {
+    const settings = getAgentSettings();
+    const noteHint = settings.postCallNotePrompt
+      ? ` ${settings.postCallNotePrompt}`
+      : '';
+    const detailParts = [
+      fallbackSummary,
+      transferredTo ? `Transferred to: ${transferredTo}` : '',
+      afterMeta.brief ? `Staff brief was: ${String(afterMeta.brief).slice(0, 200)}` : '',
+    ].filter(Boolean);
     appendCustomerCallActivity({
-      customerId: resolved.customerId,
+      customerId,
       callId,
-      summary: summary.slice(0, 400),
-      outcome: endedReason || undefined,
+      summary: fallbackSummary.slice(0, 400),
+      outcome: endedReason || disposition,
+      disposition,
+      aim: afterMeta.aim != null ? String(afterMeta.aim) : (afterMeta.brief != null ? 'callback' : undefined),
+      detail: `${detailParts.join(' ').slice(0, 800)}${noteHint ? '' : ''}`,
+      type: 'call',
+      updateCallQueue: true,
+      transferredTo,
     });
   }
 }
@@ -519,28 +579,35 @@ async function executeTool(
 
   if (name === 'transferToHuman') {
     const takeMessage = Boolean(args.takeMessage);
-    const transferNumber = resolveTransferNumber(String(args.department || 'general'));
-    const willTransfer = Boolean(transferNumber) && !takeMessage;
+    const department = String(args.department || 'general');
+    const transferNumber = resolveTransferNumber(department);
+    const destination = !takeMessage
+      ? resolveTransferDestination({
+          department,
+          reason: String(args.reason || args.message || ''),
+          message: String(args.message || ''),
+        })
+      : null;
+    const willTransfer = Boolean(destination) && !takeMessage;
     const fresh = getCallById(callId);
     saveCall({
       id: callId,
       outcome: willTransfer ? 'transferred' : 'message_taken',
       ...(willTransfer ? { status: 'transferred' } : {}),
-      transferredTo: String(args.department ?? 'general'),
+      transferredTo: department,
       metadata: {
         ...((fresh?.metadata as Record<string, unknown> | undefined) || {}),
         transferNumber: transferNumber || undefined,
+        transferMode: willTransfer ? 'warm-transfer-experimental' : undefined,
       },
     });
     return {
-      transferred: Boolean(transferNumber) && !takeMessage,
+      transferred: willTransfer,
       transferNumber: transferNumber || null,
       department: args.department ?? 'general',
       message: args.message ?? args.reason,
-      takeMessage: takeMessage || !transferNumber,
-      destination: transferNumber && !takeMessage
-        ? { type: 'number', number: transferNumber }
-        : undefined,
+      takeMessage: takeMessage || !destination,
+      destination: destination || undefined,
     };
   }
 
@@ -691,10 +758,23 @@ async function handleVapiMessage(
 
   if (type === 'status-update') {
     const call = ensureCallFromVapi(message);
-    const status = String(message.status || '').toLowerCase();
-    const mapped = status.includes('end') || status === 'ended' || status === 'completed'
+    const status = String(message.status || message.endedReason || '').toLowerCase();
+    const terminal =
+      status.includes('end')
+      || status === 'ended'
+      || status === 'completed'
+      || status.includes('hang')
+      || status.includes('cancel')
+      || status === 'busy'
+      || status.includes('no-answer')
+      || status.includes('no_answer')
+      || status.includes('customer-ended')
+      || status.includes('assistant-ended')
+      || status.includes('silence-timed-out')
+      || status.includes('max-duration');
+    const mapped = terminal
       ? 'completed'
-      : status.includes('fail')
+      : status.includes('fail') || status.includes('error')
         ? 'failed'
         : status.includes('ring')
           ? 'ringing'
@@ -703,7 +783,12 @@ async function handleVapiMessage(
       id: call.id,
       status: mapped,
       ...(mapped === 'completed' || mapped === 'failed'
-        ? { endedAt: new Date().toISOString() }
+        ? {
+            endedAt: new Date().toISOString(),
+            outcome: terminal
+              ? String(message.endedReason || message.status || 'remote_ended')
+              : undefined,
+          }
         : {}),
     });
     sendJson(res, 200, { ok: true });
@@ -712,10 +797,32 @@ async function handleVapiMessage(
 
   if (type === 'end-of-call-report' || type === 'hang') {
     const call = ensureCallFromVapi(message);
-    const partyPhone = String((call.metadata as Record<string, unknown> | undefined)?.partyPhone
-      || partyPhoneFromCall(message.call as Record<string, unknown>)
-      || '');
-    finalizeVapiCall(String(call.id), message, partyPhone);
+    // Always close the row even if finalize throws mid-way on CRM append
+    try {
+      const partyPhone = String((call.metadata as Record<string, unknown> | undefined)?.partyPhone
+        || partyPhoneFromCall(message.call as Record<string, unknown>)
+        || '');
+      finalizeVapiCall(String(call.id), message, partyPhone);
+    } catch (err) {
+      console.warn('[vapi] finalizeVapiCall error — forcing completed:', err instanceof Error ? err.message : err);
+      saveCall({
+        id: String(call.id),
+        status: 'completed',
+        endedAt: new Date().toISOString(),
+        outcome: 'finalize_error',
+      });
+    }
+    // Belt-and-braces: never leave hang/EOC as in_progress
+    const after = getCallById(String(call.id));
+    const afterStatus = String(after?.status ?? '');
+    if (after && (afterStatus === 'ringing' || afterStatus === 'in_progress')) {
+      saveCall({
+        id: String(call.id),
+        status: 'completed',
+        endedAt: new Date().toISOString(),
+        outcome: String(after.outcome ?? 'hang'),
+      });
+    }
     sendJson(res, 200, { ok: true });
     return;
   }

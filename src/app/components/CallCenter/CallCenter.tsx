@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -269,6 +270,14 @@ export default function CallCenter() {
 
   const [transferNumbers, setTransferNumbers] = useState<TransferNumbers>({});
   const [transferSaving, setTransferSaving] = useState(false);
+  const [leadCallbackPolicy, setLeadCallbackPolicy] = useState<'alert_only' | 'outbound_first' | 'inbound_only'>('alert_only');
+  const [defaultOutboundBrief, setDefaultOutboundBrief] = useState('');
+  const [postCallNotePrompt, setPostCallNotePrompt] = useState('');
+  const [callQueueMaxAttempts, setCallQueueMaxAttempts] = useState(3);
+  const [callQueueRetryMinutes, setCallQueueRetryMinutes] = useState(60);
+  const [callQueueQuietStart, setCallQueueQuietStart] = useState('20:00');
+  const [callQueueQuietEnd, setCallQueueQuietEnd] = useState('08:00');
+  const [queueSettingsSaving, setQueueSettingsSaving] = useState(false);
 
   const app = useContext(AppContext);
   const [leadFormCallId, setLeadFormCallId] = useState<string | null>(null);
@@ -309,6 +318,15 @@ export default function CallCenter() {
       const data = await res.json();
       setIsActive(data.isActive !== false);
       setActiveVoiceId(data.activeVoiceId ?? null);
+      if (data.leadCallbackPolicy === 'outbound_first' || data.leadCallbackPolicy === 'inbound_only' || data.leadCallbackPolicy === 'alert_only') {
+        setLeadCallbackPolicy(data.leadCallbackPolicy);
+      }
+      if (typeof data.defaultOutboundBrief === 'string') setDefaultOutboundBrief(data.defaultOutboundBrief);
+      if (typeof data.postCallNotePrompt === 'string') setPostCallNotePrompt(data.postCallNotePrompt);
+      if (Number.isFinite(Number(data.callQueueMaxAttempts))) setCallQueueMaxAttempts(Number(data.callQueueMaxAttempts));
+      if (Number.isFinite(Number(data.callQueueRetryMinutes))) setCallQueueRetryMinutes(Number(data.callQueueRetryMinutes));
+      if (typeof data.callQueueQuietStart === 'string') setCallQueueQuietStart(data.callQueueQuietStart);
+      if (typeof data.callQueueQuietEnd === 'string') setCallQueueQuietEnd(data.callQueueQuietEnd);
     } catch {
       // keep defaults
     }
@@ -621,6 +639,35 @@ export default function CallCenter() {
     }
   }
 
+  async function saveCallQueueSettings() {
+    setQueueSettingsSaving(true);
+    try {
+      const res = await fetch('/api/agent/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadCallbackPolicy,
+          defaultOutboundBrief,
+          postCallNotePrompt,
+          callQueueMaxAttempts,
+          callQueueRetryMinutes,
+          callQueueQuietStart,
+          callQueueQuietEnd,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to save');
+      if (data.leadCallbackPolicy) setLeadCallbackPolicy(data.leadCallbackPolicy);
+      if (typeof data.defaultOutboundBrief === 'string') setDefaultOutboundBrief(data.defaultOutboundBrief);
+      if (typeof data.postCallNotePrompt === 'string') setPostCallNotePrompt(data.postCallNotePrompt);
+      toast.success('Call Queue / AI dial settings saved');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save settings');
+    } finally {
+      setQueueSettingsSaving(false);
+    }
+  }
+
   async function queueOutbound() {
     if (!outboundTo.trim()) {
       toast.error('Enter a phone number');
@@ -635,6 +682,7 @@ export default function CallCenter() {
           template: outboundTemplate,
           context: {
             aim: outboundAim,
+            brief: outboundAim,
             customerId: outboundCustomerId || undefined,
             source: 'call_centre',
           },
@@ -1171,6 +1219,103 @@ export default function CallCenter() {
               <Button onClick={saveTransferNumbers} disabled={transferSaving}>
                 {transferSaving ? 'Saving…' : 'Save transfer numbers'}
               </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Phone className="w-5 h-5" />
+                Call Queue & AI dial settings
+              </CardTitle>
+              <CardDescription>
+                Controls CRM “Call this person” defaults, lead callback policy, and how Cynthia notes outcomes after dials.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label>Lead callback policy</Label>
+                <Select
+                  value={leadCallbackPolicy}
+                  onValueChange={(v) => setLeadCallbackPolicy(v as typeof leadCallbackPolicy)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="alert_only">Alert only (staff dials)</SelectItem>
+                    <SelectItem value="outbound_first">Outbound first (AI may dial)</SelectItem>
+                    <SelectItem value="inbound_only">Inbound only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Default brief for “Call this person”</Label>
+                <Textarea
+                  className="mt-1 min-h-[80px]"
+                  value={defaultOutboundBrief}
+                  onChange={(e) => setDefaultOutboundBrief(e.target.value)}
+                  placeholder="What Cynthia should cover by default…"
+                />
+              </div>
+              <div>
+                <Label>Post-call note prompt</Label>
+                <Textarea
+                  className="mt-1 min-h-[60px]"
+                  value={postCallNotePrompt}
+                  onChange={(e) => setPostCallNotePrompt(e.target.value)}
+                  placeholder="What Cynthia must capture after every call…"
+                />
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <Label>Max dial attempts</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    className="mt-1"
+                    value={callQueueMaxAttempts}
+                    onChange={(e) => setCallQueueMaxAttempts(Number(e.target.value) || 3)}
+                  />
+                </div>
+                <div>
+                  <Label>Retry delay (minutes)</Label>
+                  <Input
+                    type="number"
+                    min={5}
+                    className="mt-1"
+                    value={callQueueRetryMinutes}
+                    onChange={(e) => setCallQueueRetryMinutes(Number(e.target.value) || 60)}
+                  />
+                </div>
+                <div>
+                  <Label>Quiet hours start</Label>
+                  <Input
+                    className="mt-1"
+                    value={callQueueQuietStart}
+                    onChange={(e) => setCallQueueQuietStart(e.target.value)}
+                    placeholder="20:00"
+                  />
+                </div>
+                <div>
+                  <Label>Quiet hours end</Label>
+                  <Input
+                    className="mt-1"
+                    value={callQueueQuietEnd}
+                    onChange={(e) => setCallQueueQuietEnd(e.target.value)}
+                    placeholder="08:00"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={saveCallQueueSettings} disabled={queueSettingsSaving}>
+                  {queueSettingsSaving ? 'Saving…' : 'Save Call Queue settings'}
+                </Button>
+                <Button variant="outline" onClick={() => navigate('/crm?tab=queue')}>
+                  Open Call Queue in CRM
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

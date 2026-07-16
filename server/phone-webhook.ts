@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import {
   appendCallTurn,
+  appendCustomerCallActivity,
   computeCallDurationSec,
   computeCallSentiment,
   DEFAULT_ORG_ID,
@@ -10,6 +11,7 @@ import {
   getRequestOrgId,
   isAfterHours,
   isAgentActive,
+  markCustomerDialling,
   resolveCandidateByPhone,
   resolveContactByPhone,
   resolvePhoneLineByDid,
@@ -388,7 +390,7 @@ export async function handlePhoneOutboundWebhook(req: IncomingMessage, res: Serv
 
 export async function handleOutboundCallApi(req: IncomingMessage, res: ServerResponse) {
   const body = JSON.parse(await readBody(req));
-  const { to, template, context, scheduledAt } = body;
+  const { to, template, context, scheduledAt, fromWorker } = body;
 
   if (!to || !template) {
     sendJson(res, 400, { error: 'to and template are required' });
@@ -398,13 +400,63 @@ export async function handleOutboundCallApi(req: IncomingMessage, res: ServerRes
   const config = resolveTelephonyConfig();
   const provider = getTelephonyProvider(config);
   const callId = `out-${Date.now()}`;
+  const meta = {
+    ...(context && typeof context === 'object' ? context : {}),
+    customerId: context?.customerId,
+    aim: context?.aim ?? context?.reason,
+    brief: context?.brief ?? context?.aim ?? context?.reason,
+  };
+
+  // Worker already owns the queue row — dial only, do not enqueue another job.
+  if (fromWorker === true || fromWorker === '1') {
+    try {
+      const result = await provider.placeCall(String(to), {
+        callId,
+        direction: 'outbound',
+        from: config.fromNumber ?? '',
+        to: String(to),
+        campaignTemplate: template as OutboundCampaignTemplate,
+        metadata: meta,
+      }, config);
+      saveCall({
+        id: result.callId,
+        providerCallId: result.providerCallId,
+        direction: 'outbound',
+        from: config.fromNumber ?? '',
+        to: String(to),
+        status: 'ringing',
+        campaignTemplate: template,
+        customerId: meta.customerId ? String(meta.customerId) : undefined,
+        transcript: [],
+        startedAt: new Date().toISOString(),
+        metadata: meta,
+      });
+      if (meta.customerId) {
+        markCustomerDialling(String(meta.customerId), result.callId);
+        appendCustomerCallActivity({
+          customerId: String(meta.customerId),
+          callId: result.callId,
+          summary: `Outbound dialling${meta.brief ? `: ${String(meta.brief).slice(0, 120)}` : ''}`,
+          detail: meta.brief ? String(meta.brief).slice(0, 800) : 'Outbound call started',
+          aim: meta.aim ? String(meta.aim) : 'callback',
+          type: 'callback',
+          createdBy: 'staff',
+        });
+      }
+      sendJson(res, 200, { success: true, callId: result.callId, fromWorker: true, status: 'dialling' });
+      return;
+    } catch (err) {
+      sendJson(res, 500, { success: false, error: err instanceof Error ? err.message : 'Dial failed' });
+      return;
+    }
+  }
 
   const { enqueueOutboundCall } = await import('./data-store');
   const job = enqueueOutboundCall({
     to: String(to),
     template: String(template),
     status: 'queued',
-    context: context ?? {},
+    context: meta,
     scheduledAt,
     callId,
   });
@@ -417,9 +469,9 @@ export async function handleOutboundCallApi(req: IncomingMessage, res: ServerRes
         from: config.fromNumber ?? '',
         to: String(to),
         campaignTemplate: template as OutboundCampaignTemplate,
-        metadata: context,
+        metadata: meta,
       }, config);
-      updateOutboundJob(String(job.id), { status: 'dialing', callId: result.callId });
+      updateOutboundJob(String(job.id), { status: 'dialling', callId: result.callId });
       saveCall({
         id: result.callId,
         providerCallId: result.providerCallId,
@@ -428,10 +480,24 @@ export async function handleOutboundCallApi(req: IncomingMessage, res: ServerRes
         to: String(to),
         status: 'ringing',
         campaignTemplate: template,
+        customerId: meta.customerId ? String(meta.customerId) : undefined,
         transcript: [],
         startedAt: new Date().toISOString(),
+        metadata: meta,
       });
-      sendJson(res, 200, { success: true, jobId: job.id, callId: result.callId });
+      if (meta.customerId) {
+        markCustomerDialling(String(meta.customerId), result.callId);
+        appendCustomerCallActivity({
+          customerId: String(meta.customerId),
+          callId: result.callId,
+          summary: `Outbound dialling${meta.brief ? `: ${String(meta.brief).slice(0, 120)}` : ''}`,
+          detail: meta.brief ? String(meta.brief).slice(0, 800) : 'Outbound call started',
+          aim: meta.aim ? String(meta.aim) : 'callback',
+          type: 'callback',
+          createdBy: 'staff',
+        });
+      }
+      sendJson(res, 200, { success: true, jobId: job.id, callId: result.callId, status: 'dialling' });
       return;
     } catch (err) {
       updateOutboundJob(String(job.id), {
@@ -443,7 +509,7 @@ export async function handleOutboundCallApi(req: IncomingMessage, res: ServerRes
     }
   }
 
-  sendJson(res, 200, { success: true, jobId: job.id, scheduled: true });
+  sendJson(res, 200, { success: true, jobId: job.id, scheduled: true, status: 'queued' });
 }
 
 export async function handleCallsListApi(req: IncomingMessage, res: ServerResponse, url?: URL) {

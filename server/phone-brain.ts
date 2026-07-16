@@ -76,6 +76,56 @@ const PHONE_CUSTOMER_TOOLS = [
   {
     type: 'function' as const,
     function: {
+      name: 'getLeadBrief',
+      description: 'Load CRM lead notes and conversation history with aims for the current or named lead',
+      parameters: {
+        type: 'object',
+        properties: {
+          phone: { type: 'string' },
+          customerId: { type: 'string' },
+          query: { type: 'string' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'addLeadNote',
+      description: 'Save a conversation note with optional aim and structured disposition onto the CRM lead after or during a call',
+      parameters: {
+        type: 'object',
+        properties: {
+          customerId: { type: 'string' },
+          detail: { type: 'string' },
+          aim: { type: 'string' },
+          outcome: { type: 'string' },
+          disposition: {
+            type: 'string',
+            enum: [
+              'no_answer',
+              'busy',
+              'voicemail',
+              'answered_interested',
+              'answered_not_interested',
+              'callback_requested',
+              'wrong_number',
+              'do_not_call',
+              'transferred',
+              'quote_requested',
+              'appointment_booked',
+              'failed',
+              'other',
+            ],
+          },
+        },
+        required: ['customerId', 'detail'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'lookupQuote',
       description: 'Find quote summaries by quote ID, customer ID, or customer name. Prefer spokenTotal when answering amounts aloud.',
       parameters: {
@@ -254,7 +304,23 @@ export function buildAccountBrainContext(
   const customer = resolved.customerId
     ? (store.customers as Array<Record<string, unknown>>).find((c) => String(c.id) === resolved.customerId)
     : undefined;
-  if (customer?.notes) lines.push(`Notes: ${String(customer.notes).slice(0, 280)}`);
+  if (customer?.notes) lines.push(`Notes: ${String(customer.notes).slice(0, 400)}`);
+  const activities = Array.isArray(customer?.activities)
+    ? (customer!.activities as Array<Record<string, unknown>>).slice(0, 8)
+    : [];
+  if (activities.length) {
+    lines.push('Conversation history (use this — do not invent prior talks):');
+    for (const a of activities) {
+      const detail = String(a.detail ?? a.summary ?? '').slice(0, 200);
+      if (!detail) continue;
+      const aim = a.aim ? ` aim=${a.aim}` : '';
+      const when = String(a.createdAt ?? '').slice(0, 16);
+      lines.push(`- ${when}${aim}: ${detail}${a.outcome ? ` → ${a.outcome}` : ''}`);
+    }
+  }
+  if (customer?.nextFollowUp) {
+    lines.push(`Next follow-up: ${String(customer.nextFollowUp)}`);
+  }
   const quotes = (store.quotes as Array<Record<string, unknown>> ?? [])
     .filter((q) => String(q.customerId ?? '') === String(resolved.customerId ?? ''))
     .slice(0, 3);
@@ -270,6 +336,8 @@ export interface PhoneBrainPromptInput {
   partyPhone: string;
   direction?: 'inbound' | 'outbound';
   campaignTemplate?: string;
+  /** Staff instruction from CRM "Call this person" text box */
+  outboundBrief?: string;
   contactName?: string;
   /** When set, skip re-resolve (call-site already resolved). */
   identity?: PhoneCallerIdentity;
@@ -385,7 +453,7 @@ export function buildPhoneBrainPrompt(input: PhoneBrainPromptInput): {
           '- When they ask you to call/remind a customer later, use bookCallback or placeOutboundCall with confirmed:true and a real phone number.',
           '- When they ask to hang up or say goodbye, end the call.',
         ].join('\n'),
-      '- Offer transferToHuman if they ask for a person or you cannot help.',
+      '- If they ask for a person or you cannot help: tell them you will put them on a short hold, then call transferToHuman (warm consult — staff answers you first, then you connect the caller).',
       '- End the call when they say goodbye or ask to hang up.',
       '- Reply only with spoken words; one or two chatty sentences.',
       afterHours ? '- Outside normal hours: still help colleagues.' : '',
@@ -412,10 +480,15 @@ export function buildPhoneBrainPrompt(input: PhoneBrainPromptInput): {
       'Live phone call:',
       '- Reply only with spoken words.',
       '- If the call just connected, greet them naturally in one short cheeky sentence using account memory.',
-      '- Offer transferToHuman if they ask for a person. End the call when they say goodbye.',
+      '- If they ask for a person: say you will put them on a short hold, then call transferToHuman. Warm consult — staff answers you first; you brief them, then connect the caller. End the call when they say goodbye.',
       afterHours ? '- Outside normal hours: still help; offer a callback if needed.' : '',
       input.campaignTemplate ? `- Soft call purpose (do not recite): ${input.campaignTemplate}` : '',
-      input.direction === 'outbound' ? '- This is an outbound call you placed.' : '- This is an inbound call.',
+      input.outboundBrief
+        ? `- STAFF BRIEF FOR THIS CALL (follow this — do not ignore): ${String(input.outboundBrief).slice(0, 800)}`
+        : '',
+      input.direction === 'outbound'
+        ? '- This is an outbound call you placed. After the conversation, call addLeadNote with detail + disposition (interested / not interested / callback / no answer / transferred / etc.).'
+        : '- This is an inbound call.',
     ].filter(Boolean).join('\n');
   }
 
@@ -492,7 +565,7 @@ export function getPhoneSessionChatTools(identity: PhoneCallerIdentity, verified
       ? [
           VERIFY_PIN_TOOL,
           ...PHONE_CUSTOMER_TOOLS.filter((t) =>
-            ['lookupCustomerByPhone', 'getAccountBriefing', 'lookupProjectStatus', 'logCallActivity'].includes(t.function.name),
+            ['lookupCustomerByPhone', 'getAccountBriefing', 'getLeadBrief', 'addLeadNote', 'lookupProjectStatus', 'logCallActivity'].includes(t.function.name),
           ),
           ...PHONE_STAFF_CRM_TOOLS.filter((t) =>
             ['searchProjects'].includes(t.function.name),

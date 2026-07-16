@@ -17,6 +17,19 @@ export function getDueFollowUps(customers: Customer[]): Customer[] {
   });
 }
 
+/** Leads that belong on the Call Queue board (scraped / dial tracking). */
+export function isCallQueueLead(c: Customer): boolean {
+  if (c.status === 'won' || c.status === 'lost') return false;
+  if (c.callQueueStatus) return true;
+  if (c.source === 'purchased' || c.leadBatchId) return true;
+  if (c.phone && (c.status === 'lead' || c.status === 'quoted')) return true;
+  return false;
+}
+
+export function getCallQueueLeads(customers: Customer[]): Customer[] {
+  return customers.filter(isCallQueueLead);
+}
+
 export function computeLeadAttribution(customers: Customer[], quotes: Quote[]) {
   const sources = new Map<string, { source: string; leads: number; won: number; revenue: number }>();
 

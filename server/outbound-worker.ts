@@ -15,9 +15,12 @@ export function startOutboundWorker(): void {
 
 async function processOutboundQueue(): Promise<void> {
   const store = getDataStore();
-  const queue = (store.outboundQueue ?? []).filter(
-    (j) => String(j.status ?? '') === 'queued'
-  );
+  const queue = (store.outboundQueue ?? []).filter((j) => {
+    if (String(j.status ?? '') !== 'queued') return false;
+    const scheduled = j.scheduledAt ? Date.parse(String(j.scheduledAt)) : NaN;
+    if (Number.isFinite(scheduled) && scheduled > Date.now()) return false;
+    return true;
+  });
   if (!queue.length) return;
 
   for (const job of queue.slice(0, 3)) {
@@ -25,17 +28,33 @@ async function processOutboundQueue(): Promise<void> {
     updateOutboundJob(id, { status: 'dialling', startedAt: new Date().toISOString() });
     try {
       const base = (process.env.APP_BASE_URL ?? `http://localhost:${process.env.PORT ?? 3001}`).replace(/\/$/, '');
-      const res = await fetch(`${base}/api/phone/outbound`, {
+      const ctx = (job.context && typeof job.context === 'object')
+        ? (job.context as Record<string, unknown>)
+        : {};
+      const res = await fetch(`${base}/api/calls/outbound`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: job.to,
           template: job.template,
-          context: job.context,
+          fromWorker: true,
+          context: {
+            ...ctx,
+            customerId: ctx.customerId ?? job.customerId,
+            aim: ctx.aim ?? ctx.reason,
+            brief: ctx.brief ?? ctx.aim ?? ctx.reason,
+            source: ctx.source ?? 'outbound_queue',
+          },
         }),
       });
       if (res.ok) {
-        updateOutboundJob(id, { status: 'completed', completedAt: new Date().toISOString() });
+        const data = await res.json().catch(() => ({})) as { callId?: string };
+        // Stay dialling until end-of-call webhook marks completed
+        updateOutboundJob(id, {
+          status: 'dialling',
+          callId: data.callId ?? job.callId,
+          dialAcceptedAt: new Date().toISOString(),
+        });
       } else {
         const errText = await res.text().catch(() => 'dial failed');
         updateOutboundJob(id, { status: 'failed', error: errText.slice(0, 200) });

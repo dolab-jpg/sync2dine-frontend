@@ -88,6 +88,10 @@ const CUSTOMER_CSV_HEADERS = [
   'whatsappOptIn',
   'preferredChannel',
   'preferredLanguage',
+  'source',
+  'campaign',
+  'leadBatchId',
+  'tags',
   'createdAt',
 ] as const;
 
@@ -230,6 +234,10 @@ export function buildCustomersCsv(customers: Customer[]): string {
         String(c.whatsappOptIn ?? false),
         c.preferredChannel ?? 'both',
         c.preferredLanguage ?? 'en',
+        c.source ?? '',
+        c.campaign ?? '',
+        c.leadBatchId ?? '',
+        (c.tags ?? []).join(';'),
         c.createdAt,
       ]
         .map((v) => escapeCsv(String(v ?? '')))
@@ -417,8 +425,9 @@ export function parseCustomersCsv(text: string): { customers: Customer[]; errors
 
     const name = get('name');
     const email = get('email');
-    if (!name || !email) {
-      errors.push(`Row ${row + 1}: name and email are required.`);
+    const phone = get('phone');
+    if (!name || (!email && !phone)) {
+      errors.push(`Row ${row + 1}: name and phone (or email) are required.`);
       continue;
     }
 
@@ -445,11 +454,25 @@ export function parseCustomersCsv(text: string): { customers: Customer[]; errors
         ? langRaw
         : 'en';
 
+    const sourceRaw = get('source');
+    const source: Customer['source'] | undefined =
+      sourceRaw === 'facebook' || sourceRaw === 'instagram' || sourceRaw === 'google'
+      || sourceRaw === 'referral' || sourceRaw === 'website' || sourceRaw === 'phone'
+      || sourceRaw === 'walk-in' || sourceRaw === 'email' || sourceRaw === 'purchased'
+        ? sourceRaw
+        : phone && !email
+          ? 'purchased'
+          : undefined;
+
+    const tagsRaw = get('tags');
+    const tags = tagsRaw ? tagsRaw.split(';').map((t) => t.trim()).filter(Boolean) : undefined;
+    const leadBatchId = get('leadbatchid') || get('campaign') || undefined;
+
     customers.push({
       id: get('id') || `${Date.now()}-${row}`,
       name,
-      email,
-      phone: get('phone'),
+      email: email || `${phone.replace(/\D/g, '') || 'lead'}@import.local`,
+      phone,
       address: get('address'),
       status,
       notes: get('notes'),
@@ -457,6 +480,12 @@ export function parseCustomersCsv(text: string): { customers: Customer[]; errors
       whatsappOptIn: get('whatsappoptin').toLowerCase() === 'true',
       preferredChannel,
       preferredLanguage,
+      source,
+      campaign: get('campaign') || undefined,
+      leadBatchId,
+      tags,
+      callQueueStatus: 'not_called',
+      callAttemptCount: 0,
       createdAt: get('createdat') || new Date().toISOString(),
       photos: [],
     });

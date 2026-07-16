@@ -29,6 +29,7 @@ import type {
 } from './orchestrator-types';
 import { PLANNING_ACTION_NAMES, PLANNING_TOOLS } from './planning-tools';
 import { GAP_AUTO_ACTIONS, GAP_CLOSING_TOOLS } from './gap-closing-tools';
+import { expandFacadeCall, FACADE_TOOLS, FACADE_WEB_STAFF_MODES, isFacadeEnabled } from './tool-facade';
 import {
   buildClarifyIntro,
   classifyTaskIntent,
@@ -1346,6 +1347,69 @@ const LEAD_CYCLE_TOOLS = [
   {
     type: 'function' as const,
     function: {
+      name: 'getLeadBrief',
+      description:
+        'Load a lead/customer brief: status, notes, and recent conversation activities with aims. Use before calling or when discussing a lead so you do not invent history.',
+      parameters: {
+        type: 'object',
+        properties: {
+          customerId: { type: 'string' },
+          phone: { type: 'string' },
+          query: { type: 'string' },
+          name: { type: 'string' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'addLeadNote',
+      description: 'Append a conversation note (with optional aim and disposition) onto a CRM lead for staff and future Cynthia calls',
+      parameters: {
+        type: 'object',
+        properties: {
+          customerId: { type: 'string' },
+          detail: { type: 'string' },
+          aim: {
+            type: 'string',
+            enum: ['discovery', 'demo_book', 'trial_followup', 'upgrade', 'past_due', 'win_back', 'callback', 'quote_chase', 'other'],
+          },
+          outcome: { type: 'string' },
+          disposition: {
+            type: 'string',
+            enum: [
+              'no_answer',
+              'busy',
+              'voicemail',
+              'answered_interested',
+              'answered_not_interested',
+              'callback_requested',
+              'wrong_number',
+              'do_not_call',
+              'transferred',
+              'quote_requested',
+              'appointment_booked',
+              'failed',
+              'other',
+            ],
+          },
+        },
+        required: ['customerId', 'detail'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'listPendingCallbacks',
+      description: 'List leads with pending callbacks or follow-ups due soon',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'addQuoteLines',
       description: 'Add line items to an existing quote or stage lines for the quote wizard prefill',
       parameters: {
@@ -1534,9 +1598,22 @@ export function sanitizeToolsForOpenAI<T extends { type: 'function'; function: {
   });
 }
 
-function getToolsForMode(mode: OrchestratorMode, body?: OrchestratorRequest) {
+export function getToolsForMode(mode: OrchestratorMode, body?: OrchestratorRequest) {
   const hasProject = Boolean(body?.projectContext?.projectId);
   const planning = hasPlanningContext(body);
+
+  // AI_TOOL_FACADE: web-staff modes get the 12 domain facade tools instead of
+  // the full schema list. Phone and customer/cyrus packs are never affected.
+  // Role/permission gating still happens post-expansion on canonical action
+  // names (applyRoleGate / AUTO_ACTION_NAMES), so no per-tool role filter here.
+  if (isFacadeEnabled() && FACADE_WEB_STAFF_MODES.has(mode)) {
+    const planningActive = mode === 'planning' || planning;
+    const facadeTools = planningActive
+      ? FACADE_TOOLS
+      : FACADE_TOOLS.filter((tool) => tool.function.name !== 'managePlanning');
+    return sanitizeToolsForOpenAI(facadeTools);
+  }
+
   let tools;
   if (mode === 'planning') {
     tools = [...GENERIC_TOOLS, ...STAFF_TOOLS, ...NAVIGATION_TOOLS, ...PLANNING_TOOLS, ...GAP_CLOSING_TOOLS];
@@ -1565,15 +1642,12 @@ function getToolsForMode(mode: OrchestratorMode, body?: OrchestratorRequest) {
       tools = tools.filter((tool) =>
         isGenericTool(tool.function.name) || canExecuteActionForRole(role, tool.function.name)
       );
-      // #region agent log
-      try{const fs=require('fs');const names=tools.map((t)=>t.function.name);fs.appendFileSync('debug-75bc70.log',JSON.stringify({sessionId:'75bc70',timestamp:Date.now(),location:'orchestrator-handler.ts:getToolsForMode',message:'tools after role gate',hypothesisId:'A',runId:'post-fix',data:{role,contractToolsPresent:['priceSmallJob','saveContract','approveQuote'].map((n)=>({name:n,present:names.includes(n)}))}})+'\n');}catch{}
-      // #endregion
     }
   }
   return sanitizeToolsForOpenAI(tools);
 }
 
-const AUTO_ACTION_NAMES = new Set([
+export const AUTO_ACTION_NAMES = new Set([
   'navigateTo',
   'navigate',
   'writeData',
@@ -1581,6 +1655,9 @@ const AUTO_ACTION_NAMES = new Set([
   'searchLeads',
   'updateLeadStatus',
   'logFollowUp',
+  'getLeadBrief',
+  'addLeadNote',
+  'listPendingCallbacks',
   'addQuoteLines',
   'updateQuoteLines',
   'completeHandover',
@@ -2029,7 +2106,10 @@ function extractCustomerNameFromMessage(
 ): string | undefined {
   const list = customers ?? [];
   const lower = message.toLowerCase();
-  const match = list.find((c) => lower.includes(c.name.toLowerCase().split(' ')[0] ?? ''));
+  const match = list.find((c) => {
+    const first = String(c.name ?? '').toLowerCase().split(' ')[0] ?? '';
+    return first.length > 0 && lower.includes(first);
+  });
   if (match) return match.name;
   const nameMatch = message.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/);
   return nameMatch?.[1];
@@ -2180,7 +2260,9 @@ function buildMockResult(userMessage: string, body: OrchestratorRequest): Orches
     if (detectQuoteWonIntent(lower)) {
       const customerName = extractCustomerNameFromMessage(userMessage, body.staffContext?.customers);
       const quote = body.staffContext?.quotes?.find((q) =>
-        customerName ? q.customerName.toLowerCase().includes(customerName.toLowerCase().split(' ')[0] ?? '') : false
+        customerName
+          ? String(q.customerName ?? '').toLowerCase().includes(customerName.toLowerCase().split(' ')[0] ?? '')
+          : false
       ) ?? body.staffContext?.quotes?.[0];
       const withPaymentPlan = /payment plan|instalment|installment/i.test(lower);
       if (quote) {
@@ -2229,7 +2311,7 @@ function buildMockResult(userMessage: string, body: OrchestratorRequest): Orches
     const customers = ctx?.customers ?? [];
     const extracted = extractCustomerFromMessage(userMessage);
     const existing = extracted.name
-      ? customers.find(c => c.name.toLowerCase().includes(extracted.name!.toLowerCase()))
+      ? customers.find(c => String(c.name ?? '').toLowerCase().includes(extracted.name!.toLowerCase()))
       : undefined;
 
     if (extracted.name || existing || lower.includes('customer') || lower.includes('client') || lower.includes('make me')) {
@@ -2805,7 +2887,7 @@ async function runPhoneOrchestrator(
       } else if (['lookupQuote', 'lookupProjectStatus', 'getPortalLink', 'escalateToStaff'].includes(toolName)) {
         output = executeCustomerTool(toolName, parsedInput, body);
       } else {
-        output = executePhoneTool(toolName, parsedInput, body);
+        output = await executePhoneTool(toolName, parsedInput, body);
       }
 
       proposedActions.push({ action: toolName, input: parsedInput, output });
@@ -2876,7 +2958,7 @@ export async function handleOrchestrator(body: OrchestratorRequest): Promise<Orc
       return await runPhoneOrchestrator(openai as unknown as Parameters<typeof runCustomerOrchestrator>[0], body, messages);
     }
 
-    return await runStaffOrchestrator(openai as unknown as Parameters<typeof runStaffOrchestrator>[0], body, messages, orgId);
+    return await runStaffOrchestrator(openai as unknown as Parameters<typeof runStaffOrchestrator>[0], body, messages);
   } catch (err) {
     throw mapOpenAIError(err);
   }
@@ -2885,9 +2967,10 @@ export async function handleOrchestrator(body: OrchestratorRequest): Promise<Orc
 async function runStaffOrchestrator(
   openai: OpenAIChatClient,
   body: OrchestratorRequest,
-  messages: OrchestratorMessage[],
-  orgId: string | null,
+  messages: OrchestratorMessage[]
 ): Promise<OrchestratorResult> {
+  const { resolveOrgIdFromBody } = await import('./org-context');
+  const orgId = resolveOrgIdFromBody(body as { orgId?: string });
   const model = body.model ?? 'gpt-4o-mini';
   const mode = resolveMode(body);
   const lastMessage = messages[messages.length - 1]?.content ?? '';
@@ -2966,8 +3049,21 @@ async function runStaffOrchestrator(
 
     for (const call of toolCalls) {
       if (call.type !== 'function') continue;
-      const parsedInput = safeParseObject(call.function.arguments);
-      const toolName = call.function.name;
+      let parsedInput = safeParseObject(call.function.arguments);
+      let toolName = call.function.name;
+
+      // Expand facade calls (searchRecords, manageQuote, …) to their CANONICAL
+      // action + flat args BEFORE any execution, AUTO_ACTION_NAMES splitting,
+      // or role filtering — so every downstream gate sees canonical names and
+      // proposedActions/autoActions stay client-compatible. The facade name is
+      // kept as requestedAs for the conversation audit trail.
+      const facade = expandFacadeCall(toolName, parsedInput);
+      let requestedAs: string | undefined;
+      if (facade) {
+        requestedAs = toolName;
+        toolName = facade.canonicalAction;
+        parsedInput = facade.canonicalArgs;
+      }
       let output: Record<string, unknown>;
 
       if (SERVER_READ_TOOLS.has(toolName)) {
@@ -2975,8 +3071,12 @@ async function runStaffOrchestrator(
       } else if (toolName === 'sendToStaffCynthia') {
         // Persist the Cynthia card server-side so phone/WhatsApp/channel paths land
         // even when no browser client is online to run toolRuntime.
-        output = executePhoneTool(toolName, parsedInput, { ...body, orgId });
-        proposedActions.push({ action: toolName, input: parsedInput, output });
+        output = await executePhoneTool(toolName, parsedInput, { ...body, orgId });
+        proposedActions.push({
+          action: toolName,
+          input: parsedInput,
+          output: requestedAs ? { ...output, requestedAs } : output,
+        });
       } else {
         output = toolName === 'updateLeadStatus'
           ? executeUpdateLeadStatus(parsedInput)
@@ -2990,7 +3090,11 @@ async function runStaffOrchestrator(
           visionKey
         );
         if (executedOutput) output = executedOutput;
-        proposedActions.push({ action: toolName, input: parsedInput, output });
+        proposedActions.push({
+          action: toolName,
+          input: parsedInput,
+          output: requestedAs ? { ...output, requestedAs } : output,
+        });
       }
 
       if (toolName === 'detectTrades' && Array.isArray(output.trades)) {

@@ -1,5 +1,7 @@
 /** Structured conversation / call notes on a CRM lead (Customer.activities). */
 
+import type { LeadCallDisposition } from './leadCallDisposition';
+
 export const LEAD_AIMS = [
   'discovery',
   'demo_book',
@@ -22,6 +24,8 @@ export interface LeadActivity {
   aim?: LeadAim | string;
   detail: string;
   outcome?: string;
+  /** Structured disposition (preferred over free-text outcome when set). */
+  disposition?: LeadCallDisposition | string;
   callSessionId?: string;
   createdAt: string;
   createdBy: 'staff' | 'cynthia' | string;
@@ -53,6 +57,7 @@ export function normalizeLeadActivities(raw: unknown): LeadActivity[] {
       aim: r.aim != null ? String(r.aim) : undefined,
       detail: detail || '(no detail)',
       outcome: r.outcome != null ? String(r.outcome) : undefined,
+      disposition: r.disposition != null ? String(r.disposition) : undefined,
       callSessionId: r.callSessionId != null
         ? String(r.callSessionId)
         : r.callId != null
@@ -70,6 +75,7 @@ export function createLeadActivity(input: {
   detail: string;
   aim?: string;
   outcome?: string;
+  disposition?: string;
   callSessionId?: string;
   createdBy?: string;
 }): LeadActivity {
@@ -79,6 +85,7 @@ export function createLeadActivity(input: {
     aim: input.aim,
     detail: input.detail.trim(),
     outcome: input.outcome,
+    disposition: input.disposition,
     callSessionId: input.callSessionId,
     createdAt: new Date().toISOString(),
     createdBy: input.createdBy ?? 'staff',
@@ -90,6 +97,7 @@ export function formatLeadBriefLines(activities: LeadActivity[], limit = 8): str
     const when = a.createdAt.slice(0, 16).replace('T', ' ');
     const aim = a.aim ? ` [${AIM_LABELS[a.aim] ?? a.aim}]` : '';
     const who = a.createdBy === 'cynthia' ? 'Cynthia' : a.createdBy;
-    return `${when}${aim} (${who}/${a.type}): ${a.detail.slice(0, 200)}${a.outcome ? ` → ${a.outcome}` : ''}`;
+    const disp = a.disposition ? ` → ${a.disposition}` : a.outcome ? ` → ${a.outcome}` : '';
+    return `${when}${aim} (${who}/${a.type}): ${a.detail.slice(0, 200)}${disp}`;
   });
 }

@@ -11,6 +11,7 @@ import {
   saveQuoteRecord,
   saveRecruitmentCandidate,
   saveRecruitmentInterview,
+  syncData,
 } from './data-store';
 import type { CallIntent, OutboundCampaignTemplate } from './telephony/types';
 import type { OrchestratorRequest } from './orchestrator-types';
@@ -19,6 +20,7 @@ import { actionRequiresConfirmation } from './action-registry';
 import { formatSpokenGbp } from './spoken-money';
 import { resolvePhoneCallerIdentity } from './phone-auth';
 import { ensureEnglishForCustomerSend } from './outbound-english-guard';
+import { resolveTransferDestination, resolveTransferNumber } from './transfer-numbers';
 
 function firstString(...values: unknown[]): string | undefined {
   for (const value of values) {
@@ -324,7 +326,8 @@ export const PHONE_TOOLS = [
     type: 'function' as const,
     function: {
       name: 'transferToHuman',
-      description: 'Transfer the call to a human team member or take a message if unavailable',
+      description:
+        'Warm-transfer the live call to a human: put the caller on hold, dial staff, brief them, then connect. Use takeMessage if they only want a message.',
       parameters: {
         type: 'object',
         properties: {
@@ -536,9 +539,30 @@ export async function executePhoneTool(
         urgency: input.urgency ?? 'medium',
         callId,
         customerId: firstString(input.customerId, body.customerContext?.customerId),
+        aim: firstString(input.aim) || 'callback',
       },
       scheduledAt: firstString(input.preferredTime, input.scheduledAt),
     });
+    const customerId = firstString(input.customerId, body.customerContext?.customerId);
+    if (customerId) {
+      appendCustomerCallActivity({
+        customerId,
+        callId: callId ?? undefined,
+        summary: `Callback booked to ${dialTo}${input.preferredTime ? ` (${String(input.preferredTime)})` : ''}`,
+        detail: String(input.reason ?? 'Callback requested'),
+        aim: 'callback',
+        type: 'callback',
+      });
+      const preferred = firstString(input.preferredTime, input.scheduledAt);
+      if (preferred) {
+        const store = getDataStore();
+        const idx = store.customers.findIndex((c) => String(c.id) === customerId);
+        if (idx >= 0) {
+          store.customers[idx] = { ...store.customers[idx], nextFollowUp: preferred };
+          syncData(store);
+        }
+      }
+    }
     return {
       callbackQueued: true,
       jobId: job.id,
@@ -773,20 +797,32 @@ export async function executePhoneTool(
   }
 
   if (name === 'transferToHuman') {
-    const transferNumber = process.env.VOICE_TRANSFER_NUMBER ?? '';
+    const department = String(input.department || 'general');
+    const transferNumber = resolveTransferNumber(department) ?? '';
+    const destination = !input.takeMessage
+      ? resolveTransferDestination({
+          department,
+          reason: String(input.reason || input.message || ''),
+          message: String(input.message || ''),
+        })
+      : null;
+    const takeMessage = Boolean(input.takeMessage) || !destination;
+    const willTransfer = Boolean(destination) && !takeMessage;
     if (callId) {
       saveCall({
         id: callId,
-        outcome: input.takeMessage ? 'message_taken' : 'transferred',
+        outcome: willTransfer ? 'transferred' : 'message_taken',
+        ...(willTransfer ? { status: 'transferred' } : {}),
         transferredTo: input.department ?? 'general',
       });
     }
     return {
-      transferred: Boolean(transferNumber) && !input.takeMessage,
+      transferred: willTransfer,
       transferNumber: transferNumber || null,
       department: input.department ?? 'general',
       message: input.message ?? input.reason,
-      takeMessage: input.takeMessage ?? !transferNumber,
+      takeMessage,
+      destination: willTransfer ? destination : undefined,
     };
   }
 
@@ -819,7 +855,26 @@ export async function executePhoneTool(
       to: dialTo,
       template: (input.template as OutboundCampaignTemplate) || 'lead_callback',
       status: 'queued',
-      context: input.context ?? {},
+      context: {
+        ...((input.context && typeof input.context === 'object') ? input.context as Record<string, unknown> : {}),
+        customerId: firstString(
+          (input.context as Record<string, unknown> | undefined)?.customerId as string | undefined,
+          input.customerId,
+          body.customerContext?.customerId,
+        ),
+        brief: firstString(
+          (input.context as Record<string, unknown> | undefined)?.brief as string | undefined,
+          input.brief,
+          input.aim,
+          input.reason,
+        ),
+        aim: firstString(
+          (input.context as Record<string, unknown> | undefined)?.aim as string | undefined,
+          input.aim,
+          input.reason,
+        ) || 'callback',
+        source: name === 'placeOutboundCall' ? 'cynthia_place_outbound' : 'cynthia_enqueue_outbound',
+      },
       scheduledAt: input.scheduledAt,
     });
     return {
@@ -827,7 +882,11 @@ export async function executePhoneTool(
       to: dialTo,
       template: input.template || 'lead_callback',
       queued: true,
-      spokenHint: `Queued an outbound call to ${dialTo}.`,
+      status: 'queued',
+      dialled: false,
+      spokenHint: name === 'placeOutboundCall'
+        ? `Queued an outbound call to ${dialTo} — the dialler will place it shortly.`
+        : `Queued an outbound call to ${dialTo}.`,
     };
   }
 

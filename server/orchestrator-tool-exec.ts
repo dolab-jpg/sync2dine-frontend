@@ -1,4 +1,5 @@
-import { getDataStore, resolveContactByPhone, appendCustomerCallActivity } from './data-store';
+import fs from 'fs';
+import { getDataStore, resolveContactByPhone, appendCustomerCallActivity, buildLeadBriefFromCustomer } from './data-store';
 import { getOfficeTeamCounts, getOfficeTeamRoster, getTopPerformer } from './team-snapshot';
 import { listTeamMembers } from './conversation-store';
 import type { OrchestratorRequest } from './orchestrator-types';
@@ -103,6 +104,72 @@ export function executeCustomerTool(
       contactRole: resolved.contactRole,
       projectId: resolved.projectId,
     };
+  }
+
+  if (name === 'getLeadBrief') {
+    const store = getDataStore();
+    let customerId = firstString(input.customerId, body.customerContext?.customerId);
+    const phone = firstString(input.phone, body.customerContext?.phone, body.callContext?.from, body.callContext?.to);
+    const query = firstString(input.query, input.name, input.customerName);
+    if (!customerId && phone) {
+      const resolved = resolveContactByPhone(phone);
+      customerId = resolved.customerId ?? undefined;
+    }
+    let customer = customerId
+      ? (store.customers as Array<Record<string, unknown>>).find((c) => String(c.id) === customerId)
+      : undefined;
+    if (!customer && query) {
+      const q = query.toLowerCase();
+      customer = (store.customers as Array<Record<string, unknown>>).find((c) =>
+        String(c.name ?? '').toLowerCase().includes(q)
+        || String(c.email ?? '').toLowerCase().includes(q)
+        || String(c.phone ?? '').includes(q),
+      );
+    }
+    return buildLeadBriefFromCustomer(customer);
+  }
+
+  if (name === 'addLeadNote') {
+    const customerId = firstString(input.customerId, body.customerContext?.customerId);
+    const detail = firstString(input.detail, input.summary, input.notes);
+    if (!customerId) return { saved: false, error: 'customerId required' };
+    if (!detail) return { saved: false, error: 'detail required' };
+    const disposition = firstString(input.disposition);
+    const note = appendCustomerCallActivity({
+      customerId,
+      callId: firstString(input.callId, body.callContext?.callId) ?? undefined,
+      summary: detail,
+      detail,
+      aim: firstString(input.aim) ?? undefined,
+      outcome: firstString(input.outcome) ?? disposition ?? undefined,
+      disposition: disposition ?? undefined,
+      type: firstString(input.type) || 'note',
+      createdBy: 'cynthia',
+      updateCallQueue: Boolean(disposition),
+    });
+    return { saved: Boolean(note.logged), customerId, note, spokenHint: 'Note saved on the lead.' };
+  }
+
+  if (name === 'listPendingCallbacks') {
+    const store = getDataStore();
+    const now = Date.now();
+    const week = now + 7 * 86400000;
+    const items = (store.customers as Array<Record<string, unknown>>)
+      .filter((c) => {
+        const next = c.nextFollowUp ? Date.parse(String(c.nextFollowUp)) : NaN;
+        const acts = Array.isArray(c.activities) ? c.activities as Array<Record<string, unknown>> : [];
+        const openCb = acts.some((a) => String(a.type) === 'callback' && !a.outcome);
+        return openCb || (Number.isFinite(next) && next <= week);
+      })
+      .slice(0, 15)
+      .map((c) => ({
+        customerId: String(c.id),
+        name: String(c.name ?? ''),
+        phone: String(c.phone ?? ''),
+        nextFollowUp: c.nextFollowUp != null ? String(c.nextFollowUp) : null,
+        status: String(c.status ?? 'lead'),
+      }));
+    return { count: items.length, callbacks: items, spokenHint: items.length ? `${items.length} pending callbacks.` : 'No pending callbacks.' };
   }
 
   if (name === 'getAccountBriefing') {
@@ -285,7 +352,14 @@ function searchCustomersServer(
     email: String(c.email ?? ''),
     phone: String(c.phone ?? ''),
   }));
-  const list = (customers?.length ? customers : storeCustomers) ?? [];
+  const list = (customers?.length
+    ? customers.map((c) => ({
+      id: String(c.id ?? ''),
+      name: String(c.name ?? ''),
+      email: String(c.email ?? ''),
+      phone: String(c.phone ?? ''),
+    }))
+    : storeCustomers) ?? [];
   if (!list.length) return { results: [] as Array<Record<string, unknown>>, hasMore: false, total: 0 };
 
   const matched = browse
@@ -331,10 +405,10 @@ function searchQuotesServer(
   const matched = browse
     ? list
     : list.filter((quote) =>
-      quote.id.toLowerCase().includes(q)
-      || quote.customerName.toLowerCase().includes(q)
-      || (quote.tradeName ?? '').toLowerCase().includes(q)
-      || quote.status.toLowerCase().includes(q)
+      String(quote.id ?? '').toLowerCase().includes(q)
+      || String(quote.customerName ?? '').toLowerCase().includes(q)
+      || String(quote.tradeName ?? '').toLowerCase().includes(q)
+      || String(quote.status ?? '').toLowerCase().includes(q)
     );
   const slice = matched.slice(0, limit).map((quote) => {
     const spokenTotal = formatSpokenGbp(quote.total);

@@ -69,20 +69,59 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   {
     id: 'email_oauth',
     name: 'Mailbox OAuth (Gmail / Outlook / Yahoo)',
-    description: 'XOAUTH2 inbox connect — read and send from user mailboxes via IMAP',
+    description: 'XOAUTH2 inbox connect — read and send from user mailboxes via IMAP. Create a Google Cloud Web client first (see setup guide below).',
     category: 'messaging',
-    docsUrl: 'https://developers.google.com/gmail/imap/xoauth2-protocol',
+    docsUrl: 'https://console.cloud.google.com/apis/credentials',
     npmPackage: 'google-auth-library',
     githubRepo: 'googleapis/google-auth-library-nodejs',
+    setupGuide: {
+      title: 'Google Cloud OAuth — create a Web client',
+      intro:
+        'A Client ID identifies this app to Google’s OAuth servers. Use Application type “Web application”. Paste the Client ID and Client Secret into the fields below, then staff connect Gmail from Communications → Mailbox.',
+      steps: [
+        {
+          label: 'Application type',
+          value: 'Web application',
+          note: 'Not Desktop or iOS — mailbox connect uses a browser redirect.',
+        },
+        {
+          label: 'Name (console only)',
+          value: 'Builder Diddies Mailbox',
+          note: 'Only shown in Google Cloud Console — not shown to end users.',
+        },
+        {
+          label: 'Authorized JavaScript origins',
+          value: 'https://app.b-diddies.com',
+          note: 'For browser requests from the live app. Domains are also added to the OAuth consent screen.',
+        },
+        {
+          label: 'Authorized redirect URIs',
+          value: 'https://app.b-diddies.com/api/mailbox/callback',
+          note: 'Must match exactly. Google may take 5 minutes to a few hours to apply changes.',
+        },
+        {
+          label: 'Optional local origin (dev only)',
+          value: 'http://localhost:5174',
+          note: 'Only if testing against a local SPA. Production connect uses app.b-diddies.com.',
+        },
+        {
+          label: 'Optional local redirect (dev only)',
+          value: 'http://localhost:3001/api/mailbox/callback',
+          note: 'Only if the API runs locally. Live VPS must use the https://app.b-diddies.com callback above.',
+        },
+      ],
+      footer:
+        'Easiest: Download JSON from Google Cloud → upload it with the green “Upload client_secret JSON” control above → Save (Enabled on, Mock off). Or paste Client ID + Secret manually. Then Communications → Mailbox → Connect with Google.',
+    },
     fields: [
-      { key: 'googleClientId', label: 'Google Client ID', type: 'text' },
-      { key: 'googleClientSecret', label: 'Google Client Secret', type: 'password' },
+      { key: 'googleClientId', label: 'Google Client ID', type: 'text', placeholder: '….apps.googleusercontent.com' },
+      { key: 'googleClientSecret', label: 'Google Client Secret', type: 'password', placeholder: 'GOCSPX-…' },
       { key: 'microsoftClientId', label: 'Microsoft Client ID', type: 'text' },
       { key: 'microsoftClientSecret', label: 'Microsoft Client Secret', type: 'password' },
       { key: 'microsoftTenantId', label: 'Microsoft Tenant ID', type: 'text', placeholder: 'common' },
       { key: 'yahooClientId', label: 'Yahoo Client ID', type: 'text' },
       { key: 'yahooClientSecret', label: 'Yahoo Client Secret', type: 'password' },
-      { key: 'redirectUri', label: 'OAuth Redirect URI', type: 'readonly', placeholder: 'Set on API server /api/mailbox/callback' },
+      { key: 'redirectUri', label: 'OAuth Redirect URI (must match Google Console)', type: 'readonly', placeholder: 'https://app.b-diddies.com/api/mailbox/callback' },
     ],
   },
   {
@@ -320,7 +359,7 @@ export function getDefaultFieldValues(def: IntegrationDefinition): Record<string
   }
   if (def.id === 'email_oauth') {
     values.microsoftTenantId = 'common';
-    values.redirectUri = 'http://localhost:3001/api/mailbox/callback';
+    values.redirectUri = 'https://app.b-diddies.com/api/mailbox/callback';
   }
   if (def.id === 'email_smtp') {
     values.host = 'smtp.gmail.com';

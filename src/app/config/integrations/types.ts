@@ -49,6 +49,13 @@ export interface IntegrationDefinition {
   description: string;
   category: IntegrationCategory;
   docsUrl?: string;
+  /** Optional setup steps shown when the card is expanded (e.g. Google Cloud OAuth). */
+  setupGuide?: {
+    title: string;
+    intro?: string;
+    steps: { label: string; value?: string; note?: string }[];
+    footer?: string;
+  };
   fields: IntegrationFieldDef[];
   npmPackage?: string;
   githubRepo?: string;

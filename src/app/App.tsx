@@ -147,6 +147,15 @@ export interface Customer {
   budget?: string;
   timeline?: string;
   tags?: string[];
+  /** Scraped / purchased lead batch id */
+  leadBatchId?: string;
+  /** Call queue tracking for scraped / dialled leads */
+  callQueueStatus?: 'not_called' | 'queued' | 'dialling' | 'called' | 'needs_retry' | 'do_not_call';
+  lastCallAt?: string;
+  lastCallId?: string;
+  lastCallDisposition?: string;
+  lastCallSummary?: string;
+  callAttemptCount?: number;
   /** Conversation / call timeline (notes with aim + detail for Cynthia) */
   activities?: Array<{
     id: string;
@@ -155,6 +164,7 @@ export interface Customer {
     detail?: string;
     summary?: string;
     outcome?: string;
+    disposition?: string;
     callSessionId?: string;
     callId?: string;
     createdAt: string;

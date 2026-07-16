@@ -9,8 +9,10 @@ import { toast } from 'sonner';
 import type { IntegrationDefinition, IntegrationInstanceState, IntegrationStatus } from '../../config/integrations/types';
 import { IntegrationFieldForm } from './IntegrationFieldForm';
 import { CompanyLogoUpload } from './CompanyLogoUpload';
+import { GoogleOAuthJsonUpload } from './GoogleOAuthJsonUpload';
 import { integrationService } from '../../engine/integrations/integrationService';
 import { fetchEmbedSnippet } from '../../engine/cyrus/cyrusThreadApi';
+import { PRODUCTION_MAILBOX_REDIRECT_URI } from '../../engine/integrations/googleOAuthClientJson';
 
 interface IntegrationCardProps {
   definition: IntegrationDefinition;
@@ -48,6 +50,15 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
   useEffect(() => {
     setLocalValues(instance.values);
   }, [instance.values]);
+
+  useEffect(() => {
+    if (definition.id !== 'email_oauth') return;
+    setLocalValues((prev) =>
+      prev.redirectUri === PRODUCTION_MAILBOX_REDIRECT_URI
+        ? prev
+        : { ...prev, redirectUri: PRODUCTION_MAILBOX_REDIRECT_URI }
+    );
+  }, [definition.id, expanded]);
 
   useEffect(() => {
     if (definition.id !== 'company' || !expanded) return;
@@ -154,6 +165,67 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
               onLogoUrlChange={(url) => setLocalValues((prev) => ({ ...prev, logoUrl: url }))}
             />
           )}
+
+          {definition.id === 'email_oauth' && (
+            <GoogleOAuthJsonUpload
+              onParsed={(parsed) => {
+                setLocalValues((prev) => ({
+                  ...prev,
+                  googleClientId: parsed.clientId,
+                  googleClientSecret: parsed.clientSecret,
+                  redirectUri: PRODUCTION_MAILBOX_REDIRECT_URI,
+                }));
+              }}
+            />
+          )}
+
+          {definition.setupGuide && (
+            <div className="p-4 bg-sky-50 rounded-lg border border-sky-200 space-y-3">
+              <div>
+                <Label className="font-semibold text-sky-950">{definition.setupGuide.title}</Label>
+                {definition.setupGuide.intro && (
+                  <p className="text-xs text-sky-900/80 mt-1 leading-relaxed">{definition.setupGuide.intro}</p>
+                )}
+              </div>
+              <ol className="space-y-3 list-decimal list-inside text-sm text-sky-950">
+                {definition.setupGuide.steps.map((step) => (
+                  <li key={step.label} className="space-y-1">
+                    <span className="font-medium">{step.label}</span>
+                    {step.value && (
+                      <div className="ml-5 flex flex-wrap items-center gap-2 mt-1">
+                        <code className="text-xs bg-white border border-sky-200 rounded px-2 py-1 break-all">
+                          {step.value}
+                        </code>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(step.value!).then(() => {
+                              toast.success(`Copied ${step.label}`);
+                            });
+                          }}
+                        >
+                          <Copy className="w-3 h-3 mr-1" />
+                          Copy
+                        </Button>
+                      </div>
+                    )}
+                    {step.note && (
+                      <p className="ml-5 text-xs text-sky-800/80">{step.note}</p>
+                    )}
+                  </li>
+                ))}
+              </ol>
+              {definition.setupGuide.footer && (
+                <p className="text-xs text-sky-900/90 border-t border-sky-200 pt-2 leading-relaxed">
+                  {definition.setupGuide.footer}
+                </p>
+              )}
+            </div>
+          )}
+
           <IntegrationFieldForm
             fields={definition.fields}
             values={localValues}

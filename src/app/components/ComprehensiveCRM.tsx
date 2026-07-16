@@ -13,7 +13,7 @@ import { Badge } from './ui/badge';
 import { Facebook, Instagram, Search as GoogleIcon, Phone, PhoneCall, Mail, User, MapPin, Calendar, TrendingUp, Plus, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { AddressMapLink } from './ui/AddressMapLink';
-import { getDueFollowUps, isLeadCustomer } from '../engine/leads/leadService';
+import { getDueFollowUps, isCallQueueLead, isLeadCustomer } from '../engine/leads/leadService';
 import {
   AIM_LABELS,
   LEAD_AIMS,
@@ -21,8 +21,16 @@ import {
   normalizeLeadActivities,
   type LeadAim,
 } from '../engine/leads/leadActivity';
+import {
+  CALL_QUEUE_STATUS_LABELS,
+  DISPOSITION_LABELS,
+  type CallQueueStatus,
+  type LeadCallDisposition,
+} from '../engine/leads/leadCallDisposition';
 import { findPlanningApplicationsByCustomerId } from '../engine/planning/planningStore';
 import { stageLabel } from '../engine/planning/types';
+import { CallThisPersonDialog } from './crm/CallThisPersonDialog';
+import { ScrapeLeadImportDialog } from './crm/ScrapeLeadImportDialog';
 
 type Lead = Customer & {
   source: NonNullable<Customer['source']>;
@@ -106,6 +114,18 @@ export default function ComprehensiveCRM() {
   const [savingLead, setSavingLead] = useState(false);
   const [noteDetail, setNoteDetail] = useState('');
   const [noteAim, setNoteAim] = useState<string>('other');
+  const [callThisPersonOpen, setCallThisPersonOpen] = useState(false);
+  const [defaultBrief, setDefaultBrief] = useState('');
+  const [queueStatusFilter, setQueueStatusFilter] = useState<string>('all');
+
+  useEffect(() => {
+    fetch('/api/agent/settings')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.defaultOutboundBrief) setDefaultBrief(String(data.defaultOutboundBrief));
+      })
+      .catch(() => {});
+  }, []);
 
   const customerPlanningApps = useMemo(
     () => (selectedLead ? findPlanningApplicationsByCustomerId(selectedLead.id) : []),
@@ -117,14 +137,19 @@ export default function ComprehensiveCRM() {
     [selectedLead],
   );
 
-  // Deep-link from lead inbox: /crm?lead=ID
+  // Deep-link from lead inbox / Call Centre: /crm?lead=ID or /crm?customerId=ID or /crm?tab=queue
   useEffect(() => {
-    const leadId = searchParams.get('lead');
-    if (!leadId) return;
-    const found = customers.find((c) => c.id === leadId);
-    const lead = found ? toLead(found) : null;
-    if (lead) {
-      setSelectedLead(lead);
+    const tab = searchParams.get('tab');
+    const leadId = searchParams.get('lead') || searchParams.get('customerId');
+    if (tab === 'queue' || tab === 'lead' || tab === 'quoted' || tab === 'won' || tab === 'lost' || tab === 'all') {
+      setActiveTab(tab);
+    }
+    if (leadId) {
+      const found = customers.find((c) => c.id === leadId);
+      const lead = found ? toLead(found) : null;
+      if (lead) setSelectedLead(lead);
+    }
+    if (tab || leadId) {
       setSearchParams({}, { replace: true });
     }
   }, [searchParams, customers, setSearchParams]);
@@ -226,6 +251,8 @@ export default function ComprehensiveCRM() {
         preferredChannel: 'email',
         source: leadForm.source,
         tags,
+        callQueueStatus: 'not_called',
+        callAttemptCount: 0,
         leadScore: 50,
         budget: leadForm.budget.trim() || undefined,
         timeline: leadForm.timeline.trim() || undefined,
@@ -279,25 +306,40 @@ export default function ComprehensiveCRM() {
       toast.error('Lead has no phone number');
       return;
     }
+    setSelectedLead(lead);
+    setCallThisPersonOpen(true);
+  };
+
+  const handleCallThisPersonStarted = (payload: { callId?: string; brief: string }) => {
+    if (!selectedLead) return;
     const activity = createLeadActivity({
       type: 'callback',
-      detail: `Outbound requested with aim: ${AIM_LABELS[aim] ?? aim}`,
-      aim,
+      detail: payload.brief,
+      aim: 'callback',
+      callSessionId: payload.callId,
       createdBy: user.id || 'staff',
     });
-    const prev = normalizeLeadActivities(lead.activities);
-    updateCustomer(lead.id, {
+    const prev = normalizeLeadActivities(selectedLead.activities);
+    updateCustomer(selectedLead.id, {
       activities: [activity, ...prev].slice(0, 50),
       lastContact: new Date().toISOString(),
+      callQueueStatus: 'dialling',
+      lastCallId: payload.callId,
     });
-    const q = new URLSearchParams({
-      tab: 'outbound',
-      to: lead.phone,
-      customerId: lead.id,
-      aim,
-    });
-    setSelectedLead(null);
-    navigate(`/calls?${q.toString()}`);
+  };
+
+  const handleImportScrapedLeads = async (incoming: Customer[]) => {
+    for (const c of incoming) {
+      const { id: _id, createdAt: _createdAt, ...rest } = c;
+      addCustomer({
+        ...rest,
+        whatsappOptIn: rest.whatsappOptIn ?? false,
+        preferredChannel: rest.preferredChannel ?? 'phone',
+        preferredLanguage: rest.preferredLanguage ?? 'en',
+        photos: rest.photos ?? [],
+      });
+    }
+    setActiveTab('queue');
   };
 
   const handleMarkCallbackDone = (lead: Lead) => {
@@ -340,13 +382,32 @@ export default function ComprehensiveCRM() {
   };
 
   const filteredLeads = leads.filter((lead) => {
-    const matchesStatus = activeTab === 'all' || lead.status === activeTab;
+    if (activeTab === 'queue') {
+      if (!isCallQueueLead(lead)) return false;
+      const qs = lead.callQueueStatus ?? 'not_called';
+      if (queueStatusFilter !== 'all' && qs !== queueStatusFilter) return false;
+    } else {
+      const matchesStatus = activeTab === 'all' || lead.status === activeTab;
+      if (!matchesStatus) return false;
+    }
     const matchesSource = filterSource === 'all' || lead.source === filterSource;
     const matchesSearch = String(lead.name ?? '').toLowerCase().includes(searchTerm.toLowerCase())
       || String(lead.email ?? '').toLowerCase().includes(searchTerm.toLowerCase())
-      || String(lead.phone ?? '').includes(searchTerm);
-    return matchesStatus && matchesSource && matchesSearch;
+      || String(lead.phone ?? '').includes(searchTerm)
+      || String(lead.leadBatchId ?? '').includes(searchTerm);
+    return matchesSource && matchesSearch;
   });
+
+  const queueStats = useMemo(() => {
+    const queue = leads.filter(isCallQueueLead);
+    return {
+      total: queue.length,
+      notCalled: queue.filter((l) => (l.callQueueStatus ?? 'not_called') === 'not_called').length,
+      dialling: queue.filter((l) => l.callQueueStatus === 'dialling' || l.callQueueStatus === 'queued').length,
+      called: queue.filter((l) => l.callQueueStatus === 'called').length,
+      needsRetry: queue.filter((l) => l.callQueueStatus === 'needs_retry').length,
+    };
+  }, [leads]);
 
   const stats = {
     total: leads.length,
@@ -374,7 +435,9 @@ export default function ComprehensiveCRM() {
               </div>
             </div>
 
-            {isSuperAdmin && (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+              <ScrapeLeadImportDialog onImport={handleImportScrapedLeads} />
+              {isSuperAdmin && (
               <Dialog open={isAddLeadOpen} onOpenChange={setIsAddLeadOpen}>
                 <DialogTrigger asChild>
                   <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg py-4 sm:py-6 px-6 sm:px-8 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 min-h-11">
@@ -506,7 +569,8 @@ export default function ComprehensiveCRM() {
                   </div>
                 </DialogContent>
               </Dialog>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
@@ -620,14 +684,36 @@ export default function ComprehensiveCRM() {
         <Card className="shadow-xl rounded-3xl border-0 mb-6">
           <CardContent className="p-6">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full mb-4 sm:mb-6 bg-slate-100 p-1.5 sm:p-2 rounded-2xl h-auto">
+              <TabsList className="grid grid-cols-2 sm:grid-cols-6 w-full mb-4 sm:mb-6 bg-slate-100 p-1.5 sm:p-2 rounded-2xl h-auto">
                 <TabsTrigger value="all" className="text-sm sm:text-base py-3 sm:py-4 rounded-xl min-h-11">All</TabsTrigger>
+                <TabsTrigger value="queue" className="text-sm sm:text-base py-3 sm:py-4 rounded-xl min-h-11">Call Queue</TabsTrigger>
                 <TabsTrigger value="lead" className="text-sm sm:text-base py-3 sm:py-4 rounded-xl min-h-11">Leads</TabsTrigger>
                 <TabsTrigger value="quoted" className="text-sm sm:text-base py-3 sm:py-4 rounded-xl min-h-11">Quoted</TabsTrigger>
                 <TabsTrigger value="won" className="text-sm sm:text-base py-3 sm:py-4 rounded-xl min-h-11">Won</TabsTrigger>
-                <TabsTrigger value="lost" className="text-sm sm:text-base py-3 sm:py-4 rounded-xl min-h-11 col-span-2 sm:col-span-1">Lost</TabsTrigger>
+                <TabsTrigger value="lost" className="text-sm sm:text-base py-3 sm:py-4 rounded-xl min-h-11">Lost</TabsTrigger>
               </TabsList>
             </Tabs>
+
+            {activeTab === 'queue' && (
+              <div className="flex flex-wrap gap-2 mb-4 text-sm">
+                <Badge variant="secondary">Queue: {queueStats.total}</Badge>
+                <Badge variant="outline">Not called: {queueStats.notCalled}</Badge>
+                <Badge variant="outline">Dialling: {queueStats.dialling}</Badge>
+                <Badge variant="outline">Needs retry: {queueStats.needsRetry}</Badge>
+                <Badge variant="outline">Called: {queueStats.called}</Badge>
+                <Select value={queueStatusFilter} onValueChange={setQueueStatusFilter}>
+                  <SelectTrigger className="w-44 min-h-9">
+                    <SelectValue placeholder="Call status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All call statuses</SelectItem>
+                    {(Object.keys(CALL_QUEUE_STATUS_LABELS) as CallQueueStatus[]).map((s) => (
+                      <SelectItem key={s} value={s}>{CALL_QUEUE_STATUS_LABELS[s]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="flex flex-col sm:flex-row gap-3">
               <Input
@@ -648,6 +734,7 @@ export default function ComprehensiveCRM() {
                   <SelectItem value="referral">Referral</SelectItem>
                   <SelectItem value="website">Website</SelectItem>
                   <SelectItem value="phone">Phone</SelectItem>
+                  <SelectItem value="purchased">Purchased / scraped</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -709,7 +796,25 @@ export default function ComprehensiveCRM() {
                       {lead.tags.map((tag) => (
                         <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
                       ))}
+                      {(activeTab === 'queue' || lead.callQueueStatus) && (
+                        <Badge variant="outline" className="text-xs">
+                          {CALL_QUEUE_STATUS_LABELS[(lead.callQueueStatus ?? 'not_called') as CallQueueStatus]
+                            ?? lead.callQueueStatus
+                            ?? 'Not called'}
+                        </Badge>
+                      )}
+                      {lead.lastCallDisposition && (
+                        <Badge className="text-xs bg-slate-800">
+                          {DISPOSITION_LABELS[lead.lastCallDisposition as LeadCallDisposition]
+                            ?? lead.lastCallDisposition}
+                        </Badge>
+                      )}
                     </div>
+                    {lead.lastCallSummary && (
+                      <p className="mt-2 text-xs text-slate-600 line-clamp-2">
+                        Last call: {lead.lastCallSummary}
+                      </p>
+                    )}
                     {lead.notes && (
                       <p className="mt-3 text-gray-700 text-sm line-clamp-2">{lead.notes}</p>
                     )}
@@ -799,6 +904,24 @@ export default function ComprehensiveCRM() {
                     <p className="mt-1">{selectedLead.email || '—'}</p>
                   </div>
                   <div>
+                    <Label className="font-bold">Call status</Label>
+                    <p className="mt-1">
+                      {CALL_QUEUE_STATUS_LABELS[(selectedLead.callQueueStatus ?? 'not_called') as CallQueueStatus]
+                        ?? selectedLead.callQueueStatus
+                        ?? 'Not called'}
+                      {selectedLead.callAttemptCount ? ` · ${selectedLead.callAttemptCount} attempt(s)` : ''}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="font-bold">Last disposition</Label>
+                    <p className="mt-1">
+                      {selectedLead.lastCallDisposition
+                        ? (DISPOSITION_LABELS[selectedLead.lastCallDisposition as LeadCallDisposition]
+                          ?? selectedLead.lastCallDisposition)
+                        : '—'}
+                    </p>
+                  </div>
+                  <div>
                     <Label className="font-bold">Budget</Label>
                     <p className="mt-1">{selectedLead.budget || 'Not specified'}</p>
                   </div>
@@ -807,6 +930,33 @@ export default function ComprehensiveCRM() {
                     <p className="mt-1">{selectedLead.timeline || 'Not specified'}</p>
                   </div>
                 </div>
+
+                {(selectedLead.lastCallSummary || selectedLead.lastCallAt || selectedLead.lastCallId) && (
+                  <div className="border rounded-2xl p-4 bg-amber-50 space-y-2">
+                    <Label className="font-bold text-lg">Call details</Label>
+                    {selectedLead.lastCallAt && (
+                      <p className="text-sm text-slate-600">
+                        {new Date(selectedLead.lastCallAt).toLocaleString('en-GB')}
+                      </p>
+                    )}
+                    {selectedLead.lastCallSummary && (
+                      <p className="text-sm text-slate-800 whitespace-pre-wrap">{selectedLead.lastCallSummary}</p>
+                    )}
+                    {selectedLead.lastCallId && (
+                      <Button
+                        variant="link"
+                        className="px-0 h-auto text-sm"
+                        onClick={() => {
+                          const id = selectedLead.lastCallId;
+                          setSelectedLead(null);
+                          navigate(`/calls?callId=${id}`);
+                        }}
+                      >
+                        Open call transcript
+                      </Button>
+                    )}
+                  </div>
+                )}
 
                 {/* Conversation notes */}
                 <div className="border rounded-2xl p-4 bg-slate-50 space-y-4">
@@ -832,6 +982,11 @@ export default function ComprehensiveCRM() {
                             </span>
                           </div>
                           <p className="text-slate-800 whitespace-pre-wrap">{a.detail}</p>
+                          {a.disposition && (
+                            <p className="text-xs text-amber-800 mt-1">
+                              Disposition: {DISPOSITION_LABELS[a.disposition as LeadCallDisposition] ?? a.disposition}
+                            </p>
+                          )}
                           {a.outcome && <p className="text-xs text-slate-500 mt-1">Outcome: {a.outcome}</p>}
                           {a.callSessionId && (
                             <Button
@@ -899,6 +1054,14 @@ export default function ComprehensiveCRM() {
                 )}
 
                 <div className="flex flex-wrap gap-3">
+                  <Button
+                    className="flex-1 min-w-[160px] bg-amber-600 hover:bg-amber-700"
+                    onClick={() => setCallThisPersonOpen(true)}
+                    disabled={!selectedLead.phone}
+                  >
+                    <PhoneCall className="w-4 h-4 mr-2" />
+                    Call this person
+                  </Button>
                   <Button className="flex-1 min-w-[140px]" onClick={handleStartQuote}>
                     Start Quote
                   </Button>
@@ -907,23 +1070,6 @@ export default function ComprehensiveCRM() {
                   </Button>
                   <Button variant="outline" className="flex-1 min-w-[140px]" onClick={handleLogFollowUp}>
                     Log Follow-up
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1 min-w-[140px]"
-                    onClick={() => handleCallWithAim('discovery')}
-                    disabled={!selectedLead.phone}
-                  >
-                    <PhoneCall className="w-4 h-4 mr-2" />
-                    Call (discovery)
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1 min-w-[140px]"
-                    onClick={() => handleCallWithAim('callback')}
-                    disabled={!selectedLead.phone}
-                  >
-                    Call (callback)
                   </Button>
                   {selectedLead.sourceCallId && (
                     <Button
@@ -936,7 +1082,7 @@ export default function ComprehensiveCRM() {
                       }}
                     >
                       <PhoneCall className="w-4 h-4 mr-2" />
-                      View call
+                      View source call
                     </Button>
                   )}
                   <Button variant="destructive" className="flex-1 min-w-[140px]" onClick={handleMarkLost}>
@@ -948,6 +1094,18 @@ export default function ComprehensiveCRM() {
           )}
         </DialogContent>
       </Dialog>
+
+      {selectedLead && (
+        <CallThisPersonDialog
+          open={callThisPersonOpen}
+          onOpenChange={setCallThisPersonOpen}
+          leadName={selectedLead.name}
+          leadPhone={selectedLead.phone}
+          customerId={selectedLead.id}
+          defaultBrief={defaultBrief}
+          onDialStarted={handleCallThisPersonStarted}
+        />
+      )}
     </div>
   );
 }

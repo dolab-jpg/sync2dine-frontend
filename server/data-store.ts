@@ -2,6 +2,10 @@ import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { BDIDDIES_HOME_ORG_LEGACY_ID, getHomeOrgId, sanitizeOrgId } from './home-org';
+import {
+  queueStatusAfterDisposition,
+  type LeadCallDisposition,
+} from './lead-call-disposition';
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), 'data');
 export const DEFAULT_ORG_ID = 'default';
@@ -50,6 +54,11 @@ export interface SyncedData {
   builders: Array<Record<string, unknown>>;
   sessions: Array<Record<string, unknown>>;
   whatsappGroups: Record<string, Record<string, unknown>>;
+  /** Cyrus / WhatsApp / phone shared conversation memory keyed by orgId:phone */
+  whatsappConversations?: Record<string, WhatsAppConversationRecord>;
+  teamMembers?: TeamMemberRecord[];
+  pendingConfirmations?: PendingConfirmationRecord[];
+  companySettings?: { website?: string; companyName?: string };
   calls: Array<Record<string, unknown>>;
   outboundQueue: Array<Record<string, unknown>>;
   recruitmentJobs: Array<Record<string, unknown>>;
@@ -64,32 +73,15 @@ export interface SyncedData {
   planningApplications: Array<Record<string, unknown>>;
   agentSettings: AgentSettings;
   phoneLines: PhoneLine[];
-  teamMembers: TeamMemberRecord[];
-  whatsappConversations: Record<string, WhatsAppConversationRecord>;
-  pendingConfirmations: PendingConfirmationRecord[];
-  companySettings?: { website?: string; companyName?: string };
 }
 
-export interface TeamMemberRecord {
-  id: string;
-  userId: string;
-  name: string;
-  phone: string;
-  role: 'super_admin' | 'manager' | 'staff' | 'builder';
-  /** Worker UI / channel reply language: en | sq | uk | ru | zh | es | pl | fa */
-  preferredLanguage?: string | null;
-  phonePinHash?: string;
-  phonePinUpdatedAt?: string;
-  updatedAt: string;
-}
-
-export type ConversationHandoffMode = 'ai_active' | 'human_takeover';
+export type ConversationHandoffMode = 'ai_active' | 'human_takeover' | 'paused';
 
 export interface WhatsAppConversationRecord {
   phone: string;
   orgId: string;
   messages: Array<{
-    role: string;
+    role: 'user' | 'assistant' | 'system';
     content: string;
     bodyEnglish?: string;
     detectedLanguage?: string;
@@ -98,7 +90,6 @@ export interface WhatsAppConversationRecord {
     fromRole?: string;
   }>;
   updatedAt: string;
-  /** Primary channel for this thread (whatsapp | web | portal | email | phone | app) */
   channel?: string;
   contactName?: string;
   handoffMode?: ConversationHandoffMode;
@@ -151,6 +142,18 @@ export interface AgentSettings {
   ivrTree?: Record<string, unknown>;
   /** Department → phone number for Cynthia live handoffs */
   transferNumbers?: TransferNumbers;
+  /** Default text for CRM "Call this person" brief box */
+  defaultOutboundBrief?: string;
+  /** What Cynthia must capture after every outbound lead call */
+  postCallNotePrompt?: string;
+  /** Max dial attempts before marking called (no more retry) */
+  callQueueMaxAttempts?: number;
+  /** Minutes between retries for needs_retry leads */
+  callQueueRetryMinutes?: number;
+  /** Quiet hours start (HH:mm local) — skip auto dial */
+  callQueueQuietStart?: string;
+  /** Quiet hours end (HH:mm local) */
+  callQueueQuietEnd?: string;
   updatedAt: string;
 }
 
@@ -158,6 +161,12 @@ const defaultAgentSettings: AgentSettings = {
   isActive: true,
   leadCallbackPolicy: 'alert_only',
   transferNumbers: {},
+  defaultOutboundBrief: 'Follow up on their enquiry, confirm interest, and book a survey or quote if they want one.',
+  postCallNotePrompt: 'After the call, note: interest level, any objection, next step, and best callback time if needed.',
+  callQueueMaxAttempts: 3,
+  callQueueRetryMinutes: 60,
+  callQueueQuietStart: '20:00',
+  callQueueQuietEnd: '08:00',
   updatedAt: new Date().toISOString(),
 };
 
@@ -173,6 +182,9 @@ const defaultData: SyncedData = {
   builders: [],
   sessions: [],
   whatsappGroups: {},
+  whatsappConversations: {},
+  teamMembers: [],
+  pendingConfirmations: [],
   calls: [],
   outboundQueue: [],
   recruitmentJobs: defaultRecruitmentJobs,
@@ -187,9 +199,6 @@ const defaultData: SyncedData = {
   planningApplications: [],
   agentSettings: { ...defaultAgentSettings },
   phoneLines: [],
-  teamMembers: [],
-  whatsappConversations: {},
-  pendingConfirmations: [],
 };
 
 function ensureDir() {
@@ -209,6 +218,14 @@ function loadFromDisk(orgId: string): SyncedData {
         builders: Array.isArray(parsed.builders) ? parsed.builders : [],
         sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
         whatsappGroups: parsed.whatsappGroups ?? {},
+        whatsappConversations: parsed.whatsappConversations ?? {},
+        teamMembers: Array.isArray(parsed.teamMembers) ? parsed.teamMembers : [],
+        pendingConfirmations: Array.isArray(parsed.pendingConfirmations)
+          ? parsed.pendingConfirmations
+          : [],
+        companySettings: parsed.companySettings && typeof parsed.companySettings === 'object'
+          ? parsed.companySettings
+          : undefined,
         calls: Array.isArray(parsed.calls) ? parsed.calls : [],
         outboundQueue: Array.isArray(parsed.outboundQueue) ? parsed.outboundQueue : [],
         recruitmentJobs: Array.isArray(parsed.recruitmentJobs) && parsed.recruitmentJobs.length
@@ -227,16 +244,6 @@ function loadFromDisk(orgId: string): SyncedData {
           ? { ...defaultAgentSettings, ...(parsed.agentSettings as AgentSettings) }
           : { ...defaultAgentSettings },
         phoneLines: Array.isArray(parsed.phoneLines) ? (parsed.phoneLines as PhoneLine[]) : [],
-        teamMembers: Array.isArray(parsed.teamMembers) ? parsed.teamMembers as TeamMemberRecord[] : [],
-        whatsappConversations: parsed.whatsappConversations && typeof parsed.whatsappConversations === 'object'
-          ? parsed.whatsappConversations as Record<string, WhatsAppConversationRecord>
-          : {},
-        pendingConfirmations: Array.isArray(parsed.pendingConfirmations)
-          ? parsed.pendingConfirmations as PendingConfirmationRecord[]
-          : [],
-        companySettings: parsed.companySettings && typeof parsed.companySettings === 'object'
-          ? parsed.companySettings
-          : undefined,
       };
       migrateLegacySoho66Line(result);
       return result;
@@ -247,6 +254,26 @@ function loadFromDisk(orgId: string): SyncedData {
   const data = { ...defaultData };
   migrateLegacySoho66Line(data);
   return data;
+}
+
+function migrateLegacySoho66Line(data: SyncedData): void {
+  if (data.phoneLines.length > 0) return;
+  const username = process.env.SOHO66_SIP_USERNAME?.trim();
+  const password = process.env.SOHO66_SIP_PASSWORD?.trim();
+  const did = process.env.SOHO66_FROM_NUMBER?.trim();
+  if (!username || !password) return;
+  const now = new Date().toISOString();
+  data.phoneLines = [{
+    id: 'line-legacy-1',
+    label: 'Line 1 (migrated)',
+    sipUsername: username,
+    sipPassword: password,
+    sipDomain: process.env.SOHO66_SIP_DOMAIN?.trim() || 'sbc.soho66.co.uk',
+    did: did ?? '',
+    enabled: true,
+    status: 'disconnected',
+    updatedAt: now,
+  }];
 }
 
 function mergeRecordArrays(
@@ -313,7 +340,7 @@ function migrateLegacyOrgDiskStores(): void {
     projects: home.projects.length ? home.projects : (legacyDefault.projects.length ? legacyDefault.projects : legacySlug.projects),
     phoneLines: home.phoneLines.length ? home.phoneLines : (legacyDefault.phoneLines.length ? legacyDefault.phoneLines : legacySlug.phoneLines),
     agentSettings: home.agentSettings ?? legacyDefault.agentSettings ?? legacySlug.agentSettings,
-    teamMembers: home.teamMembers.length ? home.teamMembers : (legacyDefault.teamMembers.length ? legacyDefault.teamMembers : legacySlug.teamMembers),
+    teamMembers: home.teamMembers?.length ? home.teamMembers : (legacyDefault.teamMembers?.length ? legacyDefault.teamMembers : legacySlug.teamMembers),
   };
   memoryStores.set(homeId, next);
   ensureDir();
@@ -337,54 +364,88 @@ function ensureOrgLoaded(orgId: string): SyncedData {
 
 export function getDataStore(orgId?: string): SyncedData {
   const id = resolveStorageOrgId(orgId ?? requestOrgId);
-  return ensureOrgLoaded(id);
+  const store = ensureOrgLoaded(id);
+  if (store.projects.length === 0 && store.contacts.length === 0 && store.phoneLines.length === 0) {
+    const loaded = loadFromDisk(id);
+    memoryStores.set(id, loaded);
+    return loaded;
+  }
+  return store;
 }
 
 export function syncData(data: Partial<SyncedData>, orgId?: string): void {
   const id = resolveStorageOrgId(orgId ?? requestOrgId);
   const memoryStore = ensureOrgLoaded(id);
-  const next = {
+  const next: SyncedData = {
     ...memoryStore,
     ...data,
     builders: data.builders ?? memoryStore.builders,
     whatsappGroups: data.whatsappGroups ?? memoryStore.whatsappGroups,
+    whatsappConversations: data.whatsappConversations ?? memoryStore.whatsappConversations ?? {},
+    teamMembers: data.teamMembers ?? memoryStore.teamMembers ?? [],
+    pendingConfirmations: data.pendingConfirmations ?? memoryStore.pendingConfirmations ?? [],
     agentSettings: data.agentSettings ?? memoryStore.agentSettings,
     phoneLines: data.phoneLines ?? memoryStore.phoneLines,
-    teamMembers: data.teamMembers ?? memoryStore.teamMembers,
-    whatsappConversations: data.whatsappConversations ?? memoryStore.whatsappConversations,
-    pendingConfirmations: data.pendingConfirmations ?? memoryStore.pendingConfirmations,
   };
+  // Never let an empty cloud snapshot wipe local CRM collections
+  const preferNonEmpty = <T>(incoming: T[] | undefined, existing: T[] | undefined): T[] => {
+    if (Array.isArray(incoming) && incoming.length > 0) return incoming;
+    if (Array.isArray(existing) && existing.length > 0) return existing;
+    return Array.isArray(incoming) ? incoming : (existing ?? []);
+  };
+  next.customers = preferNonEmpty(data.customers as Array<Record<string, unknown>> | undefined, memoryStore.customers);
+  next.contacts = preferNonEmpty(data.contacts as Array<Record<string, unknown>> | undefined, memoryStore.contacts);
+  next.projects = preferNonEmpty(data.projects as Array<Record<string, unknown>> | undefined, memoryStore.projects);
+  next.quotes = preferNonEmpty(data.quotes as Array<Record<string, unknown>> | undefined, memoryStore.quotes);
+  next.calls = preferNonEmpty(data.calls as Array<Record<string, unknown>> | undefined, memoryStore.calls);
+  next.phoneLines = preferNonEmpty(data.phoneLines, memoryStore.phoneLines);
+
   memoryStores.set(id, next);
+
+  // Always keep a local JSON cache — Supabase adapter does not yet persist Cyrus threads.
   ensureDir();
   try {
     writeFileSync(dataFileForOrg(id), JSON.stringify(next, null, 2));
   } catch {
     // ignore write errors in dev
   }
+
+  import('./supabase-data.js').then(({ isSupabaseConfigured, syncDataToSupabase }) => {
+    if (isSupabaseConfigured()) {
+      syncDataToSupabase(next, id).catch(() => { /* ignore async write errors */ });
+    }
+  }).catch(() => { /* ignore */ });
 }
 
-function migrateLegacySoho66Line(data: SyncedData): void {
-  if (data.phoneLines.length > 0) return;
-  const username = process.env.SOHO66_SIP_USERNAME?.trim();
-  const password = process.env.SOHO66_SIP_PASSWORD?.trim();
-  const did = process.env.SOHO66_FROM_NUMBER?.trim();
-  if (!username || !password) return;
-  const now = new Date().toISOString();
-  data.phoneLines = [{
-    id: 'line-legacy-1',
-    label: 'Line 1 (migrated)',
-    sipUsername: username,
-    sipPassword: password,
-    sipDomain: process.env.SOHO66_SIP_DOMAIN?.trim() || 'sip.soho66.co.uk',
-    did: did ?? '',
-    enabled: true,
-    status: 'disconnected',
-    updatedAt: now,
-  }];
-}
-
-export function normalizePhoneExport(phone: string): string {
-  return normalizePhone(phone);
+/** Preload org data from Supabase on server startup */
+export async function initDataFromSupabase(orgId?: string): Promise<void> {
+  // Resolve through home-org so hydration lands in the same store requests read from.
+  const id = resolveStorageOrgId(orgId ?? DEFAULT_ORG_ID);
+  try {
+    const { isSupabaseConfigured, loadSyncedDataFromSupabase } = await import('./supabase-data.js');
+    if (!isSupabaseConfigured()) return;
+    const data = await loadSyncedDataFromSupabase(id);
+    // Local disk wins when it has richer CRM (supabase shell orgs often look "populated" but incomplete)
+    const disk = loadFromDisk(id);
+    data.whatsappConversations = {
+      ...(disk.whatsappConversations ?? {}),
+      ...(data.whatsappConversations ?? {}),
+    };
+    data.teamMembers = (data.teamMembers?.length ? data.teamMembers : disk.teamMembers) ?? [];
+    const richer = <T>(cloud: T[] | undefined, local: T[] | undefined): T[] => {
+      const c = cloud ?? [];
+      const l = local ?? [];
+      return l.length >= c.length ? l : c;
+    };
+    data.phoneLines = richer(data.phoneLines, disk.phoneLines);
+    data.customers = richer(data.customers, disk.customers);
+    data.contacts = richer(data.contacts, disk.contacts);
+    data.projects = richer(data.projects, disk.projects);
+    data.quotes = richer(data.quotes, disk.quotes);
+    memoryStores.set(id, data);
+  } catch {
+    // fall back to JSON files
+  }
 }
 
 function normalizePhone(phone: string): string {
@@ -394,9 +455,24 @@ function normalizePhone(phone: string): string {
   return digits;
 }
 
+export function normalizePhoneExport(phone: string): string {
+  return normalizePhone(phone);
+}
+
+export interface TeamMemberRecord {
+  id: string;
+  userId?: string;
+  name: string;
+  phone: string;
+  role: string;
+  preferredLanguage?: string | null;
+  phonePinHash?: string;
+  phonePinUpdatedAt?: string;
+}
+
 export function resolveStaffByPhone(phone: string, orgId?: string): TeamMemberRecord | null {
   const normalized = normalizePhone(phone);
-  const members = getDataStore(orgId).teamMembers ?? [];
+  const members = (getDataStore(orgId).teamMembers ?? []) as TeamMemberRecord[];
   return members.find((m) => normalizePhone(String(m.phone ?? '')) === normalized) ?? null;
 }
 
@@ -429,11 +505,12 @@ export function resolveContactByPhone(phone: string): {
     contactName: contact ? String(contact.name) : 'Guest',
     contactRole: contact ? String(contact.role ?? 'primary') : 'guest',
     projectId: project ? String(project.id) : null,
-    activeQuotes: getActiveQuotesForCustomer(customerId),
+    activeQuotes: getActiveQuotes(customerId),
   };
 }
 
-function getActiveQuotesForCustomer(customerId: string | null): Array<{
+// Local copy (quote-lookup.ts imports this module, so importing it back would be a cycle).
+function getActiveQuotes(customerId: string | null): Array<{
   tradeName?: string;
   total: number;
   status: string;
@@ -450,6 +527,10 @@ function getActiveQuotesForCustomer(customerId: string | null): Array<{
       status: String(q.status ?? 'draft'),
       expiresAt: String(q.expiresAt ?? ''),
     }));
+}
+
+export function getProjectById(id: string): Record<string, unknown> | undefined {
+  return getDataStore().projects.find(p => String(p.id) === id);
 }
 
 export function saveQuoteRecord(quote: Record<string, unknown>): Record<string, unknown> {
@@ -478,10 +559,6 @@ export function updateQuoteRecord(id: string, patch: Record<string, unknown>): R
   store.quotes[idx] = { ...store.quotes[idx], ...patch, updatedAt: new Date().toISOString() };
   syncData(store);
   return store.quotes[idx];
-}
-
-export function getProjectById(id: string): Record<string, unknown> | undefined {
-  return getDataStore().projects.find(p => String(p.id) === id);
 }
 
 export function updateProjectRecord(
@@ -548,7 +625,24 @@ export function getCallById(id: string): Record<string, unknown> | undefined {
 }
 
 export function getCallByProviderId(providerCallId: string): Record<string, unknown> | undefined {
-  return getDataStore().calls.find(c => String(c.providerCallId) === providerCallId);
+  const id = String(providerCallId || '').trim();
+  if (!id) return undefined;
+  const matches = getDataStore().calls.filter((c) => String(c.providerCallId) === id);
+  if (!matches.length) return undefined;
+  if (matches.length === 1) return matches[0];
+  // Prefer TradePro-owned rows over orphan webhook rows that used the Vapi UUID as local id
+  const preferred = matches.find((c) => {
+    const localId = String(c.id);
+    const meta = (c.metadata as Record<string, unknown> | undefined) || {};
+    return (
+      localId.startsWith('out-')
+      || localId.startsWith('call-')
+      || localId.startsWith('vapi-out-')
+      || String(meta.tradeproCallId || '') === localId
+      || localId !== id
+    );
+  });
+  return preferred || matches[0];
 }
 
 export function saveCall(call: Record<string, unknown>): Record<string, unknown> {
@@ -600,6 +694,42 @@ export function updateOutboundJob(id: string, patch: Record<string, unknown>): v
   syncData(store);
 }
 
+/** Mark outbound queue rows tied to a call as completed (end-of-call, not dial-accept). */
+export function completeOutboundJobsForCall(callId: string, patch?: Record<string, unknown>): void {
+  if (!callId) return;
+  const store = getDataStore();
+  let changed = false;
+  for (const job of store.outboundQueue) {
+    if (String(job.callId ?? '') !== callId) continue;
+    const status = String(job.status ?? '');
+    if (status === 'completed' || status === 'cancelled') continue;
+    Object.assign(job, {
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+      ...(patch || {}),
+    });
+    changed = true;
+  }
+  if (changed) syncData(store);
+}
+
+/** Set customer call-queue status when an outbound dial is accepted. */
+export function markCustomerDialling(customerId: string, callId?: string): void {
+  if (!customerId) return;
+  const store = getDataStore();
+  const idx = store.customers.findIndex((c) => String(c.id) === customerId);
+  if (idx < 0) return;
+  const customer = store.customers[idx] as Record<string, unknown>;
+  store.customers[idx] = {
+    ...customer,
+    callQueueStatus: 'dialling',
+    lastCallId: callId ?? customer.lastCallId,
+    lastContact: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  syncData(store);
+}
+
 export function resolveCandidateByPhone(phone: string): {
   candidateId: string | null;
   candidateName: string;
@@ -648,6 +778,7 @@ export function saveCustomerRecord(customer: Record<string, unknown>): Record<st
   let id = customer.id ? String(customer.id) : '';
   let existingIdx = id ? store.customers.findIndex(c => String(c.id) === id) : -1;
 
+  // AI/phone/WhatsApp callers rarely pass an id — match by phone/email to avoid duplicate CRM rows.
   if (existingIdx < 0 && (phone || email)) {
     const dup = store.customers.find(c => {
       if (phone && normalizePhone(String(c.phone ?? '')) === normalizePhone(phone)) return true;
@@ -676,7 +807,9 @@ export function saveCustomerRecord(customer: Record<string, unknown>): Record<st
   }
   syncData(store);
   const saved = store.customers.find(c => String(c.id) === id) ?? record;
-  // CRM UI loads from Supabase — mirror disk/AI/WhatsApp/phone creates there too.
+  // Direct mirror to public.customers under the home-org uuid. syncData's full sync also upserts
+  // customers, but it resolves the org via a cloud organizations lookup that can fall back to the
+  // shared default org — this mirror guarantees the row lands where the CRM UI reads it.
   void import('./supabase-crm')
     .then(({ mirrorCustomerToSupabaseAsync }) => {
       mirrorCustomerToSupabaseAsync(saved as Record<string, unknown>, getRequestOrgId());
@@ -693,24 +826,43 @@ export function appendCustomerCallActivity(input: {
   callId?: string;
   summary: string;
   outcome?: string;
+  disposition?: string;
+  aim?: string;
+  detail?: string;
+  createdBy?: string;
+  type?: string;
+  /** When true, also update lastCall* / callQueueStatus denormalised fields */
+  updateCallQueue?: boolean;
+  transferredTo?: string;
 }): Record<string, unknown> {
   const store = getDataStore();
   const idx = store.customers.findIndex(c => String(c.id) === input.customerId);
   const stamp = new Date().toISOString();
+  const detail = (input.detail ?? input.summary).trim();
+  const aimBit = input.aim ? ` Aim: ${input.aim}.` : '';
+  const dispositionBit = input.disposition ? ` Disposition: ${input.disposition}.` : '';
   const line = [
-    `[Aria call ${stamp.slice(0, 16).replace('T', ' ')}]`,
-    input.summary.trim(),
+    `[Cynthia call ${stamp.slice(0, 16).replace('T', ' ')}]`,
+    detail,
+    aimBit,
+    dispositionBit,
     input.outcome ? `Outcome: ${input.outcome.trim()}` : '',
+    input.transferredTo ? `Transferred to: ${input.transferredTo}` : '',
     input.callId ? `(callId ${input.callId})` : '',
   ].filter(Boolean).join(' ');
 
   const activity = {
     id: `CA${Date.now()}`,
-    type: 'aria_call',
-    callId: input.callId ?? null,
+    type: input.type ?? 'call',
+    aim: input.aim ?? null,
+    detail,
     summary: input.summary,
     outcome: input.outcome ?? null,
+    disposition: input.disposition ?? null,
+    callSessionId: input.callId ?? null,
+    callId: input.callId ?? null,
     createdAt: stamp,
+    createdBy: input.createdBy ?? 'cynthia',
   };
 
   if (idx < 0) {
@@ -723,14 +875,105 @@ export function appendCustomerCallActivity(input: {
     ? [...(customer.activities as unknown[])]
     : [];
   activities.unshift(activity);
-  store.customers[idx] = {
+
+  const patch: Record<string, unknown> = {
     ...customer,
     notes: prevNotes ? `${line}\n${prevNotes}` : line,
     activities: activities.slice(0, 50),
+    lastContact: stamp,
     updatedAt: stamp,
   };
+
+  if (input.updateCallQueue) {
+    const prevAttempts = Number(customer.callAttemptCount ?? 0);
+    const sameCall = input.callId && customer.lastCallId === input.callId;
+    const attemptCount = input.callId && !sameCall ? prevAttempts + 1 : Math.max(prevAttempts, 1);
+    const maxAttempts = getAgentSettings().callQueueMaxAttempts ?? 3;
+    let callQueueStatus = customer.callQueueStatus;
+    if (input.disposition) {
+      callQueueStatus = queueStatusAfterDisposition(
+        input.disposition as LeadCallDisposition,
+        attemptCount,
+        maxAttempts,
+      );
+    }
+    Object.assign(patch, {
+      lastCallAt: stamp,
+      lastCallId: input.callId ?? customer.lastCallId,
+      lastCallDisposition: input.disposition ?? customer.lastCallDisposition,
+      lastCallSummary: (input.summary || detail).slice(0, 400),
+      callAttemptCount: attemptCount,
+      callQueueStatus: callQueueStatus ?? 'called',
+    });
+  }
+
+  store.customers[idx] = patch;
   syncData(store);
   return { ...activity, logged: true };
+}
+
+/** Build a spoken/CRM brief from customer notes + activities for Cynthia. */
+export function buildLeadBriefFromCustomer(customer: Record<string, unknown> | undefined): {
+  found: boolean;
+  customerId: string | null;
+  name: string | null;
+  status: string | null;
+  phone: string | null;
+  nextFollowUp: string | null;
+  notesPreview: string | null;
+  activities: Array<Record<string, unknown>>;
+  spokenHint: string;
+} {
+  if (!customer) {
+    return {
+      found: false,
+      customerId: null,
+      name: null,
+      status: null,
+      phone: null,
+      nextFollowUp: null,
+      notesPreview: null,
+      activities: [],
+      spokenHint: 'No lead on file for that lookup.',
+    };
+  }
+  const activitiesRaw = Array.isArray(customer.activities) ? customer.activities as Array<Record<string, unknown>> : [];
+  const activities = activitiesRaw.slice(0, 8).map((a) => ({
+    type: a.type ?? 'note',
+    aim: a.aim ?? null,
+    detail: String(a.detail ?? a.summary ?? '').slice(0, 280),
+    outcome: a.outcome ?? null,
+    createdAt: a.createdAt ?? null,
+    createdBy: a.createdBy ?? null,
+  }));
+  const name = String(customer.name ?? 'Lead');
+  const notes = String(customer.notes ?? '').slice(0, 400);
+  const activityLines = activities
+    .filter((a) => a.detail)
+    .map((a) => {
+      const aim = a.aim ? ` [${a.aim}]` : '';
+      return `${String(a.createdAt ?? '').slice(0, 10)}${aim}: ${a.detail}`;
+    });
+  const spokenHint = [
+    `${name} is on file as ${String(customer.status ?? 'lead')}.`,
+    activityLines.length
+      ? `Recent conversation: ${activityLines.slice(0, 3).join(' | ')}`
+      : notes
+        ? `Notes: ${notes.slice(0, 200)}`
+        : 'No prior conversation notes yet.',
+  ].join(' ');
+
+  return {
+    found: true,
+    customerId: String(customer.id),
+    name,
+    status: customer.status != null ? String(customer.status) : null,
+    phone: customer.phone != null ? String(customer.phone) : null,
+    nextFollowUp: customer.nextFollowUp != null ? String(customer.nextFollowUp) : null,
+    notesPreview: notes || null,
+    activities,
+    spokenHint,
+  };
 }
 
 export function getAgentSettings(): AgentSettings {
@@ -812,7 +1055,7 @@ export function savePhoneLine(
     label: input.label,
     sipUsername: input.sipUsername,
     sipPassword: input.sipPassword,
-    sipDomain: input.sipDomain?.trim() || 'sip.soho66.co.uk',
+    sipDomain: input.sipDomain?.trim() || process.env.SOHO66_SIP_DOMAIN?.trim() || 'sbc.soho66.co.uk',
     did: input.did,
     enabled: input.enabled !== false,
     status: input.status ?? (prev?.status ?? 'disconnected'),
@@ -867,13 +1110,58 @@ export function maskPhoneLine(line: PhoneLine): Omit<PhoneLine, 'sipPassword'> &
   };
 }
 
+/** Open call rows older than this are treated as abandoned (missed end-of-call webhook). */
+export const STALE_OPEN_CALL_MAX_MS = Number(process.env.STALE_OPEN_CALL_MAX_MS ?? 45 * 60 * 1000);
+
+function callStartedAtMs(call: Record<string, unknown>): number {
+  const t = call.startedAt ? new Date(String(call.startedAt)).getTime() : NaN;
+  return Number.isFinite(t) ? t : NaN;
+}
+
+/** Persist-complete any ringing/in_progress call older than TTL. Returns how many were closed. */
+export function expireStaleOpenCalls(nowMs: number = Date.now()): number {
+  const store = getDataStore();
+  const maxAge = STALE_OPEN_CALL_MAX_MS > 0 ? STALE_OPEN_CALL_MAX_MS : 45 * 60 * 1000;
+  const stamp = new Date(nowMs).toISOString();
+  let closed = 0;
+  for (let i = 0; i < store.calls.length; i++) {
+    const c = store.calls[i];
+    const status = String(c.status ?? '');
+    if (status !== 'ringing' && status !== 'in_progress') continue;
+    if (c.endedAt) {
+      // Already ended but status left open — normalize
+      store.calls[i] = { ...c, status: 'completed', updatedAt: stamp };
+      closed += 1;
+      continue;
+    }
+    const started = callStartedAtMs(c);
+    if (!Number.isFinite(started) || nowMs - started < maxAge) continue;
+    store.calls[i] = {
+      ...c,
+      status: 'completed',
+      endedAt: stamp,
+      outcome: String(c.outcome ?? 'stale_timeout'),
+      updatedAt: stamp,
+    };
+    closed += 1;
+  }
+  if (closed > 0) syncData(store);
+  return closed;
+}
+
+function isOpenCallStatus(status: unknown): boolean {
+  const s = String(status ?? '');
+  return s === 'ringing' || s === 'in_progress';
+}
+
 export function getLinesSummary(): { total: number; registered: number; onCall: number } {
+  expireStaleOpenCalls();
   const store = getDataStore();
   const total = store.phoneLines.filter(l => l.enabled).length;
   const registered = store.phoneLines.filter(l => l.enabled && l.status === 'registered').length;
   const activeLineIds = new Set(
     store.calls
-      .filter(c => ['ringing', 'in_progress'].includes(String(c.status ?? '')))
+      .filter(c => isOpenCallStatus(c.status))
       .map(c => String(c.lineId ?? ''))
       .filter(Boolean),
   );
@@ -881,14 +1169,21 @@ export function getLinesSummary(): { total: number; registered: number; onCall: 
 }
 
 export function resolveAvailableLineForOutbound(): PhoneLine | undefined {
+  expireStaleOpenCalls();
   const store = getDataStore();
   const busyLineIds = new Set(
     store.calls
-      .filter(c => ['ringing', 'in_progress'].includes(String(c.status ?? '')))
+      .filter(c => isOpenCallStatus(c.status))
       .map(c => String(c.lineId ?? ''))
       .filter(Boolean),
   );
-  return store.phoneLines.find(l => l.enabled && l.status === 'registered' && !busyLineIds.has(l.id));
+  const available = store.phoneLines.filter(
+    l => l.enabled && l.status === 'registered' && !busyLineIds.has(l.id),
+  );
+  return (
+    available.find(l => (l.purpose ?? 'staff') === 'aria')
+    ?? available[0]
+  );
 }
 
 export function computeCallSentiment(call: Record<string, unknown>): 'negative' | 'neutral' | 'positive' {
@@ -923,6 +1218,7 @@ export function getAgentStatusSnapshot(): {
     callbacksBooked: number;
   };
 } {
+  expireStaleOpenCalls();
   const store = getDataStore();
   const todayStart = startOfTodayLocal();
   const todayCalls = store.calls.filter(c => {
@@ -931,10 +1227,7 @@ export function getAgentStatusSnapshot(): {
   });
 
   const activeCalls = store.calls
-    .filter(c => {
-      const status = String(c.status ?? '');
-      return status === 'ringing' || status === 'in_progress';
-    })
+    .filter(c => isOpenCallStatus(c.status))
     .map(call => ({
       ...call,
       elapsedSec: computeCallDurationSec(call),

@@ -93,6 +93,13 @@ export function MailboxConnectPanel({ userId, orgId, onConnectionChange }: Props
         {connections.length === 0 && (
           <p className="text-sm text-gray-600">No mailbox connected. Connect Gmail, Outlook, or Yahoo to read and send email from Builder Diddies.</p>
         )}
+        <p className="text-xs text-slate-600 bg-slate-50 border rounded-lg p-3 leading-relaxed">
+          First-time setup: a super admin must create a Google Cloud <strong>Web application</strong> OAuth client
+          with redirect URI <code className="text-[11px]">https://app.b-diddies.com/api/mailbox/callback</code>,
+          then paste Client ID + Secret under{' '}
+          <a href="/integrations" className="text-blue-700 underline font-medium">Integrations → Mailbox OAuth</a>
+          {' '}(setup guide is on that card). After that, click Connect with Google here.
+        </p>
         {connections.map(conn => (
           <div key={conn.id} className="flex flex-wrap items-center justify-between gap-2 p-3 border rounded-lg bg-slate-50">
             <div>
