@@ -804,7 +804,7 @@ Successful production calls used **Vapi + ElevenLabs Cockney (Lizzie `EQx6HGDYjk
 |--------|-------|
 | Sales / quotes | `detectTrades`, `linkCustomer`, `convertQuoteToProject`, `saveQuote`, `updateQuote`, `startQuote`, `proposeQuoteFields`, `priceSmallJob`, `submitForApproval`, `approveQuote`, `rejectQuote`, `addQuoteLines`, `updateQuoteLines` |
 | Contracts | `generatePaymentSchedule`, `saveContract`, `sendContract` |
-| CRM / search | `searchLeads`, `updateLeadStatus`, `logFollowUp`, `searchCustomers`, `searchProjects`, `searchQuotes`, `getTeamPerformance` |
+| CRM / search | `searchLeads`, `updateLeadStatus`, `logFollowUp`, `getLeadBrief`, `addLeadNote`, `listPendingCallbacks`, `searchCustomers`, `searchProjects`, `searchQuotes`, `getTeamPerformance` |
 | Project / PM | `completeHandover`, `assignContractor`, `markPaymentReceived` + project action set below |
 | Receipts | `sendClientReceipt` |
 | Email | `listRecentEmails`, `getEmailThread`, `draftEmailReply`, `sendEmailReply`, `sendEmailWithAttachment` |
