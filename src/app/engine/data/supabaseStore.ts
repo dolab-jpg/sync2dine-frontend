@@ -28,14 +28,55 @@ export async function loadProjectsFromSupabase(): Promise<UnifiedProject[]> {
     .select('id, status, customer_id, quote_id, portal_token, data')
     .eq('org_id', orgId);
   if (error || !data) return [];
-  return data.map(row => ({
-    id: row.id,
-    status: row.status,
-    customerId: row.customer_id,
-    quoteId: row.quote_id,
-    portalToken: row.portal_token,
-    ...(row.data as Record<string, unknown>),
-  })) as UnifiedProject[];
+
+  const { data: fileRows } = await supabase
+    .from('project_files')
+    .select('id, project_id, storage_path, filename, mime_type, source, uploaded_by, caption, taken_at, message_id, task_id, bucket')
+    .eq('org_id', orgId);
+
+  const filesByProject = new Map<string, Array<Record<string, unknown>>>();
+  for (const row of fileRows ?? []) {
+    const pid = String(row.project_id ?? '');
+    if (!pid) continue;
+    const list = filesByProject.get(pid) ?? [];
+    list.push({
+      id: String(row.id),
+      storagePath: String(row.storage_path ?? ''),
+      filename: String(row.filename ?? ''),
+      mimeType: String(row.mime_type ?? 'application/octet-stream'),
+      source: row.source ?? 'document',
+      uploadedBy: row.uploaded_by ?? undefined,
+      caption: row.caption ?? undefined,
+      takenAt: row.taken_at ?? undefined,
+      messageId: row.message_id ?? undefined,
+      taskId: row.task_id ?? undefined,
+      bucket: row.bucket ?? 'project-files',
+    });
+    filesByProject.set(pid, list);
+  }
+
+  return data.map((row) => {
+    const base = {
+      id: row.id,
+      status: row.status,
+      customerId: row.customer_id,
+      quoteId: row.quote_id,
+      portalToken: row.portal_token,
+      ...(row.data as Record<string, unknown>),
+    } as UnifiedProject;
+    const fromTable = filesByProject.get(String(row.id)) ?? [];
+    if (!fromTable.length) return base;
+    const existing = Array.isArray(base.files) ? base.files : [];
+    const seen = new Set(existing.map((f) => f.id));
+    const merged = [...existing];
+    for (const f of fromTable) {
+      const id = String(f.id);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      merged.push(f as UnifiedProject['files'][number]);
+    }
+    return { ...base, files: merged };
+  });
 }
 
 export async function saveProjectToSupabase(project: UnifiedProject): Promise<void> {

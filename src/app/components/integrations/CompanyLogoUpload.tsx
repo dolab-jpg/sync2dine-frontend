@@ -4,10 +4,36 @@ import { Label } from '../ui/label';
 import { Loader2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { uploadFileToStorage, getSignedFileUrl } from '../../engine/data/supabaseStore';
+import { loadIntegrationsStore, saveIntegrationsStore } from '../../engine/integrations/integrationsStore';
 
 interface CompanyLogoUploadProps {
   logoUrl: string;
   onLogoUrlChange: (url: string) => void;
+}
+
+/** Convert any browser-decodable image (incl. WebP) to PNG bytes for pdf-lib compatibility. */
+async function fileToPngFile(file: File): Promise<File> {
+  if (file.type === 'image/png') return file;
+  const bitmap = await createImageBitmap(file);
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas unavailable');
+  ctx.drawImage(bitmap, 0, 0);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error('PNG convert failed');
+  return new File([blob], 'logo.png', { type: 'image/png' });
+}
+
+function persistLogoStoragePath(storagePath: string) {
+  const store = loadIntegrationsStore();
+  const company = store.integrations.company ?? { enabled: true, mockMode: false, values: {}, status: 'connected' as const };
+  store.integrations.company = {
+    ...company,
+    values: { ...company.values, logoStoragePath: storagePath },
+  };
+  saveIntegrationsStore(store);
 }
 
 export function CompanyLogoUpload({ logoUrl, onLogoUrlChange }: CompanyLogoUploadProps) {
@@ -26,69 +52,76 @@ export function CompanyLogoUpload({ logoUrl, onLogoUrlChange }: CompanyLogoUploa
       return;
     }
     setUploading(true);
-    const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
-    const storagePath = `company/logo.${ext}`;
-    const uploaded = await uploadFileToStorage('project-files', storagePath, file, file.type);
-    if (!uploaded) {
+    try {
+      // Always store PNG so quote/invoice/contract PDFs can embed the logo.
+      const pngFile = await fileToPngFile(file);
+      const storagePath = 'company/logo.png';
+      const uploaded = await uploadFileToStorage('project-files', storagePath, pngFile, 'image/png');
+      if (!uploaded) {
+        toast.error('Logo upload failed — check Supabase Storage or paste a Logo URL below');
+        return;
+      }
+      persistLogoStoragePath(storagePath);
+      const url = await getSignedFileUrl('project-files', storagePath);
+      if (!url) {
+        toast.error('Logo uploaded but could not get a preview URL — paste a Logo URL below if needed');
+        return;
+      }
+      onLogoUrlChange(url);
+      toast.success('Logo uploaded (PNG — ready for PDFs)');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Logo upload failed');
+    } finally {
       setUploading(false);
-      toast.error('Logo upload failed — check Supabase Storage or paste a Logo URL below');
-      return;
     }
-    const url = await getSignedFileUrl('project-files', storagePath);
-    setUploading(false);
-    if (!url) {
-      toast.error('Logo uploaded but could not get a preview URL — paste a Logo URL below if needed');
-      return;
-    }
-    onLogoUrlChange(url);
-    toast.success('Logo uploaded');
   };
 
   return (
     <div className="space-y-2 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 p-4">
       <Label className="text-sm font-medium">Company logo</Label>
       <p className="text-xs text-muted-foreground">
-        Upload PNG, JPEG, or WebP (max 2 MB). Shown on invoices, quotes, and receipts.
+        PNG or JPEG preferred. WebP is converted to PNG so quotes, invoices, and contracts keep the logo.
       </p>
-      <div className="flex flex-wrap items-center gap-3">
-        {logoUrl ? (
+      {logoUrl ? (
+        <div className="flex items-center gap-3">
           <img
             src={logoUrl}
-            alt="Company logo preview"
-            className="h-14 max-w-[180px] object-contain rounded border bg-white p-1"
+            alt="Company logo"
+            className="h-14 w-auto max-w-[160px] object-contain rounded border bg-white p-1"
           />
-        ) : (
-          <div className="h-14 w-28 rounded border bg-white flex items-center justify-center text-xs text-muted-foreground">
-            No logo
-          </div>
-        )}
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          className="hidden"
-          onChange={(e) => void handleFile(e.target.files?.[0] ?? null)}
-        />
+        </div>
+      ) : null}
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        accept="image/png,image/jpeg,image/webp"
+        onChange={(e) => void handleFile(e.target.files?.[0] ?? null)}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={uploading}
+        onClick={() => inputRef.current?.click()}
+      >
+        {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+        {logoUrl ? 'Replace logo' : 'Upload logo'}
+      </Button>
+      {logoUrl && (
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
-          disabled={uploading}
-          onClick={() => inputRef.current?.click()}
+          className="text-destructive"
+          onClick={() => {
+            onLogoUrlChange('');
+            persistLogoStoragePath('');
+          }}
         >
-          {uploading ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Upload className="w-4 h-4 mr-2" />
-          )}
-          {logoUrl ? 'Replace logo' : 'Upload logo'}
+          Remove
         </Button>
-        {logoUrl && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => onLogoUrlChange('')}>
-            Remove
-          </Button>
-        )}
-      </div>
+      )}
     </div>
   );
 }

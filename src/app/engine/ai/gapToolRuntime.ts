@@ -180,7 +180,9 @@ export async function executeGapTool(
       );
       return {
         action: name,
-        summary: `Invoice PDF ready (${invoiceId}).`,
+        summary: pdf.logoWarning
+          ? `Invoice PDF ready (${invoiceId}). Logo: ${pdf.logoWarning}`
+          : `Invoice PDF ready (${invoiceId})${pdf.logoEmbedded ? ' with company logo' : ''}.`,
         openRoute: '/cynthia',
         output: {
           ...output,
@@ -188,6 +190,8 @@ export async function executeGapTool(
           pdfDataUrl: pdf.url || `data:${pdf.mimeType};base64,${pdf.content}`,
           pdfFilename: pdf.filename,
           pdfPath: pdf.storagePath || pdf.filename,
+          logoEmbedded: pdf.logoEmbedded ?? false,
+          logoWarning: pdf.logoWarning,
         },
         executed: true,
       };
@@ -211,13 +215,17 @@ export async function executeGapTool(
       );
       return {
         action: name,
-        summary: `Contract PDF ready for ${customerName}.`,
+        summary: pdf.logoWarning
+          ? `Contract PDF ready for ${customerName}. Logo: ${pdf.logoWarning}`
+          : `Contract PDF ready for ${customerName}${pdf.logoEmbedded ? ' with company logo' : ''}.`,
         openRoute: '/cynthia',
         output: {
           ...output,
           pdfDataUrl: pdf.url || `data:${pdf.mimeType};base64,${pdf.content}`,
           pdfFilename: pdf.filename,
           pdfPath: pdf.storagePath || pdf.filename,
+          logoEmbedded: pdf.logoEmbedded ?? false,
+          logoWarning: pdf.logoWarning,
         },
         executed: true,
       };

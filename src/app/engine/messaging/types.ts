@@ -20,6 +20,9 @@ export interface DocumentAttachment {
   url?: string;
   /** Supabase/local storage path when persisted under a project */
   storagePath?: string;
+  /** Set when PDF was built without an embedded company logo */
+  logoWarning?: string;
+  logoEmbedded?: boolean;
 }
 
 export interface OutboundMessage {

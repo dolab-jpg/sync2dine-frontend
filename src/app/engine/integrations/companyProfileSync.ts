@@ -19,6 +19,8 @@ export interface CompanyProfileValues extends Record<string, string> {
   email?: string;
   address?: string;
   logoUrl?: string;
+  /** Durable storage path under project-files (e.g. company/logo.png) — used to refresh signed logoUrl */
+  logoStoragePath?: string;
   accountName?: string;
   sortCode?: string;
   accountNumber?: string;
@@ -74,10 +76,41 @@ export async function initCompanyProfile(): Promise<void> {
     const remote = await loadCompanyProfileFromSupabase();
     if (!remote?.values) return;
     const store = loadIntegrationsStore();
+    const values = { ...store.integrations.company.values, ...remote.values };
+
+    // Refresh short-lived signed logo URLs from durable storage path.
+    const storagePath = String(values.logoStoragePath || '').trim();
+    let logoPath = storagePath;
+    if (!logoPath && values.logoUrl) {
+      const m = String(values.logoUrl).match(/\/project-files\/([^?]+)/);
+      if (m?.[1]) {
+        try {
+          logoPath = decodeURIComponent(m[1]).replace(/^[^/]+\//, ''); // strip org prefix if present
+          if (logoPath.includes('/company/')) {
+            logoPath = logoPath.slice(logoPath.indexOf('company/'));
+          } else if (!logoPath.startsWith('company/')) {
+            logoPath = '';
+          }
+        } catch {
+          logoPath = '';
+        }
+      }
+    }
+    if (logoPath) {
+      values.logoStoragePath = logoPath;
+      try {
+        const { getSignedFileUrl } = await import('../data/supabaseStore');
+        const fresh = await getSignedFileUrl('project-files', logoPath);
+        if (fresh) values.logoUrl = fresh;
+      } catch {
+        // keep existing logoUrl
+      }
+    }
+
     store.integrations.company = {
       ...store.integrations.company,
       ...remote,
-      values: { ...store.integrations.company.values, ...remote.values },
+      values,
     };
     saveIntegrationsStore(store);
   })();

@@ -10,20 +10,74 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-async function embedLogo(doc: PDFDocument, logoUrl: string): Promise<PDFImage | null> {
-  if (!logoUrl.trim()) return null;
+async function embedLogo(doc: PDFDocument, logoUrl: string): Promise<{ image: PDFImage | null; warning?: string }> {
+  if (!logoUrl.trim()) return { image: null, warning: 'No company logo URL configured' };
   try {
     const res = await fetch(logoUrl);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return { image: null, warning: `Company logo URL failed to load (${res.status}) — re-upload in Settings → Company` };
+    }
     const bytes = new Uint8Array(await res.arrayBuffer());
     const lower = logoUrl.toLowerCase();
-    if (lower.includes('.png') || res.headers.get('content-type')?.includes('png')) {
-      return doc.embedPng(bytes);
+    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+    const isPng = lower.includes('.png') || contentType.includes('png');
+    const isJpg =
+      lower.includes('.jpg')
+      || lower.includes('.jpeg')
+      || contentType.includes('jpeg')
+      || contentType.includes('jpg');
+    const isWebp = lower.includes('.webp') || contentType.includes('webp');
+
+    if (isWebp) {
+      // pdf-lib cannot embed WebP; convert via canvas when available (browser).
+      try {
+        const blob = new Blob([bytes], { type: 'image/webp' });
+        const bmp = await createImageBitmap(blob);
+        const canvas = document.createElement('canvas');
+        canvas.width = bmp.width;
+        canvas.height = bmp.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return { image: null, warning: 'Company logo is WebP and could not be converted for PDF' };
+        ctx.drawImage(bmp, 0, 0);
+        const pngBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+        if (!pngBlob) return { image: null, warning: 'Company logo WebP conversion failed' };
+        const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
+        return { image: await doc.embedPng(pngBytes) };
+      } catch {
+        return { image: null, warning: 'Company logo is WebP — upload PNG or JPEG in Settings → Company for PDFs' };
+      }
     }
-    return doc.embedJpg(bytes);
+
+    if (isPng) return { image: await doc.embedPng(bytes) };
+    if (isJpg) return { image: await doc.embedJpg(bytes) };
+    // Fall back: try PNG then JPG
+    try {
+      return { image: await doc.embedPng(bytes) };
+    } catch {
+      try {
+        return { image: await doc.embedJpg(bytes) };
+      } catch {
+        return { image: null, warning: 'Company logo format not supported for PDF (use PNG or JPEG)' };
+      }
+    }
   } catch {
-    return null;
+    return { image: null, warning: 'Company logo could not be fetched (expired link or blocked) — re-upload in Settings' };
   }
+}
+
+/** Resolve a fresh logo URL when a storage path is saved (signed URLs expire after 1h). */
+async function resolveLogoUrlForPdf(company: CompanyProfileValues): Promise<string> {
+  const path = company.logoStoragePath?.trim();
+  if (path) {
+    try {
+      const { getSignedFileUrl } = await import('../data/supabaseStore');
+      const fresh = await getSignedFileUrl('project-files', path);
+      if (fresh) return fresh;
+    } catch {
+      // fall through to stored logoUrl
+    }
+  }
+  return company.logoUrl?.trim() || '';
 }
 
 function legalFooterLines(company: CompanyProfileValues): string[] {
@@ -51,7 +105,13 @@ interface BuildPdfOptions {
   includePaymentDetails?: boolean;
 }
 
-async function buildPdfDocument(options: BuildPdfOptions): Promise<Uint8Array> {
+interface BuiltPdf {
+  bytes: Uint8Array;
+  logoEmbedded: boolean;
+  logoWarning?: string;
+}
+
+async function buildPdfDocument(options: BuildPdfOptions): Promise<BuiltPdf> {
   const { title, sections, includePaymentDetails } = options;
   const company = getCompanyProfile();
   const doc = await PDFDocument.create();
@@ -66,7 +126,10 @@ async function buildPdfDocument(options: BuildPdfOptions): Promise<Uint8Array> {
   let page = doc.addPage([pageWidth, pageHeight]);
   let y = topContent;
 
-  const logo = company.logoUrl ? await embedLogo(doc, company.logoUrl) : null;
+  const logoUrl = await resolveLogoUrlForPdf(company);
+  const { image: logo, warning: logoWarning } = logoUrl
+    ? await embedLogo(doc, logoUrl)
+    : { image: null, warning: company.logoUrl || company.logoStoragePath ? 'Company logo could not be resolved' : 'No company logo configured' };
   const logoWidth = 72;
   const logoHeight = logo ? (logo.height / logo.width) * logoWidth : 0;
   const headerRight = pageWidth - marginX;
@@ -163,7 +226,11 @@ async function buildPdfDocument(options: BuildPdfOptions): Promise<Uint8Array> {
 
   drawLegalFooter(page, font, company, marginX);
 
-  return doc.save();
+  return {
+    bytes: await doc.save(),
+    logoEmbedded: Boolean(logo),
+    logoWarning: logo ? undefined : logoWarning,
+  };
 }
 
 function drawLegalFooter(
@@ -190,7 +257,7 @@ export async function generateQuotePdf(
   const items = lineItems?.length
     ? lineItems.map((i) => `${i.description}: £${i.amount.toFixed(2)}`)
     : [`Total project cost: £${total.toFixed(2)}`];
-  const bytes = await buildPdfDocument({
+  const built = await buildPdfDocument({
     title: 'QUOTATION',
     sections: [
       { heading: 'Customer', lines: [customerName, `Trade: ${tradeName ?? 'General'}`] },
@@ -201,7 +268,9 @@ export async function generateQuotePdf(
   return {
     filename: `quote-${customerName.replace(/\s+/g, '-').toLowerCase()}.pdf`,
     mimeType: 'application/pdf',
-    content: toBase64(bytes),
+    content: toBase64(built.bytes),
+    logoEmbedded: built.logoEmbedded,
+    logoWarning: built.logoWarning,
   };
 }
 
@@ -221,7 +290,7 @@ export async function generateInvoicePdf(
   total: number,
   invoiceId: string
 ): Promise<DocumentAttachment> {
-  const bytes = await buildPdfDocument({
+  const built = await buildPdfDocument({
     title: 'INVOICE',
     includePaymentDetails: true,
     sections: [
@@ -237,7 +306,9 @@ export async function generateInvoicePdf(
   return {
     filename: `invoice-${invoiceId}.pdf`,
     mimeType: 'application/pdf',
-    content: toBase64(bytes),
+    content: toBase64(built.bytes),
+    logoEmbedded: built.logoEmbedded,
+    logoWarning: built.logoWarning,
   };
 }
 
@@ -249,7 +320,7 @@ export async function generateReceiptPdf(
   receiptId?: string
 ): Promise<DocumentAttachment> {
   const ref = receiptId ?? `RCP-${Date.now()}`;
-  const bytes = await buildPdfDocument({
+  const built = await buildPdfDocument({
     title: 'PAYMENT RECEIPT',
     sections: [
       { heading: 'Received From', lines: [customerName] },
@@ -269,7 +340,9 @@ export async function generateReceiptPdf(
   return {
     filename: `receipt-${ref}.pdf`,
     mimeType: 'application/pdf',
-    content: toBase64(bytes),
+    content: toBase64(built.bytes),
+    logoEmbedded: built.logoEmbedded,
+    logoWarning: built.logoWarning,
   };
 }
 
@@ -279,7 +352,7 @@ export async function generateContractPdf(
   terms: string,
   total: number
 ): Promise<DocumentAttachment> {
-  const bytes = await buildPdfDocument({
+  const built = await buildPdfDocument({
     title: 'CONTRACT OF WORKS',
     sections: [
       { heading: 'Parties', lines: [`Customer: ${customerName}`, `Project: ${projectName}`, `Agreed value: £${total.toFixed(2)} (GBP)`] },
@@ -298,6 +371,8 @@ export async function generateContractPdf(
   return {
     filename: `contract-${customerName.replace(/\s+/g, '-').toLowerCase()}.pdf`,
     mimeType: 'application/pdf',
-    content: toBase64(bytes),
+    content: toBase64(built.bytes),
+    logoEmbedded: built.logoEmbedded,
+    logoWarning: built.logoWarning,
   };
 }

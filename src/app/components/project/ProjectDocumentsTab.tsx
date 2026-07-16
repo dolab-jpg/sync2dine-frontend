@@ -138,6 +138,39 @@ export function ProjectDocumentsTab({ project, customerPhone, customerWhatsappOp
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="w-4 h-4" /> Generated files
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {project.files.filter((f) => f.mimeType?.includes('pdf') || f.source === 'document').length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No PDFs saved yet. Ask Cynthia to generate a quote, invoice, or contract PDF while this project is open.
+            </p>
+          ) : (
+            project.files
+              .filter((f) => f.mimeType?.includes('pdf') || f.source === 'document')
+              .map((f) => (
+                <div key={f.id} className="flex justify-between items-center gap-2 p-2 border rounded">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{f.filename}</p>
+                    <p className="text-xs text-slate-500">{f.uploadedBy ?? 'system'} · {f.takenAt ? new Date(f.takenAt).toLocaleString('en-GB') : ''}</p>
+                  </div>
+                  {f.dataUrl ? (
+                    <Button size="sm" variant="outline" asChild>
+                      <a href={f.dataUrl} download={f.filename} target="_blank" rel="noreferrer">
+                        Open
+                      </a>
+                    </Button>
+                  ) : null}
+                </div>
+              ))
+          )}
+        </CardContent>
+      </Card>
+
       <p className="text-xs text-slate-500">Customer portal: {portalUrl}</p>
     </div>
   );

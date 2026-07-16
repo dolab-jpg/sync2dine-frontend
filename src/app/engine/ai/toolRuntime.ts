@@ -1354,7 +1354,7 @@ async function dispatchSingleTool(
       : undefined;
     try {
       const { persistGeneratedPdf } = await import('../messaging/documentPersist');
-      const projectId = readOptionalString(output.projectId) || undefined;
+      const projectId = readOptionalString(output.projectId) || ctx.projectId || undefined;
       const pdf = await persistGeneratedPdf(
         await generateQuotePdf(customerName, total, tradeName, lineItems),
         { projectId, uploadedBy: 'cynthia-quote' }
@@ -1362,7 +1362,9 @@ async function dispatchSingleTool(
       const dataUrl = pdf.url || `data:${pdf.mimeType};base64,${pdf.content}`;
       return {
         action: name,
-        summary: `Quote PDF ready for ${customerName} (£${total.toLocaleString('en-GB')}).`,
+        summary: pdf.logoWarning
+          ? `Quote PDF ready for ${customerName} (£${total.toLocaleString('en-GB')}). Logo: ${pdf.logoWarning}`
+          : `Quote PDF ready for ${customerName} (£${total.toLocaleString('en-GB')})${pdf.logoEmbedded ? ' with company logo' : ''}.`,
         openRoute: '/cynthia',
         output: {
           ...output,
@@ -1370,6 +1372,8 @@ async function dispatchSingleTool(
           pdfDataUrl: dataUrl,
           pdfFilename: pdf.filename,
           pdfPath: pdf.storagePath || pdf.filename,
+          logoEmbedded: pdf.logoEmbedded ?? false,
+          logoWarning: pdf.logoWarning,
         },
         executed: true,
       };

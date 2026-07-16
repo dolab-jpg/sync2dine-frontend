@@ -13,6 +13,7 @@ export async function persistGeneratedPdf(
   const dataUrl = `data:${attachment.mimeType};base64,${attachment.content}`;
   let storagePath = attachment.storagePath;
   let url = attachment.url ?? dataUrl;
+  let persistWarning: string | undefined;
 
   if (opts?.projectId) {
     try {
@@ -27,15 +28,20 @@ export async function persistGeneratedPdf(
       storagePath = file.storagePath;
       const resolved = await resolveFileUrl(file);
       if (resolved) url = resolved;
-    } catch {
-      // Keep in-memory attachment if storage fails
+      else url = file.dataUrl || dataUrl;
+    } catch (err) {
+      persistWarning = err instanceof Error ? err.message : 'Could not save PDF to project files';
+      url = dataUrl;
     }
+  } else {
+    persistWarning = 'No projectId — PDF generated in-session only (not saved to Project Documents)';
   }
 
   return {
     ...attachment,
     url,
     storagePath,
+    logoWarning: [attachment.logoWarning, persistWarning].filter(Boolean).join(' · ') || attachment.logoWarning,
   };
 }
 
