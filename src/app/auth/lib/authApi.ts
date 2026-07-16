@@ -168,15 +168,13 @@ export function homePathForRole(role: string): string {
   switch (role) {
     case 'kiosk':
       return '/front';
-    case 'builder':
-      return '/builder';
     case 'recruitment':
       return '/recruitment';
-    case 'customer':
-      return '/projects';
     case 'platform_owner':
       return '/platform/clients';
     default:
+      // Restaurant staff land on the Live board, sales staff on the dashboard —
+      // both are '/' and the experience gate picks the right shell.
       return '/';
   }
 }

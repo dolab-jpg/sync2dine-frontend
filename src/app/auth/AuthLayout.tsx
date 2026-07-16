@@ -9,11 +9,11 @@ interface AuthLayoutProps {
 
 export function AuthLayout({ children, wide = false }: AuthLayoutProps) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4 sm:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-s2d-teal-ink via-s2d-teal to-s2d-teal-deep flex items-center justify-center p-4 sm:p-6">
       <div className={`w-full ${wide ? 'max-w-6xl' : 'max-w-md'}`}>
         <div className="text-center mb-6 sm:mb-8">
           <BrandLogo size="lg" showWordmark className="justify-center mb-3" />
-          <p className="text-amber-100">AI Phone & Ordering Platform</p>
+          <p className="text-s2d-cream">AI Phone & Ordering Platform</p>
         </div>
         {children}
       </div>

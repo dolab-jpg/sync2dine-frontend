@@ -2,16 +2,16 @@ import { useState } from 'react';
 import { Check, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 
-export const SEED_PASSWORD = 'TradeProSeed1!';
+export const SEED_PASSWORD = 'Sync2DineDemo1!';
 
 export const SEED_ACCOUNTS = [
-  { role: 'platform_owner', label: 'Platform Owner', username: 'owner', email: 'owner@tradepro.com', name: 'Platform Owner' },
-  { role: 'super_admin', label: 'Super Admin', username: 'john.smith', email: 'john@bathroompro.com', name: 'John Smith' },
-  { role: 'manager', label: 'Manager', username: 'sarah.johnson', email: 'sarah@bathroompro.com', name: 'Sarah Johnson' },
-  { role: 'staff', label: 'Sales / Staff', username: 'mike.davis', email: 'mike@bathroompro.com', name: 'Mike Davis' },
-  { role: 'builder', label: 'Builder', username: 'mike.wilson', email: 'mike.wilson@bathroompro.com', name: 'Mike Wilson' },
-  { role: 'recruitment', label: 'Recruitment', username: 'emma.thompson', email: 'emma@bathroompro.com', name: 'Emma Thompson' },
-  { role: 'customer', label: 'Customer', username: 'amanda.peterson', email: 'amanda.peterson@email.com', name: 'Amanda Peterson' },
+  { role: 'platform_owner', label: 'Platform Owner', username: 'owner', email: 'owner@sync2dine.io', name: 'Platform Owner' },
+  { role: 'super_admin', label: 'Restaurant Owner', username: 'maya.nguyen', email: 'maya@demo.sync2dine.io', name: 'Maya Nguyen' },
+  { role: 'manager', label: 'Manager', username: 'leo.martinez', email: 'leo@demo.sync2dine.io', name: 'Leo Martinez' },
+  { role: 'staff', label: 'Front of House', username: 'priya.patel', email: 'priya@demo.sync2dine.io', name: 'Priya Patel' },
+  { role: 'builder', label: 'Kitchen / Ops', username: 'kai.brooks', email: 'kai@demo.sync2dine.io', name: 'Kai Brooks' },
+  { role: 'recruitment', label: 'Hiring', username: 'nina.ross', email: 'nina@demo.sync2dine.io', name: 'Nina Ross' },
+  { role: 'customer', label: 'Guest', username: 'guest.chen', email: 'guest@demo.sync2dine.io', name: 'Guest Chen' },
 ] as const;
 
 export type SeedAccount = (typeof SEED_ACCOUNTS)[number];
@@ -64,7 +64,7 @@ export function SeedAccountsPanel({ onFill, defaultOpen = true }: SeedAccountsPa
         className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white text-left"
       >
         <div>
-          <p className="font-semibold">Test accounts — click to fill or copy</p>
+          <p className="font-semibold">Demo accounts — click to fill or copy</p>
           <p className="text-xs text-amber-50/90">Real Supabase users · shared password below</p>
         </div>
         {open ? <ChevronUp className="w-5 h-5 shrink-0" /> : <ChevronDown className="w-5 h-5 shrink-0" />}

@@ -125,8 +125,20 @@ function exportOrdersCsv(orders: FoodOrder[]) {
   URL.revokeObjectURL(url);
 }
 
-export default function RestaurantOrders() {
-  const [tab, setTab] = useState<'kitchen' | 'till' | 'delivery'>('kitchen');
+export type BoardTab = 'kitchen' | 'till' | 'delivery';
+
+interface RestaurantOrdersProps {
+  /** Controlled tab (RestaurantShell routes /orders/kitchen|till|delivery) */
+  tab?: BoardTab;
+  /** Hide the internal tab switcher when the shell already provides tabs */
+  showTabs?: boolean;
+  /** Skip full-page chrome when composed inside the Live board */
+  embedded?: boolean;
+}
+
+export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedded = false }: RestaurantOrdersProps = {}) {
+  const [tabState, setTab] = useState<BoardTab>('kitchen');
+  const tab = tabProp ?? tabState;
   const [orders, setOrders] = useState<FoodOrder[]>([]);
   const [nowTick, setNowTick] = useState(0);
   const knownIdsRef = useRef<Set<string>>(new Set());
@@ -193,13 +205,15 @@ export default function RestaurantOrders() {
   }, [orders, tab, nowTick]);
 
   return (
-    <main className="min-h-screen bg-slate-100 p-3 sm:p-5">
+    <main className={embedded ? '' : 'min-h-full bg-s2d-cream p-3 sm:p-5'}>
       <section className="mx-auto max-w-7xl">
-        <div className="mb-4 rounded-[1.75rem] bg-emerald-950 p-4 text-white shadow-xl">
+        <div className="mb-4 rounded-[1.75rem] bg-s2d-teal-deep p-4 text-white shadow-xl">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-200">Sync2Dine staff tablet</p>
-              <h1 className="mt-1 text-3xl font-black tracking-tight sm:text-4xl">Orders, till and delivery</h1>
+              <p className="text-sm font-semibold uppercase tracking-[0.25em] text-s2d-gold">Sync2Dine staff tablet</p>
+              <h1 className="mt-1 text-3xl font-black tracking-tight sm:text-4xl">
+                {showTabs ? 'Orders, till and delivery' : tab === 'till' ? 'Till — take payment' : tab === 'delivery' ? 'Delivery board' : 'Kitchen board'}
+              </h1>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <Button
@@ -211,32 +225,40 @@ export default function RestaurantOrders() {
                 <Download className="mr-2 h-5 w-5" />
                 Export CSV
               </Button>
-              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-white/10 p-1">
-                {[
-                  ['kitchen', Utensils, 'Kitchen'],
-                  ['till', CreditCard, 'Till'],
-                  ['delivery', Truck, 'Delivery'],
-                ].map(([id, Icon, label]) => {
-                  const ActiveIcon = Icon as typeof Utensils;
-                  return (
-                    <button
-                      key={id as string}
-                      type="button"
-                      onClick={() => setTab(id as typeof tab)}
-                      className={`flex min-h-[56px] items-center justify-center gap-2 rounded-xl px-3 text-base font-bold transition ${
-                        tab === id ? 'bg-amber-200 text-emerald-950' : 'text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <ActiveIcon className="h-5 w-5" />
-                      {label as string}
-                    </button>
-                  );
-                })}
-              </div>
+              {showTabs && (
+                <div className="grid grid-cols-3 gap-2 rounded-2xl bg-white/10 p-1">
+                  {[
+                    ['kitchen', Utensils, 'Kitchen'],
+                    ['till', CreditCard, 'Till'],
+                    ['delivery', Truck, 'Delivery'],
+                  ].map(([id, Icon, label]) => {
+                    const ActiveIcon = Icon as typeof Utensils;
+                    return (
+                      <button
+                        key={id as string}
+                        type="button"
+                        onClick={() => setTab(id as BoardTab)}
+                        className={`flex min-h-[56px] items-center justify-center gap-2 rounded-xl px-3 text-base font-bold transition ${
+                          tab === id ? 'bg-s2d-gold text-s2d-teal-deep' : 'text-white hover:bg-white/10'
+                        }`}
+                      >
+                        <ActiveIcon className="h-5 w-5" />
+                        {label as string}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
+        {visibleOrders.length === 0 && (
+          <div className="rounded-[1.5rem] border border-dashed border-s2d-teal/30 bg-white/70 p-10 text-center">
+            <p className="text-xl font-bold text-s2d-teal-deep">No orders on this board right now</p>
+            <p className="mt-1 text-s2d-teal-soft">New phone and kiosk orders appear here with a kitchen alert.</p>
+          </div>
+        )}
         <div className="grid gap-3 lg:grid-cols-2">
           {visibleOrders.map((order) => (
             <article key={order.id} className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
@@ -246,10 +268,14 @@ export default function RestaurantOrders() {
                   <h2 className="text-2xl font-black text-slate-950">{order.customer}</h2>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Badge className="rounded-xl bg-emerald-950 px-3 py-1 text-white">{statusLabel(order.status)}</Badge>
-                  <Badge variant="outline" className="rounded-xl px-3 py-1">
-                    {order.payment === 'unpaid' ? 'Unpaid' : `Paid ${order.payment}`}
-                  </Badge>
+                  <Badge className="rounded-xl bg-s2d-teal-deep px-3 py-1 text-white">{statusLabel(order.status)}</Badge>
+                  {order.payment === 'unpaid' ? (
+                    <Badge className="rounded-xl bg-red-600 px-3 py-1 text-white">Unpaid</Badge>
+                  ) : (
+                    <Badge variant="outline" className="rounded-xl border-s2d-teal px-3 py-1 text-s2d-teal-deep">
+                      Paid {order.payment}
+                    </Badge>
+                  )}
                 </div>
               </header>
 
@@ -261,7 +287,7 @@ export default function RestaurantOrders() {
                     </div>
                   ))}
                   {order.address && (
-                    <p className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 font-semibold text-amber-950">
+                    <p className="flex items-center gap-2 rounded-xl bg-s2d-cream-bright px-3 py-2 font-semibold text-s2d-teal-ink">
                       <MapPin className="h-5 w-5" />
                       {order.address}
                     </p>
@@ -279,7 +305,7 @@ export default function RestaurantOrders() {
               <footer className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 <Button
                   type="button"
-                  className="min-h-[52px] rounded-xl bg-amber-400 text-base font-bold text-emerald-950 hover:bg-amber-300"
+                  className="min-h-[52px] rounded-xl bg-s2d-gold text-base font-bold text-s2d-teal-deep hover:bg-s2d-gold-soft"
                   onClick={() => void patchOrder(order.id, { status: 'coming' })}
                 >
                   <Receipt className="mr-2 h-5 w-5" />
@@ -287,14 +313,14 @@ export default function RestaurantOrders() {
                 </Button>
                 <Button
                   type="button"
-                  className="min-h-[52px] rounded-xl bg-emerald-950 text-base font-bold text-white hover:bg-emerald-900"
+                  className="min-h-[52px] rounded-xl bg-s2d-teal-deep text-base font-bold text-white hover:bg-s2d-teal"
                   onClick={() => void patchOrder(order.id, { status: 'paid', payment: 'cash' })}
                 >
                   Cash paid
                 </Button>
                 <Button
                   type="button"
-                  className="min-h-[52px] rounded-xl bg-emerald-950 text-base font-bold text-white hover:bg-emerald-900"
+                  className="min-h-[52px] rounded-xl bg-s2d-teal-deep text-base font-bold text-white hover:bg-s2d-teal"
                   onClick={() => void patchOrder(order.id, { status: 'paid', payment: 'card' })}
                 >
                   Card paid

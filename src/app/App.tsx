@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, ReactElement } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router';
 import LoginPage from './auth/pages/LoginPage';
 import SignupPage from './auth/pages/SignupPage';
 import ForgotPasswordPage from './auth/pages/ForgotPasswordPage';
@@ -7,35 +7,22 @@ import ResetPasswordPage from './auth/pages/ResetPasswordPage';
 import InviteAcceptPage from './auth/pages/InviteAcceptPage';
 import ProfilePage from './auth/pages/ProfilePage';
 import ChangePasswordPage from './auth/pages/ChangePasswordPage';
-import Dashboard from './components/Dashboard';
+import SalesDashboard from './components/SalesDashboard';
 import CustomerManagement from './components/CustomerManagement';
-import BathroomDesigner from './components/BathroomDesigner';
 import ProductCatalog from './components/ProductCatalog';
-import QuoteBuilder from './components/QuoteBuilder';
-import QuoteLineBuilder from './components/QuoteLineBuilder';
 import { AIAssistantProvider } from './context/AIAssistantContext';
 import { allTradeProducts, tradePricingRules } from './data/tradeProducts';
 import type { TradeId } from './config/types';
-import QuotesList from './components/QuotesList';
-import Portfolio from './components/Portfolio';
 import Settings from './components/Settings';
-import BookingSystem from './components/BookingSystem';
-import SiteSurvey from './components/SiteSurvey';
-import FinanceApplication from './components/FinanceApplication';
 import CommunicationsHub from './components/CommunicationsHub';
 import CyrusConversations from './components/CyrusConversations';
 import CynthiaHome from './components/Cynthia/CynthiaHome';
 import IntegrationsHub from './components/integrations/IntegrationsHub';
 import CursorPastePage from './pages/CursorPastePage';
-import AIBathroomRender from './components/AIBathroomRender';
 import ComprehensiveCRM from './components/ComprehensiveCRM';
 import TeamManagement from './components/TeamManagement';
 import SalesManagement from './components/SalesManagement';
-import BuilderDashboard from './components/BuilderDashboard';
 import RecruitmentCRM from './components/RecruitmentCRM';
-import ChangeOrders from './components/ChangeOrders';
-import BuilderProjectManagement from './components/BuilderProjectManagement';
-import CustomerPortal from './components/CustomerPortal';
 import { seedContactsFromCustomers } from './engine/contacts/contactStore';
 import { syncToServer, loadProjects, saveProjects, loadProjectsAsync, initProjectsRealtime } from './engine/project/projectStore';
 import { initBankingStore } from './engine/banking/bankingStore';
@@ -62,23 +49,17 @@ import {
   migrateQuotes,
   migratePricingRules,
 } from './engine/data/dataImportExportService';
-import BuilderManagement from './components/BuilderManagement';
-import CostingDashboard from './components/CostingDashboard';
 import AccountsHub from './components/accounts/AccountsHub';
-import JobPricing from './components/JobPricing/JobPricing';
-import ApprovalsQueue from './components/Approvals/ApprovalsQueue';
-import ContractsHub from './components/Contracts/ContractsHub';
-import ContractSignPage from './components/Contracts/ContractSignPage';
-import BuildingControlHub from './components/buildingControl/BuildingControlHub';
-import PlanningHub from './components/planning/PlanningHub';
-import PlanningApplicationDetail from './components/planning/PlanningApplicationDetail';
-import PlanningCustomerApproval from './components/planning/PlanningCustomerApproval';
 import ConversationAudit from './components/aiStudio/ConversationAudit';
 import CallCenter from './components/CallCenter/CallCenter';
 import AppShell from './components/AppShell';
 import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
 import FrontKiosk from './components/FrontKiosk';
 import RestaurantOrders from './components/RestaurantOrders';
+import RestaurantShell from './components/restaurant/RestaurantShell';
+import RestaurantLive from './components/restaurant/RestaurantLive';
+import RestaurantSettings from './components/restaurant/RestaurantSettings';
+import { getExperience } from './engine/platform/experience';
 import { ensureActiveOrgId, installApiFetchInterceptor, syncActiveOrgFromProfile } from './engine/platform/orgContext';
 import { integrationService } from './engine/integrations/integrationService';
 import { Toaster } from './components/ui/sonner';
@@ -1187,9 +1168,6 @@ export default function App() {
         <OnlineStatusBanner />
         <Routes>
           <Route path="/cursor-paste" element={<CursorPastePage />} />
-          <Route path="/contract/:token" element={<ContractSignPage />} />
-          <Route path="/portal/:token" element={<CustomerPortal />} />
-          <Route path="/planning-approve/:token" element={<PlanningCustomerApproval />} />
           <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -1201,24 +1179,64 @@ export default function App() {
     );
   }
 
+  const experience = getExperience(user.role);
+
+  if (experience === 'kiosk') {
+    return (
+      <AppContext.Provider value={contextValue}>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/front" element={<FrontKiosk />} />
+            <Route path="*" element={<Navigate to="/front" replace />} />
+          </Routes>
+          <Toaster />
+        </BrowserRouter>
+      </AppContext.Provider>
+    );
+  }
+
+  if (experience === 'restaurant') {
+    return (
+      <AppContext.Provider value={contextValue}>
+        <BrowserRouter>
+          <Routes>
+            {/* Diner kiosk stays shell-less on the same tenant org */}
+            <Route path="/front" element={<FrontKiosk />} />
+            <Route
+              element={(
+                <RestaurantShell>
+                  <Outlet />
+                </RestaurantShell>
+              )}
+            >
+              <Route path="/" element={<RestaurantLive />} />
+              <Route path="/orders" element={<Navigate to="/orders/kitchen" replace />} />
+              <Route path="/orders/kitchen" element={<RestaurantOrders tab="kitchen" showTabs={false} />} />
+              <Route path="/orders/till" element={<RestaurantOrders tab="till" showTabs={false} />} />
+              <Route path="/orders/delivery" element={<RestaurantOrders tab="delivery" showTabs={false} />} />
+              <Route
+                path="/menu"
+                element={<ProtectedRoute element={<ProductCatalog />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route path="/products" element={<Navigate to="/menu" replace />} />
+              <Route path="/settings" element={<RestaurantSettings />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/profile/password" element={<ChangePasswordPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AppContext.Provider>
+    );
+  }
+
   return (
     <AppContext.Provider value={contextValue}>
       <AIAssistantProvider>
       <BrowserRouter>
         <AppShell>
             <Routes>
-              <Route
-                path="/"
-                element={user.role === 'kiosk' ? <Navigate to="/front" replace /> : <Dashboard />}
-              />
-              <Route
-                path="/booking"
-                element={<ProtectedRoute element={<BookingSystem />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-              />
-              <Route
-                path="/site-survey"
-                element={<ProtectedRoute element={<SiteSurvey />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-              />
+              <Route path="/" element={<SalesDashboard />} />
               <Route
                 path="/crm"
                 element={<ProtectedRoute element={<ComprehensiveCRM />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
@@ -1229,43 +1247,15 @@ export default function App() {
               />
               <Route
                 path="/front"
-                element={<ProtectedRoute element={<FrontKiosk />} allowedRoles={['kiosk', 'super_admin', 'manager', 'staff']} user={user} />}
+                element={<ProtectedRoute element={<FrontKiosk />} allowedRoles={['kiosk', 'platform_owner', 'super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route
                 path="/orders"
-                element={<ProtectedRoute element={<RestaurantOrders />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-              />
-              <Route
-                path="/ai-render/:tradeId?"
-                element={<ProtectedRoute element={<AIBathroomRender />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-              />
-              <Route
-                path="/designer"
-                element={<ProtectedRoute element={<BathroomDesigner />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+                element={<ProtectedRoute element={<RestaurantOrders />} allowedRoles={['platform_owner', 'super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route
                 path="/products"
                 element={<ProtectedRoute element={<ProductCatalog />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-              />
-              <Route
-                path="/quote/:tradeId?/:customerId?"
-                element={<ProtectedRoute element={<QuoteBuilder />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-              />
-              <Route
-                path="/quote-lines/:customerId?"
-                element={<ProtectedRoute element={<QuoteLineBuilder />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-              />
-              <Route
-                path="/ai-estimate/:tradeId?/:customerId?"
-                element={<ProtectedRoute element={<QuoteBuilder />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-              />
-              <Route
-                path="/quotes"
-                element={<ProtectedRoute element={<QuotesList />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-              />
-              <Route
-                path="/finance"
-                element={<ProtectedRoute element={<FinanceApplication />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route
                 path="/email"
@@ -1300,9 +1290,6 @@ export default function App() {
                 path="/integrations"
                 element={<ProtectedRoute element={<IntegrationsHub />} allowedRoles={['super_admin']} user={user} />}
               />
-              <Route path="/portal/:token" element={<CustomerPortal />} />
-              <Route path="/contract/:token" element={<ContractSignPage />} />
-              <Route path="/portfolio" element={<Portfolio />} />
               <Route
                 path="/settings"
                 element={<ProtectedRoute element={<Settings />} allowedRoles={['super_admin']} user={user} />}
@@ -1314,22 +1301,6 @@ export default function App() {
               <Route
                 path="/sales"
                 element={<ProtectedRoute element={<SalesManagement />} allowedRoles={['super_admin']} user={user} />}
-              />
-              <Route path="/projects" element={<BuilderProjectManagement />} />
-              <Route path="/projects/:projectId" element={<BuilderProjectManagement />} />
-              <Route
-                path="/builder"
-                element={<ProtectedRoute element={<BuilderDashboard />} allowedRoles={['builder']} user={user} />}
-              />
-              <Route path="/builder-projects" element={<BuilderProjectManagement />} />
-              <Route path="/builder-projects/:projectId" element={<BuilderProjectManagement />} />
-              <Route
-                path="/costing"
-                element={<ProtectedRoute element={<CostingDashboard />} allowedRoles={['super_admin', 'manager']} user={user} />}
-              />
-              <Route
-                path="/builder-management"
-                element={<ProtectedRoute element={<BuilderManagement />} allowedRoles={['super_admin', 'manager']} user={user} />}
               />
               <Route
                 path="/recruitment"
@@ -1348,32 +1319,6 @@ export default function App() {
                 }
               />
               <Route
-                path="/price-job"
-                element={<ProtectedRoute element={<JobPricing />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-              />
-              <Route
-                path="/approvals"
-                element={<ProtectedRoute element={<ApprovalsQueue />} allowedRoles={['super_admin', 'manager']} user={user} />}
-              />
-              <Route
-                path="/contracts"
-                element={<ProtectedRoute element={<ContractsHub />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-              />
-              <Route path="/changes" element={<ChangeOrders />} />
-              <Route
-                path="/building-control"
-                element={<ProtectedRoute element={<BuildingControlHub />} allowedRoles={['super_admin', 'manager', 'staff', 'builder']} user={user} />}
-              />
-              <Route
-                path="/planning"
-                element={<ProtectedRoute element={<PlanningHub />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-              />
-              <Route
-                path="/planning/:id"
-                element={<ProtectedRoute element={<PlanningApplicationDetail />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-              />
-              <Route path="/planning-approve/:token" element={<PlanningCustomerApproval />} />
-              <Route
                 path="/platform/clients"
                 element={
                   <ProtectedRoute
@@ -1389,10 +1334,7 @@ export default function App() {
               />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/profile/password" element={<ChangePasswordPage />} />
-              <Route
-                path="*"
-                element={<Navigate to={user.role === 'kiosk' ? '/front' : '/'} replace />}
-              />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           <Toaster />
         </AppShell>

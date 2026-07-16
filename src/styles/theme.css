@@ -2,6 +2,15 @@
 
 :root {
   --font-size: 16px;
+  /* Sync2Dine brand palette (teal / cream / gold) */
+  --s2d-teal: #0f3d3e;
+  --s2d-teal-deep: #102f30;
+  --s2d-teal-ink: #0b2223;
+  --s2d-teal-soft: #16494a;
+  --s2d-cream: #f6efe0;
+  --s2d-cream-bright: #fff8df;
+  --s2d-gold: #e8c26a;
+  --s2d-gold-soft: #f3dda4;
   --background: #ffffff;
   --foreground: oklch(0.145 0 0);
   --card: #ffffff;
@@ -83,6 +92,14 @@
 }
 
 @theme inline {
+  --color-s2d-teal: var(--s2d-teal);
+  --color-s2d-teal-deep: var(--s2d-teal-deep);
+  --color-s2d-teal-ink: var(--s2d-teal-ink);
+  --color-s2d-teal-soft: var(--s2d-teal-soft);
+  --color-s2d-cream: var(--s2d-cream);
+  --color-s2d-cream-bright: var(--s2d-cream-bright);
+  --color-s2d-gold: var(--s2d-gold);
+  --color-s2d-gold-soft: var(--s2d-gold-soft);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

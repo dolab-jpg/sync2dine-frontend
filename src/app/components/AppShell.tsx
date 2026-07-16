@@ -1,9 +1,9 @@
 import { NavLink, useNavigate } from 'react-router';
 import {
-  Home, Calendar, ClipboardCheck, ClipboardList, Mail, Image, Settings, TrendingUp,
-  Sparkles, Users, BarChart3, Wrench, FolderKanban, UserPlus, UserCircle, LogOut,
-  ChevronDown, ChevronLeft, ChevronRight, MessageCircle, PenLine, GitBranch, ShieldCheck, DollarSign, Menu, Phone,
-  Landmark, Calculator, BadgeCheck, FileSignature, ScrollText, Building2, Plug, Package, Palette, CreditCard, MoreHorizontal,
+  Home, ClipboardList, Mail, Settings, TrendingUp,
+  Sparkles, Users, BarChart3, UserPlus, UserCircle, LogOut,
+  ChevronDown, ChevronLeft, ChevronRight, MessageCircle, ShieldCheck, Menu, Phone,
+  Landmark, Building2, Plug, Package, MoreHorizontal,
 } from 'lucide-react';
 import { isNativeBridgeAvailable } from '../bridge/nativeBridge';
 import OrgActingAsPicker from './platform/OrgActingAsPicker';
@@ -28,7 +28,6 @@ import {
 import { fetchLeadInbox, getLastPollTime, setLastPollTime } from '../engine/leads/leadInboxService';
 import type { Customer } from '../App';
 import { BrandLogo } from './BrandLogo';
-import { integrationService } from '../engine/integrations/integrationService';
 import { OnlineStatusBanner } from './OnlineStatusBanner';
 import { useTranslation } from 'react-i18next';
 
@@ -197,37 +196,12 @@ export default function AppShell({ children }: AppShellProps) {
   };
 
   const getRoleCopilotPrompt = (role: string) => {
-    if (role === 'builder') return 'Ask AI about schedules, building control, and site tasks';
-    if (role === 'customer') return 'Ask AI for project updates and next steps';
     if (role === 'recruitment') return 'Ask AI to summarise candidates and actions';
-    return 'Ask AI to detect trades, prefill quotes, and manage project actions';
+    return 'Ask AI about leads, calls, clients, and follow-ups';
   };
 
+  /** Sync2Dine sales-org nav (Super Master B2/C2–C6/C15). Restaurant tenants use RestaurantShell. */
   const getNavItems = () => {
-    const financeConnected = (() => {
-      const inst = integrationService.getInstance('stripe');
-      return Boolean(
-        inst?.enabled
-        && integrationService.getStatus('stripe') === 'connected'
-        && !integrationService.isMockMode('stripe')
-      );
-    })();
-
-    if (user.role === 'builder') {
-      return [
-        { to: '/builder', icon: Home, label: t('nav.dashboard') },
-        { to: '/projects', icon: FolderKanban, label: t('nav.projects') },
-        { to: '/building-control', icon: ShieldCheck, label: t('nav.buildingControl') },
-        { to: '/changes', icon: GitBranch, label: 'Changes' },
-      ];
-    }
-    if (user.role === 'customer') {
-      return [
-        { to: '/projects', icon: FolderKanban, label: t('nav.projects') },
-        { to: '/changes', icon: GitBranch, label: 'Changes' },
-        { to: '/portfolio', icon: Image, label: 'Gallery' },
-      ];
-    }
     if (user.role === 'recruitment') {
       return [
         { to: '/recruitment', icon: UserPlus, label: t('nav.recruitment') },
@@ -238,53 +212,23 @@ export default function AppShell({ children }: AppShellProps) {
         { to: '/front', icon: Phone, label: 'Front kiosk' },
       ];
     }
-    const restaurantMode =
-      location.pathname.startsWith('/orders')
-      || (typeof localStorage !== 'undefined' && localStorage.getItem('sync2dine_mode') === 'restaurant');
-    if (restaurantMode) {
-      return [
-        { to: '/orders', icon: ClipboardList, label: 'Orders' },
-        { to: '/products', icon: Package, label: 'Menu' },
-        { to: '/calls', icon: Phone, label: t('nav.callCenter') },
-        { to: '/settings', icon: Settings, label: t('nav.settings') },
-      ];
-    }
     return [
       { to: '/', icon: Home, label: t('nav.dashboard') },
-      { to: '/orders', icon: ClipboardList, label: 'Orders' },
       { to: '/crm', icon: TrendingUp, label: 'CRM' },
       { to: '/customers', icon: Users, label: t('nav.customers') },
-      { to: '/booking', icon: Calendar, label: 'Book' },
-      { to: '/site-survey', icon: ClipboardCheck, label: 'Survey' },
-      { to: '/designer', icon: Palette, label: 'Designer' },
-      { to: '/ai-render', icon: Sparkles, label: 'AI Design' },
-      { to: '/quote', icon: PenLine, label: 'New Quote' },
-      { to: '/quotes', icon: ClipboardList, label: 'Quotes' },
-      { to: '/price-job', icon: Calculator, label: 'Price Job' },
-      ...(financeConnected
-        ? [{ to: '/finance', icon: CreditCard, label: 'Finance' }]
-        : []),
-      ...(hasSuperAdminAccess(user.role) || user.role === 'manager'
-        ? [{ to: '/approvals', icon: BadgeCheck, label: t('nav.approvals') }]
-        : []),
-      { to: '/contracts', icon: FileSignature, label: t('nav.contracts') },
-      { to: '/projects', icon: FolderKanban, label: t('nav.projects') },
-      { to: '/planning', icon: ScrollText, label: t('nav.planning') },
-      { to: '/building-control', icon: ShieldCheck, label: t('nav.buildingControl') },
-      { to: '/changes', icon: GitBranch, label: 'Changes' },
       { to: '/communications', icon: Mail, label: t('nav.communications') },
       { to: '/cynthia', icon: MessageCircle, label: 'Lizzie' },
       { to: '/calls', icon: Phone, label: t('nav.callCenter') },
-      { to: '/portfolio', icon: Image, label: 'Portfolio' },
       ...(user.role === 'platform_owner'
-        ? [{ to: '/platform/clients', icon: Building2, label: t('nav.platformClients') }]
+        ? [
+            { to: '/platform/clients', icon: Building2, label: t('nav.platformClients') },
+            { to: '/orders', icon: ClipboardList, label: 'Orders' },
+          ]
         : []),
       ...(hasSuperAdminAccess(user.role)
         ? [
             { to: '/products', icon: Package, label: t('nav.products') },
             { to: '/integrations', icon: Plug, label: t('nav.integrations') },
-            { to: '/builder-management', icon: Wrench, label: 'Builders' },
-            { to: '/costing', icon: DollarSign, label: 'Costing' },
             { to: '/accounts', icon: Landmark, label: t('nav.accounts') },
             { to: '/sales', icon: BarChart3, label: t('nav.sales') },
             { to: '/team', icon: Users, label: t('nav.team') },
@@ -296,13 +240,7 @@ export default function AppShell({ children }: AppShellProps) {
       ...(user.role === 'manager'
         ? [{ to: '/ai-audit', icon: ShieldCheck, label: t('nav.aiAudit') }]
         : []),
-      ...((user.role === 'staff') && canAccessAccounts(user.role, accountsAccess)
-        ? [{ to: '/accounts', icon: Landmark, label: t('nav.accounts') }]
-        : []),
-      ...(user.role === 'manager'
-        ? [{ to: '/costing', icon: DollarSign, label: 'Costing' }]
-        : []),
-      ...(user.role === 'manager' && canAccessAccounts(user.role, accountsAccess)
+      ...((user.role === 'staff' || user.role === 'manager') && canAccessAccounts(user.role, accountsAccess)
         ? [{ to: '/accounts', icon: Landmark, label: t('nav.accounts') }]
         : []),
       ...((user.role === 'staff' || user.role === 'manager') && recruitmentAccess[user.role]
@@ -311,13 +249,10 @@ export default function AppShell({ children }: AppShellProps) {
     ];
   };
 
-  const restaurantMode =
-    location.pathname.startsWith('/orders')
-    || (typeof localStorage !== 'undefined' && localStorage.getItem('sync2dine_mode') === 'restaurant');
   const navItems = getNavItems();
   const expanded = sidebar.isOpen && !isMobile;
   const aiDockedInline = aiOpen && aiSettings.panelDocked && isWideViewport;
-  const brandSubtitle = restaurantMode ? 'Takeaway Phone & Orders' : 'AI Phone & Ordering';
+  const brandSubtitle = 'AI Phone & Ordering';
 
   if (user.role === 'kiosk' || location.pathname.startsWith('/front')) {
     return <>{children}</>;
@@ -337,8 +272,8 @@ export default function AppShell({ children }: AppShellProps) {
             showLabels ? 'px-3 justify-start' : 'px-0 justify-center'
           } ${
             isActive
-              ? 'bg-gradient-to-r from-amber-500/90 to-amber-600/90 text-white shadow-md'
-              : 'text-amber-100/90 hover:bg-white/8 hover:text-white'
+              ? 'bg-s2d-gold text-s2d-teal-deep shadow-md'
+              : 'text-s2d-cream/90 hover:bg-white/8 hover:text-white'
           }`
         }
       >
@@ -354,13 +289,13 @@ export default function AppShell({ children }: AppShellProps) {
     ));
 
   return (
-    <div className="native-shell h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden safe-area-x">
+    <div className="native-shell h-screen flex flex-col bg-gradient-to-br from-s2d-cream to-white overflow-hidden safe-area-x">
       <SelfHealErrorBridge />
       <OnlineStatusBanner />
       <div ref={shellRef} className="flex flex-1 min-h-0 overflow-hidden">
       <aside
         style={{ width: expanded ? EXPANDED_WIDTH : RAIL_WIDTH }}
-        className="relative hidden md:flex shrink-0 flex-col bg-gradient-to-b from-slate-900/95 via-slate-800/95 to-slate-900/95 backdrop-blur-sm border-r border-white/10 shadow-xl transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] touch-manipulation select-none"
+        className="relative hidden md:flex shrink-0 flex-col bg-gradient-to-b from-s2d-teal-deep via-s2d-teal to-s2d-teal-ink backdrop-blur-sm border-r border-white/10 shadow-xl transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] touch-manipulation select-none"
         aria-label="Navigation"
         aria-expanded={expanded}
       >
@@ -382,7 +317,7 @@ export default function AppShell({ children }: AppShellProps) {
             onClick={() => {
               sidebar.toggle();
             }}
-            className={`w-full flex items-center gap-3 rounded-xl text-amber-100/80 hover:bg-white/8 hover:text-white transition-all duration-200 text-sm min-h-11 touch-manipulation ${
+            className={`w-full flex items-center gap-3 rounded-xl text-s2d-cream/80 hover:bg-white/8 hover:text-white transition-all duration-200 text-sm min-h-11 touch-manipulation ${
               expanded ? 'px-3' : 'justify-center'
             }`}
             aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
@@ -404,7 +339,7 @@ export default function AppShell({ children }: AppShellProps) {
           <button
             type="button"
             onClick={logout}
-            className={`w-full flex items-center gap-3 rounded-xl text-amber-100/80 hover:bg-red-500/15 hover:text-red-200 transition-all duration-200 text-sm min-h-11 touch-manipulation ${
+            className={`w-full flex items-center gap-3 rounded-xl text-s2d-cream/80 hover:bg-red-500/15 hover:text-red-200 transition-all duration-200 text-sm min-h-11 touch-manipulation ${
               expanded ? 'px-3' : 'justify-center'
             }`}
             title="Logout"
@@ -424,7 +359,7 @@ export default function AppShell({ children }: AppShellProps) {
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         <SheetContent
           side="left"
-          className="w-[min(18rem,85vw)] p-0 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 border-white/10 text-amber-100"
+          className="w-[min(18rem,85vw)] p-0 bg-gradient-to-b from-s2d-teal-deep via-s2d-teal to-s2d-teal-ink border-white/10 text-s2d-cream"
         >
           <SheetHeader className="sr-only">
             <SheetTitle>Navigation</SheetTitle>
@@ -443,7 +378,7 @@ export default function AppShell({ children }: AppShellProps) {
                 setMobileNavOpen(false);
                 logout();
               }}
-              className="w-full flex items-center gap-3 rounded-xl px-3 text-amber-100/80 hover:bg-red-500/15 hover:text-red-200 transition-all duration-200 text-sm min-h-11 touch-manipulation"
+              className="w-full flex items-center gap-3 rounded-xl px-3 text-s2d-cream/80 hover:bg-red-500/15 hover:text-red-200 transition-all duration-200 text-sm min-h-11 touch-manipulation"
             >
               <LogOut className="w-5 h-5 shrink-0" />
               <span>Logout</span>
@@ -453,19 +388,19 @@ export default function AppShell({ children }: AppShellProps) {
       </Sheet>
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <header className="shrink-0 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-4 bg-gradient-to-r from-slate-900/95 via-slate-800/95 to-slate-900/95 backdrop-blur-sm border-b border-amber-500/30 shadow-sm z-30">
+        <header className="shrink-0 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-4 bg-gradient-to-r from-s2d-teal-deep via-s2d-teal to-s2d-teal-deep backdrop-blur-sm border-b border-s2d-gold/30 shadow-sm z-30">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <button
               type="button"
               onClick={() => setMobileNavOpen(true)}
-              className="md:hidden min-h-11 min-w-11 flex items-center justify-center rounded-xl bg-white/8 hover:bg-white/15 text-amber-100 transition-all touch-manipulation shrink-0"
+              className="md:hidden min-h-11 min-w-11 flex items-center justify-center rounded-xl bg-white/8 hover:bg-white/15 text-s2d-cream transition-all touch-manipulation shrink-0"
               aria-label="Open navigation menu"
             >
               <Menu className="w-5 h-5" />
             </button>
             <div className="min-w-0">
               <p className="text-sm sm:text-base font-semibold text-white truncate">{user.name}</p>
-              <p className="text-xs text-amber-300/90 truncate">{getRoleDisplayName(user.role)}</p>
+              <p className="text-xs text-s2d-gold/90 truncate">{getRoleDisplayName(user.role)}</p>
             </div>
           </div>
 
@@ -477,8 +412,8 @@ export default function AppShell({ children }: AppShellProps) {
                 title={getRoleCopilotPrompt(user.role)}
                 className={`min-h-11 min-w-11 flex items-center justify-center rounded-xl transition-all duration-200 touch-manipulation ${
                   aiOpen
-                    ? 'bg-amber-500/90 text-white shadow-md'
-                    : 'bg-white/8 hover:bg-white/15 text-amber-100'
+                    ? 'bg-s2d-gold text-s2d-teal-deep shadow-md'
+                    : 'bg-white/8 hover:bg-white/15 text-s2d-cream'
                 }`}
                 aria-label={aiOpen ? 'Hide AI assistant' : `Show AI assistant: ${getRoleCopilotPrompt(user.role)}`}
               >
@@ -491,7 +426,7 @@ export default function AppShell({ children }: AppShellProps) {
               <button
                 type="button"
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center justify-center gap-2 min-h-11 min-w-11 p-2 rounded-xl bg-white/8 hover:bg-white/15 text-amber-100 transition-all duration-200 touch-manipulation"
+                className="flex items-center justify-center gap-2 min-h-11 min-w-11 p-2 rounded-xl bg-white/8 hover:bg-white/15 text-s2d-cream transition-all duration-200 touch-manipulation"
               >
                 <UserCircle className="w-5 h-5 sm:w-6 sm:h-6" />
                 <ChevronDown className={`w-4 h-4 hidden sm:block transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''}`} />
@@ -500,9 +435,9 @@ export default function AppShell({ children }: AppShellProps) {
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
                   <div className="absolute right-0 mt-2 w-56 bg-white/95 backdrop-blur rounded-xl shadow-lg overflow-hidden z-50 border border-slate-200/80">
-                    <div className="px-4 py-3 bg-gradient-to-r from-amber-500/90 to-amber-600/90 text-white">
+                    <div className="px-4 py-3 bg-s2d-teal-deep text-white">
                       <p className="font-semibold">{user.name}</p>
-                      <p className="text-sm text-amber-100">{user.email}</p>
+                      <p className="text-sm text-s2d-cream">{user.email}</p>
                     </div>
                     <NavLink
                       to="/profile"
@@ -600,26 +535,18 @@ export default function AppShell({ children }: AppShellProps) {
             aria-label="Primary"
             data-testid="staff-bottom-nav"
           >
-            {(restaurantMode
-              ? [
-                  { to: '/orders', icon: ClipboardList, label: 'Orders' },
-                  { to: '/products', icon: Package, label: 'Menu' },
-                  { to: '/calls', icon: Phone, label: 'Calls' },
-                  { to: '/settings', icon: Settings, label: 'Settings' },
-                ]
-              : [
-                  { to: '/cynthia', icon: MessageCircle, label: 'Lizzie' },
-                  { to: '/projects', icon: FolderKanban, label: 'Jobs' },
-                  { to: '/quotes', icon: ClipboardList, label: 'Quotes' },
-                  { to: '/crm', icon: TrendingUp, label: 'CRM' },
-                ]
-            ).map(({ to, icon: Icon, label }) => (
+            {[
+              { to: '/cynthia', icon: MessageCircle, label: 'Lizzie' },
+              { to: '/crm', icon: TrendingUp, label: 'CRM' },
+              { to: '/calls', icon: Phone, label: 'Calls' },
+              { to: '/customers', icon: Users, label: 'Customers' },
+            ].map(({ to, icon: Icon, label }) => (
               <NavLink
                 key={to}
                 to={to}
                 className={({ isActive }) =>
                   `flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium min-h-14 touch-manipulation ${
-                    isActive ? 'text-emerald-700' : 'text-slate-500'
+                    isActive ? 'text-s2d-teal' : 'text-slate-500'
                   }`
                 }
               >
