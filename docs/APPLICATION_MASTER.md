@@ -1,6 +1,6 @@
 # Builder Diddies — Application Master Audit
 
-**Audit date:** 2026-07-15 (evening UK)  
+**Audit date:** 2026-07-16 (afternoon UK)  
 **Method:** Code walk → live probes → then cross-check existing docs (never the reverse).  
 **Purpose:** Single place to open before searching the codebase. Update markers when shipping.
 
@@ -68,12 +68,12 @@ flowchart LR
 
 | Repo | Local path | Remote | Branch | Local HEAD = `origin/master` |
 |------|------------|--------|--------|------------------------------|
-| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 49e51da` |
-| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 3438f2f` |
+| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ ccaed41` |
+| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 1085f0b` |
 
-**Frontend tip commit:** `49e51da` — Audited mid-call language + per-lang Cynthia voices docs (§16.5 / VOICE_SETUP).
+**Frontend tip commit:** `ccaed41` — CRM Add Lead + conversation notes/activities; platform_owner Cynthia CRM tools.
 
-**Backend tip commit:** `3438f2f` — VAPI_SIP docs for per-lang voices; voice code `d3e348f` (`phone-voices.ts` live on VPS).
+**Backend tip commit:** `1085f0b` — outbound worker → `/api/calls/outbound`; `getLeadBrief` / `addLeadNote`; aim-aware call logging.
 
 **Ship note (2026-07-15 Cynthia unify):** Cyrus + Aria collapsed into **Cynthia channels** (§4.1). Phone AI is Vapi-only; `/api/cyrus/*` + `cyrus-widget.js` remain transport aliases; new embeds use `cynthia-widget.js`.
 
@@ -85,6 +85,8 @@ flowchart LR
 
 **Ship note (2026-07-16 Warm consult transfer — AUDITED):** LIVE. Cynthia mid-call handoff is **not** blind: Vapi `transferPlan.mode: warm-transfer-experimental` (hold caller → dial staff → brief → bridge / cancel). Code: `tradepro-backend/server/transfer-numbers.ts` + `transferToHuman` in `vapi-routes.ts` / `phone-tools.ts`; prompts in `phone-brain.ts`. Destinations = Call Centre `/api/agent/transfer-numbers` (prod all → `+447576442345`). Smoke: assistant destinations include warm plan ×5; live transfer with `transferPlan` → `200 ok`. See §16.9 + [VOICE_SETUP.md](./VOICE_SETUP.md) + backend `docs/VAPI_SIP.md`.
 
+**Ship note (2026-07-16 Lead management + Cynthia sales calls — AUDITED):** LIVE on SPA + `tradepro-api`. `/crm` Add Lead form works (was stub); lead detail **Conversation notes** timeline with aim + detail; callbacks strip with Call next / Mark done. `platform_owner` mapped in frontend agent context/rolePermissions like super_admin for CRM tools. Cynthia tools: `getLeadBrief`, `addLeadNote`, `listPendingCallbacks`; phone brain injects notes/activities into account memory. Outbound context carries `aim` + `customerId`; EOC writes `activities[]`. Outbound worker fixed → `POST /api/calls/outbound` with `fromWorker:true` (no re-queue loop). `POST /api/leads/from-call` returns 4xx on capture errors. Live probe: platform owner created “Acme Trade SaaS Lead” with notes; callbacks strip visible.
+
 **DO_NOT_SHIP:** `.cursor/local/*.py`, `debug-login.png`, `playwright-report/`, `test-results/`, backend `server/data/*`, `_patch_*.cjs`, `_tmp_*.cjs`, `tmp-aria-lizzie.mp3`.
 
 ### 1B — VPS (`https://app.b-diddies.com`)
@@ -94,8 +96,8 @@ Host SSH: `vps` → `mail.all1house.com`.
 | Check | Result |
 |-------|--------|
 | SPA docroot | `/var/www/vhosts/b-diddies.com/app.b-diddies.com/` |
-| Live bundles | `assets/index-DH_Fv7bq.js` + `assets/index-XSsHTsfL.css` |
-| Local `dist/` | **Same hashes** (built ~2026-07-15 after Path B disable) |
+| Live bundles | `assets/index-C6RUTGTB.js` + `assets/index-_4zdBbGL.css` |
+| Local `dist/` | **Same hashes** (built 2026-07-16 lead management ship) |
 | Title in live HTML | Builder Diddies — Construction Estimation Platform |
 | API unit | `tradepro-api` = **active** |
 | API WorkingDirectory | `/var/www/vhosts/b-diddies.com/tradepro-backend` |
@@ -189,7 +191,7 @@ Source: `src/app/App.tsx`.
 | Path | Feature | Roles / gate | Primary UI | Status |
 |------|---------|--------------|------------|--------|
 | `/` | Dashboard | any authed | `Dashboard` | LIVE |
-| `/crm` | CRM | super_admin, manager, staff | `ComprehensiveCRM` | LIVE |
+| `/crm` | Lead Management CRM | super_admin, manager, staff, platform_owner | `ComprehensiveCRM` | LIVE — Add Lead, conversation notes/activities, callbacks strip |
 | `/customers` | Customers | super_admin, manager, staff | `CustomerManagement` | LIVE |
 | `/quote/:tradeId?/:customerId?` | Quote builder | staff+ | `QuoteBuilder` | LIVE |
 | `/ai-estimate/:tradeId?/:customerId?` | AI estimate (same builder) | staff+ | `QuoteBuilder` | LIVE |
@@ -246,8 +248,8 @@ Source: `src/app/App.tsx`.
 | `data/` | Supabase store, cloud persist, import/export | LIVE |
 | `integrations/` | Integration store/service, org OpenAI key sync | LIVE |
 | `leads/` | Lead + inbox services | LIVE |
-| `mailbox/` | Mailbox service | LIVE |
-| `messaging/` | Hub, email/WhatsApp, PDFs, templates | LIVE |
+| `mailbox/` | Mailbox service | PARTIAL | mock-default; live OAuth when secrets + mock off — §19.1 |
+| `messaging/` | Hub, email/WhatsApp, PDFs, templates | PARTIAL | WA LIVE; Comms email often mock / SMTP-only — §19.1 |
 | `notifications/` | Notify + store | LIVE |
 | `planning/` | Planning store + AI | LIVE |
 | `platform/` | Org context, home org, platform API | LIVE |
@@ -371,7 +373,7 @@ WhatsApp Meta (cold / inert) → Phone → Vapi → Agent → Projects → Build
 | WhatsApp Web.js | `/api/whatsapp-web/*` | LIVE |
 | Cynthia web channels (alias) | `/api/cyrus/*` | LIVE |
 | Cynthia | `/api/cynthia/*` | LIVE |
-| Mailbox | `/api/mailbox/*`, Gmail/Outlook webhooks | LIVE |
+| Mailbox | `/api/mailbox/*`, Gmail/Outlook webhooks | PARTIAL | routes+poller LIVE; mock-default until secrets + mock off — §19.1 |
 | Platform / Stripe | `/api/platform/*`, `/api/stripe/*` | LIVE |
 | Banking / contracts / projects | `/api/banking/*`, `/api/contracts*`, project routes | LIVE |
 | Push / translate / language packs | `/api/push/*`, `/api/translate/*`, `/api/language-packs` | LIVE |
@@ -427,7 +429,7 @@ Migrations are the schema source of truth (all **14** applied remotely).
 | Projects | `projects`, `project_files`, `whatsapp_groups`, `whatsapp_sessions` |
 | Ops | `recruitment_*`, `bank_*`, `client_receipts`, `contracts`, `planning_applications`, `calls`, `outbound_queue`, `phone_lines`, `agent_settings` |
 | Audit | `usage_events`, `conversation_logs`, `ai_studio_config` |
-| Mailbox | `mailbox_connections`, `mailbox_tokens`, `mailbox_sync_state`, `email_messages_cache`, `email_attachments` |
+| Mailbox (schema only — unused by Node API) | `mailbox_connections`, `mailbox_tokens`, `mailbox_sync_state`, `email_messages_cache`, `email_attachments` — runtime SoT is `server/data/mailbox-data.json` (§19.1) |
 | Other | `device_tokens`, `code_fix_jobs`, `org_invites`, `agent_activity_events` |
 | Profile columns (later migrations) | `username`, `preferred_language` |
 
@@ -446,10 +448,10 @@ Source: `src/app/config/integrations/registry.ts` + backend/VPS wiring.
 |----|----------|--------|-------|
 | `openai` | AI | LIVE | Company AI Brain; org key sync |
 | `whatsapp` | Messaging | LIVE | WhatsApp Web QR — API **200** on VPS |
-| `email_smtp` | Messaging | LIVE | SMTP send |
-| `email_oauth` | Messaging | LIVE | Gmail/Outlook/Yahoo IMAP OAuth |
-| `email_resend` | Messaging | PARTIAL | Config UI; confirm provider path when used |
-| `sendgrid` | Messaging | PARTIAL | Config UI |
+| `email_smtp` | Messaging | PARTIAL | Wired for Comms `/api/messages/send`; mock-default until SMTP enabled + mock off |
+| `email_oauth` | Messaging | PARTIAL | Code+poller LIVE; mock-default; CASA unverified — §19.1 |
+| `email_resend` | Messaging | PLANNED | Registry UI only; live send path does not use Resend |
+| `sendgrid` | Messaging | PLANNED | Registry UI only; live send path does not use SendGrid |
 | `supabase` | Database | LIVE | Direct browser + service role on API; primary cloud store |
 | `webhook_server` | Infra | LIVE | Public base for webhooks |
 | `stripe` | Payments | LIVE | Node + Edge webhook |
@@ -743,7 +745,7 @@ Frontend registry card `voice_telephony` stores UI overrides; **Vapi + ElevenLab
 | Softphone JsSIP WSS | PARTIAL |
 | Chatterbox TTS | LEGACY for phone — not used for Vapi media; mock/clone UI only |
 | Mock calls (`/api/agent/tts`, Test Call tab) | Intentional non-live — blocked in prod unless `ALLOW_TELEPHONY_MOCK` |
-| Outbound worker URL mismatch | Worker may call `/api/phone/outbound` while live route is `/api/calls/outbound` — treat queue as PARTIAL until confirmed |
+| Outbound worker URL | **LIVE** — worker dials `POST /api/calls/outbound` with `fromWorker:true` (fixed 2026-07-16; was `/api/phone/outbound`) |
 
 ### 16.8 Proven live stack (retest baseline)
 
@@ -1010,11 +1012,19 @@ Meta webhook is inert while Path B is cold. Also: frontend `engine/messaging/mes
 
 | | |
 |---|---|
-| **Status** | LIVE code+poller; CASA production verification PARTIAL — see [CASA_MAILBOX_CHECKLIST.md](./CASA_MAILBOX_CHECKLIST.md) |
-| **UI** | Settings → Email & Inbox; `/communications`; Integrations → `email_oauth` / `email_smtp` |
+| **Status** | PARTIAL — LIVE code+poller; mock-default until secrets + mock off; CASA production verification open — see [CASA_MAILBOX_CHECKLIST.md](./CASA_MAILBOX_CHECKLIST.md) |
+| **UI** | Settings → Email & Inbox; `/communications` (Mailbox / Inbox / Compose); Integrations → `email_oauth` / `email_smtp` |
 | **API** | `/api/mailbox/connect`, `/callback`, `/connections`, `/sync`, `/messages`, `/send`, `/search`; `POST /webhooks/gmail`, `/webhooks/outlook` |
-| **Env** | `TOKEN_ENCRYPTION_KEY`, `MAILBOX_OAUTH_REDIRECT_BASE`, `MAILBOX_POLL_INTERVAL_MS`, `GOOGLE_OAUTH_*`, `MICROSOFT_OAUTH_*`, `YAHOO_OAUTH_*`, optional `NYLAS_*` |
-| **Worker** | `startMailboxPoller()` on API listen |
+| **Env** | `TOKEN_ENCRYPTION_KEY` (required in prod — weak hardcoded fallback if unset), `MAILBOX_OAUTH_REDIRECT_BASE` (prod: `https://app.b-diddies.com`), `GOOGLE_OAUTH_*`, `MICROSOFT_OAUTH_*` / `MICROSOFT_OAUTH_TENANT_ID`, `YAHOO_OAUTH_*`, `INTEGRATIONS_MOCK_MODE` / `MAILBOX_MOCK_MODE` / `MAILBOX_FORCE_MOCK`, optional `AUTH_ENFORCED` |
+| **Worker** | `startMailboxPoller()` on API listen — tick every **60s**; per-connection due uses `pollIntervalSec` (default **180**). There is **no** `MAILBOX_POLL_INTERVAL_MS` reader. |
+| **Data** | Runtime SoT: `server/data/mailbox-data.json` on the API host. Supabase mailbox tables exist as schema only — Node store does not read them yet. |
+| **Auth** | Client sends `X-User-Id` / `X-Org-Id`. JWT required only when `AUTH_ENFORCED=true`. |
+| **Live gate** | Mock unless `INTEGRATIONS_MOCK_MODE=false` or `MAILBOX_MOCK_MODE=false`. UI can force live with `X-Mailbox-Live: true` when Google client id/secret exist (Integrations Hub or env). |
+| **Google scope** | `https://mail.google.com/` (full mail — restricted; drives CASA). |
+| **Stacks** | (1) Mailbox OAuth IMAP sync + XOAUTH2 SMTP send via `/api/mailbox/*`. (2) Comms hub transactional email via `/api/messages/send` → SMTP only (`email_smtp`). Do not confuse the two. |
+| **Redirect** | Callback = `{MAILBOX_OAUTH_REDIRECT_BASE\|\|APP_BASE_URL}/api/mailbox/callback`. Production: `https://app.b-diddies.com/api/mailbox/callback`. |
+| **Google Cloud setup** | Create OAuth client type **Web application**. Authorized JavaScript origins: `https://app.b-diddies.com`. Authorized redirect URIs: `https://app.b-diddies.com/api/mailbox/callback`. Paste Client ID/Secret in Integrations → Mailbox OAuth (in-app setup guide on that card). |
+| **Nylas** | Stub only (`nylas-fallback.ts`); not selectable via `MAILBOX_PROVIDER`. |
 
 ### 19.2 Stripe (SaaS + deposits)
 
@@ -1132,10 +1142,10 @@ Source: `src/app/config/integrations/registry.ts`. UI: `/integrations` (super_ad
 |----|--------|--------|
 | `openai` | `provider`, `apiKey`, `deepseekApiKey`, `staffModel`, `cyrusModel`, `summaryModel`, `ttsVoice` | LIVE |
 | `whatsapp` | `cyrusDisplayName` (+ QR panel) | LIVE |
-| `email_smtp` | host, port, username, password, fromEmail, fromName, secure | LIVE |
-| `email_oauth` | Google/MS/Yahoo client ids/secrets, tenant, redirectUri | LIVE / CASA PARTIAL |
-| `email_resend` | apiKey, fromEmail, fromName | PARTIAL |
-| `sendgrid` | apiKey, fromEmail | PARTIAL |
+| `email_smtp` | host, port, username, password, fromEmail, fromName, secure | PARTIAL (mock-default) |
+| `email_oauth` | Google/MS/Yahoo client ids/secrets, tenant, redirectUri | PARTIAL (code LIVE; CASA open) |
+| `email_resend` | apiKey, fromEmail, fromName | PLANNED (unwired on live send path) |
+| `sendgrid` | apiKey, fromEmail | PLANNED (unwired on live send path) |
 | `supabase` | projectUrl, anonKey, serviceRoleKey | LIVE |
 | `webhook_server` | baseUrl, healthEndpoint | LIVE |
 | `stripe` | publishableKey, secretKey, webhookSecret | LIVE |
@@ -1241,7 +1251,7 @@ Legend: **DONE** = detailed in this MD · **THIN** = mentioned only (routes tabl
 | Finance application (Stripe-gated) | YES | DONE | §3.2, §19.2 |
 | Communications hub (all tabs) | YES | DONE | §28.9 |
 | Lead inbox | YES | DONE | §18, §19.1, §28.9 |
-| Mailbox OAuth / IMAP | YES | DONE | §19.1 |
+| Mailbox OAuth / IMAP | YES | PARTIAL | §19.1 — mock-default; CASA open |
 | Legacy EmailSystem | YES (orphan) | ORPHAN | §28.14 |
 | WhatsApp Web (Meta Path B cold forever) | YES | DONE | §18 |
 | Cynthia website widget + portal chat | YES | DONE | §19.3 |
@@ -1349,7 +1359,7 @@ Each feature row: **UI → Components → Engine → API file(s) → Data**.
 
 | Feature | UI | Components | Engine | API | Data |
 |---------|-----|------------|--------|-----|------|
-| CRM | `/crm` | `ComprehensiveCRM.tsx` | `leads/leadService.ts` | `/api/leads/*` | `customers`, leads in synced-data |
+| CRM | `/crm` | `ComprehensiveCRM.tsx` + `leads/leadActivity.ts` | `leads/leadService.ts` | `/api/leads/*`, outbound aim context | `customers` JSON `activities[]` (aim, detail, type) |
 | Customers | `/customers` | `CustomerManagement.tsx`, `CustomerContactsPanel.tsx` | `contacts/contactStore.ts`, leads | `/api/auth/customers`, data sync | `customers`, `contacts` |
 | Lead inbox | `/communications?tab=leads` | `mailbox/LeadInboxPanel.tsx` | `leads/leadInboxService.ts` | `/api/leads/inbox*` | `lead-inbox.json` + Supabase |
 | Sales mgmt | `/sales` | `SalesManagement.tsx` | — | — | quotes/customers |
@@ -1374,7 +1384,7 @@ Each feature row: **UI → Components → Engine → API file(s) → Data**.
 | Comms hub | `/communications`, `/email` | `CommunicationsHub.tsx` | `messaging/messagingHub.ts`, providers, `templateRenderer`, `messageLogStore` | `/api/messages/send`, mailbox, WA | message logs |
 | Send tab | Comms | hub | messagingHub | messages + WA Web | — |
 | Lead inbox tab | `?tab=leads` | `LeadInboxPanel` | leadInboxService | `/api/leads/inbox*` | lead-inbox |
-| Mailbox inbox / compose / connect | Comms + Settings | `InboxPanel`, `EmailComposePanel`, `MailboxConnectPanel` | `mailbox/mailboxService.ts` | `/api/mailbox/*`, `/webhooks/gmail\|outlook` | `mailbox-data.json`, mailbox tables |
+| Mailbox inbox / compose / connect | Comms + Settings | `InboxPanel`, `EmailComposePanel`, `MailboxConnectPanel` | `mailbox/mailboxService.ts` | `/api/mailbox/*`, `/webhooks/gmail\|outlook` | `mailbox-data.json` (SoT); Supabase mailbox tables schema-only |
 | Templates / logs | Comms tabs | hub | templateRenderer, messageLogStore | — | local/synced |
 | WhatsApp QR | `/integrations` | `WhatsAppWebPanel.tsx` | — | `/api/whatsapp-web/*` | `.wwebjs_auth/` |
 | Meta WA (cold) | `/webhooks/whatsapp` inert | — | — | `whatsapp-webhook.ts` gated by `WHATSAPP_META_ENABLED` | — |
@@ -1624,7 +1634,7 @@ Vertical sub-panels in `AIStudioPanel` (not URL tabs): company voice/instruction
 |--------|----------|---------|
 | `pricing` | super_admin / platform_owner | Pricing rules CRUD |
 | `quote-stages` | same | Wizard stages overview (trade configs) |
-| `ai` | same | Mongo panel, OpenAI prefs, AI Studio |
+| `ai` | same | OpenAI prefs, AI Studio |
 | `integrations` | same | IntegrationsHub |
 | `email-inbox` | same | MailboxConnectPanel |
 | `import-export` | same | ImportExportPanel |
