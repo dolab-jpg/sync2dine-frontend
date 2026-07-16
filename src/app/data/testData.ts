@@ -1,6 +1,6 @@
 import { BuilderProject, DesignItem, ProjectMessage, BuilderPayment, PaymentStage, Invoice } from '../components/BuilderProjectManagement';
 
-// Test Data for TradePro Multi-Trade Platform
+// Test Data for Builder Diddies Multi-Trade Platform
 // This file contains comprehensive realistic test data for all features
 
 // ===== BUILDERS =====

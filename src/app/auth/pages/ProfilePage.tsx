@@ -115,7 +115,7 @@ export default function ProfilePage() {
     <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Account</h1>
-        <p className="text-sm text-slate-600 mt-1">Your personal profile for TradePro.</p>
+        <p className="text-sm text-slate-600 mt-1">Your personal profile for Builder Diddies.</p>
         {needsComplete && (
           <p className="mt-2 text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-3">
             Finish signing up: choose a username so you can sign in with it next time.
@@ -140,7 +140,7 @@ export default function ProfilePage() {
             </div>
             <UsernameField value={username} onChange={setUsername} />
             <div>
-              <Label htmlFor="profile-language">App language</Label>
+              <Label htmlFor="profile-language">AI chat & phone language</Label>
               <Select
                 value={preferredLanguage}
                 onValueChange={(v) => setPreferredLanguage(normalizeLang(v))}
@@ -157,7 +157,7 @@ export default function ProfilePage() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-slate-500 mt-1">
-                Translates the app and AI chat for you. Customer messages, contracts, and documents stay in English.
+                Spoken and AI chat replies can use this language. The app UI stays English. Customer emails, contracts, quotes, and documents stay English.
               </p>
             </div>
             <div>

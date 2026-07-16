@@ -1,5 +1,5 @@
 /**
- * JS bridge between the TradePro website and the Flutter mobile shell.
+ * JS bridge between the Builder Diddies website and the Flutter mobile shell.
  * When running in a normal browser, all methods fall back to web APIs.
  */
 

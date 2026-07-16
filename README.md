@@ -1,6 +1,6 @@
-# TradePro — Bathroom Sales Estimation Platform (Frontend)
+# Builder Diddies — Bathroom Sales Estimation Platform (Frontend)
 
-React/Vite frontend for the TradePro multi-trade construction estimation platform.
+React/Vite frontend for the Builder Diddies multi-trade construction estimation platform.
 
 **Full inventory / audit (SPA · backend · Flutter mobile · GitHub · VPS · Supabase):** [docs/APPLICATION_MASTER.md](docs/APPLICATION_MASTER.md) — single living SoT (Flutter = §27).
 

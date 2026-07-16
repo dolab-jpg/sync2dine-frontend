@@ -54,5 +54,5 @@ Use this checklist before enabling live Gmail OAuth in production (Google CASA v
 2. Send test email to connected address; run Sync; confirm Inbox tab shows thread.
 3. Compose reply with PDF attachment; confirm delivery.
 4. Confirm inbound email triggers Cyrus via `commsEventBus` and appears on project timeline.
-5. Ask TradePro AI: "List my recent emails" — confirm `listRecentEmails` tool works.
+5. Ask Cynthia / Builder Diddies AI: "List my recent emails" — confirm `listRecentEmails` tool works.
 6. Integrations Hub → Check for updates — confirm imapflow/mailparser versions load.

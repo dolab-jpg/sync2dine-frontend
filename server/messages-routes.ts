@@ -178,13 +178,13 @@ export async function handleMessageRoutes(
         ? await sendViaResend({
           ...payload,
           to,
-          subject: payload.subject || 'TradePro email test',
+          subject: payload.subject || 'Builder Diddies email test',
           body: payload.body || 'This is a test email confirming your Resend settings work.',
         }, to)
         : await sendViaSmtp({
           ...payload,
           to,
-          subject: payload.subject || 'TradePro SMTP test',
+          subject: payload.subject || 'Builder Diddies SMTP test',
           body: payload.body || 'This is a test email confirming your SMTP settings work.',
         }, to);
       sendJson(res, result.success ? 200 : 500, result);

@@ -121,7 +121,7 @@ function buildIcs(opts: {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//TradePro//EN',
+    'PRODID:-//Builder Diddies//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:REQUEST',
     'BEGIN:VEVENT',

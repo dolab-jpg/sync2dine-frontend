@@ -198,7 +198,7 @@ export default function PlatformClientsCRM() {
                 <h1 className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-violet-300 to-indigo-200 bg-clip-text text-transparent">
                   Platform Clients
                 </h1>
-                <p className="text-indigo-100 mt-1 text-sm sm:text-lg">Manage companies you sell TradePro to</p>
+                <p className="text-indigo-100 mt-1 text-sm sm:text-lg">Manage companies you sell Builder Diddies to</p>
               </div>
             </div>
 

@@ -50,7 +50,7 @@ No issues found.
 
 ## Conclusions
 
-The TradePro platform **passes responsive QA** across all tested routes and breakpoints.
+The Builder Diddies platform **passes responsive QA** across all tested routes and breakpoints.
 
 **Navigation**
 - Mobile (375px): Hamburger menu visible; slide-out sheet navigation works.

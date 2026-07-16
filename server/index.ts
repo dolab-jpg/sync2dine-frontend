@@ -129,7 +129,7 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
 }
 
 server.listen(PORT, () => {
-  console.log(`TradePro API server running on port ${PORT}`);
+  console.log(`Builder Diddies API server running on port ${PORT}`);
   ensureBdiddiesHomeOrg();
   startMailboxPoller();
   startOutboundWorker();

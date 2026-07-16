@@ -42,7 +42,7 @@ function buildReceiptBody(
     '',
     'This email serves as your receipt. Please retain for your records.',
     '',
-    'TradePro Ltd',
+    'Builder Diddies Ltd',
   ].filter(Boolean).join('\n');
 }
 

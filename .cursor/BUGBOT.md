@@ -27,7 +27,7 @@ For the in-app self-heal queue (`/api/ai/code-fix`) to show **LIVE** and auto-fi
    - `CURSOR_API_KEY` — Cursor Dashboard → API Keys (Cloud Agents)
    - `GITHUB_TOKEN` — GitHub PAT with `repo` scope on `dolab-jpg/tradepro-frontend` and `tradepro-backend` (needed for **Approve & merge** from chat / AI Audit)
 2. In Cursor Dashboard, grant the API key’s GitHub App access to both repos.
-3. Confirm green **LIVE** on `/ai-audit` → **Code fixes**, and the LIVE badge in the TradePro AI chat header.
+3. Confirm green **LIVE** on `/ai-audit` → **Code fixes**, and the LIVE badge in the Cynthia / Builder Diddies AI chat header.
 4. Surgical errors **auto-start** (toggle in AI Studio: “Auto-start surgical self-heal fixes”). You approve merges in chat (**Approve & merge**) or bulk in AI Audit.
 5. Larger / redesign-scoped jobs still ask Yes/No and may open a plan-mode Cursor agent first.
 

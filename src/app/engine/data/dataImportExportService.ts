@@ -247,7 +247,7 @@ export function exportFullBackupJson(context: {
 }): void {
   const bundle = buildFullBackup(context);
   downloadBlob(
-    `tradepro-backup-${dateStamp()}.json`,
+    `builder-diddies-backup-${dateStamp()}.json`,
     JSON.stringify(bundle, null, 2),
     'application/json'
   );
@@ -261,7 +261,7 @@ export function exportEstimationPackJson(context: {
 }): void {
   const bundle = buildEstimationPack(context);
   downloadBlob(
-    `tradepro-estimation-${dateStamp()}.json`,
+    `builder-diddies-estimation-${dateStamp()}.json`,
     JSON.stringify(bundle, null, 2),
     'application/json'
   );
@@ -269,7 +269,7 @@ export function exportEstimationPackJson(context: {
 
 export function exportCustomersCsv(customers: Customer[]): void {
   downloadBlob(
-    `tradepro-customers-${dateStamp()}.csv`,
+    `builder-diddies-customers-${dateStamp()}.csv`,
     buildCustomersCsv(customers),
     'text/csv'
   );
