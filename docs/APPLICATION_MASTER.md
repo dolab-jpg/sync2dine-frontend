@@ -68,12 +68,12 @@ flowchart LR
 
 | Repo | Local path | Remote | Branch | Local HEAD = `origin/master` |
 |------|------------|--------|--------|------------------------------|
-| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 4579b5f` |
+| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 89ca686` |
 | Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 3438f2f` |
 
-**Frontend tip commit:** `4579b5f` — Audited mid-call language + per-lang Cynthia voices docs (§16.5 / VOICE_SETUP).
+**Frontend tip commit:** `89ca686` — Audited mid-call language + per-lang Cynthia voices docs (§16.5 / VOICE_SETUP).
 
-**Backend tip commit:** `3438f2f` — VAPI_SIP docs for per-lang voices; code tip `d3e348f` (`phone-voices.ts` live on VPS).
+**Backend tip commit:** `3438f2f` — VAPI_SIP docs for per-lang voices; voice code `d3e348f` (`phone-voices.ts` live on VPS).
 
 **Ship note (2026-07-15 Cynthia unify):** Cyrus + Aria collapsed into **Cynthia channels** (§4.1). Phone AI is Vapi-only; `/api/cyrus/*` + `cyrus-widget.js` remain transport aliases; new embeds use `cynthia-widget.js`.
 
