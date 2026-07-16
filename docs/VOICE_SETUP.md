@@ -86,7 +86,8 @@ Inbound: a small Asterisk REGISTER bridge on the VPS acts as the “IP phone” 
 | Bridge | VPS Docker `tradepro-sip-bridge` (`/var/www/vhosts/b-diddies.com/tradepro-sip-bridge`) |
 | REGISTER | `1005090093@sbc.soho66.co.uk:8060` (only one REGISTER — log out VOIS on that user) |
 | Vapi | phone + Cynthia assistant + webhook `https://app.b-diddies.com/webhooks/vapi` |
-| Voice | ElevenLabs Lizzie `EQx6HGDYjkDpcli6vorJ` |
+| Voice (English) | ElevenLabs Lizzie `EQx6HGDYjkDpcli6vorJ` (locked) |
+| Voice (other langs) | `server/phone-voices.ts` map — see table above; identity always Cynthia |
 
 Keep Soho66 Routing Wizard as **Ring my IP phone** (then voicemail if needed). Staff mid-call divert: Call Centre **Call Transfer Destinations** → mobile (prod all depts → `+447576442345`). No Force/Forward and no web softphone required — resolution is `transfer-numbers.ts` / `transferToHuman` / Vapi `transferCall`.
 
@@ -110,7 +111,25 @@ Keep Soho66 Routing Wizard as **Ring my IP phone** (then voicemail if needed). S
 2. From a **different** handset, dial the company DID.
 3. Confirm same ElevenLabs voice and customer/lead path (no staff PIN required).
 
+### C — Mid-call language switch (AUDITED 2026-07-16)
+
+1. On an inbound or outbound Cynthia call, ask her to speak Spanish or Polish.
+2. She must call `setCallLanguage`, then **continue speaking** in that language (not list languages and stop).
+3. She must still say her name is **Cynthia** (never Aerisita / Klava / etc.).
+4. Ask to switch back to English → Lizzie voice / Cockney Cynthia again.
+5. CRM tools still work; tool results / written artifacts stay English.
+
 If the voice sounds like generic OpenAI TTS or the old mock pipeline, stop — fix `VAPI_ELEVENLABS_VOICE_ID` / Vapi Integrations before continuing.
+
+### Audit snapshot (2026-07-16)
+
+| Check | Result |
+|-------|--------|
+| `origin/master` frontend | `370e7d4` → `dolab-jpg/tradepro-frontend` |
+| `origin/master` backend | `d3e348f` → `dolab-jpg/tradepro-backend` |
+| VPS `tradepro-api` | **active**; `GET /api/vapi/health` → `{ ok: true, provider: "vapi" }` |
+| VPS files | `phone-voices.ts` + `phone-language.ts` present; `getVapiVoiceConfigForLang` wired; no `en-GB ONLY` hard block |
+| English voice | Lizzie locked — not remapped |
 
 ---
 

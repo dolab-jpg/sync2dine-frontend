@@ -68,18 +68,20 @@ flowchart LR
 
 | Repo | Local path | Remote | Branch | Local HEAD = `origin/master` |
 |------|------------|--------|--------|------------------------------|
-| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 41766dd` (feature `@ 49b4fb6`) |
-| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ 0ead751` |
+| Frontend | `Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` | **YES** `@ 370e7d4` |
+| Backend | `tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` | **YES** `@ d3e348f` |
 
-**Frontend tip commit:** `41766dd` — Tip SHA sync; feature `49b4fb6` WWeb-only + APPLICATION_MASTER §18.
+**Frontend tip commit:** `370e7d4` — Mid-call language switch + per-lang Cynthia voices (docs mirror).
 
-**Backend tip commit:** `0ead751` — Disable Meta WhatsApp Path B permanently; prefer WhatsApp Web.js only (`WHATSAPP_META_ENABLED` off).
+**Backend tip commit:** `d3e348f` — Mid-call language switch + per-lang Cynthia voices (`phone-voices.ts` live on VPS).
 
 **Ship note (2026-07-15 Cynthia unify):** Cyrus + Aria collapsed into **Cynthia channels** (§4.1). Phone AI is Vapi-only; `/api/cyrus/*` + `cyrus-widget.js` remain transport aliases; new embeds use `cynthia-widget.js`.
 
 **Ship note (2026-07-15 WhatsApp Path B):** Meta Cloud API disabled permanently (`WHATSAPP_META_ENABLED` off). Sole LIVE transport = WhatsApp Web.js QR (§18). Leave Meta secrets blank on VPS.
 
-**Ship note (2026-07-15 Language boundary):** SPA UI English-only; phone/WhatsApp speech may use `SUPPORTED_LANGS`; brain + emails/contracts/quotes stay English (§3.6, §19.12). Vapi STT = Deepgram `multi`; `setCallLanguage` persists preferred language + best-effort per-lang ElevenLabs voice (`phone-voices.ts`; English = Lizzie locked; identity always Cynthia).
+**Ship note (2026-07-15 Language boundary):** SPA UI English-only; phone/WhatsApp speech may use `SUPPORTED_LANGS`; brain + emails/contracts/quotes stay English (§3.6, §19.12). Vapi STT = Deepgram `multi`.
+
+**Ship note (2026-07-16 Mid-call language + voices — AUDITED):** LIVE on `tradepro-api`. English TTS = **Lizzie locked** (`EQx6HGDYjkDpcli6vorJ`). Non-English = `server/phone-voices.ts` map (es Aerisita, pl Aleksandra, ru Klava, uk Kira, zh Zicai, fa Laura, sq Veronica). Identity always **Cynthia**. Tool `setCallLanguage` unchanged schema: persist preferred language + best-effort `PATCH /call/{id}` voice + speak-next nudge. Call-start prompt no longer hard-blocks non-English (“en-GB ONLY” removed). No mid-call system-prompt rebuild; CRM tools unchanged. See §16.5 + [VOICE_SETUP.md](./VOICE_SETUP.md).
 
 **DO_NOT_SHIP:** `.cursor/local/*.py`, `debug-login.png`, `playwright-report/`, `test-results/`, backend `server/data/*`, `_patch_*.cjs`, `_tmp_*.cjs`, `tmp-aria-lizzie.mp3`.
 
@@ -96,7 +98,7 @@ Host SSH: `vps` → `mail.all1house.com`.
 | API unit | `tradepro-api` = **active** |
 | API WorkingDirectory | `/var/www/vhosts/b-diddies.com/tradepro-backend` |
 | API process | Node 24 + `tsx` → `server/index.ts` (**canonical backend**, not frontend `server/`) |
-| VPS backend git SHA | `0ead751` = local = `origin/master` |
+| VPS backend git SHA | checkout tip may lag (`0ead751`); **live files** for language/voice = `d3e348f` content via SCP (`phone-voices.ts` present; `GET /api/vapi/health` → 200) |
 | WhatsApp Meta on VPS | `WHATSAPP_META_ENABLED=false` in `/etc/tradepro-api.env`; `/webhooks/whatsapp` → 403 |
 | Env file | `/etc/tradepro-api.env` (key names only listed below) |
 | Also on disk | `tradepro-app/` frontend tree; `httpdocs/` marketing site — **SPA users hit `app.b-diddies.com`** |
@@ -652,12 +654,12 @@ curl.exe -sS -o NUL -w "%{http_code}" https://app.b-diddies.com/api/whatsapp-web
 
 **Ops docs:** [VOICE_SETUP.md](./VOICE_SETUP.md) · sibling backend `tradepro-backend/docs/VAPI_SIP.md`
 
-**Policy:** Cynthia phone AI is **Vapi only**, with spoken voice via **ElevenLabs** (`provider: '11labs'`). Prior successful live calls used the female Cockney **Lizzie** voice (`VAPI_ELEVENLABS_VOICE_ID=EQx6HGDYjkDpcli6vorJ`). `VOICE_PROVIDER=local_realtime` / `soho66` / sip-bridge AI answering are **unsupported** and fail closed. `tradepro-backend/sip-bridge/` is historical only.
+**Policy:** Cynthia phone AI is **Vapi only**, with spoken voice via **ElevenLabs** (`provider: '11labs'`). **English / UK** uses female Cockney **Lizzie** (`VAPI_ELEVENLABS_VOICE_ID=EQx6HGDYjkDpcli6vorJ`) — do not change. Non-English languages use the map in `tradepro-backend/server/phone-voices.ts` (mirrored in frontend `server/` for LEGACY twin). She always names herself **Cynthia**. `VOICE_PROVIDER=local_realtime` / `soho66` / sip-bridge AI answering are **unsupported** and fail closed. `tradepro-backend/sip-bridge/` is historical only.
 
 ### 16.1 Architecture
 
 ```
-Caller ↔ Soho66 SIP ↔ Vapi (media) ↔ ElevenLabs (female Cockney) ↔ POST /webhooks/vapi ↔ Cynthia phone-brain + phone tools
+Caller ↔ Soho66 SIP ↔ Vapi (media) ↔ ElevenLabs (Lizzie en / per-lang map) ↔ POST /webhooks/vapi ↔ Cynthia phone-brain + phone tools
 Browser Cynthia mic → POST /api/vapi/web-session → @vapi-ai/web
 ```
 
@@ -678,7 +680,8 @@ Required: `VOICE_PROVIDER=vapi` + configured `VAPI_ELEVENLABS_VOICE_ID` (or `ELE
 |-------|------|
 | Provider | `VOICE_PROVIDER=vapi` (required), `TELEPHONY_PROVIDER` |
 | Vapi | `VAPI_PRIVATE_KEY`, `VAPI_PUBLIC_KEY`, `VAPI_REGION`, `VAPI_WEBHOOK_BASE_URL`, `VAPI_SERVER_SECRET`, `VAPI_PHONE_NUMBER_ID`, `VAPI_SIP_CREDENTIAL_ID`, `VAPI_ASSISTANT_ID`, `VAPI_ELEVENLABS_VOICE_ID`, `VAPI_LLM_MODEL` |
-| ElevenLabs (live phone voice) | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` — prod Cockney Lizzie `EQx6HGDYjkDpcli6vorJ` |
+| ElevenLabs (live phone voice) | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` — prod Cockney Lizzie `EQx6HGDYjkDpcli6vorJ` (en locked) |
+| Per-lang voice overrides (optional) | `VAPI_ELEVENLABS_VOICE_ID_ES` / `_PL` / `_RU` / `_UK` / `_ZH` / `_FA` / `_SQ`, or JSON `VAPI_ELEVENLABS_VOICE_MAP` — **must not override `en`** |
 | Soho66 trunk | `SOHO66_SIP_*`, `SOHO66_FROM_NUMBER` (feed Vapi SIP — not local sip-bridge AI) |
 | Ops | `VOICE_TRANSFER_NUMBER`, `VOICE_WEBHOOK_VERIFY_TOKEN`, `VOICE_AFTER_HOURS`, `VOICE_BUSINESS_HOURS_*` |
 | Legacy (not live phone) | `CHATTERBOX_*` — mock/clone UI only; unused for Vapi media |
@@ -705,9 +708,23 @@ Frontend registry card `voice_telephony` stores UI overrides; **Vapi + ElevenLab
 | POST | `/api/concierge/outbound` | Queue outbound |
 | GET | `/api/contacts/lookup` | Caller match |
 
-**Key files:** `server/vapi-routes.ts`, `vapi-client.ts`, `vapi-assistant.ts`, `phone-webhook.ts`, `phone-brain.ts`, `phone-orchestrator.ts`, `phone-tools.ts`, `phone-session.ts`, `phone-auth.ts`, `phone-prompt.ts` (`buildCynthiaPhoneSystemPrompt`), `tts.ts`, `ivr-handler.ts`, `agent-routes.ts`, `telephony/{vapi,soho66,twilio,mock}Adapter.ts`, `lineRegistry.ts`, `provider-gates.ts`.
+**Key files:** `server/vapi-routes.ts`, `vapi-client.ts`, `vapi-assistant.ts`, `phone-voices.ts`, `phone-language.ts`, `phone-webhook.ts`, `phone-brain.ts`, `phone-orchestrator.ts`, `phone-tools.ts`, `phone-session.ts`, `phone-auth.ts`, `phone-prompt.ts` (`buildCynthiaPhoneSystemPrompt`), `tts.ts`, `ivr-handler.ts`, `agent-routes.ts`, `telephony/{vapi,soho66,twilio,mock}Adapter.ts`, `lineRegistry.ts`, `provider-gates.ts`.
 
-### 16.5 UI entry points
+### 16.5 Mid-call language + per-language voices (AUDITED 2026-07-16)
+
+| Item | Status |
+|------|--------|
+| Module | `tradepro-backend/server/phone-voices.ts` (+ frontend LEGACY twin) |
+| Call start | `buildVapiAssistantForParty` → `getVapiVoiceConfigForLang(language)` |
+| Tool | `setCallLanguage` — same schema; persist + `call.metadata.callLanguage` / `callVoiceId` + best-effort Vapi voice PATCH |
+| Prompt | Default Cockney English; may switch speech; **never** “en-GB ONLY”; always Cynthia |
+| STT | Deepgram `language: multi` (unchanged) |
+| Tools / CRM | Unchanged — tool args + customer artifacts stay English |
+| Defaults | en Lizzie; es Aerisita `03vEurziQfq3V8WZhQvn`; pl Aleksandra `NOWYzprzTwfZQqU76pBX`; ru Klava `bi0tSQTrp58MDdPUkrEl`; uk Kira `2HWb7sZSrZqPB8HOI0KI`; zh Zicai `DVE92KG0Yd4X7RoMqy8J`; fa Laura `FGY2WhTYpPnrIDTdsKH5`; sq Veronica `ejl43bbp2vjkAFGSmAMa` |
+| Ops note | Library voices must exist on the ElevenLabs account wired to Vapi; missing → Lizzie fallback + `voiceUpdated: false` log |
+| Retest | Ask for Spanish/Polish mid-call → must speak (not list-and-stop); back to English → Lizzie. Full table: [VOICE_SETUP.md](./VOICE_SETUP.md) |
+
+### 16.6 UI entry points
 
 | Route / UI | Component | Notes |
 |------------|-----------|-------|
@@ -717,7 +734,7 @@ Frontend registry card `voice_telephony` stores UI overrides; **Vapi + ElevenLab
 | Settings | `settings/StaffSoftphones.tsx`, `StaffPhoneRegistration.tsx` | SIP assign + PIN |
 | Integrations | `voice_telephony` card | Cynthia phone / Vapi branding; `chatterbox_tts` = legacy UI only |
 
-### 16.6 Known voice gaps
+### 16.7 Known voice gaps
 
 | Item | Status |
 |------|--------|
