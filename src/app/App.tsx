@@ -54,6 +54,7 @@ import ConversationAudit from './components/aiStudio/ConversationAudit';
 import CallCenter from './components/CallCenter/CallCenter';
 import AppShell from './components/AppShell';
 import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
+import MenuPreview from './components/platform/MenuPreview';
 import FrontKiosk from './components/FrontKiosk';
 import RestaurantOrders from './components/RestaurantOrders';
 import RestaurantShell from './components/restaurant/RestaurantShell';
@@ -1346,7 +1347,7 @@ export default function App() {
               />
               <Route
                 path="/products"
-                element={<ProtectedRoute element={<ProductCatalog />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+                element={<Navigate to="/platform/clients" replace />}
               />
               <Route
                 path="/email"
@@ -1414,6 +1415,16 @@ export default function App() {
                 element={
                   <ProtectedRoute
                     element={<PlatformClientsCRM />}
+                    allowedRoles={['platform_owner']}
+                    user={user}
+                  />
+                }
+              />
+              <Route
+                path="/platform/clients/:orgId/menu"
+                element={
+                  <ProtectedRoute
+                    element={<MenuPreview />}
                     allowedRoles={['platform_owner']}
                     user={user}
                   />

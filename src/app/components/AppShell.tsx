@@ -3,7 +3,7 @@ import {
   Home, ClipboardList, Mail, Settings, TrendingUp,
   Sparkles, Users, BarChart3, UserPlus, UserCircle, LogOut,
   ChevronDown, ChevronLeft, ChevronRight, MessageCircle, ShieldCheck, Menu, Phone,
-  Landmark, Building2, Plug, Package, MoreHorizontal,
+  Landmark, Building2, Plug, MoreHorizontal,
 } from 'lucide-react';
 import { isNativeBridgeAvailable } from '../bridge/nativeBridge';
 import OrgActingAsPicker from './platform/OrgActingAsPicker';
@@ -233,7 +233,6 @@ export default function AppShell({ children }: AppShellProps) {
         : []),
       ...(hasSuperAdminAccess(user.role)
         ? [
-            { to: '/products', icon: Package, label: t('nav.products') },
             { to: '/integrations', icon: Plug, label: t('nav.integrations') },
             { to: '/accounts', icon: Landmark, label: t('nav.accounts') },
             { to: '/sales', icon: BarChart3, label: t('nav.sales') },

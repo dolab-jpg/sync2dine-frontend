@@ -216,11 +216,49 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
         { value: 'mock', label: 'Mock (dev/test)' },
         { value: 'soho66', label: 'Soho66 (SIP)' },
       ]},
+      { key: 'sipUsername', label: 'SIP Username', type: 'text', placeholder: 'Extension or auth user' },
+      { key: 'sipPassword', label: 'SIP Password', type: 'password' },
+      { key: 'sipDomain', label: 'SIP Domain', type: 'text', placeholder: 'sip.soho66.co.uk' },
+      { key: 'did', label: 'DID (Inbound Number)', type: 'text', placeholder: '+442037453233' },
       { key: 'sipBridgeUrl', label: 'SIP Bridge URL (Jambonz)', type: 'url', placeholder: 'http://your-vps:3000' },
       { key: 'transferNumber', label: 'Transfer Number', type: 'text', placeholder: '+4420... (human handoff)' },
       { key: 'webhookUrl', label: 'Voice Webhook URL', type: 'readonly', placeholder: 'Set after deploying server' },
       { key: 'businessHoursStart', label: 'Business Hours Start', type: 'text', placeholder: '09:00' },
       { key: 'businessHoursEnd', label: 'Business Hours End', type: 'text', placeholder: '17:30' },
+    ],
+  },
+  {
+    id: 'vapi',
+    name: 'Vapi (Voice AI Platform)',
+    description: 'Vapi orchestrates Cynthia phone calls — connects SIP trunk to AI pipeline with ElevenLabs voice',
+    category: 'ai',
+    docsUrl: 'https://docs.vapi.ai',
+    fields: [
+      { key: 'privateKey', label: 'Private Key', type: 'password', placeholder: 'vapi_sk_...', required: true },
+      { key: 'publicKey', label: 'Public Key', type: 'text', placeholder: 'vapi_pk_...' },
+      { key: 'phoneNumberId', label: 'Phone Number ID', type: 'text', placeholder: 'Vapi phone number resource ID' },
+      { key: 'serverSecret', label: 'Server Secret', type: 'password', placeholder: 'Webhook signature secret' },
+      { key: 'region', label: 'Region', type: 'select', options: [
+        { value: 'us', label: 'US' },
+        { value: 'eu', label: 'EU' },
+      ]},
+      { key: 'webhookUrl', label: 'Webhook URL', type: 'readonly', placeholder: 'Auto-set from backend deploy' },
+    ],
+  },
+  {
+    id: 'elevenlabs',
+    name: 'ElevenLabs',
+    description: 'Ultra-realistic voice cloning and TTS for Cynthia phone calls via Vapi',
+    category: 'ai',
+    docsUrl: 'https://elevenlabs.io/docs',
+    fields: [
+      { key: 'apiKey', label: 'API Key', type: 'password', placeholder: 'xi_...', required: true },
+      { key: 'voiceId', label: 'Voice ID', type: 'text', placeholder: 'Cloned voice ID from ElevenLabs' },
+      { key: 'modelId', label: 'Model ID', type: 'select', options: [
+        { value: 'eleven_turbo_v2_5', label: 'Turbo v2.5 (fastest)' },
+        { value: 'eleven_multilingual_v2', label: 'Multilingual v2' },
+        { value: 'eleven_monolingual_v1', label: 'Monolingual v1' },
+      ]},
     ],
   },
   {
@@ -375,6 +413,13 @@ export function getDefaultFieldValues(def: IntegrationDefinition): Record<string
     values.provider = 'soho66';
     values.businessHoursStart = '09:00';
     values.businessHoursEnd = '17:30';
+    values.sipDomain = 'sip.soho66.co.uk';
+  }
+  if (def.id === 'vapi') {
+    values.region = 'eu';
+  }
+  if (def.id === 'elevenlabs') {
+    values.modelId = 'eleven_turbo_v2_5';
   }
   if (def.id === 'chatterbox_tts') {
     values.baseUrl = '';

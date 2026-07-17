@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '../ui/badge';
 import {
   Building2, Mail, Phone, MapPin, Calendar, TrendingUp, Plus, CreditCard,
-  Zap, Crown, Rocket, AlertTriangle, PauseCircle,
+  Zap, Crown, Rocket, AlertTriangle, PauseCircle, UtensilsCrossed,
 } from 'lucide-react';
 import { AddressMapLink } from '../ui/AddressMapLink';
 import { toast } from 'sonner';
@@ -444,6 +444,9 @@ export default function PlatformClientsCRM() {
                 )}
                 <div className="flex flex-wrap gap-2 pt-2">
                   <Button className="flex-1 min-w-[120px]" onClick={() => handleActAs(selected)}>Act as client</Button>
+                  <Button variant="outline" className="flex-1 min-w-[120px]" onClick={() => { setSelected(null); navigate(`/platform/clients/${selected.id}/menu`); }}>
+                    <UtensilsCrossed className="w-4 h-4 mr-1" /> View Menu
+                  </Button>
                   <Button variant="outline" className="flex-1 min-w-[120px]" onClick={() => void handleStripeCheckout(selected.id)}>
                     <CreditCard className="w-4 h-4 mr-1" /> Stripe billing
                   </Button>

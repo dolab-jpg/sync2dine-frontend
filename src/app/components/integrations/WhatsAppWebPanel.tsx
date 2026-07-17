@@ -1,9 +1,14 @@
+/**
+ * WhatsAppWebPanel — admin UI for WWeb.js QR connection.
+ * Live API must hit backend with handleWWebRoutes (same-origin /api/whatsapp-web/*).
+ * No nginx change needed — Plesk reverse-proxy already forwards /api to the Node backend.
+ */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Label } from '../ui/label';
-import { Loader2, LogOut, RefreshCw, Smartphone, Wifi, WifiOff, CheckCheck, Check, MessageSquare } from 'lucide-react';
+import { Loader2, LogOut, RefreshCw, Smartphone, Wifi, WifiOff, CheckCheck, Check, MessageSquare, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface WWebStatus {
@@ -16,14 +21,22 @@ interface WWebStatus {
   } | null;
 }
 
-// Same convention as authApi.ts / orgContext.ts: VITE_API_BASE_URL when set,
-// same-origin (empty prefix) in production.
+interface QRResponse {
+  qr: string | null;
+  qrImageDataUrl?: string | null;
+  status: string;
+  error?: string;
+}
+
 const API = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '').replace(/\/$/, '');
 
 export function WhatsAppWebPanel() {
   const [wwebStatus, setWwebStatus] = useState<WWebStatus>({ status: 'disconnected' });
   const [qrData, setQrData] = useState<string | null>(null);
+  const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showFallback, setShowFallback] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchStatus = useCallback(async () => {
@@ -40,8 +53,10 @@ export function WhatsAppWebPanel() {
   const fetchQR = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/whatsapp-web/qr`);
-      const data = await res.json() as { qr: string | null; status: string };
+      const data = await res.json() as QRResponse;
       setQrData(data.qr);
+      setQrImageUrl(data.qrImageDataUrl ?? null);
+      if (data.error) setLastError(data.error);
       return data;
     } catch {
       return null;
@@ -57,6 +72,7 @@ export function WhatsAppWebPanel() {
         await fetchQR();
       } else {
         setQrData(null);
+        setQrImageUrl(null);
       }
     }, 3000);
 
@@ -67,6 +83,7 @@ export function WhatsAppWebPanel() {
 
   const handleReconnect = async () => {
     setLoading(true);
+    setLastError(null);
     try {
       await fetch(`${API}/api/whatsapp-web/reconnect`, { method: 'POST' });
       toast.success('Reconnecting — QR code will appear shortly');
@@ -87,6 +104,8 @@ export function WhatsAppWebPanel() {
       toast.success('WhatsApp disconnected');
       setWwebStatus({ status: 'disconnected' });
       setQrData(null);
+      setQrImageUrl(null);
+      setLastError(null);
     } catch {
       toast.error('Logout failed');
     } finally {
@@ -109,6 +128,9 @@ export function WhatsAppWebPanel() {
   }[wwebStatus.status];
 
   const StatusIcon = wwebStatus.status === 'ready' ? Wifi : wwebStatus.status === 'disconnected' ? WifiOff : Loader2;
+
+  const qrImgSrc = qrImageUrl
+    || (qrData ? `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(qrData)}` : null);
 
   return (
     <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-white">
@@ -156,12 +178,12 @@ export function WhatsAppWebPanel() {
           </div>
         )}
 
-        {wwebStatus.status === 'qr_pending' && qrData && (
+        {wwebStatus.status === 'qr_pending' && qrImgSrc && (
           <div className="flex flex-col items-center gap-3 p-6 bg-white rounded-xl border-2 border-dashed border-green-300">
             <p className="text-sm font-medium text-gray-700">Scan with WhatsApp on your phone</p>
             <div className="p-3 bg-white rounded-lg shadow-sm">
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(qrData)}`}
+                src={qrImgSrc}
                 alt="WhatsApp QR Code"
                 className="w-64 h-64"
               />
@@ -193,6 +215,39 @@ export function WhatsAppWebPanel() {
           <div className="p-4 bg-gray-50 rounded-xl border text-center space-y-3">
             <StatusIcon className="w-8 h-8 mx-auto text-gray-400" />
             <p className="text-sm text-gray-600">WhatsApp is not connected. Click below to start.</p>
+            {lastError && (
+              <p className="text-xs text-red-600">{lastError}</p>
+            )}
+          </div>
+        )}
+
+        {/* Fix 6C: Fallback link when disconnected with error after reconnect */}
+        {wwebStatus.status === 'disconnected' && lastError && (
+          <div className="border rounded-lg overflow-hidden">
+            <button
+              onClick={() => setShowFallback(!showFallback)}
+              className="w-full flex items-center justify-between px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              <span>Manual fallback options</span>
+              {showFallback ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+            {showFallback && (
+              <div className="px-4 pb-3 text-xs text-gray-500 space-y-2">
+                <a
+                  href="https://web.whatsapp.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-green-700 hover:underline font-medium"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Open WhatsApp Web in new tab
+                </a>
+                <p>
+                  Note: The production AI path still requires WWeb.js QR pairing above.
+                  The browser tab is for manual message checking only.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

@@ -1,4 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { AppContext } from '../App';
 import { computeLeadAttribution } from '../engine/leads/leadService';
 import { getOfficeTeamRoster, loadOfficeTeam } from '../engine/team/teamSnapshot';
@@ -7,20 +8,74 @@ import { Button } from './ui/button';
 import {
   TrendingUp, Users, DollarSign, Target, Award, Calendar,
   FileText, CheckCircle, XCircle, Clock, ArrowUp, ArrowDown,
-  Shield, BarChart3, PieChart, Activity
+  Shield, BarChart3, PieChart, Activity, Bot, Phone,
 } from 'lucide-react';
+
+function safePct(num: number, den: number): string {
+  if (!den || !Number.isFinite(num / den)) return '0';
+  return ((num / den) * 100).toFixed(1);
+}
+
+function safeDivide(num: number, den: number): number {
+  if (!den || !Number.isFinite(num / den)) return 0;
+  return num / den;
+}
+
+function periodStart(period: 'week' | 'month' | 'quarter'): Date {
+  const now = new Date();
+  if (period === 'week') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - d.getDay());
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  if (period === 'month') {
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+  const qMonth = Math.floor(now.getMonth() / 3) * 3;
+  return new Date(now.getFullYear(), qMonth, 1);
+}
+
+interface AgentStats {
+  agentName?: string;
+  status?: string;
+  callsToday?: number;
+  callsThisPeriod?: number;
+  avgDuration?: number;
+  uptime?: string;
+}
 
 export default function SalesManagement() {
   const context = useContext(AppContext);
+  const navigate = useNavigate();
   if (!context) return null;
 
   const { user, customers, quotes } = context;
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter'>('month');
+  const [agentStats, setAgentStats] = useState<AgentStats | null>(null);
 
   const [teamVersion, setTeamVersion] = useState(0);
   useEffect(() => {
     void loadOfficeTeam().then(() => setTeamVersion((v) => v + 1));
   }, []);
+
+  useEffect(() => {
+    fetch('/api/agent/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) {
+          setAgentStats({
+            agentName: data.agentName ?? data.name ?? 'Cynthia',
+            status: data.status ?? 'unknown',
+            callsToday: data.todayStats?.calls ?? data.callsToday ?? 0,
+            callsThisPeriod: data.todayStats?.calls ?? 0,
+            avgDuration: data.todayStats?.avgDuration ?? 0,
+            uptime: data.uptime ?? '',
+          });
+        }
+      })
+      .catch(() => {});
+  }, [selectedPeriod]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const teamMembers = useMemo(() => getOfficeTeamRoster().map((m) => ({
@@ -30,14 +85,25 @@ export default function SalesManagement() {
     ...m.performance,
   })), [teamVersion]);
 
-  const leadSources = useMemo(() => computeLeadAttribution(customers, quotes).map((row) => ({
+  const cutoff = useMemo(() => periodStart(selectedPeriod), [selectedPeriod]);
+
+  const filteredCustomers = useMemo(
+    () => customers.filter((c) => new Date(c.createdAt) >= cutoff),
+    [customers, cutoff],
+  );
+  const filteredQuotes = useMemo(
+    () => quotes.filter((q) => new Date(q.createdAt) >= cutoff),
+    [quotes, cutoff],
+  );
+
+  const leadSources = useMemo(() => computeLeadAttribution(filteredCustomers, filteredQuotes).map((row) => ({
     source: row.source,
     leads: row.leads,
     won: row.won,
     spent: 0,
     revenue: row.revenue,
     roi: row.revenue > 0 ? Math.round(row.revenue / 100) : 0,
-  })), [customers, quotes]);
+  })), [filteredCustomers, filteredQuotes]);
 
   if (user.role !== 'super_admin' && user.role !== 'platform_owner') {
     return (
@@ -53,26 +119,27 @@ export default function SalesManagement() {
     );
   }
 
-  const revenueData = {
-    thisMonth: teamMembers.reduce((s, m) => s + m.revenue, 0),
-    lastMonth: 265000,
-    thisQuarter: 845000,
-    target: 900000,
-    growth: 12.8
-  };
-
   const pipelineData = {
-    leads: customers.filter(c => c.status === 'lead').length,
-    contacted: customers.filter(c => c.source && c.status === 'lead').length,
-    quoted: customers.filter(c => c.status === 'quoted').length,
-    won: customers.filter(c => c.status === 'won').length,
-    lost: customers.filter(c => c.status === 'lost').length
+    leads: filteredCustomers.filter(c => c.status === 'lead').length,
+    contacted: filteredCustomers.filter(c => c.source && c.status === 'lead').length,
+    quoted: filteredCustomers.filter(c => c.status === 'quoted').length,
+    won: filteredCustomers.filter(c => c.status === 'won').length,
+    lost: filteredCustomers.filter(c => c.status === 'lost').length,
   };
 
   const totalRevenue = teamMembers.reduce((sum, member) => sum + member.revenue, 0);
   const totalLeads = teamMembers.reduce((sum, member) => sum + member.leads, 0);
   const totalWon = teamMembers.reduce((sum, member) => sum + member.won, 0);
-  const overallConversion = ((totalWon / totalLeads) * 100).toFixed(1);
+  const overallConversion = safePct(totalWon, totalLeads);
+  const avgDeal = safeDivide(totalRevenue, totalWon);
+
+  const revenueData = {
+    thisMonth: totalRevenue,
+    lastMonth: 265000,
+    thisQuarter: 845000,
+    target: 900000,
+    growth: totalRevenue > 0 ? 12.8 : 0,
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -86,57 +153,49 @@ export default function SalesManagement() {
               <p className="text-amber-100 mt-2 text-lg">Complete overview of your business performance</p>
             </div>
             <div className="flex gap-2">
-              <Button
-                onClick={() => setSelectedPeriod('week')}
-                className={`px-6 py-3 rounded-xl ${
-                  selectedPeriod === 'week'
-                    ? 'bg-amber-500 text-white'
-                    : 'bg-white/10 text-amber-100 hover:bg-white/20'
-                }`}
-              >
-                Week
-              </Button>
-              <Button
-                onClick={() => setSelectedPeriod('month')}
-                className={`px-6 py-3 rounded-xl ${
-                  selectedPeriod === 'month'
-                    ? 'bg-amber-500 text-white'
-                    : 'bg-white/10 text-amber-100 hover:bg-white/20'
-                }`}
-              >
-                Month
-              </Button>
-              <Button
-                onClick={() => setSelectedPeriod('quarter')}
-                className={`px-6 py-3 rounded-xl ${
-                  selectedPeriod === 'quarter'
-                    ? 'bg-amber-500 text-white'
-                    : 'bg-white/10 text-amber-100 hover:bg-white/20'
-                }`}
-              >
-                Quarter
-              </Button>
+              {(['week', 'month', 'quarter'] as const).map((p) => (
+                <Button
+                  key={p}
+                  onClick={() => setSelectedPeriod(p)}
+                  className={`px-6 py-3 rounded-xl capitalize ${
+                    selectedPeriod === p
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-white/10 text-amber-100 hover:bg-white/20'
+                  }`}
+                >
+                  {p}
+                </Button>
+              ))}
             </div>
           </div>
         </div>
 
+        {/* KPI cards — clickable */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white">
+          <Card
+            className="bg-gradient-to-br from-green-500 to-green-600 text-white cursor-pointer hover:shadow-xl transition-shadow"
+            onClick={() => navigate('/crm')}
+          >
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-2">
                 <DollarSign className="w-8 h-8" />
-                <div className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded-lg">
-                  <ArrowUp className="w-4 h-4" />
-                  <span className="text-sm font-bold">{revenueData.growth}%</span>
-                </div>
+                {revenueData.growth > 0 && (
+                  <div className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded-lg">
+                    <ArrowUp className="w-4 h-4" />
+                    <span className="text-sm font-bold">{revenueData.growth}%</span>
+                  </div>
+                )}
               </div>
               <p className="text-sm opacity-90 mb-1">Total Revenue</p>
-              <p className="text-3xl font-bold">£{(totalRevenue / 1000).toFixed(0)}k</p>
+              <p className="text-3xl font-bold">£{totalRevenue > 0 ? `${(totalRevenue / 1000).toFixed(0)}k` : '0'}</p>
               <p className="text-xs opacity-75 mt-1">This {selectedPeriod}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+          <Card
+            className="bg-gradient-to-br from-blue-500 to-blue-600 text-white cursor-pointer hover:shadow-xl transition-shadow"
+            onClick={() => navigate('/customers')}
+          >
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-2">
                 <Users className="w-8 h-8" />
@@ -148,7 +207,10 @@ export default function SalesManagement() {
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+          <Card
+            className="bg-gradient-to-br from-purple-500 to-purple-600 text-white cursor-pointer hover:shadow-xl transition-shadow"
+            onClick={() => navigate('/crm')}
+          >
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-2">
                 <Target className="w-8 h-8" />
@@ -160,18 +222,55 @@ export default function SalesManagement() {
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-amber-500 to-amber-600 text-white">
+          <Card
+            className="bg-gradient-to-br from-amber-500 to-amber-600 text-white cursor-pointer hover:shadow-xl transition-shadow"
+            onClick={() => navigate('/crm')}
+          >
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-2">
                 <Award className="w-8 h-8" />
                 <TrendingUp className="w-6 h-6 opacity-75" />
               </div>
               <p className="text-sm opacity-90 mb-1">Avg Deal Size</p>
-              <p className="text-3xl font-bold">£{(totalRevenue / totalWon).toFixed(0)}</p>
+              <p className="text-3xl font-bold">£{avgDeal > 0 ? avgDeal.toFixed(0) : '0'}</p>
               <p className="text-xs opacity-75 mt-1">Per won deal</p>
             </CardContent>
           </Card>
         </div>
+
+        {/* Agents section */}
+        {agentStats && (
+          <Card className="mb-6 border-2 border-indigo-200">
+            <CardHeader>
+              <CardTitle className="text-2xl flex items-center gap-3">
+                <Bot className="w-7 h-7 text-indigo-600" />
+                AI Phone Agent
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-indigo-50 p-4 rounded-xl">
+                  <p className="text-sm text-indigo-600 font-semibold">{agentStats.agentName}</p>
+                  <p className="text-2xl font-black text-indigo-900 capitalize">{agentStats.status}</p>
+                </div>
+                <div className="bg-indigo-50 p-4 rounded-xl cursor-pointer hover:bg-indigo-100" onClick={() => navigate('/calls')}>
+                  <p className="text-sm text-indigo-600 font-semibold">Calls Today</p>
+                  <p className="text-2xl font-black text-indigo-900">{agentStats.callsToday ?? 0}</p>
+                </div>
+                <div className="bg-indigo-50 p-4 rounded-xl">
+                  <p className="text-sm text-indigo-600 font-semibold">Avg Duration</p>
+                  <p className="text-2xl font-black text-indigo-900">
+                    {agentStats.avgDuration ? `${Math.round(agentStats.avgDuration)}s` : '—'}
+                  </p>
+                </div>
+                <div className="bg-indigo-50 p-4 rounded-xl">
+                  <p className="text-sm text-indigo-600 font-semibold">Uptime</p>
+                  <p className="text-2xl font-black text-indigo-900">{agentStats.uptime || '—'}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <Card>
@@ -232,7 +331,7 @@ export default function SalesManagement() {
                   </div>
                   <div className="text-right">
                     <p className="text-3xl font-bold text-green-600">{pipelineData.won}</p>
-                    <p className="text-sm text-gray-600">£{(totalRevenue / 1000).toFixed(0)}k revenue</p>
+                    <p className="text-sm text-gray-600">£{totalRevenue > 0 ? `${(totalRevenue / 1000).toFixed(0)}k` : '0'} revenue</p>
                   </div>
                 </div>
               </div>
@@ -277,7 +376,7 @@ export default function SalesManagement() {
                     <div className="mt-2 bg-gray-200 rounded-full h-2 overflow-hidden">
                       <div
                         className="bg-green-500 h-full rounded-full transition-all"
-                        style={{ width: `${(source.won / source.leads) * 100}%` }}
+                        style={{ width: `${source.leads > 0 ? (source.won / source.leads) * 100 : 0}%` }}
                       />
                     </div>
                   </div>
@@ -358,9 +457,9 @@ export default function SalesManagement() {
                     <td className="text-center py-4 px-4">{totalWon}</td>
                     <td className="text-center py-4 px-4">{teamMembers.reduce((s, m) => s + m.lost, 0)}</td>
                     <td className="text-center py-4 px-4">{teamMembers.reduce((s, m) => s + m.pending, 0)}</td>
-                    <td className="text-center py-4 px-4">£{(totalRevenue / 1000).toFixed(0)}k</td>
+                    <td className="text-center py-4 px-4">£{totalRevenue > 0 ? `${(totalRevenue / 1000).toFixed(0)}k` : '0'}</td>
                     <td className="text-center py-4 px-4">{overallConversion}%</td>
-                    <td className="text-center py-4 px-4">£{(totalRevenue / totalWon).toFixed(0)}</td>
+                    <td className="text-center py-4 px-4">£{avgDeal > 0 ? avgDeal.toFixed(0) : '0'}</td>
                   </tr>
                 </tbody>
               </table>
@@ -386,17 +485,17 @@ export default function SalesManagement() {
                 <div className="bg-gray-200 rounded-full h-4 overflow-hidden">
                   <div
                     className="bg-gradient-to-r from-green-500 to-green-600 h-full rounded-full transition-all"
-                    style={{ width: `${(revenueData.thisQuarter / revenueData.target) * 100}%` }}
+                    style={{ width: `${revenueData.target > 0 ? (revenueData.thisQuarter / revenueData.target) * 100 : 0}%` }}
                   />
                 </div>
               </div>
               <p className="text-sm text-gray-600">
-                {((revenueData.thisQuarter / revenueData.target) * 100).toFixed(1)}% of quarterly target
+                {revenueData.target > 0 ? ((revenueData.thisQuarter / revenueData.target) * 100).toFixed(1) : '0'}% of quarterly target
               </p>
             </CardContent>
           </Card>
 
-          <Card className="border-2 border-blue-500">
+          <Card className="border-2 border-blue-500 cursor-pointer hover:shadow-xl transition-shadow" onClick={() => navigate('/crm')}>
             <CardHeader>
               <CardTitle className="text-xl text-blue-700">Active Opportunities</CardTitle>
             </CardHeader>
@@ -418,21 +517,23 @@ export default function SalesManagement() {
 
           <Card className="border-2 border-purple-500">
             <CardHeader>
-              <CardTitle className="text-xl text-purple-700">This Month</CardTitle>
+              <CardTitle className="text-xl text-purple-700">This {selectedPeriod}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Revenue</span>
                   <span className="font-bold text-2xl text-purple-600">
-                    £{(revenueData.thisMonth / 1000).toFixed(0)}k
+                    £{totalRevenue > 0 ? `${(totalRevenue / 1000).toFixed(0)}k` : '0'}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <ArrowUp className="w-4 h-4 text-green-600" />
-                  <span className="text-green-600 font-bold">{revenueData.growth}%</span>
-                  <span className="text-gray-500">vs last month</span>
-                </div>
+                {revenueData.growth > 0 && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <ArrowUp className="w-4 h-4 text-green-600" />
+                    <span className="text-green-600 font-bold">{revenueData.growth}%</span>
+                    <span className="text-gray-500">vs last {selectedPeriod}</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

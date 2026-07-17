@@ -56,10 +56,35 @@ export interface RecruitmentInterview {
   notes?: string;
 }
 
+export interface RecruitmentApplication {
+  id: string;
+  candidateId: string;
+  jobId: string;
+  stage: 'applied' | 'screening' | 'interview' | 'offer' | 'hired' | 'rejected';
+  appliedDate: string;
+  stageDate: string;
+  notes: string[];
+  feedback: string;
+  rating: number;
+}
+
+export interface RecruitmentOnboardingTask {
+  id: string;
+  candidateId: string;
+  task: string;
+  category: 'documentation' | 'training' | 'equipment' | 'access' | 'orientation';
+  status: 'pending' | 'in-progress' | 'completed';
+  dueDate?: string;
+  assignedTo?: string;
+  notes?: string;
+}
+
 export interface RecruitmentStoreData {
   jobs: RecruitmentJob[];
   candidates: RecruitmentCandidate[];
   interviews: RecruitmentInterview[];
+  applications: RecruitmentApplication[];
+  onboardingTasks: RecruitmentOnboardingTask[];
   updatedAt: string;
 }
 
@@ -116,6 +141,8 @@ function createDefaultStore(): RecruitmentStoreData {
     jobs: DEFAULT_JOBS,
     candidates: [],
     interviews: [],
+    applications: [],
+    onboardingTasks: [],
     updatedAt: new Date().toISOString(),
   };
 }
@@ -129,6 +156,8 @@ export function loadRecruitmentStore(): RecruitmentStoreData {
       jobs: Array.isArray(parsed.jobs) && parsed.jobs.length ? parsed.jobs : DEFAULT_JOBS,
       candidates: Array.isArray(parsed.candidates) ? parsed.candidates : [],
       interviews: Array.isArray(parsed.interviews) ? parsed.interviews : [],
+      applications: Array.isArray(parsed.applications) ? parsed.applications : [],
+      onboardingTasks: Array.isArray(parsed.onboardingTasks) ? parsed.onboardingTasks : [],
       updatedAt: parsed.updatedAt ?? new Date().toISOString(),
     };
   } catch {
@@ -150,9 +179,102 @@ export async function syncRecruitmentToServer(data: RecruitmentStoreData): Promi
         recruitmentJobs: data.jobs,
         recruitmentCandidates: data.candidates,
         recruitmentInterviews: data.interviews,
+        recruitmentApplications: data.applications,
+        recruitmentOnboardingTasks: data.onboardingTasks,
       }),
     });
   } catch {
     // sync optional in dev
+  }
+}
+
+export async function loadRecruitmentFromApi(): Promise<RecruitmentStoreData | null> {
+  try {
+    const res = await fetch('/api/recruitment');
+    if (!res.ok) return null;
+    const data = await res.json() as Record<string, unknown>;
+    return {
+      jobs: Array.isArray(data.jobs) ? data.jobs as RecruitmentJob[] : [],
+      candidates: Array.isArray(data.candidates) ? data.candidates as RecruitmentCandidate[] : [],
+      interviews: Array.isArray(data.interviews) ? data.interviews as RecruitmentInterview[] : [],
+      applications: Array.isArray(data.applications) ? data.applications as RecruitmentApplication[] : [],
+      onboardingTasks: Array.isArray(data.onboardingTasks) ? data.onboardingTasks as RecruitmentOnboardingTask[] : [],
+      updatedAt: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function patchOnboardingTask(task: { id: string; status: string }): Promise<boolean> {
+  try {
+    const res = await fetch('/api/recruitment/onboarding', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(task),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function postRecruitmentJob(job: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch('/api/recruitment/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(job),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { job?: Record<string, unknown> };
+    return data.job ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function postRecruitmentCandidate(candidate: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch('/api/recruitment/candidates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(candidate),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { candidate?: Record<string, unknown> };
+    return data.candidate ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function postRecruitmentApplication(app: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch('/api/recruitment/applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(app),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { application?: Record<string, unknown> };
+    return data.application ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function patchRecruitmentApplication(id: string, patch: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(`/api/recruitment/applications/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { application?: Record<string, unknown> };
+    return data.application ?? null;
+  } catch {
+    return null;
   }
 }

@@ -142,6 +142,14 @@ export const integrationService = {
       );
     }
 
+    if ((id === 'vapi' || id === 'elevenlabs') && integrationService.hasCredentials(id, values)) {
+      fetch('/api/integrations/voice-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ integration: id, values }),
+      }).catch(() => { /* env push is best-effort; localStorage is source of truth */ });
+    }
+
     if (id === 'openai' && integrationService.hasCredentials(id, values)) {
       const apiKey = values.apiKey?.trim();
       if (integrationService.isLiveOpenAIApiKey(apiKey)) {

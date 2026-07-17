@@ -84,6 +84,46 @@ const STAFF_READ_TOOL_NAMES = new Set([
 const seenToolCalls = new Map<string, number>();
 const TOOL_IDEMPOTENCY_TTL_MS = 15 * 60 * 1000;
 
+/** Backfill recordingUrl onto orders that were placed during a call (9D). */
+async function backfillOrderRecordingFromCall(
+  callId: string,
+  recordingUrl: string | undefined | null,
+): Promise<void> {
+  const url = String(recordingUrl ?? '').trim();
+  if (!callId?.trim() || !url) return;
+  try {
+    const { updateOrderRecord } = await import('./data-store');
+    const store = getDataStore();
+    const orders = Array.isArray(store.orders) ? store.orders : [];
+    for (const order of orders) {
+      const sourceCall = String(order.sourceCallId ?? '');
+      const callIds = Array.isArray(order.callIds) ? order.callIds.map(String) : [];
+      if (sourceCall !== callId && !callIds.includes(callId)) continue;
+      await updateOrderRecord(String(order.id), { recordingUrl: url });
+    }
+  } catch {
+    // ignore — orders may not exist
+  }
+}
+
+/** Stamp listenUrl onto any orders linked to an active call (9D). */
+function stampListenUrlOnOrders(callId: string, listenUrl: string): void {
+  if (!callId || !listenUrl) return;
+  try {
+    const store = getDataStore();
+    const orders = Array.isArray(store.orders) ? store.orders : [];
+    for (const order of orders) {
+      const sourceCall = String(order.sourceCallId ?? '');
+      const callIds = Array.isArray(order.callIds) ? order.callIds.map(String) : [];
+      if (sourceCall !== callId && !callIds.includes(callId)) continue;
+      if (order.listenUrl === listenUrl) continue;
+      order.listenUrl = listenUrl;
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -165,6 +205,7 @@ async function enrichMonitorUrlsFromVapi(
           ...(controlUrl ? { controlUrl } : {}),
         },
       });
+      if (listenUrl) stampListenUrlOnOrders(callId, listenUrl);
     }
     return {
       ...(listenUrl ? { listenUrl } : {}),
@@ -436,6 +477,21 @@ function finalizeVapiCall(
       brief: afterMeta.brief ?? afterMeta.aim,
     },
   });
+
+  // Backfill recordingUrl onto any orders placed during this call (9D)
+  void backfillOrderRecordingFromCall(callId, recordingUrl || (after?.recordingUrl as string | undefined));
+
+  // Push call.ended analytics event (5E)
+  void import('./analytics-routes').then(({ pushAnalyticsEvent }) => {
+    pushAnalyticsEvent({
+      type: 'call.ended',
+      callId,
+      direction: after?.direction ?? 'inbound',
+      durationSec: after ? computeCallDurationSec(after) : undefined,
+      outcome: disposition || endedReason || undefined,
+      recordingUrl: recordingUrl || undefined,
+    });
+  }).catch(() => {});
 
   completeOutboundJobsForCall(callId, { disposition, endedReason: endedReason || undefined });
 

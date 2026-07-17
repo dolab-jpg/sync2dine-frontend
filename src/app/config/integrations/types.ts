@@ -11,6 +11,8 @@ export type IntegrationId =
   | 'google_calendar'
   | 'twilio_sms'
   | 'voice_telephony'
+  | 'vapi'
+  | 'elevenlabs'
   | 'chatterbox_tts'
   | 'storage'
   | 'xero'

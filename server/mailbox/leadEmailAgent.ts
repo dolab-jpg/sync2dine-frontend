@@ -2,7 +2,7 @@ import { handleOrchestrator } from '../orchestrator-handler';
 import type { OrchestratorRequest } from '../orchestrator-types';
 import { executeChannelActions } from '../channel-action-executor';
 import { executePhoneTool } from '../phone-tools';
-import { getDataStore } from '../data-store';
+import { getDataStore, saveRecruitmentCandidate, saveRecruitmentApplication } from '../data-store';
 import type { CachedEmailMessage } from './types';
 import {
   addInboxItem,
@@ -132,6 +132,68 @@ function heuristicParse(body: string, fromAddr: string, fromName?: string): {
   };
 }
 
+const RECRUITMENT_KEYWORDS = /\b(apply|applying|application|CV|curriculum.?vitae|résumé|resume|job.?applic|position|vacancy|role.?at|hiring|work.?with.?you)\b/i;
+
+function looksLikeJobApplication(subject: string, body: string): boolean {
+  const combined = `${subject} ${body.slice(0, 2000)}`;
+  const hits = combined.match(RECRUITMENT_KEYWORDS);
+  return (hits?.length ?? 0) >= 1;
+}
+
+function routeToRecruitmentPipeline(
+  message: CachedEmailMessage,
+  body: string,
+  orgId: string,
+): LeadInboxItem {
+  const hint = heuristicParse(body, message.fromAddr, message.fromName);
+  const name = hint.name ?? message.fromName ?? message.fromAddr.split('@')[0];
+  const phone = hint.phone ?? '';
+  const email = hint.email ?? message.fromAddr;
+
+  const candidate = saveRecruitmentCandidate({
+    name,
+    phone,
+    email,
+    source: 'email',
+    desiredRole: message.subject.replace(/^(re:|fwd?:)\s*/gi, '').slice(0, 120),
+    notes: `Auto-imported from email: ${message.subject}`,
+  });
+
+  const store = getDataStore(orgId);
+  const matchJob = store.recruitmentJobs.find(
+    j => String(j.status) === 'open',
+  );
+  if (matchJob) {
+    saveRecruitmentApplication({
+      candidateId: String(candidate.id),
+      jobId: String(matchJob.id),
+      stage: 'applied',
+      appliedDate: new Date().toISOString().slice(0, 10),
+      stageDate: new Date().toISOString().slice(0, 10),
+      notes: [`Email application: ${message.subject}`],
+      feedback: '',
+      rating: 0,
+    });
+  }
+
+  return addInboxItem({
+    orgId,
+    messageId: message.messageId || message.id,
+    emailCacheId: message.id,
+    subject: message.subject,
+    fromAddr: message.fromAddr,
+    fromName: message.fromName,
+    summary: `Job application from ${name} — routed to recruitment pipeline`,
+    recommendation: 'Review in Recruitment CRM',
+    customerId: undefined,
+    customerName: name,
+    phone: phone || undefined,
+    status: 'skipped',
+    toolsUsed: ['saveRecruitmentCandidate', 'saveRecruitmentApplication'],
+    auditLog: `Candidate ${candidate.id} created from email`,
+  });
+}
+
 export interface LeadEmailAgentResult {
   inboxItem: LeadInboxItem;
   skipped: boolean;
@@ -163,6 +225,14 @@ export async function runLeadEmailAgent(
 
   const policy = getLeadCallbackPolicy();
   const body = extractEmailBody(message);
+
+  // 4C: Route job applications to recruitment pipeline instead of lead desk
+  if (looksLikeJobApplication(message.subject, body)) {
+    markMessageProcessed(msgKey);
+    const inboxItem = routeToRecruitmentPipeline(message, body, orgId);
+    return { inboxItem, skipped: false };
+  }
+
   const emailContent = [
     `From: ${message.fromName ?? message.fromAddr} <${message.fromAddr}>`,
     `Subject: ${message.subject}`,

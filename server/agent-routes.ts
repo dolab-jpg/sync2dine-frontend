@@ -4,13 +4,22 @@ import {
   getAgentCapacitySnapshot,
   getAgentSettings,
   getAgentStatusSnapshot,
+  getDataStore,
   getPhoneLineByAssignedUserId,
   getPhoneLineById,
   listPhoneLines,
   lookupContactByPhone,
   maskPhoneLine,
+  saveCustomerRecord,
   savePhoneLine,
+  saveRecruitmentApplication,
+  saveRecruitmentCandidate,
+  saveRecruitmentJob,
+  saveRecruitmentOnboardingTask,
+  seedOnboardingForCandidate,
   updateAgentSettings,
+  updateRecruitmentApplication,
+  updateRecruitmentOnboardingTask,
   type PhoneLinePurpose,
 } from './data-store';
 import {
@@ -130,6 +139,30 @@ async function handlePatchSettings(req: IncomingMessage, res: ServerResponse) {
   }
   if (typeof body.callQueueQuietStart === 'string') patch.callQueueQuietStart = body.callQueueQuietStart;
   if (typeof body.callQueueQuietEnd === 'string') patch.callQueueQuietEnd = body.callQueueQuietEnd;
+  if (typeof body.callQueueMaxConcurrent === 'number' && Number.isFinite(body.callQueueMaxConcurrent)) {
+    patch.callQueueMaxConcurrent = Math.max(1, Math.min(5, Math.round(body.callQueueMaxConcurrent)));
+  }
+  if (
+    body.outboundQueueState === 'running'
+    || body.outboundQueueState === 'paused'
+    || body.outboundQueueState === 'stopped'
+  ) {
+    patch.outboundQueueState = body.outboundQueueState;
+    if (body.outboundQueueState === 'stopped') {
+      const { cancelQueuedOutboundJobs } = await import('./data-store');
+      cancelQueuedOutboundJobs();
+    }
+  }
+  if (typeof body.campaignReviewBrief === 'string') patch.campaignReviewBrief = body.campaignReviewBrief;
+  if (typeof body.campaignReorderBrief === 'string') patch.campaignReorderBrief = body.campaignReorderBrief;
+  if (typeof body.campaignWinbackBrief === 'string') patch.campaignWinbackBrief = body.campaignWinbackBrief;
+  if (typeof body.aboutUs === 'string') patch.aboutUs = body.aboutUs;
+  if (typeof body.sayToday === 'string') patch.sayToday = body.sayToday;
+  if (Array.isArray(body.deliveryPostcodePrefixes)) {
+    const { normalizeDeliveryPrefixes } = await import('./delivery-areas');
+    patch.deliveryPostcodePrefixes = normalizeDeliveryPrefixes(body.deliveryPostcodePrefixes);
+  }
+  if (typeof body.deliveryNotes === 'string') patch.deliveryNotes = body.deliveryNotes;
   const updated = updateAgentSettings(patch);
   sendJson(res, 200, updated);
 }
@@ -372,10 +405,9 @@ async function handleGetMyLine(req: IncomingMessage, res: ServerResponse) {
   }
   const line = getPhoneLineByAssignedUserId(userId);
   if (!line) {
-    sendJson(res, 404, { error: 'No softphone line assigned to this user' });
+    sendJson(res, 200, { line: null, message: 'No softphone line is assigned to your account yet. Ask an admin to assign one in Call Centre → Phone Lines.' });
     return;
   }
-  // Owner receives real SIP password for JsSIP register (never returned on list endpoints).
   sendJson(res, 200, { line });
 }
 
@@ -488,70 +520,6 @@ export async function handleAgentRoutes(
     await handleGetStatus(req, res);
     return true;
   }
-  if (pathname === '/api/agent/capacity' && req.method === 'GET') {
-    sendJson(res, 200, getAgentCapacitySnapshot());
-    return true;
-  }
-  if (pathname === '/api/campaigns/templates' && req.method === 'GET') {
-    const { getCampaignTemplates } = await import('./outbound-campaigns');
-    sendJson(res, 200, { templates: getCampaignTemplates() });
-    return true;
-  }
-  if (pathname === '/api/campaigns/lapsed-customers' && req.method === 'GET') {
-    const days = Math.max(1, Number(url.searchParams.get('days') ?? 30) || 30);
-    const { listCustomersWithLastOrderOlderThan } = await import('./outbound-campaigns');
-    sendJson(res, 200, { days, customers: await listCustomersWithLastOrderOlderThan(days) });
-    return true;
-  }
-  if (pathname === '/api/campaigns/queue-lapsed' && req.method === 'POST') {
-    const body = JSON.parse(await readBody(req)) as {
-      template?: string;
-      daysOlderThan?: number;
-      dryRun?: boolean;
-    };
-    try {
-      const { queueLapsedCampaign } = await import('./outbound-campaigns');
-      const result = await queueLapsedCampaign({
-        template: (body.template ?? 'lapse_winback') as 'customer_review' | 'customer_reorder' | 'lapse_winback',
-        daysOlderThan: Math.max(1, Number(body.daysOlderThan ?? 30) || 30),
-        dryRun: body.dryRun === true,
-      });
-      sendJson(res, 200, { success: true, ...result });
-    } catch (err) {
-      sendJson(res, 400, { error: err instanceof Error ? err.message : 'Campaign queue failed' });
-    }
-    return true;
-  }
-  if (pathname === '/api/campaigns/upload' && req.method === 'POST') {
-    const body = JSON.parse(await readBody(req)) as {
-      csv?: string;
-      rows?: Array<{ name?: string; phone?: string; notes?: string; customerId?: string }>;
-      template?: string;
-      brief?: string;
-      dryRun?: boolean;
-    };
-    try {
-      const { parseCampaignCsv, queueCsvCampaign } = await import('./outbound-campaigns');
-      const rows = Array.isArray(body.rows) && body.rows.length
-        ? body.rows.map((r) => ({
-            name: String(r.name ?? 'Guest'),
-            phone: String(r.phone ?? ''),
-            notes: r.notes != null ? String(r.notes) : undefined,
-            customerId: r.customerId != null ? String(r.customerId) : undefined,
-          }))
-        : parseCampaignCsv(String(body.csv ?? ''));
-      const result = queueCsvCampaign({
-        rows,
-        template: body.template,
-        brief: body.brief,
-        dryRun: body.dryRun === true,
-      });
-      sendJson(res, 200, { success: true, ...result });
-    } catch (err) {
-      sendJson(res, 400, { error: err instanceof Error ? err.message : 'Campaign upload failed' });
-    }
-    return true;
-  }
   if (pathname === '/api/agent/voices' && req.method === 'GET') {
     await handleGetVoices(req, res);
     return true;
@@ -604,5 +572,210 @@ export async function handleAgentRoutes(
       return true;
     }
   }
+
+  if (pathname === '/api/customers/upsert' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+    const customer = (body.customer && typeof body.customer === 'object')
+      ? (body.customer as Record<string, unknown>)
+      : body;
+    if (!customer.name && !customer.phone && !customer.id) {
+      sendJson(res, 400, { error: 'customer required' });
+      return true;
+    }
+    const saved = saveCustomerRecord(customer);
+    sendJson(res, 200, { ok: true, customer: saved });
+    return true;
+  }
+
+  if (pathname === '/api/campaigns/templates' && req.method === 'GET') {
+    const { getCampaignTemplates } = await import('./outbound-campaigns');
+    sendJson(res, 200, { templates: getCampaignTemplates() });
+    return true;
+  }
+  if (pathname === '/api/campaigns/lapsed-customers' && req.method === 'GET') {
+    const days = Math.max(1, Number(url.searchParams.get('days') ?? 30) || 30);
+    const { listCustomersWithLastOrderOlderThan } = await import('./outbound-campaigns');
+    sendJson(res, 200, { days, customers: await listCustomersWithLastOrderOlderThan(days) });
+    return true;
+  }
+  if (pathname === '/api/campaigns/queue-lapsed' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req)) as {
+      template?: string;
+      daysOlderThan?: number;
+      dryRun?: boolean;
+    };
+    const template = String(body.template ?? 'lapse_winback');
+    const daysOlderThan = Math.max(1, Number(body.daysOlderThan ?? 30) || 30);
+    try {
+      const { queueLapsedCampaign } = await import('./outbound-campaigns');
+      const result = await queueLapsedCampaign({
+        template: template as 'customer_review' | 'customer_reorder' | 'lapse_winback',
+        daysOlderThan,
+        dryRun: body.dryRun === true,
+      });
+      sendJson(res, 200, { success: true, ...result });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : 'Campaign queue failed' });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/agent/capacity' && req.method === 'GET') {
+    sendJson(res, 200, getAgentCapacitySnapshot());
+    return true;
+  }
+
+  // ── Recruitment routes ────────────────────────────────────────────
+  if (pathname === '/api/recruitment' && req.method === 'GET') {
+    const store = getDataStore();
+    sendJson(res, 200, {
+      jobs: store.recruitmentJobs,
+      candidates: store.recruitmentCandidates,
+      interviews: store.recruitmentInterviews,
+      applications: store.recruitmentApplications,
+      onboardingTasks: store.recruitmentOnboardingTasks,
+    });
+    return true;
+  }
+
+  if (pathname === '/api/recruitment/jobs' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+    const job = saveRecruitmentJob(body);
+    sendJson(res, 200, { ok: true, job });
+    return true;
+  }
+
+  if (pathname === '/api/recruitment/candidates' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+    const candidate = saveRecruitmentCandidate(body);
+    sendJson(res, 200, { ok: true, candidate });
+    return true;
+  }
+
+  if (pathname === '/api/recruitment/applications' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+    const app = saveRecruitmentApplication(body);
+    if (String(body.stage) === 'hired') {
+      seedOnboardingForCandidate(String(body.candidateId));
+    }
+    sendJson(res, 200, { ok: true, application: app });
+    return true;
+  }
+
+  const appPatchMatch = pathname.match(/^\/api\/recruitment\/applications\/([^/]+)$/);
+  if (appPatchMatch && req.method === 'PATCH') {
+    const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+    const updated = updateRecruitmentApplication(decodeURIComponent(appPatchMatch[1]), body);
+    if (!updated) {
+      sendJson(res, 404, { error: 'Application not found' });
+      return true;
+    }
+    if (String(body.stage) === 'hired' && updated) {
+      seedOnboardingForCandidate(String(updated.candidateId));
+    }
+    sendJson(res, 200, { ok: true, application: updated });
+    return true;
+  }
+
+  if (pathname === '/api/recruitment/onboarding' && (req.method === 'POST' || req.method === 'PATCH')) {
+    const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+    if (body.id) {
+      const updated = updateRecruitmentOnboardingTask(String(body.id), body);
+      sendJson(res, updated ? 200 : 404, updated ? { ok: true, task: updated } : { error: 'Task not found' });
+    } else {
+      const task = saveRecruitmentOnboardingTask(body);
+      sendJson(res, 200, { ok: true, task });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/integrations/voice-config' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req)) as { integration: string; values: Record<string, string> };
+    const envMap: Record<string, string> = {};
+    if (body.integration === 'vapi') {
+      if (body.values.privateKey) envMap.VAPI_PRIVATE_KEY = body.values.privateKey;
+      if (body.values.publicKey) envMap.VAPI_PUBLIC_KEY = body.values.publicKey;
+      if (body.values.phoneNumberId) envMap.VAPI_PHONE_NUMBER_ID = body.values.phoneNumberId;
+      if (body.values.serverSecret) envMap.VAPI_SERVER_SECRET = body.values.serverSecret;
+      if (body.values.region) envMap.VAPI_REGION = body.values.region;
+    } else if (body.integration === 'elevenlabs') {
+      if (body.values.apiKey) envMap.ELEVENLABS_API_KEY = body.values.apiKey;
+      if (body.values.voiceId) {
+        envMap.ELEVENLABS_VOICE_ID = body.values.voiceId;
+        envMap.VAPI_ELEVENLABS_VOICE_ID = body.values.voiceId;
+      }
+      if (body.values.modelId) envMap.ELEVENLABS_MODEL_ID = body.values.modelId;
+    }
+    for (const [k, v] of Object.entries(envMap)) {
+      process.env[k] = v;
+    }
+    sendJson(res, 200, { ok: true, keysSet: Object.keys(envMap) });
+    return true;
+  }
+
+  if (pathname === '/api/integrations/voice-config' && req.method === 'GET') {
+    const mask = (v?: string | null) => (v && v.trim() ? `${v.trim().slice(0, 4)}…${v.trim().slice(-4)}` : null);
+    sendJson(res, 200, {
+      vapi: {
+        configured: Boolean(process.env.VAPI_PRIVATE_KEY || process.env.VAPI_API_KEY),
+        privateKey: mask(process.env.VAPI_PRIVATE_KEY || process.env.VAPI_API_KEY),
+        publicKey: mask(process.env.VAPI_PUBLIC_KEY),
+        phoneNumberId: mask(process.env.VAPI_PHONE_NUMBER_ID),
+        serverSecret: Boolean(process.env.VAPI_SERVER_SECRET),
+        region: process.env.VAPI_REGION || 'eu',
+        webhookUrl: process.env.VAPI_WEBHOOK_BASE_URL || process.env.WEBHOOK_BASE_URL || '',
+      },
+      elevenlabs: {
+        configured: Boolean(process.env.ELEVENLABS_API_KEY || process.env.VAPI_ELEVENLABS_VOICE_ID || process.env.ELEVENLABS_VOICE_ID),
+        apiKey: mask(process.env.ELEVENLABS_API_KEY),
+        voiceId: process.env.VAPI_ELEVENLABS_VOICE_ID || process.env.ELEVENLABS_VOICE_ID || '',
+        modelId: process.env.ELEVENLABS_MODEL_ID || '',
+      },
+      openai: {
+        configured: Boolean(process.env.OPENAI_API_KEY),
+        apiKey: mask(process.env.OPENAI_API_KEY),
+      },
+      sip: {
+        username: process.env.SOHO66_SIP_USERNAME || '',
+        domain: process.env.SOHO66_SIP_DOMAIN || 'sbc.soho66.co.uk',
+        did: process.env.SOHO66_FROM_NUMBER || '',
+        bridgeUrl: process.env.SOHO66_SIP_BRIDGE_URL || '',
+        hasPassword: Boolean(process.env.SOHO66_SIP_PASSWORD),
+      },
+    });
+    return true;
+  }
+
+  if (pathname === '/api/campaigns/upload' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req)) as {
+      csv?: string;
+      rows?: Array<{ name?: string; phone?: string; notes?: string; customerId?: string }>;
+      template?: string;
+      brief?: string;
+      dryRun?: boolean;
+    };
+    try {
+      const { parseCampaignCsv, queueCsvCampaign } = await import('./outbound-campaigns');
+      const rows = Array.isArray(body.rows) && body.rows.length
+        ? body.rows.map((r) => ({
+            name: String(r.name ?? 'Guest'),
+            phone: String(r.phone ?? ''),
+            notes: r.notes != null ? String(r.notes) : undefined,
+            customerId: r.customerId != null ? String(r.customerId) : undefined,
+          }))
+        : parseCampaignCsv(String(body.csv ?? ''));
+      const result = queueCsvCampaign({
+        rows,
+        template: body.template,
+        brief: body.brief,
+        dryRun: body.dryRun === true,
+      });
+      sendJson(res, 200, { success: true, ...result });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : 'Campaign upload failed' });
+    }
+    return true;
+  }
+
   return false;
 }

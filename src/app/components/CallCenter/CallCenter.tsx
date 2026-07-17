@@ -954,6 +954,7 @@ export default function CallCenter() {
                         </div>
                       </div>
                       <Badge className="shrink-0">{call.status.replace(/_/g, ' ')}</Badge>
+                    </div>
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       <LiveCallSpeakerButton listenUrl={call.listenUrl} />
                       {customerId ? (
