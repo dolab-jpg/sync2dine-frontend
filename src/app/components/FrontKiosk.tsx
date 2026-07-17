@@ -29,14 +29,28 @@ export default function FrontKiosk() {
         <div className="grid flex-1 place-items-center py-6">
           {/* Portrait: stacked. Landscape tablet: avatar left, controls right. */}
           <div className="grid w-full max-w-3xl gap-6 rounded-[2rem] bg-white/88 p-6 shadow-2xl shadow-s2d-teal-ink/20 sm:p-8 landscape:lg:max-w-5xl landscape:lg:grid-cols-2 landscape:lg:items-center">
-            <div className="mx-auto flex aspect-square w-full max-h-[46vh] max-w-[46vh] items-center justify-center rounded-full bg-gradient-to-br from-s2d-teal-deep via-s2d-teal to-s2d-gold p-5 shadow-inner landscape:lg:max-h-[60vh] landscape:lg:max-w-full">
-              <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-s2d-teal-deep text-center text-white">
-                <Sparkles className={`mb-4 h-14 w-14 ${active ? 'animate-pulse text-s2d-gold-soft' : 'text-s2d-gold'}`} />
-                <p className="text-5xl font-black tracking-tight sm:text-6xl">Lizzie</p>
-                <p className="mt-3 max-w-xs text-lg text-s2d-cream">
-                  {active ? 'Listening for your order' : 'Tap to speak to the Sync2Dine avatar'}
-                </p>
+            <div className="mx-auto flex w-full max-w-[46vh] flex-col items-center landscape:lg:max-w-full">
+              <div
+                className={`relative mx-auto aspect-square w-full max-h-[40vh] max-w-[40vh] overflow-hidden rounded-full bg-gradient-to-br from-s2d-teal-deep via-s2d-teal to-s2d-gold p-1.5 shadow-inner landscape:lg:max-h-[52vh] ${
+                  active ? 'ring-4 ring-s2d-gold ring-offset-4 ring-offset-transparent' : ''
+                }`}
+              >
+                <img
+                  src="/lizzie-avatar.png"
+                  alt="Lizzie, your Sync2Dine host"
+                  className="h-full w-full rounded-full object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+                {active && (
+                  <span className="absolute bottom-3 right-3 flex h-6 w-6 items-center justify-center rounded-full bg-s2d-gold shadow-lg">
+                    <Sparkles className="h-4 w-4 animate-pulse text-s2d-teal-deep" />
+                  </span>
+                )}
               </div>
+              <p className="mt-4 text-4xl font-black tracking-tight text-s2d-teal-deep sm:text-5xl">Lizzie</p>
+              <p className="mt-1 max-w-xs text-center text-lg text-slate-700">
+                {active ? 'Listening for your order' : 'Tap to speak to the Sync2Dine avatar'}
+              </p>
             </div>
 
             <div>

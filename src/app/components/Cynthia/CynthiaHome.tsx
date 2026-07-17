@@ -48,7 +48,7 @@ type LocalBubble =
 const CYNTHIA_AVATAR_SRC = '/cynthia-avatar.png';
 
 function cynthiaName(): string {
-  return integrationService.getConfig('whatsapp').cyrusDisplayName || 'Cynthia';
+  return integrationService.getConfig('whatsapp').cyrusDisplayName || 'Lizzie';
 }
 
 function CynthiaAvatar({
@@ -126,7 +126,7 @@ export default function CynthiaHome() {
     projectId: null,
     planningApplicationId: null,
     tradeId: null,
-    approvedBy: app?.user.name ?? 'Cynthia',
+    approvedBy: app?.user.name ?? 'Lizzie',
     role: agentContext.role,
     userId: app?.user.id,
     customerId: null,
@@ -310,7 +310,7 @@ export default function CynthiaHome() {
         setArtifact({ type: 'report', title, markdown: r.output.reportMarkdown });
       }
       if (r.action === 'sendToStaffCynthia' && r.executed) {
-        toast.success(r.summary || 'Sent to Cynthia chat', { duration: 2800 });
+        toast.success(r.summary || 'Sent to Lizzie chat', { duration: 2800 });
         void reloadThread();
       }
     }
@@ -514,7 +514,7 @@ export default function CynthiaHome() {
         {bubbles.length === 0 && !sending && (
           <div className="mx-auto max-w-sm rounded-2xl bg-white/90 p-4 text-center shadow-sm mt-8">
             <CynthiaAvatar name={name} sizeClass="h-14 w-14" className="mx-auto mb-2 ring-2 ring-emerald-600/20" />
-            <p className="text-sm font-semibold text-slate-900">Cynthia, I am here to help</p>
+            <p className="text-sm font-semibold text-slate-900">Lizzie, I am here to help</p>
             <p className="text-xs text-slate-600 mt-1">
               Share a note, speak, or paste details. I can quote, create PDFs &amp; reports, email, call, and push cards when you&apos;re on the phone.
             </p>
@@ -740,8 +740,8 @@ export default function CynthiaHome() {
                   ? 'bg-red-100 text-red-600'
                   : 'text-slate-500 hover:bg-slate-200/70 hover:text-slate-700'
               }`}
-              title={vapiActive ? 'End Cynthia voice' : 'Talk to Cynthia (same phone voice)'}
-              aria-label={vapiActive ? 'End Cynthia voice' : 'Talk to Cynthia'}
+              title={vapiActive ? 'End Lizzie voice' : 'Talk to Lizzie (same phone voice)'}
+              aria-label={vapiActive ? 'End Lizzie voice' : 'Talk to Cynthia'}
               onClick={() => { void toggleVapi(); }}
             >
               {vapiStatus === 'connecting' ? (
