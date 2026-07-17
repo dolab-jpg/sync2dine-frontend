@@ -13,8 +13,8 @@
 
 ## Repos / deploy
 
-- Frontend: `sync2dine-frontend` → `origin/master` → build + `scripts/deploy-spa.sh` → docroot `…/app.sync2dine.io/`
-- Backend: `sync2dine-backend` → rsync `server/` + restart Node on port **3011** (`…/sync2dine-backend`)
+- Frontend: `sync2dine-frontend` `@ cd037c8` → `origin/master` → build + `scripts/deploy-spa.sh` → docroot `…/app.sync2dine.io/` (bundle `index-BaNBGGFg.js`)
+- Backend: `sync2dine-backend` `@ cc06bdd` → VPS `…/sync2dine-backend` Node on port **3011**
 
 ## Verify
 
