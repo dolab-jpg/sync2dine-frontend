@@ -82,18 +82,20 @@ find "$DOCROOT" -type f -exec chmod 644 {} +
 restorecon -Rv "$DOCROOT" >/dev/null 2>&1 || true
 
 echo "== Local smoke test =="
-HEADERS=$(curl -sI --max-time 10 -H "Host: app.sync2dine.io" http://127.0.0.1/ | head -5 || true)
+# Prefer public HTTPS — Host-header curl to 127.0.0.1 can fail on this Plesk box.
+SMOKE_BASE="${SMOKE_BASE_URL:-https://app.sync2dine.io}"
+HEADERS=$(curl -sI --max-time 15 "$SMOKE_BASE/" | head -5 || true)
 echo "$HEADERS"
-TITLE=$(curl -s --max-time 10 -H "Host: app.sync2dine.io" http://127.0.0.1/ | grep -oiE '<title>[^<]+</title>' | head -1 || true)
+TITLE=$(curl -s --max-time 15 "$SMOKE_BASE/" | grep -oiE '<title>[^<]+</title>' | head -1 || true)
 echo "Title: ${TITLE:-unknown}"
-ASSET=$(curl -sI --max-time 10 -H "Host: app.sync2dine.io" "http://127.0.0.1/assets/" | head -1 || true)
+ASSET=$(curl -sI --max-time 15 "$SMOKE_BASE/assets/" | head -1 || true)
 echo "Assets probe: $ASSET"
 JS_BASE=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' "$DOCROOT/index.html" | head -1 | xargs -n1 basename 2>/dev/null || true)
 if [ -z "$JS_BASE" ]; then
   JS_BASE=$(find "$DOCROOT/assets" -name 'index-*.js' -printf '%f\n' 2>/dev/null | head -1 || true)
 fi
 if [ -n "$JS_BASE" ]; then
-  CODE=$(curl -sI --max-time 10 -H "Host: app.sync2dine.io" "http://127.0.0.1/assets/$JS_BASE" | head -1 || true)
+  CODE=$(curl -sI --max-time 15 "$SMOKE_BASE/assets/$JS_BASE" | head -1 || true)
   echo "JS probe ($JS_BASE): $CODE"
   if ! echo "$CODE" | grep -q '200'; then
     echo "ERROR: JS asset not publicly readable — check directory modes (need 755 on assets/)"
