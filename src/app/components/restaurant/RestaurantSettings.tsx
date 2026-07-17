@@ -117,14 +117,8 @@ export default function RestaurantSettings() {
       }
       setPrefixDraft('');
       toast.success('Saved — the phone agent will use this on the next call');
-      // #region agent log
-      fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'342d7b'},body:JSON.stringify({sessionId:'342d7b',runId:'pre-fix',hypothesisId:'E',location:'RestaurantSettings.tsx:save',message:'settings saved',data:{ok:true,prefixCount:prefixes.length,prefixes:prefixes.slice(0,8),notesLen:deliveryNotes.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     } catch {
       toast.error('Save failed');
-      // #region agent log
-      fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'342d7b'},body:JSON.stringify({sessionId:'342d7b',runId:'pre-fix',hypothesisId:'E',location:'RestaurantSettings.tsx:save',message:'settings save failed',data:{ok:false},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     } finally {
       setSaving(false);
     }

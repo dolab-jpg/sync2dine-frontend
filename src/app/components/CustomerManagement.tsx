@@ -99,9 +99,6 @@ export default function CustomerManagement() {
       updateCustomer(editingCustomer.id, formData);
       toast.success('Customer updated successfully');
       setIsAddDialogOpen(false);
-      // #region agent log
-      fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'342d7b'},body:JSON.stringify({sessionId:'342d7b',runId:'pre-fix',hypothesisId:'A',location:'CustomerManagement.tsx:update',message:'customer special saved in UI',data:{customerId:editingCustomer.id,specialNameLen:(formData.specialName||'').length,dealNoteLen:(formData.specialDealNote||'').length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       resetForm();
       return;
     }

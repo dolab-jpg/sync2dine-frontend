@@ -866,6 +866,14 @@ export default function App() {
   }, [quotes]);
 
   // CRUD operations
+  const mirrorCustomerToPhoneBackend = (customer: Customer) => {
+    void fetch('/api/customers/upsert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer }),
+    }).catch(() => {});
+  };
+
   const addCustomer = (customer: Omit<Customer, 'id' | 'createdAt'>) => {
     const newCustomer = {
       ...customer,
@@ -894,6 +902,7 @@ export default function App() {
       }
       return next;
     });
+    mirrorCustomerToPhoneBackend(newCustomer);
     return newCustomer;
   };
 
@@ -903,14 +912,21 @@ export default function App() {
       if (idx >= 0) {
         const next = [...prev];
         next[idx] = { ...next[idx], ...customer };
+        mirrorCustomerToPhoneBackend(next[idx]);
         return next;
       }
+      mirrorCustomerToPhoneBackend(customer);
       return [...prev, customer];
     });
   };
 
   const updateCustomer = (id: string, updates: Partial<Customer>) => {
-    setCustomers(customers.map(c => c.id === id ? { ...c, ...updates } : c));
+    setCustomers((prev) => {
+      const next = prev.map((c) => (c.id === id ? { ...c, ...updates } : c));
+      const updated = next.find((c) => c.id === id);
+      if (updated) mirrorCustomerToPhoneBackend(updated);
+      return next;
+    });
   };
 
   const deleteCustomer = (id: string) => {
