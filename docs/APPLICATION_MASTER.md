@@ -89,7 +89,7 @@ flowchart LR
 
 **Ship note (2026-07-16 Ghost active calls — AUDITED):** LIVE on `tradepro-api` `@ 6271370`. Call Centre **Live Call Status** is **not** live SIP presence — it lists open `calls` rows with `status` `ringing` | `in_progress` from `GET /api/agent/status` (`getAgentStatusSnapshot`). Missed Vapi end-of-call left multi-hour “On call…” cards (debug: 4 ghosts, `elapsedSec` 46k–446k). Fix: `expireStaleOpenCalls()` closes open rows older than **45 minutes** (`outcome: stale_timeout`, env `STALE_OPEN_CALL_MAX_MS`); also applied to lines `onCall`. Vapi hang/EOC/status-update expanded to always force `completed` + `endedAt`. Re-probe: `activeCalls: []`. See §16.7 / §16.10.
 
-**Ship note (2026-07-17 Sync2Dine meal deals + dense delivery board — PRODUCTION):** LIVE on **https://app.sync2dine.io** (SPA `189bb3e` + API `6afa2a9`). Menu specials store `data.deal` (main/side/drink choices); Lizzie `placeFoodOrder` expands e.g. 3× Mile a Meal → ~9 kitchen lines; delivery board shows all lines compactly with deal hint. Demo: Huge Party Delivery tickets. See [MEAL_DEALS.md](./MEAL_DEALS.md).
+**Ship note (2026-07-17 Sync2Dine meal deals + dense delivery board — PRODUCTION):** LIVE on **https://app.sync2dine.io** (SPA `@ 189bb3e` / docs `@ 180bdf6`, bundle `index-BaNBGGFg.js`; API `@ cc06bdd`). Menu specials store `data.deal` (main/side/drink choices); Lizzie `placeFoodOrder` expands e.g. 3× Mile a Meal → ~9 kitchen lines; delivery board shows all lines compactly with deal hint. Demo: Huge Party Delivery tickets. See [MEAL_DEALS.md](./MEAL_DEALS.md).
 
 **DO_NOT_SHIP:** `.cursor/local/*.py`, `debug-login.png`, `playwright-report/`, `test-results/`, backend `server/data/*`, `_patch_*.cjs`, `_tmp_*.cjs`, `tmp-aria-lizzie.mp3`.
 
