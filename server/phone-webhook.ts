@@ -521,6 +521,57 @@ export async function handleOutboundCallApi(req: IncomingMessage, res: ServerRes
   sendJson(res, 200, { success: true, jobId: job.id, scheduled: true, status: 'queued' });
 }
 
+export async function handleOutboundBulkApi(req: IncomingMessage, res: ServerResponse) {
+  const body = JSON.parse(await readBody(req)) as {
+    rows?: Array<{ company?: string; name?: string; phone?: string; customerId?: string }>;
+    template?: string;
+    batchId?: string;
+    brief?: string;
+  };
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  if (!rows.length) {
+    sendJson(res, 400, { error: 'rows array is required' });
+    return;
+  }
+  const template = String(body.template ?? 'lead_callback');
+  const batchId = String(body.batchId ?? `sales-csv-${new Date().toISOString().slice(0, 10)}`);
+  const defaultBrief = String(body.brief ?? 'Sales outreach — introduce Sync2Dine takeaway phone platform.');
+  const { enqueueOutboundCall } = await import('./data-store');
+  const jobs: Array<Record<string, unknown>> = [];
+  const skipped: string[] = [];
+
+  for (const row of rows) {
+    const phone = String(row.phone ?? '').trim();
+    const company = String(row.company ?? row.name ?? '').trim();
+    if (!phone) {
+      skipped.push('missing phone');
+      continue;
+    }
+    const job = enqueueOutboundCall({
+      to: phone,
+      template,
+      status: 'queued',
+      context: {
+        customerId: row.customerId,
+        company,
+        aim: 'sales_outreach',
+        brief: company ? `${defaultBrief} Company: ${company}.` : defaultBrief,
+        source: 'sales_csv_dial',
+        batchId,
+      },
+    });
+    jobs.push(job);
+  }
+
+  sendJson(res, 200, {
+    success: true,
+    queued: jobs.length,
+    skipped: skipped.length,
+    batchId,
+    jobs: jobs.slice(0, 50),
+  });
+}
+
 export async function handleCallsListApi(req: IncomingMessage, res: ServerResponse, url?: URL) {
   const store = getDataStore();
   const limit = Math.min(Number(url?.searchParams.get('limit') ?? 100), 100);
@@ -609,6 +660,10 @@ export async function handlePhoneRoutes(
   }
   if (pathname === '/api/calls/outbound' && req.method === 'POST') {
     await handleOutboundCallApi(req, res);
+    return true;
+  }
+  if (pathname === '/api/calls/outbound/bulk' && req.method === 'POST') {
+    await handleOutboundBulkApi(req, res);
     return true;
   }
   if (pathname === '/api/calls' && req.method === 'GET') {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { getDataStore, syncData } from '../data-store';
+import { getDataStore, syncData, saveRecruitmentCandidate, saveRecruitmentApplication } from '../data-store';
 import { handleCyrusViaOrchestrator } from '../cyrus-orchestrator';
 import { runLeadEmailAgent } from './leadEmailAgent';
 import type { CachedEmailMessage } from './types';
@@ -53,6 +53,53 @@ function appendProjectMessage(projectId: string, msg: Record<string, unknown>): 
   syncData(store);
 }
 
+const JOB_APPLICATION_PATTERNS = /\b(apply|applying|application|applicant|CV|curriculum\s*vitae|résumé|resume|job\s*(?:opening|posting|position|role|vacancy)|cover\s*letter|hire|hiring|work\s*(?:with|for|at)\s*(?:you|your)|interested\s*in\s*(?:the|a|your)\s*(?:role|position|job))\b/i;
+
+function looksLikeJobApplication(subject: string, body: string): boolean {
+  const combined = `${subject} ${body}`.slice(0, 4000);
+  const matches = combined.match(JOB_APPLICATION_PATTERNS);
+  return (matches?.length ?? 0) >= 1;
+}
+
+function tryRouteToRecruitment(message: CachedEmailMessage, orgId: string): boolean {
+  const subject = message.subject ?? '';
+  const body = message.textBody ?? message.snippet ?? '';
+  if (!looksLikeJobApplication(subject, body)) return false;
+
+  const fromName = message.fromName || message.fromAddr.split('@')[0] || 'Applicant';
+  const phoneMatch = body.match(/(?:\+44|0)\d[\d\s()-]{8,14}\d/);
+  const emailMatch = message.fromAddr;
+
+  const candidate = saveRecruitmentCandidate({
+    name: fromName,
+    email: emailMatch,
+    phone: phoneMatch?.[0]?.replace(/\s/g, '') ?? '',
+    source: 'email',
+    desiredRole: subject.slice(0, 120),
+    notes: `Auto-detected job application email: ${subject}`,
+  });
+
+  const store = getDataStore(orgId);
+  const openJob = store.recruitmentJobs.find(
+    (j) => String(j.status) === 'open',
+  );
+  if (openJob) {
+    saveRecruitmentApplication({
+      candidateId: String(candidate.id),
+      jobId: String(openJob.id),
+      stage: 'applied',
+      appliedDate: new Date().toISOString().slice(0, 10),
+      stageDate: new Date().toISOString().slice(0, 10),
+      notes: [`Auto-matched from email: ${subject}`],
+      feedback: '',
+      rating: 0,
+    });
+  }
+
+  console.log(`[commsEventBus] Routed email to recruitment pipeline: ${fromName} <${emailMatch}>`);
+  return true;
+}
+
 export async function processInboundEmail(message: CachedEmailMessage, orgId = 'default'): Promise<void> {
   const conn = getConnection(message.connectionId);
   const resolved = resolveContactByEmail(message.fromAddr);
@@ -74,6 +121,7 @@ export async function processInboundEmail(message: CachedEmailMessage, orgId = '
   }
 
   if (!resolved.customerId) {
+    if (tryRouteToRecruitment(message, orgId)) return;
     try {
       await runLeadEmailAgent(message, orgId);
     } catch (err) {

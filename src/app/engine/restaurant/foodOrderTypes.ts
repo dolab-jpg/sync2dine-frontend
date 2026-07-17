@@ -68,6 +68,7 @@ export type FoodOrder = {
   sourceCallId?: string;
   callId?: string;
   recordingUrl?: string;
+  listenUrl?: string;
   callIds?: string[];
 };
 

@@ -1,14 +1,19 @@
 import {
   appendCustomerCallActivity,
   appendProjectMessageRecord,
+  completeOnboardingTaskByCategory,
   enqueueOutboundCall,
+  getCallById,
   getDataStore,
   getRequestOrgId,
   lookupContactByPhone,
   normalizePhoneExport,
+  resolveCandidateByPhone,
   saveCall,
   saveCustomerRecord,
+  saveOrderRecord,
   saveQuoteRecord,
+  saveRecruitmentApplication,
   saveRecruitmentCandidate,
   saveRecruitmentInterview,
   syncData,
@@ -21,6 +26,16 @@ import { formatSpokenGbp } from './spoken-money';
 import { resolvePhoneCallerIdentity } from './phone-auth';
 import { ensureEnglishForCustomerSend } from './outbound-english-guard';
 import { resolveTransferDestination, resolveTransferNumber } from './transfer-numbers';
+import { expandMealDealOrderItems, listMenuItemsForOrg, type OrderLineInput } from './menu-catalog';
+import { allergenSafetyHint, customerAllergenConflict } from './allergens';
+import {
+  cancelReservation,
+  checkTableAvailability,
+  createReservation,
+  listReservations,
+  updateReservation,
+} from './reservations-store';
+import { executeRestaurantTool, RESTAURANT_TOOL_NAMES } from './restaurant-ai-tools';
 
 function firstString(...values: unknown[]): string | undefined {
   for (const value of values) {
@@ -325,6 +340,22 @@ export const PHONE_TOOLS = [
   {
     type: 'function' as const,
     function: {
+      name: 'completeOnboardingTask',
+      description: 'Tick off an onboarding task for a hired candidate by category (documentation, training, equipment, access, orientation)',
+      parameters: {
+        type: 'object',
+        properties: {
+          candidateId: { type: 'string' },
+          candidateName: { type: 'string' },
+          category: { type: 'string', enum: ['documentation', 'training', 'equipment', 'access', 'orientation'] },
+        },
+        required: ['category'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'transferToHuman',
       description:
         'Warm-transfer the live call to a human: put the caller on hold, dial staff, brief them, then connect. Use takeMessage if they only want a message.',
@@ -455,6 +486,181 @@ export const PHONE_TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'getMenu',
+      description:
+        'Return the restaurant menu for Sync2Dine takeaway ordering (categories, item names, prices, UK 14 allergen contains/may-contain). Use before placing a food order.',
+      parameters: {
+        type: 'object',
+        properties: {
+          category: { type: 'string', description: 'Optional menu category filter e.g. mains, sides, drinks' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'checkDeliveryArea',
+      description:
+        'Check whether a UK postcode is inside the restaurant delivery area (configured postcode prefixes). Call before placeFoodOrder when orderType is delivery.',
+      parameters: {
+        type: 'object',
+        properties: {
+          postcode: { type: 'string', description: 'Full or partial UK postcode from the caller' },
+        },
+        required: ['postcode'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'getDeliveryAreas',
+      description:
+        'List the postcode beginnings this restaurant delivers to, plus any delivery fee / minimum notes. Use when the caller asks where you deliver.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'placeFoodOrder',
+      description:
+        'Place a takeaway food order for collection, delivery, or table. Confirm items and total with the caller before calling. For delivery, pass postcode (and address) after checkDeliveryArea succeeds. For meal deals (getMenu items with a deal object), pass qty plus dealChoices — one object per unit with main/side/drink (or whatever roles the deal lists). The kitchen receives expanded component lines.',
+      parameters: {
+        type: 'object',
+        properties: {
+          customerName: { type: 'string' },
+          customerPhone: { type: 'string' },
+          orderType: { type: 'string', enum: ['collection', 'delivery', 'table'] },
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                qty: { type: 'number' },
+                price: { type: 'number' },
+                dealChoices: {
+                  type: 'array',
+                  description:
+                    'Required for meal deals: one entry per qty unit. Each entry maps role → chosen dish name (e.g. {main, side, drink}).',
+                  items: {
+                    type: 'object',
+                    additionalProperties: { type: 'string' },
+                  },
+                },
+              },
+              required: ['name'],
+            },
+          },
+          total: { type: 'number' },
+          deliveryAddress: { type: 'string' },
+          postcode: { type: 'string', description: 'UK postcode required for delivery orders' },
+          specialName: {
+            type: 'string',
+            description: 'Named customer special applied on this order (from their CRM specialName)',
+          },
+          notes: { type: 'string' },
+          customerAllergies: {
+            type: 'string',
+            description: 'Spoken allergy summary e.g. peanuts, sesame — ask once before placing',
+          },
+          allergyConfirmed: {
+            type: 'boolean',
+            description: 'True after you asked about allergies (even if none)',
+          },
+          paymentStatus: { type: 'string', enum: ['unpaid', 'cash', 'card'] },
+        },
+        required: ['items'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'checkTableAvailability',
+      description: 'Check table availability for a party size at a date/time. Use when caller wants to book a table.',
+      parameters: {
+        type: 'object',
+        properties: {
+          startsAt: { type: 'string', description: 'ISO datetime or spoken slot converted e.g. 2026-07-17T19:00:00Z' },
+          partySize: { type: 'number' },
+        },
+        required: ['startsAt', 'partySize'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'bookTable',
+      description: 'Book a table reservation after confirming party size and time. Links this phone call automatically.',
+      parameters: {
+        type: 'object',
+        properties: {
+          startsAt: { type: 'string' },
+          partySize: { type: 'number' },
+          customerName: { type: 'string' },
+          customerPhone: { type: 'string' },
+          notes: { type: 'string' },
+        },
+        required: ['startsAt', 'partySize'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'updateReservation',
+      description: 'Change an existing table reservation (time, party size, notes). Lookup by reservationId or customer phone.',
+      parameters: {
+        type: 'object',
+        properties: {
+          reservationId: { type: 'string' },
+          customerPhone: { type: 'string' },
+          startsAt: { type: 'string' },
+          partySize: { type: 'number' },
+          notes: { type: 'string' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'cancelReservation',
+      description: 'Cancel a table reservation by id or customer phone for upcoming bookings.',
+      parameters: {
+        type: 'object',
+        properties: {
+          reservationId: { type: 'string' },
+          customerPhone: { type: 'string' },
+          reason: { type: 'string' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'listReservations',
+      description: 'List reservations for a day or phone number (staff/agent lookup).',
+      parameters: {
+        type: 'object',
+        properties: {
+          day: { type: 'string', description: 'YYYY-MM-DD' },
+          phone: { type: 'string' },
+        },
+      },
+    },
+  },
 ];
 
 export const PHONE_AUTO_ACTIONS = new Set([
@@ -465,6 +671,7 @@ export const PHONE_AUTO_ACTIONS = new Set([
   'screenCandidate',
   'bookInterview',
   'logCandidate',
+  'completeOnboardingTask',
   'transferToHuman',
   'enqueueOutboundCall',
   'placeOutboundCall',
@@ -475,6 +682,20 @@ export const PHONE_AUTO_ACTIONS = new Set([
   'saveCustomer',
   'saveQuote',
   'sendCustomerMessage',
+  'getMenu',
+  'placeFoodOrder',
+  'checkDeliveryArea',
+  'getDeliveryAreas',
+  'checkTableAvailability',
+  'bookTable',
+  'updateReservation',
+  'cancelReservation',
+  'listReservations',
+  'upsertMenuItem',
+  'deleteMenuItem',
+  'listOrders',
+  'markOrderPaid',
+  'updateOrderStatus',
 ]);
 
 export async function executePhoneTool(
@@ -482,6 +703,9 @@ export async function executePhoneTool(
   input: Record<string, unknown>,
   body: OrchestratorRequest,
 ): Promise<Record<string, unknown>> {
+  if (RESTAURANT_TOOL_NAMES.has(name) && name !== 'getMenu') {
+    return executeRestaurantTool(name, input, body);
+  }
   const callId = firstString(body.callContext?.callId);
   const callerPhone = firstString(input.phone, body.callContext?.from, body.customerContext?.phone);
 
@@ -589,7 +813,7 @@ export async function executePhoneTool(
       const found = lookupContactByPhone(custPhone);
       if (found.found && found.customerId) {
         resolvedId = found.customerId;
-        customerName = found.customerName || customerName;
+        customerName = found.name || customerName;
       }
     }
     if (custPhone && !isStaffPartyPhone(custPhone) && !resolvedId) {
@@ -753,6 +977,19 @@ export async function executePhoneTool(
     if (callId) {
       saveCall({ id: callId, candidateId: candidate.id, intent: 'recruitment' });
     }
+    const jobId = firstString(input.jobId);
+    if (jobId) {
+      saveRecruitmentApplication({
+        candidateId: candidate.id,
+        jobId,
+        stage: 'screening',
+        appliedDate: new Date().toISOString().slice(0, 10),
+        stageDate: new Date().toISOString().slice(0, 10),
+        notes: ['Phone screening by Cynthia'],
+        feedback: '',
+        rating: 0,
+      });
+    }
     return { candidateId: candidate.id, name: candidate.name, screened: true };
   }
 
@@ -766,7 +1003,51 @@ export async function executePhoneTool(
       source: input.source ?? 'phone',
       notes: input.notes ?? '',
     });
+    const role = firstString(input.desiredRole) ?? '';
+    if (role) {
+      const store = getDataStore();
+      const matchJob = store.recruitmentJobs.find(
+        j => String(j.status) === 'open' && String(j.title ?? '').toLowerCase().includes(role.toLowerCase()),
+      );
+      if (matchJob) {
+        saveRecruitmentApplication({
+          candidateId: candidate.id,
+          jobId: String(matchJob.id),
+          stage: 'applied',
+          appliedDate: new Date().toISOString().slice(0, 10),
+          stageDate: new Date().toISOString().slice(0, 10),
+          notes: [`Auto-matched via logCandidate (${input.source ?? 'phone'})`],
+          feedback: '',
+          rating: 0,
+        });
+      }
+    }
     return { candidateId: candidate.id, name: candidate.name, saved: true };
+  }
+
+  if (name === 'completeOnboardingTask') {
+    const category = firstString(input.category) ?? '';
+    if (!category) {
+      return { ok: false, error: 'category_required', spokenHint: 'Which onboarding category: documentation, training, equipment, access, or orientation?' };
+    }
+    let candidateId = firstString(input.candidateId);
+    if (!candidateId && callerPhone) {
+      const resolved = resolveCandidateByPhone(callerPhone);
+      candidateId = resolved.candidateId ?? undefined;
+    }
+    if (!candidateId) {
+      return { ok: false, error: 'candidate_not_found', spokenHint: 'I could not match you to a hired candidate.' };
+    }
+    const updated = completeOnboardingTaskByCategory(candidateId, category);
+    if (!updated) {
+      return { ok: false, error: 'task_not_found', spokenHint: `No pending ${category} task found for that candidate.` };
+    }
+    return {
+      ok: true,
+      taskId: updated.id,
+      category,
+      spokenHint: `Done — ${category} onboarding task marked complete.`,
+    };
   }
 
   if (name === 'bookInterview') {
@@ -1101,6 +1382,532 @@ export async function executePhoneTool(
             : "Done — I've put that in your Cynthia chat."
         : 'I could not complete that follow-up fully — check the details in Cynthia.',
       error: ok ? undefined : 'One or more follow-up actions failed',
+    };
+  }
+
+  if (name === 'getMenu') {
+    const store = getDataStore();
+    const aboutUs = store.agentSettings?.aboutUs?.trim();
+    const sayToday = store.agentSettings?.sayToday?.trim();
+    const category = firstString(input.category)?.toLowerCase();
+    const menu = await listMenuItemsForOrg(firstString(body.orgId) ?? getRequestOrgId(), category);
+    if (!menu.length) {
+      return {
+        ok: true,
+        menu: [],
+        aboutUs: aboutUs || undefined,
+        sayToday: sayToday || undefined,
+        spokenHint: category
+          ? `We don't have anything under ${category} on the menu right now.`
+          : 'The menu is not set up yet — the team can add dishes from the Menu tab. I can still take a message or a callback.',
+      };
+    }
+    return {
+      ok: true,
+      menu: menu.map(({
+        category: cat,
+        name: itemName,
+        price,
+        description,
+        deal,
+        allergensContains,
+        allergensMayContain,
+        dietary,
+        allergenNotes,
+        allergenDeclared,
+      }) => ({
+        category: cat,
+        name: itemName,
+        price,
+        ...(description ? { description } : {}),
+        allergensContains,
+        allergensMayContain,
+        ...(dietary?.length ? { dietary } : {}),
+        ...(allergenNotes ? { allergenNotes } : {}),
+        ...(allergenDeclared ? { allergenDeclared: true } : {}),
+        ...(deal
+          ? {
+              deal: {
+                roles: deal.roles.map((r) => ({
+                  role: r.role,
+                  qtyPerDeal: r.qtyPerDeal,
+                  choices: r.choices,
+                })),
+              },
+            }
+          : {}),
+      })),
+      aboutUs: aboutUs || undefined,
+      sayToday: sayToday || undefined,
+      spokenHint: sayToday
+        ? `Today: ${sayToday}. I can read the menu or take your order.`
+        : 'I can read the menu or take your order whenever you are ready.',
+    };
+  }
+
+  if (name === 'getDeliveryAreas') {
+    const { normalizeDeliveryPrefixes } = await import('./delivery-areas');
+    const settings = getDataStore().agentSettings;
+    const prefixes = normalizeDeliveryPrefixes(settings?.deliveryPostcodePrefixes);
+    const notes = settings?.deliveryNotes?.trim() || '';
+    if (!prefixes.length) {
+      return {
+        ok: true,
+        prefixes: [],
+        deliveryNotes: notes || undefined,
+        spokenHint: notes
+          ? `We have not set delivery postcodes in the app yet. ${notes}`
+          : 'We have not set delivery postcodes in the app yet — I can offer collection, or take a message for the team.',
+      };
+    }
+    const spokenPrefixes = prefixes.join(', ');
+    return {
+      ok: true,
+      prefixes,
+      deliveryNotes: notes || undefined,
+      spokenHint: notes
+        ? `We deliver to postcodes starting ${spokenPrefixes}. ${notes}`
+        : `We deliver to postcodes starting ${spokenPrefixes}.`,
+    };
+  }
+
+  if (name === 'checkDeliveryArea') {
+    const { matchDeliveryPostcode, normalizeDeliveryPrefixes } = await import('./delivery-areas');
+    const settings = getDataStore().agentSettings;
+    const prefixes = normalizeDeliveryPrefixes(settings?.deliveryPostcodePrefixes);
+    const postcode = firstString(input.postcode) ?? '';
+    if (!postcode) {
+      return {
+        ok: false,
+        error: 'postcode_required',
+        spokenHint: 'I need the postcode to check if we deliver there.',
+      };
+    }
+    if (!prefixes.length) {
+      return {
+        ok: false,
+        error: 'delivery_areas_not_configured',
+        postcode,
+        spokenHint: 'Delivery areas are not set up in the app yet — shall I put this down for collection instead?',
+      };
+    }
+    const match = matchDeliveryPostcode(postcode, prefixes);
+    const notes = settings?.deliveryNotes?.trim() || '';
+    if (!match.ok) {
+      return {
+        ok: false,
+        inArea: false,
+        postcode: match.normalized || postcode,
+        prefixes,
+        spokenHint: 'We do not stretch that far for delivery yet — collection is a shout though, or I can take another postcode?',
+      };
+    }
+    return {
+      ok: true,
+      inArea: true,
+      postcode: match.normalized,
+      matchedPrefix: match.matchedPrefix,
+      deliveryNotes: notes || undefined,
+      spokenHint: notes
+        ? `Yes, we deliver to ${match.normalized}. ${notes}`
+        : `Yes, we deliver to ${match.normalized}.`,
+    };
+  }
+
+  if (name === 'placeFoodOrder') {
+    const rawItems = Array.isArray(input.items) ? input.items : [];
+    if (!rawItems.length) {
+      return { ok: false, error: 'items_required', spokenHint: 'Tell me what you would like to order first.' };
+    }
+    const orderType = firstString(input.orderType) ?? 'collection';
+    const postcode = firstString(input.postcode);
+    const streetAddress = firstString(input.deliveryAddress);
+
+    if (orderType === 'delivery') {
+      if (!postcode && !streetAddress) {
+        return {
+          ok: false,
+          error: 'delivery_address_required',
+          spokenHint: 'For delivery I need the street address and postcode first.',
+        };
+      }
+      if (!postcode) {
+        return {
+          ok: false,
+          error: 'postcode_required',
+          spokenHint: 'I just need the postcode so I can check we deliver there.',
+        };
+      }
+      const { matchDeliveryPostcode, normalizeDeliveryPrefixes } = await import('./delivery-areas');
+      const prefixes = normalizeDeliveryPrefixes(getDataStore().agentSettings?.deliveryPostcodePrefixes);
+      if (!prefixes.length) {
+        return {
+          ok: false,
+          error: 'delivery_areas_not_configured',
+          spokenHint: 'Delivery areas are not set up yet — shall I make this collection instead?',
+        };
+      }
+      const match = matchDeliveryPostcode(postcode, prefixes);
+      if (!match.ok) {
+        return {
+          ok: false,
+          error: 'out_of_delivery_area',
+          postcode: match.normalized || postcode,
+          spokenHint: 'We do not stretch that far for delivery yet — collection instead, or a different postcode?',
+        };
+      }
+    }
+
+    // Fill missing/zero prices from the live catalog so phone orders never total £0.
+    let catalog: Awaited<ReturnType<typeof listMenuItemsForOrg>> = [];
+    try {
+      catalog = await listMenuItemsForOrg(firstString(body.orgId) ?? getRequestOrgId());
+    } catch {
+      catalog = [];
+    }
+
+    const rawLines: OrderLineInput[] = rawItems.map((row) => {
+      const r = row as Record<string, unknown>;
+      const dealChoices = Array.isArray(r.dealChoices)
+        ? (r.dealChoices as Array<Record<string, unknown>>).map((unit) => {
+            const mapped: Record<string, string> = {};
+            for (const [k, v] of Object.entries(unit ?? {})) {
+              if (v != null && String(v).trim()) mapped[String(k).toLowerCase()] = String(v).trim();
+            }
+            return mapped;
+          })
+        : undefined;
+      return {
+        name: String(r.name ?? '').trim(),
+        qty: Number(r.qty ?? 1) || 1,
+        price: r.price != null ? Number(r.price) : undefined,
+        dealChoices,
+        dealName: r.dealName != null ? String(r.dealName) : undefined,
+        role: r.role != null ? String(r.role) : undefined,
+        dealIndex: r.dealIndex != null ? Number(r.dealIndex) : undefined,
+      };
+    });
+
+    const expanded = expandMealDealOrderItems(rawLines, catalog);
+    if (!expanded.ok) {
+      return {
+        ok: false,
+        error: expanded.error,
+        spokenHint: expanded.spokenHint,
+      };
+    }
+
+    const customerAllergies = firstString(input.customerAllergies) ?? '';
+    const allergyConfirmed = input.allergyConfirmed === true;
+    if (!allergyConfirmed) {
+      return {
+        ok: false,
+        error: 'allergy_check_required',
+        spokenHint: 'Before I place that — any allergies or intolerances we should know about?',
+      };
+    }
+
+    const allergenWarnings: string[] = [];
+    for (const line of expanded.items) {
+      const match = catalog.find((c) => c.name.toLowerCase() === String(line.name).toLowerCase());
+      if (!match) continue;
+      const safety = allergenSafetyHint(match);
+      if (safety) allergenWarnings.push(safety);
+      if (customerAllergies) {
+        const conflicts = customerAllergenConflict(customerAllergies, match.allergensContains ?? []);
+        if (conflicts.length) {
+          allergenWarnings.push(
+            `${match.name} contains ${conflicts.join(', ')} which matches the caller allergies — suggest alternatives or kitchen check.`,
+          );
+        }
+      }
+    }
+    if (allergenWarnings.length) {
+      return {
+        ok: false,
+        error: 'allergen_review_required',
+        allergenWarnings,
+        spokenHint: allergenWarnings[0],
+      };
+    }
+
+    // Price: meal deals charge the deal price × qty; components are kitchen lines.
+    let pricedTotal = 0;
+    for (const line of rawLines) {
+      if (!line.name) continue;
+      const qty = Math.max(1, Number(line.qty ?? 1) || 1);
+      const match = catalog.find((c) => c.name.toLowerCase() === line.name.toLowerCase());
+      if (match?.deal) {
+        pricedTotal += match.price * qty;
+      } else {
+        const unit = Number(line.price ?? match?.price ?? 0);
+        pricedTotal += (Number.isFinite(unit) ? unit : 0) * qty;
+      }
+    }
+    pricedTotal = Math.round(pricedTotal * 100) / 100;
+
+    const items = expanded.items.map((row) => {
+      const price = Number(row.price ?? 0);
+      const filled =
+        (!Number.isFinite(price) || price < 0) && row.name
+          ? catalog.find((c) => c.name.toLowerCase() === row.name.toLowerCase())?.price
+          : price;
+      return {
+        name: row.name,
+        qty: Math.max(1, Number(row.qty ?? 1) || 1),
+        price: Number.isFinite(Number(filled)) ? Number(filled) : 0,
+        ...(row.dealName ? { dealName: row.dealName } : {}),
+        ...(row.dealIndex != null ? { dealIndex: row.dealIndex } : {}),
+        ...(row.role ? { role: row.role } : {}),
+      };
+    });
+    const totalBeforeSpecial = Number.isFinite(Number(input.total)) && Number(input.total) > 0
+      ? Number(input.total)
+      : pricedTotal;
+    const phone = firstString(input.customerPhone, callerPhone) ?? '';
+    let customerId = firstString(input.customerId, body.customerContext?.customerId);
+    if (!customerId && phone) {
+      const found = lookupContactByPhone(phone);
+      if (found.found && found.customerId) customerId = found.customerId;
+    }
+    if (!customerId && phone) {
+      const { ensureGuestCustomerForCall } = await import('./data-store');
+      const guest = ensureGuestCustomerForCall(phone, callId);
+      customerId = guest.customerId ?? undefined;
+    }
+    if (customerId && callId) {
+      appendCustomerCallActivity({
+        customerId,
+        callId,
+        summary: 'Order placed by phone',
+        outcome: 'order_placed',
+        updateCallQueue: true,
+      });
+    }
+
+    const store = getDataStore();
+    const customerRow = customerId
+      ? store.customers.find((c) => String(c.id) === customerId)
+      : undefined;
+    const crmSpecialName = customerRow?.specialName != null ? String(customerRow.specialName).trim() : '';
+    const crmSpecialNote = customerRow?.specialDealNote != null ? String(customerRow.specialDealNote).trim() : '';
+    const appliedSpecialName = firstString(input.specialName) || undefined;
+    let total = totalBeforeSpecial;
+    let specialAppliedNote = '';
+    if (appliedSpecialName && crmSpecialNote) {
+      const pctMatch = crmSpecialNote.match(/(\d+(?:\.\d+)?)\s*%/);
+      if (pctMatch) {
+        const pct = Math.min(100, Math.max(0, Number(pctMatch[1])));
+        if (Number.isFinite(pct) && pct > 0) {
+          total = Math.round(totalBeforeSpecial * (1 - pct / 100) * 100) / 100;
+          specialAppliedNote = `${appliedSpecialName}: ${pct}% off (${formatSpokenGbp(totalBeforeSpecial)} → ${formatSpokenGbp(total)})`;
+        }
+      }
+      if (!specialAppliedNote) {
+        specialAppliedNote = `${appliedSpecialName}: ${crmSpecialNote}`;
+      }
+    } else if (appliedSpecialName && crmSpecialName) {
+      specialAppliedNote = `Special: ${appliedSpecialName}${crmSpecialNote ? ` — ${crmSpecialNote}` : ''}`;
+    }
+
+    const { formatUkPostcodeDisplay, normalizeUkPostcode } = await import('./delivery-areas');
+    const normalizedPostcode = postcode ? formatUkPostcodeDisplay(postcode) : '';
+    const compactPc = postcode ? normalizeUkPostcode(postcode) : '';
+    let deliveryAddress = streetAddress || undefined;
+    if (orderType === 'delivery' && normalizedPostcode) {
+      if (deliveryAddress) {
+        const upper = deliveryAddress.toUpperCase().replace(/\s+/g, '');
+        if (!upper.includes(compactPc)) {
+          deliveryAddress = `${deliveryAddress.replace(/,\s*$/, '')}, ${normalizedPostcode}`;
+        }
+      } else {
+        deliveryAddress = normalizedPostcode;
+      }
+    }
+
+    const baseNotes = firstString(input.notes) ?? '';
+    const notes = [baseNotes, specialAppliedNote].filter(Boolean).join(' | ');
+
+    const payRaw = (firstString(input.paymentStatus) ?? 'unpaid').toLowerCase();
+    let paymentStatus = 'unpaid';
+    let paymentMethod: string | undefined;
+    if (payRaw === 'cash' || payRaw === 'card') {
+      paymentStatus = 'unpaid';
+      paymentMethod = payRaw;
+    } else if (payRaw === 'paid') {
+      paymentStatus = 'paid';
+    }
+
+    const callRecord = callId ? getCallById(callId) : undefined;
+    const callMeta = (callRecord?.metadata as Record<string, unknown> | undefined) || {};
+    const listenUrl = String(callRecord?.listenUrl ?? callMeta.listenUrl ?? '').trim() || undefined;
+    const recordingUrl = String(callRecord?.recordingUrl ?? '').trim() || undefined;
+
+    const record = await saveOrderRecord({
+      customerId: customerId || undefined,
+      customerName: firstString(input.customerName, body.customerContext?.customerName) ?? 'Guest',
+      customerPhone: phone,
+      channel: 'phone',
+      orderType,
+      status: 'new',
+      paymentStatus,
+      paymentMethod,
+      items,
+      total,
+      deliveryAddress,
+      deliveryPostcode: normalizedPostcode || undefined,
+      specialName: appliedSpecialName,
+      notes,
+      customerAllergies,
+      allergyConfirmed,
+      sourceCallId: callId,
+      callIds: callId ? [callId] : [],
+      listenUrl,
+      recordingUrl,
+      source: 'phone',
+      syncState: 'local',
+      placedAt: new Date().toISOString(),
+      etaMinutes: orderType === 'delivery' ? 40 : 20,
+    }, firstString(body.orgId) ?? getRequestOrgId());
+    const spokenTotal = formatSpokenGbp(Number(record.total));
+    const where =
+      orderType === 'delivery' && deliveryAddress
+        ? ` Delivery to ${deliveryAddress}.`
+        : orderType === 'collection'
+          ? ' Collection.'
+          : '';
+    const specialSpeak = specialAppliedNote ? ` Special applied: ${appliedSpecialName}.` : '';
+    return {
+      ok: true,
+      orderId: record.id,
+      orderNumber: record.orderNumber,
+      total: record.total,
+      spokenTotal,
+      specialName: appliedSpecialName ?? null,
+      deliveryAddress: record.deliveryAddress ?? deliveryAddress ?? null,
+      deliveryPostcode: normalizedPostcode || null,
+      customerId: record.customerId ?? customerId ?? null,
+      spokenHint: `Order ${record.orderNumber} is in — ${spokenTotal}.${where}${specialSpeak} The kitchen has it.`,
+    };
+  }
+
+  if (name === 'checkTableAvailability') {
+    const startsAt = firstString(input.startsAt, input.dateTime) ?? '';
+    const partySize = Math.max(1, Number(input.partySize ?? 2) || 2);
+    if (!startsAt) {
+      return { ok: false, error: 'startsAt_required', spokenHint: 'What day and time were you thinking?' };
+    }
+    const result = await checkTableAvailability({ startsAt, partySize }, firstString(body.orgId) ?? getRequestOrgId());
+    if (!result.ok) return { ok: false, error: result.error, spokenHint: 'I could not check tables just now.' };
+    if (!result.availableTables.length) {
+      const next = result.nextSlots?.[0];
+      return {
+        ok: true,
+        available: false,
+        nextSlots: result.nextSlots,
+        spokenHint: next
+          ? `Fully booked then — earliest I can do is ${new Date(next).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}.`
+          : 'We are fully booked around then — want a different time?',
+      };
+    }
+    return {
+      ok: true,
+      available: true,
+      tables: result.availableTables,
+      spokenHint: `Yes — I can fit ${partySize} at that time.`,
+    };
+  }
+
+  if (name === 'bookTable') {
+    const startsAt = firstString(input.startsAt) ?? '';
+    const partySize = Math.max(1, Number(input.partySize ?? 2) || 2);
+    if (!startsAt) return { ok: false, error: 'startsAt_required' };
+    const result = await createReservation({
+      startsAt,
+      partySize,
+      customerName: firstString(input.customerName, body.customerContext?.customerName),
+      customerPhone: firstString(input.customerPhone, callerPhone),
+      notes: firstString(input.notes),
+      callId,
+      channel: 'phone',
+    }, firstString(body.orgId) ?? getRequestOrgId());
+    if (!result.ok || !result.reservation) {
+      return { ok: false, error: result.error, spokenHint: 'Could not book that slot — try another time?' };
+    }
+    const r = result.reservation;
+    return {
+      ok: true,
+      reservationId: r.id,
+      startsAt: r.startsAt,
+      partySize: r.partySize,
+      status: r.status,
+      spokenHint: `Table booked for ${partySize} at ${new Date(r.startsAt).toLocaleString('en-GB')}.`,
+    };
+  }
+
+  if (name === 'updateReservation') {
+    const org = firstString(body.orgId) ?? getRequestOrgId();
+    let id = firstString(input.reservationId);
+    if (!id) {
+      const phone = firstString(input.customerPhone, callerPhone);
+      const list = await listReservations(org, { phone });
+      const upcoming = list
+        .filter((r) => !['cancelled', 'completed', 'no_show'].includes(r.status))
+        .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
+      id = upcoming?.id;
+    }
+    if (!id) return { ok: false, error: 'reservation_not_found' };
+    const patch: Record<string, unknown> = {};
+    if (input.startsAt != null) patch.startsAt = String(input.startsAt);
+    if (input.partySize != null) patch.partySize = Number(input.partySize);
+    if (input.notes != null) patch.notes = String(input.notes);
+    if (callId) {
+      const existing = (await listReservations(org)).find((r) => r.id === id);
+      patch.callIds = [...new Set([...(existing?.callIds ?? []), callId])];
+      patch.callId = existing?.callId || callId;
+    }
+    const result = await updateReservation(id, patch, org);
+    return result.ok
+      ? { ok: true, reservation: result.reservation, spokenHint: 'Reservation updated.' }
+      : { ok: false, error: result.error };
+  }
+
+  if (name === 'cancelReservation') {
+    const org = firstString(body.orgId) ?? getRequestOrgId();
+    let id = firstString(input.reservationId);
+    if (!id) {
+      const phone = firstString(input.customerPhone, callerPhone);
+      const list = await listReservations(org, { phone });
+      const upcoming = list
+        .filter((r) => !['cancelled', 'completed', 'no_show'].includes(r.status))
+        .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
+      id = upcoming?.id;
+    }
+    if (!id) return { ok: false, error: 'reservation_not_found' };
+    const result = await cancelReservation(id, firstString(input.reason), org);
+    return result.ok
+      ? { ok: true, spokenHint: 'Reservation cancelled — see you another time.' }
+      : { ok: false, error: result.error };
+  }
+
+  if (name === 'listReservations') {
+    const org = firstString(body.orgId) ?? getRequestOrgId();
+    const rows = await listReservations(org, {
+      day: firstString(input.day),
+      phone: firstString(input.phone, callerPhone),
+    });
+    return {
+      ok: true,
+      count: rows.length,
+      reservations: rows.slice(0, 20).map((r) => ({
+        id: r.id,
+        partySize: r.partySize,
+        customerName: r.customerName,
+        customerPhone: r.customerPhone,
+        startsAt: r.startsAt,
+        status: r.status,
+        tableId: r.tableId,
+      })),
     };
   }
 

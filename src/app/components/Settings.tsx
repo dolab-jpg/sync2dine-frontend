@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Switch } from './ui/switch';
-import { Plus, Edit, Trash2, Settings as SettingsIcon, DollarSign, Sparkles, Plug, Upload } from 'lucide-react';
+import { Plus, Edit, Trash2, Settings as SettingsIcon, DollarSign, Sparkles, Plug, Upload, Phone } from 'lucide-react';
 import ImportExportPanel from './settings/ImportExportPanel';
 import IntegrationsHub from './integrations/IntegrationsHub';
 import { MailboxConnectPanel } from './mailbox/MailboxConnectPanel';
@@ -19,6 +19,7 @@ import { getAllTrades } from '../config/trades';
 import { useAIAssistant } from '../context/AIAssistantContext';
 import { StaffPhoneRegistration } from './settings/StaffPhoneRegistration';
 import { StaffSoftphones } from './settings/StaffSoftphones';
+import { PhoneSohoSettings } from './settings/PhoneSohoSettings';
 import { canManageCompanySettings } from '../engine/ai/rolePermissions';
 import type { AgentRole } from '../engine/ai/agentContext';
 import { getActiveOrgId } from '../engine/platform/orgContext';
@@ -137,6 +138,10 @@ export default function Settings() {
               <TabsTrigger value="quote-stages" className="min-h-10 shrink-0">Stages</TabsTrigger>
               <TabsTrigger value="ai" className="min-h-10 shrink-0">AI</TabsTrigger>
               <TabsTrigger value="integrations" className="min-h-10 shrink-0">API</TabsTrigger>
+              <TabsTrigger value="phone-soho" className="min-h-10 shrink-0">
+                <Phone className="w-3.5 h-3.5 mr-1.5 inline" />
+                Phone &amp; Soho66
+              </TabsTrigger>
               <TabsTrigger value="email-inbox" className="min-h-10 shrink-0">Email &amp; Inbox</TabsTrigger>
               <TabsTrigger value="import-export" className="min-h-10 shrink-0">
                 <Upload className="w-3.5 h-3.5 mr-1.5 inline" />
@@ -415,6 +420,14 @@ export default function Settings() {
 
         <TabsContent value="integrations" className="space-y-6">
           <IntegrationsHub />
+          <p className="text-sm text-gray-500">
+            For Soho66 trunk, outbound minute rates, and phone usage, use the{' '}
+            <strong>Phone &amp; Soho66</strong> tab.
+          </p>
+        </TabsContent>
+
+        <TabsContent value="phone-soho" className="space-y-6">
+          <PhoneSohoSettings />
         </TabsContent>
 
         <TabsContent value="email-inbox" className="space-y-6">

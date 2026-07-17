@@ -54,6 +54,93 @@ export default function IntegrationsHub() {
     return integrationService.subscribe(refresh);
   }, [refresh]);
 
+  // Seed Integrations status from server env (testing: keys copied from b-diddies).
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/integrations/voice-config');
+        if (!res.ok) return;
+        const data = await res.json() as {
+          vapi?: { configured?: boolean; region?: string; webhookUrl?: string; voiceId?: string };
+          elevenlabs?: { configured?: boolean; voiceId?: string; modelId?: string };
+          openai?: { configured?: boolean };
+          sip?: { username?: string; domain?: string; did?: string; bridgeUrl?: string; hasPassword?: boolean };
+        };
+        if (data.vapi?.configured) {
+          const cur = integrationService.getInstance('vapi');
+          if (!cur?.values?.privateKey) {
+            integrationService.updateIntegration('vapi', {
+              enabled: true,
+              mockMode: false,
+              status: 'connected',
+              values: {
+                ...(cur?.values ?? {}),
+                region: data.vapi.region || 'eu',
+                webhookUrl: data.vapi.webhookUrl || 'https://app.sync2dine.io/webhooks/vapi',
+                privateKey: '(configured on server)',
+                publicKey: '(configured on server)',
+                phoneNumberId: '(configured on server)',
+                serverSecret: '(configured on server)',
+              },
+            });
+          }
+        }
+        if (data.elevenlabs?.configured) {
+          const cur = integrationService.getInstance('elevenlabs');
+          if (!cur?.values?.voiceId && !cur?.values?.apiKey) {
+            integrationService.updateIntegration('elevenlabs', {
+              enabled: true,
+              mockMode: false,
+              status: 'connected',
+              values: {
+                ...(cur?.values ?? {}),
+                voiceId: data.elevenlabs.voiceId || '',
+                modelId: data.elevenlabs.modelId || '',
+                apiKey: '(configured on server)',
+              },
+            });
+          }
+        }
+        if (data.openai?.configured) {
+          const cur = integrationService.getInstance('openai');
+          if (!cur?.values?.apiKey) {
+            integrationService.updateIntegration('openai', {
+              enabled: true,
+              mockMode: false,
+              status: 'connected',
+              values: {
+                ...(cur?.values ?? {}),
+                provider: 'openai',
+                apiKey: '(configured on server)',
+              },
+            });
+            integrationService.setMasterMockMode(false);
+          }
+        }
+        if (data.sip?.username || data.sip?.did) {
+          const cur = integrationService.getInstance('voice_telephony');
+          integrationService.updateIntegration('voice_telephony', {
+            enabled: true,
+            mockMode: false,
+            status: 'connected',
+            values: {
+              ...(cur?.values ?? {}),
+              provider: 'soho66',
+              sipUsername: data.sip.username || cur?.values?.sipUsername || '',
+              sipDomain: data.sip.domain || cur?.values?.sipDomain || 'sbc.soho66.co.uk',
+              did: data.sip.did || cur?.values?.did || '',
+              sipBridgeUrl: data.sip.bridgeUrl || cur?.values?.sipBridgeUrl || '',
+              sipPassword: data.sip.hasPassword ? '(configured on server)' : (cur?.values?.sipPassword || ''),
+            },
+          });
+        }
+        refresh();
+      } catch {
+        /* offline */
+      }
+    })();
+  }, [refresh]);
+
   const filtered = INTEGRATION_REGISTRY.filter(
     def => filter === 'all' || def.category === filter
   );

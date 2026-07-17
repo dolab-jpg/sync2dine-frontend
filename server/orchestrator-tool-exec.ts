@@ -15,6 +15,7 @@ import {
 } from './dataPolicy';
 import { formatSpokenGbp, withSpokenMoney } from './spoken-money';
 import { lookupQuotesFromStore } from './quote-lookup';
+import { computeAnalyticsOverview } from './analytics-routes';
 
 const SENSITIVE_KEYS = SENSITIVE_FIELD_KEYS;
 
@@ -569,6 +570,7 @@ export const SERVER_READ_TOOLS = new Set([
   'getProjectProfit',
   'getCostBreakdown',
   'readData',
+  'getSalesAndAgentStats',
 ]);
 
 type LeadCustomer = {
@@ -961,6 +963,12 @@ export async function executeServerReadTool(
     output = executeCostingReadTool(toolName, input, body);
   } else if (toolName === 'readData') {
     output = executeReadData(input, body);
+  } else if (toolName === 'getSalesAndAgentStats') {
+    const period = String(input.period ?? 'month');
+    const orgId = body.orgId;
+    const overview = computeAnalyticsOverview(period, orgId);
+    const spokenHint = `This ${period}: £${overview.revenue > 0 ? Math.round(overview.revenue / 1000) + 'k' : '0'} revenue, ${overview.leads} leads, ${overview.conversion}% conversion, ${overview.agents.length ? 'agent ' + String(overview.agents[0]?.status ?? 'unknown') : 'no agent data'}.`;
+    output = { ...overview, spokenHint };
   } else if (
     toolName === 'lookupQuote'
     || toolName === 'lookupProjectStatus'

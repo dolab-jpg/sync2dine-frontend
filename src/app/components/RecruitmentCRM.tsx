@@ -24,6 +24,12 @@ import {
   loadRecruitmentStore,
   saveRecruitmentStore,
   syncRecruitmentToServer,
+  loadRecruitmentFromApi,
+  patchOnboardingTask,
+  postRecruitmentJob,
+  postRecruitmentCandidate,
+  postRecruitmentApplication,
+  patchRecruitmentApplication,
 } from '../engine/recruitment/recruitmentStore';
 
 // Types
@@ -439,7 +445,17 @@ export default function RecruitmentCRM() {
     if (store.jobs.length > 0) setJobs(store.jobs as JobPosting[]);
     if (store.candidates.length > 0) setCandidates(store.candidates as Candidate[]);
     if (store.interviews.length > 0) setInterviews(store.interviews as Interview[]);
-    setPersistReady(true);
+    if (store.applications?.length > 0) setApplications(store.applications as Application[]);
+    if (store.onboardingTasks?.length > 0) setOnboardingTasks(store.onboardingTasks as OnboardingTask[]);
+    loadRecruitmentFromApi().then((api) => {
+      if (!api) { setPersistReady(true); return; }
+      if (api.jobs.length > 0) setJobs(api.jobs as JobPosting[]);
+      if (api.candidates.length > 0) setCandidates(api.candidates as Candidate[]);
+      if (api.interviews.length > 0) setInterviews(api.interviews as Interview[]);
+      if (api.applications.length > 0) setApplications(api.applications as Application[]);
+      if (api.onboardingTasks.length > 0) setOnboardingTasks(api.onboardingTasks as OnboardingTask[]);
+      setPersistReady(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -448,11 +464,13 @@ export default function RecruitmentCRM() {
       jobs,
       candidates,
       interviews,
+      applications,
+      onboardingTasks,
       updatedAt: new Date().toISOString(),
     };
     saveRecruitmentStore(data);
     void syncRecruitmentToServer(data);
-  }, [jobs, candidates, interviews, persistReady]);
+  }, [jobs, candidates, interviews, applications, onboardingTasks, persistReady]);
 
   const [onboardingTasks, setOnboardingTasks] = useState<OnboardingTask[]>([
     {
@@ -582,6 +600,109 @@ export default function RecruitmentCRM() {
     topSource: 'LinkedIn',
     conversionRate: 25, // %
     upcomingInterviews: interviews.filter(i => i.status === 'scheduled').length
+  };
+
+  // ── Onboarding task status cycle ────────────────────────────────────
+  const cycleOnboardingStatus = (taskId: string) => {
+    setOnboardingTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t;
+      const next: OnboardingTask['status'] =
+        t.status === 'pending' ? 'in-progress' : t.status === 'in-progress' ? 'completed' : 'pending';
+      void patchOnboardingTask({ id: t.id, status: next });
+      return { ...t, status: next };
+    }));
+  };
+
+  // ── Auto-seed onboarding when stage → hired ──────────────────────
+  const DEFAULT_ONBOARDING = [
+    { task: 'Complete right to work documentation', category: 'documentation' as const, assignedTo: 'HR Team' },
+    { task: 'Provide bank details for payroll', category: 'documentation' as const, assignedTo: 'HR Team' },
+    { task: 'Complete health & safety induction', category: 'training' as const, assignedTo: 'H&S Officer' },
+    { task: 'Issue company van and equipment', category: 'equipment' as const, assignedTo: 'Operations' },
+    { task: 'Set up email and system access', category: 'access' as const, assignedTo: 'IT Team' },
+    { task: 'First day orientation with team', category: 'orientation' as const, assignedTo: 'Line Manager' },
+  ];
+
+  const seedOnboarding = (candidateId: string) => {
+    const existing = onboardingTasks.filter(t => t.candidateId === candidateId);
+    if (existing.length > 0) return;
+    const now = new Date();
+    const seeded: OnboardingTask[] = DEFAULT_ONBOARDING.map((tmpl, i) => ({
+      id: `OB${Date.now()}-${i}`,
+      candidateId,
+      task: tmpl.task,
+      category: tmpl.category,
+      status: 'pending' as const,
+      dueDate: new Date(now.getTime() + (i + 1) * 86400000).toISOString().slice(0, 10),
+      assignedTo: tmpl.assignedTo,
+    }));
+    setOnboardingTasks(prev => [...prev, ...seeded]);
+  };
+
+  // ── Stage move ───────────────────────────────────────────────────
+  const moveApplicationStage = (appId: string, newStage: Application['stage']) => {
+    setApplications(prev => prev.map(a => {
+      if (a.id !== appId) return a;
+      void patchRecruitmentApplication(a.id, { stage: newStage, stageDate: new Date().toISOString().slice(0, 10) });
+      if (newStage === 'hired') seedOnboarding(a.candidateId);
+      return { ...a, stage: newStage, stageDate: new Date().toISOString().slice(0, 10) };
+    }));
+  };
+
+  // ── Add Job ──────────────────────────────────────────────────────
+  const [newJob, setNewJob] = useState({ title: '', department: 'sales' as JobPosting['department'], description: '', location: '', salaryRange: '', employmentType: 'full-time' as JobPosting['employmentType'], positions: 1, requiredSkills: '', qualifications: '' });
+
+  const handleAddJob = async () => {
+    const job: JobPosting = {
+      id: `J${Date.now()}`,
+      title: newJob.title,
+      department: newJob.department,
+      description: newJob.description,
+      location: newJob.location,
+      salaryRange: newJob.salaryRange,
+      employmentType: newJob.employmentType,
+      requiredSkills: newJob.requiredSkills.split(',').map(s => s.trim()).filter(Boolean),
+      qualifications: newJob.qualifications.split(',').map(s => s.trim()).filter(Boolean),
+      status: 'open',
+      createdAt: new Date().toISOString().slice(0, 10),
+      positions: newJob.positions,
+      applicantCount: 0,
+    };
+    setJobs(prev => [job, ...prev]);
+    await postRecruitmentJob(job as unknown as Record<string, unknown>);
+    setIsAddJobOpen(false);
+    setNewJob({ title: '', department: 'sales', description: '', location: '', salaryRange: '', employmentType: 'full-time', positions: 1, requiredSkills: '', qualifications: '' });
+    toast.success('Job posted successfully');
+  };
+
+  // ── Add Candidate ────────────────────────────────────────────────
+  const [newCandidate, setNewCandidate] = useState({ name: '', email: '', phone: '', location: '', desiredRole: '', experience: '', skills: '', source: 'direct' as Candidate['source'] });
+
+  const handleAddCandidate = async () => {
+    const candidate: Candidate = {
+      id: `C${Date.now()}`,
+      name: newCandidate.name,
+      email: newCandidate.email,
+      phone: newCandidate.phone,
+      address: '',
+      location: newCandidate.location,
+      currentEmploymentStatus: 'unemployed',
+      desiredRole: newCandidate.desiredRole,
+      skills: newCandidate.skills.split(',').map(s => s.trim()).filter(Boolean),
+      certifications: [],
+      experience: newCandidate.experience,
+      willingToRelocate: false,
+      preferredLocations: [],
+      availability: 'Immediate',
+      source: newCandidate.source,
+      createdAt: new Date().toISOString().slice(0, 10),
+      rating: 3,
+    };
+    setCandidates(prev => [candidate, ...prev]);
+    await postRecruitmentCandidate(candidate as unknown as Record<string, unknown>);
+    setIsAddCandidateOpen(false);
+    setNewCandidate({ name: '', email: '', phone: '', location: '', desiredRole: '', experience: '', skills: '', source: 'direct' });
+    toast.success('Candidate added successfully');
   };
 
   // Render Job Posting Card
@@ -1005,7 +1126,11 @@ export default function RecruitmentCRM() {
               <CardContent>
                 <div className="space-y-3">
                   {tasks.map(task => (
-                    <div key={task.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+                    <div
+                      key={task.id}
+                      className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => cycleOnboardingStatus(task.id)}
+                    >
                       <div className="mt-1">
                         {task.status === 'completed' ? (
                           <CheckCircle2 className="w-5 h-5 text-green-500" />
@@ -1023,6 +1148,7 @@ export default function RecruitmentCRM() {
                           <span className="flex items-center gap-1">
                             <Badge variant="outline" className="text-xs">{task.category}</Badge>
                           </span>
+                          <Badge variant="outline" className="text-xs">{task.status}</Badge>
                           {task.assignedTo && (
                             <span className="flex items-center gap-1">
                               <User className="w-3 h-3" />
@@ -1037,9 +1163,6 @@ export default function RecruitmentCRM() {
                           )}
                         </div>
                       </div>
-                      <Button size="sm" variant="ghost">
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
                     </div>
                   ))}
                 </div>
@@ -1339,24 +1462,255 @@ export default function RecruitmentCRM() {
       )}
 
       {/* Application pipeline detail */}
-      {selectedApplication && (
-        <Dialog open={!!selectedApplication} onOpenChange={() => setSelectedApplication(null)}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Application {selectedApplication.id}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-2 text-sm">
-              <p><strong>Candidate ID:</strong> {selectedApplication.candidateId}</p>
-              <p><strong>Job ID:</strong> {selectedApplication.jobId}</p>
-              <p><strong>Stage:</strong> {selectedApplication.stage}</p>
-              <p><strong>Applied:</strong> {new Date(selectedApplication.appliedDate).toLocaleDateString()}</p>
-              {selectedApplication.notes?.length > 0 && (
-                <p className="text-slate-600">{selectedApplication.notes.join('; ')}</p>
-              )}
+      {selectedApplication && (() => {
+        const appCandidate = getCandidateById(selectedApplication.candidateId);
+        const appJob = getJobById(selectedApplication.jobId);
+        return (
+          <Dialog open={!!selectedApplication} onOpenChange={() => setSelectedApplication(null)}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Application Detail</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <Label className="text-slate-600">Candidate</Label>
+                    <p className="font-medium">{appCandidate?.name ?? selectedApplication.candidateId}</p>
+                  </div>
+                  <div>
+                    <Label className="text-slate-600">Job</Label>
+                    <p className="font-medium">{appJob?.title ?? selectedApplication.jobId}</p>
+                  </div>
+                  <div>
+                    <Label className="text-slate-600">Applied</Label>
+                    <p>{new Date(selectedApplication.appliedDate).toLocaleDateString('en-GB')}</p>
+                  </div>
+                  <div>
+                    <Label className="text-slate-600">Rating</Label>
+                    <div className="flex items-center gap-1">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} className={`w-4 h-4 ${i < selectedApplication.rating ? 'text-amber-500 fill-amber-500' : 'text-slate-300'}`} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-slate-600 mb-1 block">Stage</Label>
+                  <Select
+                    value={selectedApplication.stage}
+                    onValueChange={(val) => {
+                      const stage = val as Application['stage'];
+                      moveApplicationStage(selectedApplication.id, stage);
+                      setSelectedApplication({ ...selectedApplication, stage, stageDate: new Date().toISOString().slice(0, 10) });
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="applied">Applied</SelectItem>
+                      <SelectItem value="screening">Screening</SelectItem>
+                      <SelectItem value="interview">Interview</SelectItem>
+                      <SelectItem value="offer">Offer</SelectItem>
+                      <SelectItem value="hired">Hired</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {selectedApplication.feedback && (
+                  <div>
+                    <Label className="text-slate-600 mb-1 block">Feedback</Label>
+                    <p className="text-sm">{selectedApplication.feedback}</p>
+                  </div>
+                )}
+
+                {selectedApplication.notes?.length > 0 && (
+                  <div>
+                    <Label className="text-slate-600 mb-1 block">Notes</Label>
+                    <ul className="list-disc list-inside space-y-1 text-sm">
+                      {selectedApplication.notes.map((note, idx) => (
+                        <li key={idx}>{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div>
+                  <Label className="text-slate-600 mb-1 block">Add Note</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add a note..."
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return;
+                        const val = (e.target as HTMLInputElement).value.trim();
+                        if (!val) return;
+                        const updated = {
+                          ...selectedApplication,
+                          notes: [...selectedApplication.notes, val],
+                        };
+                        setApplications(prev => prev.map(a => a.id === updated.id ? updated : a));
+                        setSelectedApplication(updated);
+                        void patchRecruitmentApplication(updated.id, { notes: updated.notes });
+                        (e.target as HTMLInputElement).value = '';
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-slate-600 mb-1 block">Feedback</Label>
+                  <Textarea
+                    defaultValue={selectedApplication.feedback}
+                    placeholder="Interview feedback..."
+                    onBlur={(e) => {
+                      const val = e.target.value.trim();
+                      if (val === selectedApplication.feedback) return;
+                      const updated = { ...selectedApplication, feedback: val };
+                      setApplications(prev => prev.map(a => a.id === updated.id ? updated : a));
+                      setSelectedApplication(updated);
+                      void patchRecruitmentApplication(updated.id, { feedback: val });
+                    }}
+                  />
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
+
+      {/* Add Job Dialog */}
+      <Dialog open={isAddJobOpen} onOpenChange={setIsAddJobOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Post New Job</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Job Title</Label>
+              <Input value={newJob.title} onChange={e => setNewJob(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Senior Sales Representative" />
             </div>
-          </DialogContent>
-        </Dialog>
-      )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Department</Label>
+                <Select value={newJob.department} onValueChange={v => setNewJob(p => ({ ...p, department: v as JobPosting['department'] }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sales">Sales</SelectItem>
+                    <SelectItem value="construction">Construction</SelectItem>
+                    <SelectItem value="office">Office</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Employment Type</Label>
+                <Select value={newJob.employmentType} onValueChange={v => setNewJob(p => ({ ...p, employmentType: v as JobPosting['employmentType'] }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full-time">Full-time</SelectItem>
+                    <SelectItem value="part-time">Part-time</SelectItem>
+                    <SelectItem value="contract">Contract</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea value={newJob.description} onChange={e => setNewJob(p => ({ ...p, description: e.target.value }))} placeholder="Job description..." />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Location</Label>
+                <Input value={newJob.location} onChange={e => setNewJob(p => ({ ...p, location: e.target.value }))} placeholder="London, UK" />
+              </div>
+              <div>
+                <Label>Salary Range</Label>
+                <Input value={newJob.salaryRange} onChange={e => setNewJob(p => ({ ...p, salaryRange: e.target.value }))} placeholder="£30,000 - £40,000" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Positions</Label>
+                <Input type="number" value={newJob.positions} onChange={e => setNewJob(p => ({ ...p, positions: Number(e.target.value) || 1 }))} min={1} />
+              </div>
+            </div>
+            <div>
+              <Label>Required Skills (comma separated)</Label>
+              <Input value={newJob.requiredSkills} onChange={e => setNewJob(p => ({ ...p, requiredSkills: e.target.value }))} placeholder="Sales, Negotiation, CRM" />
+            </div>
+            <div>
+              <Label>Qualifications (comma separated)</Label>
+              <Input value={newJob.qualifications} onChange={e => setNewJob(p => ({ ...p, qualifications: e.target.value }))} placeholder="5+ years experience, UK Driving License" />
+            </div>
+            <Button onClick={handleAddJob} disabled={!newJob.title.trim()} className="w-full">
+              <Plus className="w-4 h-4 mr-2" />
+              Post Job
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Candidate Dialog */}
+      <Dialog open={isAddCandidateOpen} onOpenChange={setIsAddCandidateOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add Candidate</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Full Name</Label>
+              <Input value={newCandidate.name} onChange={e => setNewCandidate(p => ({ ...p, name: e.target.value }))} placeholder="John Smith" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Email</Label>
+                <Input value={newCandidate.email} onChange={e => setNewCandidate(p => ({ ...p, email: e.target.value }))} placeholder="john@email.com" type="email" />
+              </div>
+              <div>
+                <Label>Phone</Label>
+                <Input value={newCandidate.phone} onChange={e => setNewCandidate(p => ({ ...p, phone: e.target.value }))} placeholder="07xxx xxxxxx" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Location</Label>
+                <Input value={newCandidate.location} onChange={e => setNewCandidate(p => ({ ...p, location: e.target.value }))} placeholder="London, UK" />
+              </div>
+              <div>
+                <Label>Source</Label>
+                <Select value={newCandidate.source} onValueChange={v => setNewCandidate(p => ({ ...p, source: v as Candidate['source'] }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="direct">Direct</SelectItem>
+                    <SelectItem value="linkedin">LinkedIn</SelectItem>
+                    <SelectItem value="indeed">Indeed</SelectItem>
+                    <SelectItem value="job-board">Job Board</SelectItem>
+                    <SelectItem value="referral">Referral</SelectItem>
+                    <SelectItem value="website">Website</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Desired Role</Label>
+              <Input value={newCandidate.desiredRole} onChange={e => setNewCandidate(p => ({ ...p, desiredRole: e.target.value }))} placeholder="Sales Representative" />
+            </div>
+            <div>
+              <Label>Experience</Label>
+              <Textarea value={newCandidate.experience} onChange={e => setNewCandidate(p => ({ ...p, experience: e.target.value }))} placeholder="Brief experience summary..." />
+            </div>
+            <div>
+              <Label>Skills (comma separated)</Label>
+              <Input value={newCandidate.skills} onChange={e => setNewCandidate(p => ({ ...p, skills: e.target.value }))} placeholder="Sales, Communication, CRM" />
+            </div>
+            <Button onClick={handleAddCandidate} disabled={!newCandidate.name.trim()} className="w-full">
+              <UserPlus className="w-4 h-4 mr-2" />
+              Add Candidate
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Candidate Details Dialog */}
       {selectedCandidate && (

@@ -1299,6 +1299,19 @@ const LEAD_CYCLE_TOOLS = [
   {
     type: 'function' as const,
     function: {
+      name: 'getSalesAndAgentStats',
+      description: 'Get sales analytics overview and AI phone agent stats for a given period (week, month, quarter). Returns revenue, leads, conversion, avgDeal, pipeline, team roster, and agent status.',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: { type: 'string', enum: ['week', 'month', 'quarter'], description: 'Time period to report on' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'searchLeads',
       description: 'Search CRM leads by name, status, source, or notes',
       parameters: {
@@ -1652,6 +1665,7 @@ export const AUTO_ACTION_NAMES = new Set([
   'navigate',
   'writeData',
   'getTeamPerformance',
+  'getSalesAndAgentStats',
   'searchLeads',
   'updateLeadStatus',
   'logFollowUp',

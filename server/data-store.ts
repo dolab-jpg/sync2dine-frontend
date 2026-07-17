@@ -64,6 +64,8 @@ export interface SyncedData {
   recruitmentJobs: Array<Record<string, unknown>>;
   recruitmentCandidates: Array<Record<string, unknown>>;
   recruitmentInterviews: Array<Record<string, unknown>>;
+  recruitmentApplications: Array<Record<string, unknown>>;
+  recruitmentOnboardingTasks: Array<Record<string, unknown>>;
   quotes: Array<Record<string, unknown>>;
   customers: Array<Record<string, unknown>>;
   bankAccounts: Array<Record<string, unknown>>;
@@ -71,6 +73,10 @@ export interface SyncedData {
   clientReceipts: Array<Record<string, unknown>>;
   contracts: Array<Record<string, unknown>>;
   planningApplications: Array<Record<string, unknown>>;
+  /** Sync2Dine food orders (JSON fallback when Supabase orders table unavailable) */
+  orders?: Array<Record<string, unknown>>;
+  diningTables?: Array<Record<string, unknown>>;
+  reservations?: Array<Record<string, unknown>>;
   agentSettings: AgentSettings;
   phoneLines: PhoneLine[];
 }
@@ -154,7 +160,7 @@ export interface AgentSettings {
   callQueueQuietStart?: string;
   /** Quiet hours end (HH:mm local) */
   callQueueQuietEnd?: string;
-  /** Max simultaneous outbound dials (legacy; prefer maxOutboundSlots) */
+  /** Max simultaneous outbound dials (1–5) — prefer maxOutboundSlots */
   callQueueMaxConcurrent?: number;
   /** Outbound worker state */
   outboundQueueState?: 'running' | 'paused' | 'stopped';
@@ -168,6 +174,18 @@ export interface AgentSettings {
   overflowNumber?: string;
   /** Enable overflow divert when at capacity */
   overflowWhenFull?: boolean;
+  /** Campaign brief stubs (review / reorder / winback) */
+  campaignReviewBrief?: string;
+  campaignReorderBrief?: string;
+  campaignWinbackBrief?: string;
+  /** Restaurant “about us” blurb for phone brain */
+  aboutUs?: string;
+  /** Optional daily spoken line (“say today”) for phone greetings */
+  sayToday?: string;
+  /** UK postcode beginnings we deliver to (e.g. B1, B11, CV1) — longest match wins */
+  deliveryPostcodePrefixes?: string[];
+  /** Free-text delivery fee / min order / area notes for the phone AI */
+  deliveryNotes?: string;
   updatedAt: string;
 }
 
@@ -187,6 +205,11 @@ const defaultAgentSettings: AgentSettings = {
   maxInboundSlots: 4,
   maxOutboundSlots: 1,
   overflowWhenFull: true,
+  campaignReviewBrief: 'Ask how their recent order was and invite them to leave a Google review.',
+  campaignReorderBrief: 'Check if they would like to place another order — mention favourites or today\'s specials.',
+  campaignWinbackBrief: 'We have not seen them in a while — offer a welcome-back discount on their next order.',
+  deliveryPostcodePrefixes: [],
+  deliveryNotes: '',
   updatedAt: new Date().toISOString(),
 };
 
@@ -210,6 +233,8 @@ const defaultData: SyncedData = {
   recruitmentJobs: defaultRecruitmentJobs,
   recruitmentCandidates: [],
   recruitmentInterviews: [],
+  recruitmentApplications: [],
+  recruitmentOnboardingTasks: [],
   customers: [],
   quotes: [],
   bankAccounts: [],
@@ -217,6 +242,7 @@ const defaultData: SyncedData = {
   clientReceipts: [],
   contracts: [],
   planningApplications: [],
+  orders: [],
   agentSettings: { ...defaultAgentSettings },
   phoneLines: [],
 };
@@ -253,6 +279,8 @@ function loadFromDisk(orgId: string): SyncedData {
           : defaultRecruitmentJobs,
         recruitmentCandidates: Array.isArray(parsed.recruitmentCandidates) ? parsed.recruitmentCandidates : [],
         recruitmentInterviews: Array.isArray(parsed.recruitmentInterviews) ? parsed.recruitmentInterviews : [],
+        recruitmentApplications: Array.isArray(parsed.recruitmentApplications) ? parsed.recruitmentApplications : [],
+        recruitmentOnboardingTasks: Array.isArray(parsed.recruitmentOnboardingTasks) ? parsed.recruitmentOnboardingTasks : [],
         customers: Array.isArray(parsed.customers) ? parsed.customers : [],
         quotes: Array.isArray(parsed.quotes) ? parsed.quotes : [],
         bankAccounts: Array.isArray(parsed.bankAccounts) ? parsed.bankAccounts : [],
@@ -260,6 +288,7 @@ function loadFromDisk(orgId: string): SyncedData {
         clientReceipts: Array.isArray(parsed.clientReceipts) ? parsed.clientReceipts : [],
         contracts: Array.isArray(parsed.contracts) ? parsed.contracts : [],
         planningApplications: Array.isArray(parsed.planningApplications) ? parsed.planningApplications : [],
+        orders: Array.isArray(parsed.orders) ? parsed.orders : [],
         agentSettings: parsed.agentSettings && typeof parsed.agentSettings === 'object'
           ? { ...defaultAgentSettings, ...(parsed.agentSettings as AgentSettings) }
           : { ...defaultAgentSettings },
@@ -418,6 +447,10 @@ export function syncData(data: Partial<SyncedData>, orgId?: string): void {
   next.projects = preferNonEmpty(data.projects as Array<Record<string, unknown>> | undefined, memoryStore.projects);
   next.quotes = preferNonEmpty(data.quotes as Array<Record<string, unknown>> | undefined, memoryStore.quotes);
   next.calls = preferNonEmpty(data.calls as Array<Record<string, unknown>> | undefined, memoryStore.calls);
+  next.orders = preferNonEmpty(
+    data.orders as Array<Record<string, unknown>> | undefined,
+    memoryStore.orders as Array<Record<string, unknown>> | undefined,
+  );
   next.phoneLines = preferNonEmpty(data.phoneLines, memoryStore.phoneLines);
 
   memoryStores.set(id, next);
@@ -457,9 +490,34 @@ export async function initDataFromSupabase(orgId?: string): Promise<void> {
       const l = local ?? [];
       return l.length >= c.length ? l : c;
     };
+    /** Merge by id so UI specials in cloud are not dropped when disk has a longer list. */
+    const mergeById = (
+      cloud: Array<Record<string, unknown>> | undefined,
+      local: Array<Record<string, unknown>> | undefined,
+    ): Array<Record<string, unknown>> => {
+      const map = new Map<string, Record<string, unknown>>();
+      for (const row of local ?? []) {
+        const id = row?.id != null ? String(row.id) : '';
+        if (id) map.set(id, row);
+      }
+      for (const row of cloud ?? []) {
+        const id = row?.id != null ? String(row.id) : '';
+        if (!id) continue;
+        const prev = map.get(id);
+        // Cloud wins overlapping fields (Customers tab / specials); keep local-only keys.
+        map.set(id, prev ? { ...prev, ...row } : row);
+      }
+      return Array.from(map.values());
+    };
     data.phoneLines = richer(data.phoneLines, disk.phoneLines);
-    data.customers = richer(data.customers, disk.customers);
-    data.contacts = richer(data.contacts, disk.contacts);
+    data.customers = mergeById(
+      data.customers as Array<Record<string, unknown>> | undefined,
+      disk.customers as Array<Record<string, unknown>> | undefined,
+    );
+    data.contacts = mergeById(
+      data.contacts as Array<Record<string, unknown>> | undefined,
+      disk.contacts as Array<Record<string, unknown>> | undefined,
+    );
     data.projects = richer(data.projects, disk.projects);
     data.quotes = richer(data.quotes, disk.quotes);
     memoryStores.set(id, data);
@@ -510,6 +568,8 @@ export function resolveContactByPhone(phone: string): {
     c => normalizePhone(String(c.phone ?? '')) === normalized
   );
   let customerId = contact ? String(contact.customerId) : null;
+  // Restaurant / takeaway customers often exist only on `customers` (no contacts row).
+  // Fall back so phone Lizzie can load specials, history, and greet by name.
   let customerFromPhone: Record<string, unknown> | undefined;
   if (!customerId && normalized) {
     customerFromPhone = store.customers.find(
@@ -541,20 +601,6 @@ export function resolveContactByPhone(phone: string): {
     projectId: project ? String(project.id) : null,
     activeQuotes: getActiveQuotes(customerId),
   };
-}
-
-/**
- * Ensure phone agent sees Customers-tab rows (specials may live in Supabase).
- */
-export async function hydrateCallerFromCloud(phone: string): Promise<ReturnType<typeof resolveContactByPhone>> {
-  try {
-    const { findCustomerByPhoneFromSupabase } = await import('./supabase-crm');
-    const cloud = await findCustomerByPhoneFromSupabase(phone, getRequestOrgId());
-    if (cloud) saveCustomerRecord(cloud);
-  } catch {
-    // ignore — fall through to in-memory resolve
-  }
-  return resolveContactByPhone(phone);
 }
 
 /**
@@ -612,6 +658,21 @@ export function ensureGuestCustomerForCall(
   return { customerId, isNew: true, contactName: 'Guest' };
 }
 
+/**
+ * Ensure phone Lizzie sees Customers-tab rows (specials live in Supabase when UI saves there).
+ * Call before building the inbound prompt.
+ */
+export async function hydrateCallerFromCloud(phone: string): Promise<ReturnType<typeof resolveContactByPhone>> {
+  try {
+    const { findCustomerByPhoneFromSupabase } = await import('./supabase-crm');
+    const cloud = await findCustomerByPhoneFromSupabase(phone, getRequestOrgId());
+    if (cloud) saveCustomerRecord(cloud);
+  } catch {
+    // ignore — fall through to in-memory resolve
+  }
+  return resolveContactByPhone(phone);
+}
+
 // Local copy (quote-lookup.ts imports this module, so importing it back would be a cycle).
 function getActiveQuotes(customerId: string | null): Array<{
   tradeName?: string;
@@ -662,6 +723,286 @@ export function updateQuoteRecord(id: string, patch: Record<string, unknown>): R
   store.quotes[idx] = { ...store.quotes[idx], ...patch, updatedAt: new Date().toISOString() };
   syncData(store);
   return store.quotes[idx];
+}
+
+/**
+ * List food orders — Supabase `public.orders` is primary when configured;
+ * disk JSON is a write-through cache / offline fallback.
+ */
+export async function listOrderRecords(
+  orgIdHint?: string | null,
+): Promise<Array<Record<string, unknown>>> {
+  const orgId = resolveStorageOrgId(orgIdHint ?? getRequestOrgId());
+  try {
+    const {
+      isSupabaseOrdersConfigured,
+      listOrdersFromSupabase,
+    } = await import('./supabase-orders');
+    if (isSupabaseOrdersConfigured()) {
+      const result = await listOrdersFromSupabase(orgId);
+      if (result.ok) {
+        const store = getDataStore();
+        store.orders = result.orders;
+        syncData(store);
+        return result.orders;
+      }
+    }
+  } catch (err) {
+    console.warn(
+      '[orders] Supabase list failed, using disk:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+  const store = getDataStore();
+  return Array.isArray(store.orders) ? store.orders : [];
+}
+
+/**
+ * Create/upsert a food order — UUID id, per-org order number, Supabase primary.
+ */
+export async function saveOrderRecord(
+  order: Record<string, unknown>,
+  orgIdHint?: string | null,
+): Promise<Record<string, unknown>> {
+  const orgId = resolveStorageOrgId(
+    orgIdHint ?? (order.orgId as string | undefined) ?? getRequestOrgId(),
+  );
+
+  try {
+    const {
+      isSupabaseOrdersConfigured,
+      upsertOrderToSupabase,
+      newOrderId,
+      isOrderUuid,
+    } = await import('./supabase-orders');
+    if (isSupabaseOrdersConfigured()) {
+      const withId = {
+        ...order,
+        orgId,
+        id: isOrderUuid(String(order.id ?? '')) ? String(order.id) : newOrderId(),
+      };
+      const result = await upsertOrderToSupabase(withId, orgId);
+      if (result.ok && result.order) {
+        const store = getDataStore();
+        if (!Array.isArray(store.orders)) store.orders = [];
+        const idx = store.orders.findIndex((o) => String(o.id) === String(result.order!.id));
+        if (idx >= 0) store.orders[idx] = result.order;
+        else store.orders.unshift(result.order);
+        syncData(store);
+        return result.order;
+      }
+      console.warn('[orders] Supabase upsert failed, writing disk:', result.error);
+    }
+  } catch (err) {
+    console.warn(
+      '[orders] Supabase save failed, using disk:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // Offline / unconfigured fallback — still prefer UUID when possible
+  const store = getDataStore();
+  if (!Array.isArray(store.orders)) store.orders = [];
+  let id = String(order.id ?? '');
+  try {
+    const { newOrderId, isOrderUuid } = await import('./supabase-orders');
+    if (!isOrderUuid(id)) id = newOrderId();
+  } catch {
+    if (!id) id = `ord-${Date.now()}`;
+  }
+  const existing = store.orders.findIndex((o) => String(o.id) === id);
+  const maxNumber = store.orders.reduce((max, o) => {
+    const n = Number(o.orderNumber ?? 0);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 100);
+  const record = {
+    ...order,
+    id,
+    orgId,
+    orderNumber: Number(order.orderNumber ?? maxNumber + 1),
+    status: String(order.status ?? 'new'),
+    paymentStatus: String(order.paymentStatus ?? 'unpaid'),
+    paymentMethod: order.paymentMethod != null ? String(order.paymentMethod) : undefined,
+    orderType: String(order.orderType ?? 'collection'),
+    items: Array.isArray(order.items) ? order.items : [],
+    total: Number(order.total ?? 0),
+    updatedAt: new Date().toISOString(),
+    createdAt: order.createdAt ?? new Date().toISOString(),
+  };
+  if (existing >= 0) {
+    store.orders[existing] = { ...store.orders[existing], ...record };
+  } else {
+    store.orders.unshift(record);
+  }
+  syncData(store);
+  return record;
+}
+
+export async function updateOrderRecord(
+  id: string,
+  patch: Record<string, unknown>,
+  orgIdHint?: string | null,
+): Promise<Record<string, unknown> | null> {
+  const orgId = resolveStorageOrgId(orgIdHint ?? getRequestOrgId());
+
+  try {
+    const {
+      isSupabaseOrdersConfigured,
+      updateOrderInSupabase,
+      isOrderUuid,
+    } = await import('./supabase-orders');
+    if (isSupabaseOrdersConfigured() && isOrderUuid(id)) {
+      const result = await updateOrderInSupabase(id, patch, orgId);
+      if (result.ok && result.order) {
+        const store = getDataStore();
+        if (!Array.isArray(store.orders)) store.orders = [];
+        const idx = store.orders.findIndex((o) => String(o.id) === id);
+        if (idx >= 0) store.orders[idx] = result.order;
+        else store.orders.unshift(result.order);
+        syncData(store);
+        return result.order;
+      }
+      if (result.error === 'not found') {
+        // Fall through to disk for legacy non-cloud ids
+      } else if (result.error) {
+        console.warn('[orders] Supabase update failed, trying disk:', result.error);
+      }
+    }
+  } catch (err) {
+    console.warn(
+      '[orders] Supabase update failed, using disk:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  const store = getDataStore();
+  if (!Array.isArray(store.orders)) store.orders = [];
+  const idx = store.orders.findIndex((o) => String(o.id) === id);
+  if (idx < 0) return null;
+  store.orders[idx] = { ...store.orders[idx], ...patch, updatedAt: new Date().toISOString() };
+  syncData(store);
+  return store.orders[idx];
+}
+
+/** Count live ringing / in-progress calls for the current org data store. */
+export function countOpenCallsForOrg(): number {
+  expireStaleOpenCalls();
+  return getDataStore().calls.filter((c) => isOpenCallStatus(c.status)).length;
+}
+
+/** Max simultaneous live calls (inbound + outbound) per org. Default 5. */
+export function getMaxConcurrentCallsPerOrg(): number {
+  const settings = getAgentSettings();
+  const fromSlots = settings.maxAgentSlots;
+  if (Number.isFinite(fromSlots) && fromSlots! > 0) {
+    return Math.max(1, Math.min(10, Math.floor(fromSlots!)));
+  }
+  const fromSettings = settings.callQueueMaxConcurrent;
+  if (Number.isFinite(fromSettings) && fromSettings! > 0) {
+    return Math.max(1, Math.min(5, Math.floor(fromSettings!)));
+  }
+  const n = Number(process.env.MAX_CONCURRENT_CALLS_PER_ORG ?? 5);
+  return Number.isFinite(n) && n > 0 ? Math.min(5, Math.floor(n)) : 5;
+}
+
+export function countOpenCallsByDirection(): { inbound: number; outbound: number; total: number } {
+  expireStaleOpenCalls();
+  const open = getDataStore().calls.filter((c) => isOpenCallStatus(c.status));
+  let inbound = 0;
+  let outbound = 0;
+  for (const c of open) {
+    if (String(c.direction ?? '') === 'outbound') outbound += 1;
+    else inbound += 1;
+  }
+  return { inbound, outbound, total: open.length };
+}
+
+export function getInboundOutboundSlotLimits(): { maxInbound: number; maxOutbound: number; maxTotal: number } {
+  const settings = getAgentSettings();
+  const maxTotal = getMaxConcurrentCallsPerOrg();
+  const maxInbound = Math.max(1, Math.min(maxTotal, Math.floor(settings.maxInboundSlots ?? 4)));
+  const maxOutbound = Math.max(1, Math.min(maxTotal, Math.floor(settings.maxOutboundSlots ?? 1)));
+  return { maxInbound, maxOutbound, maxTotal };
+}
+
+/** Capacity snapshot for Call Centre UI + outbound worker. */
+export function getAgentCapacitySnapshot(): {
+  inboundActive: number;
+  outboundActive: number;
+  totalActive: number;
+  maxInbound: number;
+  maxOutbound: number;
+  maxTotal: number;
+  outboundSlotsFree: number;
+  inboundSlotsFree: number;
+  overflowArmed: boolean;
+  overflowNumber?: string;
+  canAcceptInboundAi: boolean;
+} {
+  const counts = countOpenCallsByDirection();
+  const limits = getInboundOutboundSlotLimits();
+  const settings = getAgentSettings();
+  const diallingJobs = (getDataStore().outboundQueue ?? []).filter(
+    (j) => String(j.status ?? '') === 'dialling',
+  ).length;
+  const outboundActive = counts.outbound + diallingJobs;
+  const inboundSlotsFree = Math.max(0, limits.maxInbound - counts.inbound);
+  const outboundSlotsFree = Math.max(0, Math.min(
+    limits.maxOutbound - outboundActive,
+    limits.maxTotal - counts.total - diallingJobs,
+  ));
+  const overflowArmed = settings.overflowWhenFull !== false;
+  const atCapacity = counts.total >= limits.maxTotal;
+  return {
+    inboundActive: counts.inbound,
+    outboundActive,
+    totalActive: counts.total,
+    maxInbound: limits.maxInbound,
+    maxOutbound: limits.maxOutbound,
+    maxTotal: limits.maxTotal,
+    outboundSlotsFree,
+    inboundSlotsFree,
+    overflowArmed,
+    overflowNumber: settings.overflowNumber || settings.transferNumbers?.general || undefined,
+    canAcceptInboundAi: !atCapacity && inboundSlotsFree > 0,
+  };
+}
+
+/** True when auto outbound dialling should be skipped (quiet hours). */
+export function isWithinCallQueueQuietHours(now = new Date()): boolean {
+  const { callQueueQuietStart, callQueueQuietEnd } = getAgentSettings();
+  const start = String(callQueueQuietStart ?? '20:00').trim();
+  const end = String(callQueueQuietEnd ?? '08:00').trim();
+  const toMins = (hhmm: string) => {
+    const [h, m] = hhmm.split(':').map((v) => Number(v));
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+    return h * 60 + m;
+  };
+  const startM = toMins(start);
+  const endM = toMins(end);
+  if (startM == null || endM == null) return false;
+  const cur = now.getHours() * 60 + now.getMinutes();
+  if (startM === endM) return false;
+  if (startM < endM) return cur >= startM && cur < endM;
+  return cur >= startM || cur < endM;
+}
+
+export function getOutboundQueueState(): 'running' | 'paused' | 'stopped' {
+  const state = getAgentSettings().outboundQueueState;
+  return state === 'paused' || state === 'stopped' ? state : 'running';
+}
+
+/** Cancel queued outbound jobs when the queue is stopped. */
+export function cancelQueuedOutboundJobs(): number {
+  const store = getDataStore();
+  let count = 0;
+  for (const job of store.outboundQueue) {
+    if (String(job.status ?? '') !== 'queued') continue;
+    Object.assign(job, { status: 'cancelled', cancelledAt: new Date().toISOString() });
+    count += 1;
+  }
+  if (count) syncData(store);
+  return count;
 }
 
 export function updateProjectRecord(
@@ -1257,111 +1598,6 @@ function isOpenCallStatus(status: unknown): boolean {
   return s === 'ringing' || s === 'in_progress';
 }
 
-export function countOpenCallsForOrg(): number {
-  expireStaleOpenCalls();
-  return getDataStore().calls.filter((c) => isOpenCallStatus(c.status)).length;
-}
-
-export function countOpenCallsByDirection(): { inbound: number; outbound: number; total: number } {
-  expireStaleOpenCalls();
-  const open = getDataStore().calls.filter((c) => isOpenCallStatus(c.status));
-  let inbound = 0;
-  let outbound = 0;
-  for (const c of open) {
-    if (String(c.direction ?? '') === 'outbound') outbound += 1;
-    else inbound += 1;
-  }
-  return { inbound, outbound, total: open.length };
-}
-
-export function getMaxConcurrentCallsPerOrg(): number {
-  const settings = getAgentSettings();
-  const fromSlots = settings.maxAgentSlots;
-  if (Number.isFinite(fromSlots) && fromSlots! > 0) {
-    return Math.max(1, Math.min(10, Math.floor(fromSlots!)));
-  }
-  const fromSettings = settings.callQueueMaxConcurrent;
-  if (Number.isFinite(fromSettings) && fromSettings! > 0) {
-    return Math.max(1, Math.min(5, Math.floor(fromSettings!)));
-  }
-  const n = Number(process.env.MAX_CONCURRENT_CALLS_PER_ORG ?? 5);
-  return Number.isFinite(n) && n > 0 ? Math.min(5, Math.floor(n)) : 5;
-}
-
-export function getInboundOutboundSlotLimits(): { maxInbound: number; maxOutbound: number; maxTotal: number } {
-  const settings = getAgentSettings();
-  const maxTotal = getMaxConcurrentCallsPerOrg();
-  const maxInbound = Math.max(1, Math.min(maxTotal, Math.floor(settings.maxInboundSlots ?? 4)));
-  const maxOutbound = Math.max(1, Math.min(maxTotal, Math.floor(settings.maxOutboundSlots ?? 1)));
-  return { maxInbound, maxOutbound, maxTotal };
-}
-
-export function getOutboundQueueState(): 'running' | 'paused' | 'stopped' {
-  const state = getAgentSettings().outboundQueueState;
-  return state === 'paused' || state === 'stopped' ? state : 'running';
-}
-
-export function isWithinCallQueueQuietHours(now = new Date()): boolean {
-  const { callQueueQuietStart, callQueueQuietEnd } = getAgentSettings();
-  const start = String(callQueueQuietStart ?? '20:00').trim();
-  const end = String(callQueueQuietEnd ?? '08:00').trim();
-  const toMins = (hhmm: string) => {
-    const [h, m] = hhmm.split(':').map((v) => Number(v));
-    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
-    return h * 60 + m;
-  };
-  const startM = toMins(start);
-  const endM = toMins(end);
-  if (startM == null || endM == null) return false;
-  const cur = now.getHours() * 60 + now.getMinutes();
-  if (startM === endM) return false;
-  if (startM < endM) return cur >= startM && cur < endM;
-  return cur >= startM || cur < endM;
-}
-
-/** Capacity snapshot for Call Centre UI + outbound worker. */
-export function getAgentCapacitySnapshot(): {
-  inboundActive: number;
-  outboundActive: number;
-  totalActive: number;
-  maxInbound: number;
-  maxOutbound: number;
-  maxTotal: number;
-  outboundSlotsFree: number;
-  inboundSlotsFree: number;
-  overflowArmed: boolean;
-  overflowNumber?: string;
-  canAcceptInboundAi: boolean;
-} {
-  const counts = countOpenCallsByDirection();
-  const limits = getInboundOutboundSlotLimits();
-  const settings = getAgentSettings();
-  const diallingJobs = (getDataStore().outboundQueue ?? []).filter(
-    (j) => String(j.status ?? '') === 'dialling',
-  ).length;
-  const outboundActive = counts.outbound + diallingJobs;
-  const inboundSlotsFree = Math.max(0, limits.maxInbound - counts.inbound);
-  const outboundSlotsFree = Math.max(0, Math.min(
-    limits.maxOutbound - outboundActive,
-    limits.maxTotal - counts.total - diallingJobs,
-  ));
-  const overflowArmed = settings.overflowWhenFull !== false;
-  const atCapacity = counts.total >= limits.maxTotal;
-  return {
-    inboundActive: counts.inbound,
-    outboundActive,
-    totalActive: counts.total,
-    maxInbound: limits.maxInbound,
-    maxOutbound: limits.maxOutbound,
-    maxTotal: limits.maxTotal,
-    outboundSlotsFree,
-    inboundSlotsFree,
-    overflowArmed,
-    overflowNumber: settings.overflowNumber || settings.transferNumbers?.general || undefined,
-    canAcceptInboundAi: !atCapacity && inboundSlotsFree > 0,
-  };
-}
-
 export function getLinesSummary(): { total: number; registered: number; onCall: number } {
   expireStaleOpenCalls();
   const store = getDataStore();
@@ -1445,9 +1681,9 @@ export function getAgentStatusSnapshot(): {
         ?? (call.direction === 'outbound' ? call.to : call.from)
         ?? '',
       );
-      const resolved = resolveContactByPhone(phone || String(call.from ?? ''));
-      const contactName = String(call.contactName ?? resolved.customerName ?? 'Guest');
-      const isGuest = !resolved.customerId
+      const resolvedContact = resolveContactByPhone(phone || String(call.from ?? ''));
+      const contactName = String(call.contactName ?? resolvedContact.customerName ?? 'Guest');
+      const isGuest = !resolvedContact.customerId
         || /^guest$/i.test(contactName)
         || contactName.trim() === '';
       const meta = (call.metadata as Record<string, unknown> | undefined) || {};
@@ -1461,7 +1697,7 @@ export function getAgentStatusSnapshot(): {
         ...call,
         elapsedSec: computeCallDurationSec(call),
         contactName,
-        customerId: call.customerId ?? resolved.customerId,
+        customerId: call.customerId ?? resolvedContact.customerId,
         isGuest,
         direction: call.direction ?? 'inbound',
         status: call.status,
@@ -1598,4 +1834,110 @@ export function isAfterHours(
   const day = now.getDay();
   if (day === 0 || day === 6) return true;
   return minutes < startMinutes || minutes >= endMinutes;
+}
+
+// ── Recruitment: applications ────────────────────────────────────────
+
+export function saveRecruitmentApplication(app: Record<string, unknown>): Record<string, unknown> {
+  const store = getDataStore();
+  const id = String(app.id ?? `APP${Date.now()}`);
+  const existing = store.recruitmentApplications.findIndex(a => String(a.id) === id);
+  const record = { ...app, id, updatedAt: new Date().toISOString(), createdAt: app.createdAt ?? new Date().toISOString() };
+  if (existing >= 0) {
+    store.recruitmentApplications[existing] = { ...store.recruitmentApplications[existing], ...record };
+  } else {
+    store.recruitmentApplications.unshift(record);
+  }
+  syncData(store);
+  return record;
+}
+
+export function updateRecruitmentApplication(id: string, patch: Record<string, unknown>): Record<string, unknown> | null {
+  const store = getDataStore();
+  const idx = store.recruitmentApplications.findIndex(a => String(a.id) === id);
+  if (idx < 0) return null;
+  store.recruitmentApplications[idx] = { ...store.recruitmentApplications[idx], ...patch, updatedAt: new Date().toISOString() };
+  syncData(store);
+  return store.recruitmentApplications[idx];
+}
+
+// ── Recruitment: onboarding tasks ────────────────────────────────────
+
+export function saveRecruitmentOnboardingTask(task: Record<string, unknown>): Record<string, unknown> {
+  const store = getDataStore();
+  const id = String(task.id ?? `OB${Date.now()}`);
+  const existing = store.recruitmentOnboardingTasks.findIndex(t => String(t.id) === id);
+  const record = { ...task, id, updatedAt: new Date().toISOString() };
+  if (existing >= 0) {
+    store.recruitmentOnboardingTasks[existing] = { ...store.recruitmentOnboardingTasks[existing], ...record };
+  } else {
+    store.recruitmentOnboardingTasks.unshift(record);
+  }
+  syncData(store);
+  return record;
+}
+
+export function updateRecruitmentOnboardingTask(id: string, patch: Record<string, unknown>): Record<string, unknown> | null {
+  const store = getDataStore();
+  const idx = store.recruitmentOnboardingTasks.findIndex(t => String(t.id) === id);
+  if (idx < 0) return null;
+  store.recruitmentOnboardingTasks[idx] = { ...store.recruitmentOnboardingTasks[idx], ...patch, updatedAt: new Date().toISOString() };
+  syncData(store);
+  return store.recruitmentOnboardingTasks[idx];
+}
+
+export function completeOnboardingTaskByCategory(candidateId: string, category: string): Record<string, unknown> | null {
+  const store = getDataStore();
+  const task = store.recruitmentOnboardingTasks.find(
+    t => String(t.candidateId) === candidateId && String(t.category) === category && String(t.status) !== 'completed',
+  );
+  if (!task) return null;
+  return updateRecruitmentOnboardingTask(String(task.id), { status: 'completed' });
+}
+
+const DEFAULT_ONBOARDING_CHECKLIST = [
+  { task: 'Complete right to work documentation', category: 'documentation', assignedTo: 'HR Team' },
+  { task: 'Provide bank details for payroll', category: 'documentation', assignedTo: 'HR Team' },
+  { task: 'Complete health & safety induction', category: 'training', assignedTo: 'H&S Officer' },
+  { task: 'Issue company van and equipment', category: 'equipment', assignedTo: 'Operations' },
+  { task: 'Set up email and system access', category: 'access', assignedTo: 'IT Team' },
+  { task: 'First day orientation with team', category: 'orientation', assignedTo: 'Line Manager' },
+];
+
+export function seedOnboardingForCandidate(candidateId: string): Record<string, unknown>[] {
+  const store = getDataStore();
+  const existing = store.recruitmentOnboardingTasks.filter(t => String(t.candidateId) === candidateId);
+  if (existing.length > 0) return existing;
+  const now = new Date();
+  const seeded: Record<string, unknown>[] = [];
+  for (let i = 0; i < DEFAULT_ONBOARDING_CHECKLIST.length; i++) {
+    const tmpl = DEFAULT_ONBOARDING_CHECKLIST[i];
+    const due = new Date(now.getTime() + (i + 1) * 86400000).toISOString().slice(0, 10);
+    const task = saveRecruitmentOnboardingTask({
+      candidateId,
+      task: tmpl.task,
+      category: tmpl.category,
+      status: 'pending',
+      dueDate: due,
+      assignedTo: tmpl.assignedTo,
+    });
+    seeded.push(task);
+  }
+  return seeded;
+}
+
+// ── Recruitment: job postings ────────────────────────────────────────
+
+export function saveRecruitmentJob(job: Record<string, unknown>): Record<string, unknown> {
+  const store = getDataStore();
+  const id = String(job.id ?? `J${Date.now()}`);
+  const existing = store.recruitmentJobs.findIndex(j => String(j.id) === id);
+  const record = { ...job, id, updatedAt: new Date().toISOString(), createdAt: job.createdAt ?? new Date().toISOString() };
+  if (existing >= 0) {
+    store.recruitmentJobs[existing] = { ...store.recruitmentJobs[existing], ...record };
+  } else {
+    store.recruitmentJobs.unshift(record);
+  }
+  syncData(store);
+  return record;
 }

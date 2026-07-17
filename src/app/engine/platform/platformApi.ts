@@ -17,6 +17,13 @@ export interface PlatformOrganization {
   monthlyTokenCap: number;
   tokensUsedThisMonth: number;
   usageCostUsd?: number;
+  elevenlabsCharactersThisMonth?: number;
+  elevenlabsConfigured?: boolean;
+  phoneOutboundMinutes?: number;
+  phoneFreeMinutesRemaining?: number;
+  phoneEstimatedCostGbp?: number;
+  phoneMobileMinutes?: number;
+  phoneLandlineMinutes?: number;
   monthlyPriceGbp: number;
   planLabel: string;
   stripeCustomerId?: string;
