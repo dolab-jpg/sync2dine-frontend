@@ -1,24 +1,47 @@
 /**
- * WhatsAppWebPanel — admin UI for WWeb.js QR connection.
- * Live API must hit backend with handleWWebRoutes (same-origin /api/whatsapp-web/*).
- * No nginx change needed — Plesk reverse-proxy already forwards /api to the Node backend.
+ * WhatsAppWebPanel — admin UI for WWeb.js QR + embedded Chromium login.
+ * Live API: same-origin /api/whatsapp-web/* (backend handleWWebRoutes).
  */
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type MouseEvent } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Label } from '../ui/label';
-import { Loader2, LogOut, RefreshCw, Smartphone, Wifi, WifiOff, CheckCheck, Check, MessageSquare, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Loader2,
+  LogOut,
+  RefreshCw,
+  Smartphone,
+  Wifi,
+  WifiOff,
+  CheckCheck,
+  Check,
+  MessageSquare,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  Monitor,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
+type WWebStatusValue =
+  | 'disconnected'
+  | 'initializing'
+  | 'qr_pending'
+  | 'authenticated'
+  | 'ready'
+  | 'error';
+
 interface WWebStatus {
-  status: 'disconnected' | 'qr_pending' | 'authenticated' | 'ready';
+  status: WWebStatusValue;
   info?: {
     pushname?: string;
     wid?: string;
     platform?: string;
     phone?: string;
   } | null;
+  error?: string;
+  browserLoginActive?: boolean;
 }
 
 interface QRResponse {
@@ -30,30 +53,58 @@ interface QRResponse {
 
 const API = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '').replace(/\/$/, '');
 
+function wsUrlForPath(path: string): string {
+  if (API) {
+    const base = API.replace(/^http/, 'ws');
+    return `${base}${path}`;
+  }
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}${path}`;
+}
+
 export function WhatsAppWebPanel() {
   const [wwebStatus, setWwebStatus] = useState<WWebStatus>({ status: 'disconnected' });
   const [qrData, setQrData] = useState<string | null>(null);
   const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [apiReachable, setApiReachable] = useState(true);
   const [loading, setLoading] = useState(false);
   const [showFallback, setShowFallback] = useState(false);
+  const [browserLogin, setBrowserLogin] = useState(false);
+  const [browserFrame, setBrowserFrame] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const framePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const frameImgRef = useRef<HTMLImageElement | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/whatsapp-web/status`);
-      const data = await res.json() as WWebStatus;
+      if (!res.ok) {
+        setApiReachable(false);
+        setLastError(`Status HTTP ${res.status}`);
+        return 'disconnected' as WWebStatusValue;
+      }
+      const data = (await res.json()) as WWebStatus;
+      setApiReachable(true);
       setWwebStatus(data);
+      if (data.error) setLastError(data.error);
+      else if (data.status === 'ready' || data.status === 'qr_pending') setLastError(null);
+      if (typeof data.browserLoginActive === 'boolean') {
+        setBrowserLogin(data.browserLoginActive);
+      }
       return data.status;
-    } catch {
-      return 'disconnected';
+    } catch (err) {
+      setApiReachable(false);
+      setLastError(err instanceof Error ? err.message : 'Cannot reach WhatsApp API');
+      return 'disconnected' as WWebStatusValue;
     }
   }, []);
 
   const fetchQR = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/whatsapp-web/qr`);
-      const data = await res.json() as QRResponse;
+      const data = (await res.json()) as QRResponse;
       setQrData(data.qr);
       setQrImageUrl(data.qrImageDataUrl ?? null);
       if (data.error) setLastError(data.error);
@@ -63,6 +114,78 @@ export function WhatsAppWebPanel() {
     }
   }, []);
 
+  const fetchBrowserFrame = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/whatsapp-web/browser-login/frame`);
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        frame: string | null;
+        status: WWebStatusValue;
+        active: boolean;
+        error?: string;
+      };
+      if (data.frame) setBrowserFrame(data.frame);
+      if (data.error) setLastError(data.error);
+      setBrowserLogin(data.active);
+      if (data.status) {
+        setWwebStatus((prev) => ({ ...prev, status: data.status }));
+      }
+      if (data.status === 'ready') {
+        toast.success('WhatsApp connected');
+        setBrowserLogin(false);
+        setBrowserFrame(null);
+      }
+    } catch {
+      /* ignore frame poll errors */
+    }
+  }, []);
+
+  const stopWs = useCallback(() => {
+    if (wsRef.current) {
+      try {
+        wsRef.current.close();
+      } catch {
+        /* ignore */
+      }
+      wsRef.current = null;
+    }
+  }, []);
+
+  const startWs = useCallback(() => {
+    stopWs();
+    try {
+      const ws = new WebSocket(wsUrlForPath('/api/whatsapp-web/browser-login/stream'));
+      wsRef.current = ws;
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(String(ev.data)) as {
+            type: string;
+            data?: string;
+            status?: WWebStatusValue;
+          };
+          if (msg.type === 'frame' && msg.data) {
+            setBrowserFrame(`data:image/jpeg;base64,${msg.data}`);
+          }
+          if (msg.status) {
+            setWwebStatus((prev) => ({ ...prev, status: msg.status! }));
+            if (msg.status === 'ready') {
+              toast.success('WhatsApp connected');
+              setBrowserLogin(false);
+              setBrowserFrame(null);
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      };
+      ws.onerror = () => {
+        /* frame poll is the fallback */
+      };
+    } catch {
+      /* proxy may block WS — poll still works */
+    }
+  }, [stopWs]);
+
   useEffect(() => {
     void fetchStatus();
 
@@ -70,7 +193,7 @@ export function WhatsAppWebPanel() {
       const status = await fetchStatus();
       if (status === 'qr_pending') {
         await fetchQR();
-      } else {
+      } else if (status !== 'initializing') {
         setQrData(null);
         setQrImageUrl(null);
       }
@@ -78,22 +201,104 @@ export function WhatsAppWebPanel() {
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      if (framePollRef.current) clearInterval(framePollRef.current);
+      stopWs();
     };
-  }, [fetchStatus, fetchQR]);
+  }, [fetchStatus, fetchQR, stopWs]);
 
-  const handleReconnect = async () => {
+  useEffect(() => {
+    if (browserLogin) {
+      startWs();
+      framePollRef.current = setInterval(() => {
+        void fetchBrowserFrame();
+      }, 1500);
+      return () => {
+        if (framePollRef.current) clearInterval(framePollRef.current);
+        stopWs();
+      };
+    }
+    stopWs();
+    if (framePollRef.current) {
+      clearInterval(framePollRef.current);
+      framePollRef.current = null;
+    }
+    return undefined;
+  }, [browserLogin, startWs, stopWs, fetchBrowserFrame]);
+
+  const handleReconnect = async (fresh = false) => {
     setLoading(true);
     setLastError(null);
     try {
-      await fetch(`${API}/api/whatsapp-web/reconnect`, { method: 'POST' });
-      toast.success('Reconnecting — QR code will appear shortly');
-      await new Promise(r => setTimeout(r, 2000));
+      const q = fresh ? '?fresh=1' : '';
+      const res = await fetch(`${API}/api/whatsapp-web/reconnect${q}`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.success(
+        fresh
+          ? 'Fresh reconnect — new QR will appear shortly'
+          : 'Reconnecting — QR code will appear shortly'
+      );
+      await new Promise((r) => setTimeout(r, 2000));
       await fetchStatus();
       await fetchQR();
-    } catch {
+    } catch (err) {
       toast.error('Failed to reconnect');
+      setLastError(err instanceof Error ? err.message : 'Reconnect failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBrowserLogin = async (fresh = true) => {
+    setLoading(true);
+    setLastError(null);
+    setBrowserFrame(null);
+    try {
+      const res = await fetch(`${API}/api/whatsapp-web/browser-login/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fresh }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string; status?: string };
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setBrowserLogin(true);
+      toast.success('Login browser started — scan the QR in the live view');
+      await fetchStatus();
+    } catch (err) {
+      toast.error('Could not start login browser');
+      setLastError(err instanceof Error ? err.message : 'Browser login failed');
+      setBrowserLogin(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStopBrowserLogin = async () => {
+    setLoading(true);
+    try {
+      await fetch(`${API}/api/whatsapp-web/browser-login/stop`, { method: 'POST' });
+      setBrowserLogin(false);
+      setBrowserFrame(null);
+      stopWs();
+      await fetchStatus();
+    } catch {
+      toast.error('Failed to stop login browser');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFrameClick = (e: MouseEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    const rect = img.getBoundingClientRect();
+    const scaleX = 1280 / rect.width;
+    const scaleY = 800 / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'click', x, y }));
     }
   };
 
@@ -106,6 +311,8 @@ export function WhatsAppWebPanel() {
       setQrData(null);
       setQrImageUrl(null);
       setLastError(null);
+      setBrowserLogin(false);
+      setBrowserFrame(null);
     } catch {
       toast.error('Logout failed');
     } finally {
@@ -113,24 +320,36 @@ export function WhatsAppWebPanel() {
     }
   };
 
-  const statusColor = {
+  const statusColor: Record<WWebStatusValue, string> = {
     disconnected: 'bg-red-100 text-red-800',
+    initializing: 'bg-amber-100 text-amber-800',
     qr_pending: 'bg-amber-100 text-amber-800',
     authenticated: 'bg-blue-100 text-blue-800',
     ready: 'bg-green-100 text-green-800',
-  }[wwebStatus.status];
+    error: 'bg-red-100 text-red-800',
+  };
 
-  const statusLabel = {
+  const statusLabel: Record<WWebStatusValue, string> = {
     disconnected: 'Disconnected',
+    initializing: 'Starting…',
     qr_pending: 'Waiting for QR scan',
     authenticated: 'Authenticating...',
     ready: 'Connected',
-  }[wwebStatus.status];
+    error: 'Error',
+  };
 
-  const StatusIcon = wwebStatus.status === 'ready' ? Wifi : wwebStatus.status === 'disconnected' ? WifiOff : Loader2;
+  const StatusIcon =
+    wwebStatus.status === 'ready'
+      ? Wifi
+      : wwebStatus.status === 'disconnected' || wwebStatus.status === 'error'
+        ? WifiOff
+        : Loader2;
 
-  const qrImgSrc = qrImageUrl
-    || (qrData ? `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(qrData)}` : null);
+  const qrImgSrc =
+    qrImageUrl ||
+    (qrData
+      ? `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(qrData)}`
+      : null);
 
   return (
     <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-white">
@@ -142,19 +361,30 @@ export function WhatsAppWebPanel() {
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-bold text-lg">WhatsApp Web</h3>
-              <Badge className={statusColor}>{statusLabel}</Badge>
+              <Badge className={statusColor[wwebStatus.status] ?? statusColor.disconnected}>
+                {statusLabel[wwebStatus.status] ?? wwebStatus.status}
+              </Badge>
             </div>
             <p className="text-sm text-gray-600">
-              Personal WhatsApp connected via QR code. Same AI brain, all tools, multi-language.
+              Personal WhatsApp via QR or live browser login. No Business API required.
             </p>
           </div>
         </div>
+
+        {!apiReachable && (
+          <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+            Cannot reach WhatsApp API ({API || 'same-origin'}). Check that the backend is running.
+            {lastError ? ` — ${lastError}` : ''}
+          </div>
+        )}
 
         {wwebStatus.status === 'ready' && wwebStatus.info && (
           <div className="p-4 bg-white rounded-xl border border-green-200 space-y-2">
             <div className="flex items-center gap-2 text-green-700">
               <Smartphone className="w-4 h-4" />
-              <span className="font-medium">Connected as {wwebStatus.info.pushname || 'Unknown'}</span>
+              <span className="font-medium">
+                Connected as {wwebStatus.info.pushname || 'Unknown'}
+              </span>
             </div>
             <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
               {wwebStatus.info.phone && (
@@ -171,22 +401,61 @@ export function WhatsAppWebPanel() {
               )}
             </div>
             <div className="flex items-center gap-4 pt-2 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><Check className="w-3 h-3" /> Sent</span>
-              <span className="flex items-center gap-1"><CheckCheck className="w-3 h-3" /> Delivered</span>
-              <span className="flex items-center gap-1 text-blue-500"><CheckCheck className="w-3 h-3" /> Read</span>
+              <span className="flex items-center gap-1">
+                <Check className="w-3 h-3" /> Sent
+              </span>
+              <span className="flex items-center gap-1">
+                <CheckCheck className="w-3 h-3" /> Delivered
+              </span>
+              <span className="flex items-center gap-1 text-blue-500">
+                <CheckCheck className="w-3 h-3" /> Read
+              </span>
             </div>
           </div>
         )}
 
-        {wwebStatus.status === 'qr_pending' && qrImgSrc && (
+        {browserLogin && (
+          <div className="space-y-2 p-3 bg-white rounded-xl border-2 border-green-300">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <Monitor className="w-4 h-4" />
+                Live WhatsApp Web (scan QR here)
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleStopBrowserLogin()}
+                disabled={loading}
+              >
+                Close browser
+              </Button>
+            </div>
+            {browserFrame ? (
+              <img
+                ref={frameImgRef}
+                src={browserFrame}
+                alt="WhatsApp Web live view"
+                className="w-full max-w-xl mx-auto rounded-lg border cursor-crosshair bg-black"
+                onClick={handleFrameClick}
+              />
+            ) : (
+              <div className="flex items-center justify-center gap-2 p-10 text-amber-700">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Loading WhatsApp Web…</span>
+              </div>
+            )}
+            <p className="text-xs text-gray-500 text-center">
+              Use Linked Devices on your phone to scan. Click the view if WhatsApp asks for a
+              confirmation step.
+            </p>
+          </div>
+        )}
+
+        {!browserLogin && wwebStatus.status === 'qr_pending' && qrImgSrc && (
           <div className="flex flex-col items-center gap-3 p-6 bg-white rounded-xl border-2 border-dashed border-green-300">
             <p className="text-sm font-medium text-gray-700">Scan with WhatsApp on your phone</p>
             <div className="p-3 bg-white rounded-lg shadow-sm">
-              <img
-                src={qrImgSrc}
-                alt="WhatsApp QR Code"
-                className="w-64 h-64"
-              />
+              <img src={qrImgSrc} alt="WhatsApp QR Code" className="w-64 h-64" />
             </div>
             <ol className="text-xs text-gray-500 space-y-1 text-center">
               <li>1. Open WhatsApp on your phone</li>
@@ -197,34 +466,40 @@ export function WhatsAppWebPanel() {
           </div>
         )}
 
-        {wwebStatus.status === 'qr_pending' && !qrData && (
+        {!browserLogin && wwebStatus.status === 'qr_pending' && !qrData && (
           <div className="flex items-center justify-center gap-2 p-6 text-amber-700">
             <Loader2 className="w-5 h-5 animate-spin" />
             <span>Generating QR code...</span>
           </div>
         )}
 
-        {wwebStatus.status === 'authenticated' && (
-          <div className="flex items-center justify-center gap-2 p-6 text-blue-700">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span>Authenticated — syncing chats...</span>
-          </div>
-        )}
+        {(wwebStatus.status === 'initializing' || wwebStatus.status === 'authenticated') &&
+          !browserLogin && (
+            <div className="flex items-center justify-center gap-2 p-6 text-blue-700">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>
+                {wwebStatus.status === 'initializing'
+                  ? 'Starting WhatsApp client…'
+                  : 'Authenticated — syncing chats...'}
+              </span>
+            </div>
+          )}
 
-        {wwebStatus.status === 'disconnected' && (
-          <div className="p-4 bg-gray-50 rounded-xl border text-center space-y-3">
-            <StatusIcon className="w-8 h-8 mx-auto text-gray-400" />
-            <p className="text-sm text-gray-600">WhatsApp is not connected. Click below to start.</p>
-            {lastError && (
-              <p className="text-xs text-red-600">{lastError}</p>
-            )}
-          </div>
-        )}
+        {(wwebStatus.status === 'disconnected' || wwebStatus.status === 'error') &&
+          !browserLogin && (
+            <div className="p-4 bg-gray-50 rounded-xl border text-center space-y-3">
+              <StatusIcon className="w-8 h-8 mx-auto text-gray-400" />
+              <p className="text-sm text-gray-600">
+                WhatsApp is not connected. Connect with QR, or open the live login browser.
+              </p>
+              {lastError && <p className="text-xs text-red-600 break-words">{lastError}</p>}
+            </div>
+          )}
 
-        {/* Fix 6C: Fallback link when disconnected with error after reconnect */}
-        {wwebStatus.status === 'disconnected' && lastError && (
+        {(wwebStatus.status === 'disconnected' || wwebStatus.status === 'error') && lastError && (
           <div className="border rounded-lg overflow-hidden">
             <button
+              type="button"
               onClick={() => setShowFallback(!showFallback)}
               className="w-full flex items-center justify-between px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
             >
@@ -243,8 +518,7 @@ export function WhatsAppWebPanel() {
                   Open WhatsApp Web in new tab
                 </a>
                 <p>
-                  Note: The production AI path still requires WWeb.js QR pairing above.
-                  The browser tab is for manual message checking only.
+                  The production AI path still needs pairing via Connect or Login browser above.
                 </p>
               </div>
             )}
@@ -252,34 +526,81 @@ export function WhatsAppWebPanel() {
         )}
 
         <div className="flex flex-wrap gap-2">
-          {wwebStatus.status === 'disconnected' && (
-            <Button onClick={handleReconnect} disabled={loading} className="bg-green-600 hover:bg-green-700">
-              {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Wifi className="w-4 h-4 mr-2" />}
-              Connect WhatsApp
-            </Button>
-          )}
+          {(wwebStatus.status === 'disconnected' || wwebStatus.status === 'error') &&
+            !browserLogin && (
+              <>
+                <Button
+                  onClick={() => void handleReconnect(false)}
+                  disabled={loading}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Wifi className="w-4 h-4 mr-2" />
+                  )}
+                  Connect WhatsApp
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => void handleBrowserLogin(true)}
+                  disabled={loading}
+                >
+                  <Monitor className="w-4 h-4 mr-2" />
+                  Open login browser
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => void handleReconnect(true)}
+                  disabled={loading}
+                >
+                  Fresh session
+                </Button>
+              </>
+            )}
           {wwebStatus.status === 'ready' && (
             <>
-              <Button variant="outline" onClick={handleReconnect} disabled={loading}>
+              <Button variant="outline" onClick={() => void handleReconnect(false)} disabled={loading}>
                 <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                 Reconnect
               </Button>
-              <Button variant="destructive" onClick={handleLogout} disabled={loading}>
+              <Button
+                variant="outline"
+                onClick={() => void handleBrowserLogin(true)}
+                disabled={loading}
+              >
+                <Monitor className="w-4 h-4 mr-2" />
+                Relink in browser
+              </Button>
+              <Button variant="destructive" onClick={() => void handleLogout()} disabled={loading}>
                 <LogOut className="w-4 h-4 mr-2" />
                 Disconnect
               </Button>
             </>
           )}
-          {wwebStatus.status === 'qr_pending' && (
-            <Button variant="outline" onClick={handleLogout} disabled={loading}>
-              <LogOut className="w-4 h-4 mr-2" />
-              Cancel
-            </Button>
-          )}
+          {(wwebStatus.status === 'qr_pending' || wwebStatus.status === 'initializing') &&
+            !browserLogin && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => void handleBrowserLogin(false)}
+                  disabled={loading}
+                >
+                  <Monitor className="w-4 h-4 mr-2" />
+                  Open login browser
+                </Button>
+                <Button variant="outline" onClick={() => void handleLogout()} disabled={loading}>
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Cancel
+                </Button>
+              </>
+            )}
         </div>
 
         <div className="text-xs text-gray-400 space-y-1">
-          <p>Messages from customers are processed by Cynthia AI with all existing tools (quotes, contracts, pricing, etc.).</p>
+          <p>
+            Messages from customers are processed by Cynthia AI with existing tools.
+          </p>
           <p>Read receipts (blue ticks) are tracked automatically.</p>
         </div>
       </CardContent>
