@@ -410,9 +410,21 @@ export default function PlatformClientsCRM() {
                           )}
                         </div>
                       </div>
-                      <div className="text-left sm:text-right shrink-0">
-                        <div className="bg-gradient-to-br from-violet-500 to-indigo-600 text-white px-4 py-2 rounded-full font-bold mb-2">
+                      <div className="text-left sm:text-right shrink-0 space-y-1">
+                        <div className="bg-gradient-to-br from-violet-500 to-indigo-600 text-white px-4 py-2 rounded-full font-bold">
                           {formatTokens(client.tokensUsedThisMonth)} / {formatTokens(client.monthlyTokenCap)} tokens
+                        </div>
+                        <div className="text-xs text-gray-700">
+                          Phone: {client.phoneOutboundMinutes ?? 0} min
+                          {client.phoneFreeMinutesRemaining != null
+                            ? ` · ${client.phoneFreeMinutesRemaining} free left`
+                            : ''}
+                          {client.phoneEstimatedCostGbp != null && client.phoneEstimatedCostGbp > 0
+                            ? ` · £${client.phoneEstimatedCostGbp.toFixed(2)} overage`
+                            : ''}
+                        </div>
+                        <div className="text-xs text-gray-700">
+                          ElevenLabs: {(client.elevenlabsCharactersThisMonth ?? 0).toLocaleString()} chars
                         </div>
                         <div className="text-sm text-gray-600">£{client.monthlyPriceGbp}/mo</div>
                       </div>
@@ -438,6 +450,24 @@ export default function PlatformClientsCRM() {
                   <div><Label className="font-bold">Status</Label><p className="capitalize">{selected.status.replace('_', ' ')}</p></div>
                   <div><Label className="font-bold">Tokens this month</Label><p>{formatTokens(selected.tokensUsedThisMonth)} / {formatTokens(selected.monthlyTokenCap)}</p></div>
                   <div><Label className="font-bold">Subscription</Label><p>{selected.subscriptionStatus ?? 'Not linked'}</p></div>
+                  <div>
+                    <Label className="font-bold">Phone outbound</Label>
+                    <p>
+                      {selected.phoneOutboundMinutes ?? 0} min total
+                      {' '}(mobile {selected.phoneMobileMinutes ?? 0} / landline {selected.phoneLandlineMinutes ?? 0})
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Free left: {selected.phoneFreeMinutesRemaining ?? '—'} · Est. overage £
+                      {(selected.phoneEstimatedCostGbp ?? 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="font-bold">ElevenLabs</Label>
+                    <p>{(selected.elevenlabsCharactersThisMonth ?? 0).toLocaleString()} characters this month</p>
+                    <p className="text-xs text-gray-500">
+                      {selected.elevenlabsConfigured ? 'Key configured' : 'Using platform / not set'}
+                    </p>
+                  </div>
                 </div>
                 {selected.notes && (
                   <div><Label className="font-bold">Notes</Label><p className="bg-gray-50 p-3 rounded-lg">{selected.notes}</p></div>
