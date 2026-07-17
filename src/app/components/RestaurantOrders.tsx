@@ -17,6 +17,9 @@ type FoodOrder = {
   payment: PaymentStatus;
   total: number;
   address?: string;
+  postcode?: string;
+  specialName?: string;
+  notes?: string;
   items: string[];
   createdAt: string;
   etaMinutes?: number;
@@ -83,6 +86,10 @@ function mapApiOrder(raw: Record<string, unknown>): FoodOrder {
         return String(item);
       })
     : [];
+  const address = raw.deliveryAddress ? String(raw.deliveryAddress) : undefined;
+  const postcodeRaw = raw.deliveryPostcode ? String(raw.deliveryPostcode).trim() : '';
+  const postcodeFromAddress = address?.match(/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b/i)?.[1];
+  const postcode = (postcodeRaw || postcodeFromAddress || '').toUpperCase().replace(/\s+/g, ' ').trim() || undefined;
   return {
     id: String(raw.id ?? ''),
     number: String(raw.orderNumber ?? raw.number ?? ''),
@@ -92,7 +99,10 @@ function mapApiOrder(raw: Record<string, unknown>): FoodOrder {
     status: (String(raw.status ?? 'new') as OrderStatus),
     payment: (String(raw.paymentStatus ?? raw.payment ?? 'unpaid') as PaymentStatus),
     total: Number(raw.total ?? 0),
-    address: raw.deliveryAddress ? String(raw.deliveryAddress) : undefined,
+    address,
+    postcode,
+    specialName: raw.specialName ? String(raw.specialName) : undefined,
+    notes: raw.notes ? String(raw.notes) : undefined,
     items,
     createdAt: String(raw.createdAt ?? new Date().toISOString()),
     etaMinutes: raw.etaMinutes != null ? Number(raw.etaMinutes) : undefined,
@@ -100,7 +110,7 @@ function mapApiOrder(raw: Record<string, unknown>): FoodOrder {
 }
 
 function exportOrdersCsv(orders: FoodOrder[]) {
-  const header = ['number', 'customer', 'phone', 'type', 'status', 'payment', 'total', 'address', 'items', 'createdAt'];
+  const header = ['number', 'customer', 'phone', 'type', 'status', 'payment', 'total', 'address', 'postcode', 'items', 'createdAt'];
   const rows = orders.map((o) => [
     o.number,
     o.customer,
@@ -110,6 +120,7 @@ function exportOrdersCsv(orders: FoodOrder[]) {
     o.payment,
     o.total.toFixed(2),
     o.address ?? '',
+    o.postcode ?? '',
     o.items.join('; '),
     o.createdAt,
   ]);
@@ -264,6 +275,15 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
                 <div>
                   <p className="text-sm font-bold uppercase tracking-wide text-slate-500">Order #{order.number}</p>
                   <h2 className="text-2xl font-black text-slate-950">{order.customer}</h2>
+                  <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-semibold text-slate-600">
+                    <span className="rounded-lg bg-slate-100 px-2 py-0.5 capitalize">{order.type}</span>
+                    {order.phone ? (
+                      <a href={`tel:${order.phone}`} className="inline-flex items-center gap-1 text-s2d-teal-deep hover:underline">
+                        <Phone className="h-3.5 w-3.5" />
+                        {order.phone}
+                      </a>
+                    ) : null}
+                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Badge className="rounded-xl bg-s2d-teal-deep px-3 py-1 text-white">{statusLabel(order.status)}</Badge>
@@ -284,11 +304,27 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
                       {item}
                     </div>
                   ))}
-                  {order.address && (
-                    <p className="flex items-center gap-2 rounded-xl bg-s2d-cream-bright px-3 py-2 font-semibold text-s2d-teal-ink">
-                      <MapPin className="h-5 w-5" />
-                      {order.address}
-                    </p>
+                  {(order.address || order.postcode) && (
+                    <div className="rounded-xl bg-s2d-cream-bright px-3 py-2 font-semibold text-s2d-teal-ink">
+                      <p className="flex items-start gap-2">
+                        <MapPin className="mt-0.5 h-5 w-5 shrink-0" />
+                        <span>
+                          {order.address || 'Delivery'}
+                          {order.postcode && order.address && !order.address.toUpperCase().includes(order.postcode.replace(/\s+/g, '')) ? (
+                            <span className="mt-1 block text-base font-black tracking-wide">{order.postcode}</span>
+                          ) : null}
+                          {order.postcode && !order.address ? (
+                            <span className="font-black tracking-wide">{order.postcode}</span>
+                          ) : null}
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                  {(order.specialName || order.notes) && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950">
+                      {order.specialName ? <p>Special: {order.specialName}</p> : null}
+                      {order.notes ? <p className="mt-0.5 text-amber-900/80 font-medium">{order.notes}</p> : null}
+                    </div>
                   )}
                 </div>
                 <div className="rounded-2xl bg-slate-950 p-4 text-center text-white">

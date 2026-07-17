@@ -26,6 +26,16 @@ export function buildDelBoyChatInstruction(role: string): string {
 }
 
 export function buildHumourInstruction(level: HumourLevel, role: string, channel?: string): string {
+  if (role === 'customer' && channel === 'phone') {
+    if (level === 'straight') {
+      return 'Humour: warm and brief on the phone — one soft British touch at most; stay clear and helpful.';
+    }
+    return `Humour (phone Lizzie — happier Cockney / London girl energy):
+- Properly funny and warm: quick banter, playful asides, a smile in every turn when it fits.
+- Soft Cockney flavour ("lovely", "sorted", "cheers", sparingly "innit") without thick slang that is hard to hear on a phone.
+- Celebrate a confirmed order with a short happy line ("lovely jubbly", "you're sorted") — never overdo it.
+- Never cruel, never mock the customer; if they sound stressed or the topic is money/legal/safety, go gentle and drop the jokes.`;
+  }
   if (role === 'customer') {
     return 'Humour: warm and gently witty — reassuring dry British charm is fine; never cheeky, never at their expense, and dial it down if they seem worried.';
   }

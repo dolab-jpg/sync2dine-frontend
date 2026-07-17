@@ -9,7 +9,7 @@ Caller ↔ Soho66 SIP ↔ Vapi (media) ↔ ElevenLabs (female Cockney) ↔ POST 
 ```
 
 - Provider: `VOICE_PROVIDER=vapi` (required)
-- Spoken voice: **ElevenLabs** via Vapi (`provider: '11labs'`) — female British / Cockney (**Lizzie** voice id `EQx6HGDYjkDpcli6vorJ` when configured on the API host). **English stays Lizzie (do not change).** Non-English calls use a per-language female funny/sassy map in `server/phone-voices.ts` (Aerisita/Aleksandra/Klava/Kira/Zicai/Laura/Veronica). She always says her name is **Cynthia**. Mid-call switch: tool `setCallLanguage` (persist + best-effort voice PATCH).
+- Spoken voice: **ElevenLabs** via Vapi (`provider: '11labs'`) — female British / Cockney (**Lizzie** voice id `EQx6HGDYjkDpcli6vorJ` when configured on the API host). **English stays Lizzie (do not change without listening to a replacement first).** Optional later: Settings `activeVoiceId` may point at another ElevenLabs id, but English production default remains Lizzie. Non-English calls use a per-language female funny/sassy map in `server/phone-voices.ts` (Aerisita/Aleksandra/Klava/Kira/Zicai/Laura/Veronica). She always says her name is **Lizzie** on Sync2Dine takeaway (never the ElevenLabs label). Mid-call switch: tool `setCallLanguage` (persist + best-effort voice PATCH).
 - Webhooks: `POST /webhooks/vapi` on `https://app.b-diddies.com`
 - In-app Cynthia mic: `POST /api/vapi/web-session`
 - Soft Phone (JsSIP) is optional for **humans** only — not used for Cynthia AI answering
