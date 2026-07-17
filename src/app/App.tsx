@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, ReactElement } from 'react';
+import React, { useState, useEffect, useMemo, useRef, ReactElement } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router';
 import LoginPage from './auth/pages/LoginPage';
 import SignupPage from './auth/pages/SignupPage';
@@ -60,7 +60,13 @@ import RestaurantShell from './components/restaurant/RestaurantShell';
 import RestaurantLive from './components/restaurant/RestaurantLive';
 import RestaurantSettings from './components/restaurant/RestaurantSettings';
 import { getExperience } from './engine/platform/experience';
-import { ensureActiveOrgId, installApiFetchInterceptor, syncActiveOrgFromProfile } from './engine/platform/orgContext';
+import {
+  ensureActiveOrgId,
+  getActiveOrgId,
+  installApiFetchInterceptor,
+  subscribeActiveOrg,
+  syncActiveOrgFromProfile,
+} from './engine/platform/orgContext';
 import { integrationService } from './engine/integrations/integrationService';
 import { Toaster } from './components/ui/sonner';
 import { OnlineStatusBanner } from './components/OnlineStatusBanner';
@@ -114,8 +120,9 @@ export interface Customer {
   tradeId?: TradeId;
   whatsappOptIn: boolean;
   preferredChannel: 'email' | 'whatsapp' | 'both' | 'phone';
-  /** Channel reply language pack: en | sq | uk | ru | zh | es | pl | fa */
-  preferredLanguage?: 'en' | 'sq' | 'uk' | 'ru' | 'zh' | 'es' | 'pl' | 'fa';
+  /** Channel reply language pack: en | es | pl | ru | uk | zh | hi | tr | ar | ro | pt | it | sq | fa */
+  preferredLanguage?:
+    | 'en' | 'es' | 'pl' | 'ru' | 'uk' | 'zh' | 'hi' | 'tr' | 'ar' | 'ro' | 'pt' | 'it' | 'sq' | 'fa';
   whatsappId?: string;
   lastWhatsAppAt?: string;
   /** CRM lead fields */
@@ -418,6 +425,19 @@ export default function App() {
       role: 'staff',
     },
   );
+  /** Bumps when active org changes so experience gate re-evaluates after profile sync. */
+  const [orgTick, setOrgTick] = useState(0);
+  /**
+   * Avoid flashing the sales shell for restaurant staff while org_id is still
+   * being restored from the profile (localStorage empty on first paint).
+   */
+  const [experienceReady, setExperienceReady] = useState(() => {
+    if (!savedUser) return true;
+    if (savedUser.role === 'kiosk' || savedUser.role === 'platform_owner') return true;
+    return Boolean(typeof window !== 'undefined' && getActiveOrgId());
+  });
+
+  useEffect(() => subscribeActiveOrg(() => setOrgTick((n) => n + 1)), []);
 
   useEffect(() => {
     const restore = async () => {
@@ -427,6 +447,8 @@ export default function App() {
         setIsLoggedIn(true);
         await syncActiveOrgFromProfile();
         await integrationService.initOrgOpenAIKey(stored.role);
+        setOrgTick((n) => n + 1);
+        setExperienceReady(true);
         return;
       }
 
@@ -453,12 +475,16 @@ export default function App() {
               setIsLoggedIn(true);
               await syncActiveOrgFromProfile();
               await integrationService.initOrgOpenAIKey(restored.role);
+              setOrgTick((n) => n + 1);
+              setExperienceReady(true);
+              return;
             }
           }
         } catch {
           // session restore optional
         }
       }
+      setExperienceReady(true);
     };
     void restore();
   }, []);
@@ -715,9 +741,6 @@ export default function App() {
     const onQuotes = () => {
       try {
         const saved = localStorage.getItem('quotes');
-        // #region agent log
-        fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'cycle',hypothesisId:'Q3',location:'App.tsx:onQuotes',message:'tradepro:quotes-updated fired',data:{cloudMode:CLOUD_MODE,hasSaved:!!saved,savedLen:saved?(()=>{try{return JSON.parse(saved).length}catch{return -1}})():0},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         // In cloud mode, localStorage is not the source of truth — ignore to avoid clobber.
         if (CLOUD_MODE) return;
         if (saved) setQuotes(migrateQuotes(JSON.parse(saved)));
@@ -785,16 +808,10 @@ export default function App() {
 
   useEffect(() => {
     const cloud = useCloudPersistence();
-    // #region agent log
-    fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'cycle',hypothesisId:'Q1',location:'App.tsx:quotesPersist',message:'quotes persist effect',data:{cloud,hydrated:cloudHydratedRef.current,quoteCount:quotes.length,ids:quotes.slice(-3).map((q)=>q.id)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (cloud) {
       if (!cloudHydratedRef.current && quotes.length === 0) return;
       void import('./engine/data/supabaseStore').then(({ saveQuotesToSupabase }) => {
         void saveQuotesToSupabase(quotes as unknown as Record<string, unknown>[]).then((err) => {
-          // #region agent log
-          fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'cycle',hypothesisId:'Q2',location:'App.tsx:saveQuotesToSupabase',message:'quotes supabase save result',data:{err:err??null,quoteCount:quotes.length},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           if (err) {
             window.dispatchEvent(
               new CustomEvent('tradepro:persist-error', {
@@ -897,18 +914,12 @@ export default function App() {
       id: Date.now().toString(),
       createdAt: new Date().toISOString(),
     };
-    // #region agent log
-    fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'cycle',hypothesisId:'Q4',location:'App.tsx:addQuote',message:'addQuote called',data:{id:newQuote.id,customerId:newQuote.customerId,total:newQuote.total,cloud:useCloudPersistence()},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     setQuotes((prev) => {
       const next = [...prev, newQuote];
       // Eager cloud persist (parity with addCustomer) so refresh does not lose the row
       if (useCloudPersistence()) {
         void import('./engine/data/supabaseStore').then(({ saveQuotesToSupabase }) => {
           void saveQuotesToSupabase(next as unknown as Record<string, unknown>[]).then((err) => {
-            // #region agent log
-            fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'cycle',hypothesisId:'Q4',location:'App.tsx:addQuote:eagerSave',message:'eager quote supabase save',data:{err:err??null,id:newQuote.id,count:next.length},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
             if (err) {
               window.dispatchEvent(
                 new CustomEvent('tradepro:persist-error', {
@@ -1152,6 +1163,8 @@ export default function App() {
     logout: handleLogout
   };
 
+  const experience = useMemo(() => getExperience(user.role), [user.role, orgTick]);
+
   if (typeof window !== 'undefined' && window.location.pathname === '/cursor-paste') {
     return (
       <BrowserRouter>
@@ -1179,7 +1192,13 @@ export default function App() {
     );
   }
 
-  const experience = getExperience(user.role);
+  if (isLoggedIn && !experienceReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f6efe0]">
+        <p className="text-lg font-semibold text-[#0f3d3e]">Loading…</p>
+      </div>
+    );
+  }
 
   if (experience === 'kiosk') {
     return (

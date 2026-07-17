@@ -137,7 +137,7 @@ export default function RestaurantLive() {
         </div>
       </section>
 
-      <RestaurantOrders embedded />
+      <RestaurantOrders embedded showTabs={false} />
     </div>
   );
 }

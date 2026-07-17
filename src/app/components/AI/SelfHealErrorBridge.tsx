@@ -157,9 +157,6 @@ export function SelfHealErrorBridge() {
 
           // Require explicit opt-in (default is false). `!== false` treated unset as on.
           const shouldAutoStart = studio.selfHealAutoStart === true && job.scope === 'surgical';
-          // #region agent log
-          fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'53a33f'},body:JSON.stringify({sessionId:'53a33f',runId:'self-heal',hypothesisId:'H2',location:'SelfHealErrorBridge.tsx:shouldAutoStart',message:'self-heal offer decision',data:{shouldAutoStart,autoStartFlag:studio.selfHealAutoStart??null,scope:job.scope,errorCode:job.errorCode,status:job.status,dedupe:!!dedupe},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
 
           if (shouldAutoStart) {
             const result = await enqueueCodeFix({

@@ -6,6 +6,27 @@ const AUTH_TOKEN_KEY = 'authToken';
 
 let orgResolveInFlight: Promise<string | null> | null = null;
 
+type OrgListener = () => void;
+const orgListeners = new Set<OrgListener>();
+
+/** Subscribe to active-org changes (experience gate, API headers). */
+export function subscribeActiveOrg(listener: OrgListener): () => void {
+  orgListeners.add(listener);
+  return () => {
+    orgListeners.delete(listener);
+  };
+}
+
+function notifyActiveOrgListeners(): void {
+  for (const listener of orgListeners) {
+    try {
+      listener();
+    } catch {
+      // ignore subscriber errors
+    }
+  }
+}
+
 export function getActiveOrgId(): string | null {
   try {
     const raw = localStorage.getItem(ACTIVE_ORG_KEY);
@@ -26,9 +47,11 @@ export function getActiveOrgId(): string | null {
 
 export function setActiveOrgId(orgId: string | null): void {
   try {
+    const prev = getActiveOrgId();
     const sanitized = sanitizeOrgId(orgId);
     if (sanitized) localStorage.setItem(ACTIVE_ORG_KEY, sanitized);
     else localStorage.removeItem(ACTIVE_ORG_KEY);
+    if (prev !== sanitized) notifyActiveOrgListeners();
   } catch {
     // ignore
   }
