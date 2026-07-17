@@ -11,23 +11,38 @@ TARBALL=${TARBALL:-/tmp/sync2dine-deploy.tar.gz}
 OWNER=${DOCROOT_OWNER:-sync2dine.io_asad090}
 
 if [ "$DOCROOT" = "$MARKETING" ] || [ "$DOCROOT" = "$D/httpdocs" ]; then
-  echo "ERROR: DOCROOT must not be marketing httpdocs ??? aborting"
+  echo "ERROR: DOCROOT must not be marketing httpdocs — aborting"
   exit 1
 fi
 case "$DOCROOT" in
   */httpdocs|*/httpdocs/)
-    echo "ERROR: DOCROOT resolves to an httpdocs path ($DOCROOT) ??? aborting"
+    echo "ERROR: DOCROOT resolves to an httpdocs path ($DOCROOT) — aborting"
     exit 1
     ;;
 esac
 
 echo "== Extract staging tree =="
 mkdir -p "$APPDIR"
-tar -xzf "$TARBALL" -C "$APPDIR"
+rm -rf "${APPDIR:?}/dist"
+# Accept either `tar czf … dist` (preferred) or flat `tar czf … -C dist .`
+tmpdir=$(mktemp -d)
+tar -xzf "$TARBALL" -C "$tmpdir"
+if [ -f "$tmpdir/dist/index.html" ]; then
+  mkdir -p "$APPDIR/dist"
+  cp -a "$tmpdir/dist/." "$APPDIR/dist/"
+elif [ -f "$tmpdir/index.html" ]; then
+  mkdir -p "$APPDIR/dist"
+  cp -a "$tmpdir/." "$APPDIR/dist/"
+else
+  echo "ERROR: tarball has neither dist/index.html nor index.html"
+  rm -rf "$tmpdir"
+  exit 1
+fi
+rm -rf "$tmpdir"
 
 echo "== Publish SPA to app docroot =="
 if [ ! -f "$APPDIR/dist/index.html" ]; then
-  echo "ERROR: $APPDIR/dist/index.html missing after extract ??? aborting before wiping docroot"
+  echo "ERROR: $APPDIR/dist/index.html missing after extract — aborting before wiping docroot"
   exit 1
 fi
 rm -rf "${DOCROOT:?}"/*
@@ -67,23 +82,25 @@ find "$DOCROOT" -type f -exec chmod 644 {} +
 restorecon -Rv "$DOCROOT" >/dev/null 2>&1 || true
 
 echo "== Local smoke test =="
-HEADERS=$(curl -sI --max-time 10 https://app.sync2dine.io/ | head -5 || true)
+HEADERS=$(curl -sI --max-time 10 -H "Host: app.sync2dine.io" http://127.0.0.1/ | head -5 || true)
 echo "$HEADERS"
-TITLE=$(curl -s --max-time 10 https://app.sync2dine.io/ | grep -oiE '<title>[^<]+</title>' | head -1 || true)
+TITLE=$(curl -s --max-time 10 -H "Host: app.sync2dine.io" http://127.0.0.1/ | grep -oiE '<title>[^<]+</title>' | head -1 || true)
 echo "Title: ${TITLE:-unknown}"
-ASSET=$(curl -sI --max-time 10 "https://app.sync2dine.io/assets/" | head -1 || true)
+ASSET=$(curl -sI --max-time 10 -H "Host: app.sync2dine.io" "http://127.0.0.1/assets/" | head -1 || true)
 echo "Assets probe: $ASSET"
-JS=$(find "$DOCROOT/assets" -name 'index-*.js' | head -1)
-if [ -n "$JS" ]; then
-  JS_BASE=$(basename "$JS")
-  CODE=$(curl -sI --max-time 10 -H "Host: app.sync2dine.io" "https://app.sync2dine.io/assets/$JS_BASE" | head -1 || true)
+JS_BASE=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' "$DOCROOT/index.html" | head -1 | xargs -n1 basename 2>/dev/null || true)
+if [ -z "$JS_BASE" ]; then
+  JS_BASE=$(find "$DOCROOT/assets" -name 'index-*.js' -printf '%f\n' 2>/dev/null | head -1 || true)
+fi
+if [ -n "$JS_BASE" ]; then
+  CODE=$(curl -sI --max-time 10 -H "Host: app.sync2dine.io" "http://127.0.0.1/assets/$JS_BASE" | head -1 || true)
   echo "JS probe ($JS_BASE): $CODE"
   if ! echo "$CODE" | grep -q '200'; then
-    echo "ERROR: JS asset not publicly readable ??? check directory modes (need 755 on assets/)"
+    echo "ERROR: JS asset not publicly readable — check directory modes (need 755 on assets/)"
     exit 1
   fi
 fi
 if ! echo "$TITLE" | grep -qiE 'Sync2Dine|TradePro|AI Phone'; then
-  echo "WARN: unexpected HTML title ??? verify this is the SPA docroot, not marketing"
+  echo "WARN: unexpected HTML title — verify this is the SPA docroot, not marketing"
 fi
-echo "DONE (SPA only ??? httpdocs untouched)"
+echo "DONE (SPA only — httpdocs untouched)"

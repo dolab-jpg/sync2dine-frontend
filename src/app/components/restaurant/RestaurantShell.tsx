@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router';
 import { useContext, useEffect, useState, type ReactNode } from 'react';
 import {
-  ChefHat, CreditCard, LogOut, Radio, Settings as SettingsIcon, Truck, UtensilsCrossed, Users, UserPlus,
+  ChefHat, LogOut, Radio, Settings as SettingsIcon, Truck, UtensilsCrossed, Users, UserPlus,
 } from 'lucide-react';
 import { AppContext } from '../../App';
 import { BrandLogo } from '../BrandLogo';
@@ -26,7 +26,6 @@ type TabDef = {
 const TABS: TabDef[] = [
   { to: '/', icon: Radio, label: 'Live', end: true },
   { to: '/orders/kitchen', icon: ChefHat, label: 'Kitchen', end: false },
-  { to: '/orders/till', icon: CreditCard, label: 'Till', end: false },
   { to: '/orders/delivery', icon: Truck, label: 'Delivery', end: false },
   { to: '/menu', icon: UtensilsCrossed, label: 'Menu', end: false },
   { to: '/customers', icon: Users, label: 'Customers', end: false, railOnly: true, roles: ['super_admin', 'manager', 'staff'] },

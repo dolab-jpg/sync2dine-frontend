@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Clock, CreditCard, Download, MapPin, Phone, Receipt, Truck, Utensils } from 'lucide-react';
+import { Clock, Download, MapPin, Phone, Receipt, Truck, Utensils } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { getActiveOrgId } from '../engine/platform/orgContext';
@@ -125,10 +125,10 @@ function exportOrdersCsv(orders: FoodOrder[]) {
   URL.revokeObjectURL(url);
 }
 
-export type BoardTab = 'kitchen' | 'till' | 'delivery';
+export type BoardTab = 'kitchen' | 'delivery';
 
 interface RestaurantOrdersProps {
-  /** Controlled tab (RestaurantShell routes /orders/kitchen|till|delivery) */
+  /** Controlled tab (RestaurantShell routes /orders/kitchen|delivery) */
   tab?: BoardTab;
   /** Hide the internal tab switcher when the shell already provides tabs */
   showTabs?: boolean;
@@ -200,7 +200,6 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
   const visibleOrders = useMemo(() => {
     void nowTick;
     if (tab === 'delivery') return orders.filter((o) => o.type === 'delivery');
-    if (tab === 'till') return orders.filter((o) => o.payment === 'unpaid' || o.status === 'coming');
     return orders;
   }, [orders, tab, nowTick]);
 
@@ -212,7 +211,7 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.25em] text-s2d-gold">Sync2Dine staff tablet</p>
               <h1 className="mt-1 text-3xl font-black tracking-tight sm:text-4xl">
-                {showTabs ? 'Orders, till and delivery' : tab === 'till' ? 'Till — take payment' : tab === 'delivery' ? 'Delivery board' : 'Kitchen board'}
+                {showTabs ? 'Kitchen and delivery' : tab === 'delivery' ? 'Delivery board' : 'Kitchen board'}
               </h1>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -226,10 +225,9 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
                 Export CSV
               </Button>
               {showTabs && (
-                <div className="grid grid-cols-3 gap-2 rounded-2xl bg-white/10 p-1">
+                <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white/10 p-1">
                   {[
                     ['kitchen', Utensils, 'Kitchen'],
-                    ['till', CreditCard, 'Till'],
                     ['delivery', Truck, 'Delivery'],
                   ].map(([id, Icon, label]) => {
                     const ActiveIcon = Icon as typeof Utensils;
@@ -302,7 +300,7 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
                 </div>
               </div>
 
-              <footer className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <footer className="mt-4 grid gap-2 sm:grid-cols-3">
                 <Button
                   type="button"
                   className="min-h-[52px] rounded-xl bg-s2d-gold text-base font-bold text-s2d-teal-deep hover:bg-s2d-gold-soft"
@@ -314,16 +312,9 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
                 <Button
                   type="button"
                   className="min-h-[52px] rounded-xl bg-s2d-teal-deep text-base font-bold text-white hover:bg-s2d-teal"
-                  onClick={() => void patchOrder(order.id, { status: 'paid', payment: 'cash' })}
+                  onClick={() => void patchOrder(order.id, { status: 'ready' })}
                 >
-                  Cash paid
-                </Button>
-                <Button
-                  type="button"
-                  className="min-h-[52px] rounded-xl bg-s2d-teal-deep text-base font-bold text-white hover:bg-s2d-teal"
-                  onClick={() => void patchOrder(order.id, { status: 'paid', payment: 'card' })}
-                >
-                  Card paid
+                  Mark ready
                 </Button>
                 <Button
                   type="button"
