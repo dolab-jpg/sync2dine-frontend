@@ -1,7 +1,7 @@
 import { useEffect, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
-import { Copy, MapPinned, Megaphone, MonitorSmartphone, PhoneCall, Store, UserPlus, Users, X } from 'lucide-react';
+import { Copy, MapPinned, Megaphone, MonitorSmartphone, PhoneCall, Store, Users, X, Plug, CreditCard, MessageCircle, Sparkles, Radio } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Textarea } from '../ui/textarea';
@@ -280,14 +280,22 @@ export default function RestaurantSettings() {
           {saving ? 'Saving…' : 'Save'}
         </Button>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Link
-            to="/team"
-            className="flex min-h-[52px] items-center gap-3 rounded-[1.25rem] border border-s2d-teal/15 bg-white px-4 py-3 font-bold text-s2d-teal-deep shadow-sm transition hover:border-s2d-teal/40"
-          >
-            <UserPlus className="h-5 w-5 text-s2d-teal" />
-            Team & invites
-          </Link>
+        <div className="rounded-[1.5rem] border border-s2d-teal/15 bg-white p-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <Plug className="mt-1 h-6 w-6 text-s2d-teal" />
+            <div className="flex-1 space-y-4">
+              <div>
+                <h2 className="text-xl font-bold text-s2d-teal-deep">Integrations</h2>
+                <p className="text-sm text-slate-600">
+                  Connect payments, messaging, and AI for this restaurant. Status refreshes when you open Settings.
+                </p>
+              </div>
+              <IntegrationStatusCards />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-1">
           <Link
             to="/customers"
             className="flex min-h-[52px] items-center gap-3 rounded-[1.25rem] border border-s2d-teal/15 bg-white px-4 py-3 font-bold text-s2d-teal-deep shadow-sm transition hover:border-s2d-teal/40"
@@ -297,6 +305,126 @@ export default function RestaurantSettings() {
           </Link>
         </div>
       </section>
+    </div>
+  );
+}
+
+function IntegrationStatusCards() {
+  const [rows, setRows] = useState<Array<{ id: string; label: string; status: string; ok: boolean }>>([
+    { id: 'stripe', label: 'Stripe', status: 'Checking…', ok: false },
+    { id: 'whatsapp', label: 'WhatsApp', status: 'Checking…', ok: false },
+    { id: 'openai', label: 'OpenAI / AI brain', status: 'Checking…', ok: false },
+    { id: 'voice', label: 'Voice / phone agent', status: 'Checking…', ok: false },
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const next = [...rows];
+      try {
+        const [integRes, agentRes, keyRes] = await Promise.all([
+          fetch('/api/integrations').catch(() => null),
+          fetch('/api/agent/status').catch(() => null),
+          fetch('/api/org/openai-key').catch(() => null),
+        ]);
+        if (cancelled) return;
+
+        if (integRes?.ok) {
+          const data = await integRes.json() as { integrations?: Array<{ id?: string; name?: string; connected?: boolean; status?: string }> };
+          const list = data.integrations ?? [];
+          const find = (re: RegExp) => list.find((i) => re.test(String(i.id ?? i.name ?? '')));
+          const stripe = find(/stripe/i);
+          const wa = find(/whatsapp/i);
+          const vapi = find(/vapi|voice/i);
+          next[0] = {
+            id: 'stripe',
+            label: 'Stripe',
+            status: stripe?.connected ? 'Connected' : 'Not connected — configure in platform Integrations if available',
+            ok: Boolean(stripe?.connected),
+          };
+          next[1] = {
+            id: 'whatsapp',
+            label: 'WhatsApp',
+            status: wa?.connected ? 'Connected' : 'Not connected',
+            ok: Boolean(wa?.connected),
+          };
+          if (vapi) {
+            next[3] = {
+              id: 'voice',
+              label: 'Voice / phone agent',
+              status: vapi.connected ? 'Vapi connected' : 'Vapi not connected',
+              ok: Boolean(vapi.connected),
+            };
+          }
+        } else {
+          next[0] = { id: 'stripe', label: 'Stripe', status: 'Status unavailable — use phone agent + menu for now', ok: false };
+          next[1] = { id: 'whatsapp', label: 'WhatsApp', status: 'Status unavailable', ok: false };
+        }
+
+        if (keyRes?.ok) {
+          const data = await keyRes.json() as { configured?: boolean; hasKey?: boolean };
+          const ok = Boolean(data.configured ?? data.hasKey);
+          next[2] = {
+            id: 'openai',
+            label: 'OpenAI / AI brain',
+            status: ok ? 'Org key configured' : 'No org OpenAI key — add via platform settings',
+            ok,
+          };
+        } else {
+          next[2] = { id: 'openai', label: 'OpenAI / AI brain', status: 'Could not check key', ok: false };
+        }
+
+        if (agentRes?.ok) {
+          const data = await agentRes.json() as { isActive?: boolean; reachable?: boolean };
+          const ok = data.isActive !== false;
+          next[3] = {
+            id: 'voice',
+            label: 'Voice / phone agent',
+            status: ok ? 'Agent answering (toggle above)' : 'Agent paused — toggle Phone agent above',
+            ok,
+          };
+        }
+
+        setRows(next);
+      } catch {
+        if (!cancelled) {
+          setRows([
+            { id: 'stripe', label: 'Stripe', status: 'Could not load', ok: false },
+            { id: 'whatsapp', label: 'WhatsApp', status: 'Could not load', ok: false },
+            { id: 'openai', label: 'OpenAI / AI brain', status: 'Could not load', ok: false },
+            { id: 'voice', label: 'Voice / phone agent', status: 'Could not load', ok: false },
+          ]);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
+  }, []);
+
+  const icons: Record<string, typeof CreditCard> = {
+    stripe: CreditCard,
+    whatsapp: MessageCircle,
+    openai: Sparkles,
+    voice: Radio,
+  };
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {rows.map((row) => {
+        const Icon = icons[row.id] ?? Plug;
+        return (
+          <div key={row.id} className="rounded-xl border border-slate-200 bg-s2d-cream/40 p-3">
+            <div className="flex items-center gap-2">
+              <Icon className="h-5 w-5 text-s2d-teal" />
+              <p className="font-bold text-s2d-teal-deep">{row.label}</p>
+              <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-bold ${row.ok ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}`}>
+                {row.ok ? 'OK' : 'Setup'}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-slate-600">{row.status}</p>
+          </div>
+        );
+      })}
     </div>
   );
 }

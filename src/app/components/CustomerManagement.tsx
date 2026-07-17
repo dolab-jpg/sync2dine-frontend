@@ -18,12 +18,14 @@ import { syncToServer } from '../engine/project/projectStore';
 import { getAllTrades } from '../config/trades';
 import type { TradeId } from '../config/types';
 import { LANG_OPTIONS } from '../i18n/languages';
+import { getExperience } from '../engine/platform/experience';
 
 export default function CustomerManagement() {
   const context = useContext(AppContext);
   if (!context) return null;
 
-  const { customers, addCustomer, updateCustomer, deleteCustomer } = context;
+  const { customers, addCustomer, updateCustomer, deleteCustomer, user } = context;
+  const isRestaurant = getExperience(user.role) === 'restaurant';
 
   useEffect(() => {
     seedContactsFromCustomers(customers);
@@ -45,6 +47,7 @@ export default function CustomerManagement() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -418,7 +421,11 @@ export default function CustomerManagement() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredCustomers.map(customer => (
-            <Card key={customer.id} className="hover:shadow-lg transition-shadow">
+            <Card
+              key={customer.id}
+              className="hover:shadow-lg transition-shadow cursor-pointer"
+              onClick={() => setViewingCustomer(customer)}
+            >
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -427,7 +434,7 @@ export default function CustomerManagement() {
                       {customer.status}
                     </span>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                     <Button variant="ghost" size="sm" onClick={() => handleEdit(customer)}>
                       <Edit className="w-4 h-4" />
                     </Button>
@@ -441,17 +448,17 @@ export default function CustomerManagement() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Phone className="w-4 h-4" />
-                    <a href={`tel:${customer.phone}`} className="hover:text-blue-600">{customer.phone}</a>
+                    <a href={`tel:${customer.phone}`} className="hover:text-blue-600" onClick={(e) => e.stopPropagation()}>{customer.phone}</a>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Mail className="w-4 h-4" />
-                    <a href={`mailto:${customer.email}`} className="hover:text-blue-600 truncate">{customer.email}</a>
+                    <a href={`mailto:${customer.email}`} className="hover:text-blue-600 truncate" onClick={(e) => e.stopPropagation()}>{customer.email}</a>
                   </div>
-                  <div className="flex items-start gap-2 text-sm text-gray-600">
+                  <div className="flex items-start gap-2 text-sm text-gray-600" onClick={(e) => e.stopPropagation()}>
                     <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
                     <AddressMapLink address={customer.address} />
                   </div>
-                  {customer.interestedTrades && customer.interestedTrades.length > 0 && (
+                  {!isRestaurant && customer.interestedTrades && customer.interestedTrades.length > 0 && (
                     <div className="flex flex-wrap gap-1 pt-1">
                       {customer.interestedTrades.map(tid => {
                         const t = getAllTrades().find(tr => tr.id === tid);
@@ -477,20 +484,106 @@ export default function CustomerManagement() {
                       <p className="text-sm text-gray-600 line-clamp-2">{customer.notes}</p>
                     </div>
                   )}
-                  <div className="pt-2 mt-2 border-t border-gray-200">
-                    <Link to={`/quote/${customer.interestedTrades?.[0] ?? 'bathroom'}/${customer.id}`}>
-                      <Button variant="outline" size="sm" className="w-full">
-                        <FileText className="w-4 h-4 mr-2" />
-                        Create Quote
-                      </Button>
-                    </Link>
-                  </div>
+                  {!isRestaurant && (
+                    <div className="pt-2 mt-2 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
+                      <Link to={`/quote/${customer.interestedTrades?.[0] ?? 'bathroom'}/${customer.id}`}>
+                        <Button variant="outline" size="sm" className="w-full">
+                          <FileText className="w-4 h-4 mr-2" />
+                          Create Quote
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <Dialog open={!!viewingCustomer} onOpenChange={(open) => { if (!open) setViewingCustomer(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          {viewingCustomer && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-black">{viewingCustomer.name}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <span className={`inline-block px-2 py-1 text-xs rounded-full ${getStatusColor(viewingCustomer.status)}`}>
+                  {viewingCustomer.status}
+                </span>
+                <div className="flex items-center gap-2 text-sm">
+                  <Phone className="w-4 h-4 text-slate-500" />
+                  <a href={`tel:${viewingCustomer.phone}`} className="font-semibold text-s2d-teal-deep hover:underline">
+                    {viewingCustomer.phone || 'No phone'}
+                  </a>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Mail className="w-4 h-4 text-slate-500" />
+                  <a href={`mailto:${viewingCustomer.email}`} className="font-semibold text-s2d-teal-deep hover:underline truncate">
+                    {viewingCustomer.email || 'No email'}
+                  </a>
+                </div>
+                <div className="flex items-start gap-2 text-sm">
+                  <MapPin className="w-4 h-4 mt-0.5 text-slate-500 shrink-0" />
+                  <AddressMapLink address={viewingCustomer.address} />
+                </div>
+                {viewingCustomer.specialName && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                    <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Special / deal</p>
+                    <p className="font-semibold text-amber-950">{viewingCustomer.specialName}</p>
+                    {viewingCustomer.specialDealNote ? (
+                      <p className="text-sm text-amber-900/80 mt-1">{viewingCustomer.specialDealNote}</p>
+                    ) : null}
+                  </div>
+                )}
+                {viewingCustomer.notes && (
+                  <div className="rounded-lg bg-slate-50 px-3 py-2">
+                    <p className="text-xs font-bold uppercase text-slate-500">Notes</p>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{viewingCustomer.notes}</p>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2 pt-2">
+                  {viewingCustomer.phone && (
+                    <Button asChild className="rounded-xl bg-s2d-teal-deep font-bold text-white">
+                      <a href={`tel:${viewingCustomer.phone}`}>
+                        <Phone className="w-4 h-4 mr-2" />
+                        Call
+                      </a>
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-xl font-bold"
+                    onClick={() => {
+                      const c = viewingCustomer;
+                      setViewingCustomer(null);
+                      handleEdit(c);
+                    }}
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-xl font-bold text-red-600"
+                    onClick={() => {
+                      const id = viewingCustomer.id;
+                      setViewingCustomer(null);
+                      handleDelete(id);
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -57,6 +57,7 @@ import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
 import FrontKiosk from './components/FrontKiosk';
 import RestaurantOrders from './components/RestaurantOrders';
 import RestaurantShell from './components/restaurant/RestaurantShell';
+import RestaurantAccounts from './components/restaurant/RestaurantAccounts';
 import RestaurantLive from './components/restaurant/RestaurantLive';
 import MenuManager from './components/restaurant/MenuManager';
 import RestaurantSettings from './components/restaurant/RestaurantSettings';
@@ -1285,9 +1286,14 @@ export default function App() {
                 element={<ProtectedRoute element={<CustomerManagement />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route
-                path="/team"
-                element={<ProtectedRoute element={<TeamManagement />} allowedRoles={['super_admin', 'manager']} user={user} />}
+                path="/calls"
+                element={<ProtectedRoute element={<CallCenter />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
+              <Route
+                path="/accounts"
+                element={<ProtectedRoute element={<RestaurantAccounts />} allowedRoles={['super_admin', 'manager']} user={user} />}
+              />
+              <Route path="/team" element={<Navigate to="/settings" replace />} />
               <Route path="/settings" element={<RestaurantSettings />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/profile/password" element={<ChangePasswordPage />} />

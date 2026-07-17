@@ -290,11 +290,14 @@ function writeProduct(
   app.addProduct({
     name: String(data.name ?? 'New product'),
     image: String(data.image ?? ''),
-    basePrice: Number(data.basePrice ?? 0),
+    basePrice: Number(data.basePrice ?? data.price ?? 0),
     margin: Number(data.margin ?? 0),
-    source: String(data.source ?? 'AI'),
-    category: String(data.category ?? 'general'),
-    tradeId: data.tradeId as Product['tradeId'],
+    source: String(data.source ?? 'restaurant'),
+    category: String(data.category ?? 'other'),
+    tradeId: (data.tradeId as Product['tradeId']) ?? null,
+    price: data.price != null ? Number(data.price) : Number(data.basePrice ?? 0),
+    description: data.description != null ? String(data.description) : '',
+    available: data.available !== false,
   });
   const newId = app.products[app.products.length - 1]?.id;
   return {

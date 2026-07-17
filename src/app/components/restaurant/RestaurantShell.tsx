@@ -1,7 +1,8 @@
-import { NavLink } from 'react-router';
+import { NavLink, useNavigate } from 'react-router';
 import { useContext, useEffect, useState, type ReactNode } from 'react';
 import {
-  ChefHat, LogOut, Radio, Settings as SettingsIcon, Truck, UtensilsCrossed, Users, UserPlus,
+  ChefHat, LogOut, Radio, Settings as SettingsIcon, Truck, UtensilsCrossed, Users,
+  Phone, Wallet, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { AppContext } from '../../App';
 import { BrandLogo } from '../BrandLogo';
@@ -9,8 +10,8 @@ import { OnlineStatusBanner } from '../OnlineStatusBanner';
 import { Toaster } from '../ui/sonner';
 
 /**
- * Tablet-first shell for restaurant tenant staff (Super Master B3/C9).
- * Portrait: bottom tab bar. Landscape/desktop: left rail. ≥48px touch targets.
+ * Tablet-first shell for restaurant tenant staff.
+ * Portrait: bottom tab bar. Landscape/desktop: collapsible left rail.
  */
 
 type TabDef = {
@@ -18,18 +19,20 @@ type TabDef = {
   icon: typeof Radio;
   label: string;
   end: boolean;
-  /** Hide from cramped bottom bar; still on desktop rail */
   railOnly?: boolean;
   roles?: string[];
 };
+
+const SIDEBAR_KEY = 's2d.restaurant.sidebarCollapsed';
 
 const TABS: TabDef[] = [
   { to: '/', icon: Radio, label: 'Live', end: true },
   { to: '/orders/kitchen', icon: ChefHat, label: 'Kitchen', end: false },
   { to: '/orders/delivery', icon: Truck, label: 'Delivery', end: false },
   { to: '/menu', icon: UtensilsCrossed, label: 'Menu', end: false },
+  { to: '/calls', icon: Phone, label: 'Calls', end: false, roles: ['super_admin', 'manager', 'staff'] },
   { to: '/customers', icon: Users, label: 'Customers', end: false, railOnly: true, roles: ['super_admin', 'manager', 'staff'] },
-  { to: '/team', icon: UserPlus, label: 'Team', end: false, railOnly: true, roles: ['super_admin', 'manager'] },
+  { to: '/accounts', icon: Wallet, label: 'Accounts', end: false, railOnly: true, roles: ['super_admin', 'manager'] },
   { to: '/settings', icon: SettingsIcon, label: 'Settings', end: false },
 ];
 
@@ -89,8 +92,13 @@ export function LiveIndicator({ live }: { live: AgentLiveState }) {
   );
 }
 
-function tabClasses(isActive: boolean, layout: 'rail' | 'bottom') {
+function tabClasses(isActive: boolean, layout: 'rail' | 'rail-collapsed' | 'bottom') {
   const base = 'flex items-center touch-manipulation font-bold transition-all duration-200';
+  if (layout === 'rail-collapsed') {
+    return `${base} justify-center rounded-xl min-h-12 w-full ${
+      isActive ? 'bg-s2d-gold text-s2d-teal-deep shadow-md' : 'text-s2d-cream hover:bg-white/10'
+    }`;
+  }
   if (layout === 'rail') {
     return `${base} gap-3 rounded-xl px-4 min-h-14 text-base ${
       isActive ? 'bg-s2d-gold text-s2d-teal-deep shadow-md' : 'text-s2d-cream hover:bg-white/10'
@@ -109,45 +117,114 @@ function tabVisible(tab: TabDef, role: string): boolean {
 export default function RestaurantShell({ children }: { children: ReactNode }) {
   const context = useContext(AppContext);
   const live = useAgentLive();
+  const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
   if (!context) return null;
   const { user, logout } = context;
   const railTabs = TABS.filter((t) => tabVisible(t, user.role));
   const bottomTabs = TABS.filter((t) => !t.railOnly && tabVisible(t, user.role));
 
+  function toggleSidebar() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+
   return (
     <div className="native-shell flex min-h-dvh flex-col bg-s2d-cream lg:flex-row">
       <OnlineStatusBanner />
 
-      {/* Landscape / desktop: left rail */}
-      <aside className="hidden w-56 shrink-0 flex-col bg-gradient-to-b from-s2d-teal-deep via-s2d-teal to-s2d-teal-ink lg:flex">
-        <div className="border-b border-white/10 p-4">
-          <BrandLogo size="md" showWordmark subtitle="Restaurant Live" />
+      <aside
+        className={`hidden shrink-0 flex-col bg-gradient-to-b from-s2d-teal-deep via-s2d-teal to-s2d-teal-ink transition-[width] duration-200 ease-out lg:flex ${
+          collapsed ? 'w-[4.5rem]' : 'w-56'
+        }`}
+      >
+        <div className={`border-b border-white/10 ${collapsed ? 'p-2' : 'p-4'}`}>
+          {collapsed ? (
+            <BrandLogo size="sm" showWordmark={false} />
+          ) : (
+            <BrandLogo size="md" showWordmark subtitle="Restaurant Live" />
+          )}
         </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="Restaurant navigation">
+        <div className="px-2 pt-2">
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="flex w-full items-center justify-center gap-2 rounded-xl px-2 py-2 text-s2d-cream/90 hover:bg-white/10 min-h-11 font-bold touch-manipulation"
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+            {!collapsed && <span className="text-sm">Collapse</span>}
+          </button>
+        </div>
+        <nav className="flex-1 space-y-1 overflow-y-auto p-2" aria-label="Restaurant navigation">
           {railTabs.map(({ to, icon: Icon, label, end }) => (
-            <NavLink key={to} to={to} end={end} className={({ isActive }) => tabClasses(isActive, 'rail')}>
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              title={label}
+              className={({ isActive }) => tabClasses(isActive, collapsed ? 'rail-collapsed' : 'rail')}
+            >
               <Icon className="h-6 w-6 shrink-0" />
-              {label}
+              {!collapsed && label}
             </NavLink>
           ))}
         </nav>
-        <div className="space-y-2 border-t border-white/10 p-3">
-          <LiveIndicator live={live} />
+        <div className={`space-y-2 border-t border-white/10 ${collapsed ? 'p-2' : 'p-3'}`}>
+          {!collapsed && <LiveIndicator live={live} />}
+          {collapsed && live.activeCallCount > 0 && (
+            <button
+              type="button"
+              title={`${live.activeCallCount} on call`}
+              onClick={() => navigate('/calls')}
+              className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300"
+            >
+              <Phone className="h-5 w-5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={logout}
-            className="flex w-full items-center gap-3 rounded-xl px-4 text-s2d-cream/80 transition hover:bg-red-500/15 hover:text-red-200 min-h-12 font-bold touch-manipulation"
+            title="Logout"
+            className={`flex w-full items-center rounded-xl text-s2d-cream/80 transition hover:bg-red-500/15 hover:text-red-200 min-h-12 font-bold touch-manipulation ${
+              collapsed ? 'justify-center px-0' : 'gap-3 px-4'
+            }`}
           >
             <LogOut className="h-5 w-5" />
-            Logout
+            {!collapsed && 'Logout'}
           </button>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Compact top bar (portrait shows brand + live here) */}
         <header className="flex h-14 shrink-0 items-center justify-between gap-3 bg-s2d-teal-deep px-3 sm:px-4 lg:h-12 lg:bg-s2d-teal-ink/90">
           <div className="flex min-w-0 items-center gap-3">
+            {collapsed && (
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="hidden min-h-11 min-w-11 items-center justify-center rounded-xl text-s2d-cream hover:bg-white/10 lg:flex"
+                aria-label="Expand sidebar"
+                title="Expand sidebar"
+              >
+                <PanelLeftOpen className="h-5 w-5" />
+              </button>
+            )}
             <span className="lg:hidden">
               <BrandLogo size="sm" showWordmark />
             </span>
@@ -175,7 +252,6 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
           {children}
         </main>
 
-        {/* Portrait / narrow: bottom tab bar */}
         <nav
           className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around border-t border-s2d-teal-ink bg-s2d-teal-deep safe-area-pb lg:hidden"
           aria-label="Restaurant navigation"

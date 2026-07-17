@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { PhoneIncoming, PhoneOutgoing, Radio } from 'lucide-react';
 import RestaurantOrders from '../RestaurantOrders';
 import { useAgentLive, LiveIndicator } from './RestaurantShell';
 
 /**
- * Restaurant Live board (Super Master C9 + C7 subset):
- * inbound calls being answered + outbound going out, above the orders board.
+ * Restaurant Live board: inbound/outbound calls strip above the orders board.
  */
 
 interface ActiveCall {
@@ -45,6 +45,7 @@ function timeLabel(iso: string) {
 }
 
 export default function RestaurantLive() {
+  const navigate = useNavigate();
   const live = useAgentLive(5_000);
   const [activeCalls, setActiveCalls] = useState<ActiveCall[]>([]);
   const [recentCalls, setRecentCalls] = useState<RecentCall[]>([]);
@@ -90,13 +91,27 @@ export default function RestaurantLive() {
                 <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Calls & orders right now</h1>
               </div>
             </div>
-            <LiveIndicator live={live} />
+            <div className="flex flex-wrap items-center gap-2">
+              <LiveIndicator live={live} />
+              <button
+                type="button"
+                onClick={() => navigate('/calls')}
+                className="rounded-xl bg-white/10 px-3 py-2 text-sm font-bold hover:bg-white/20"
+              >
+                Open Calls
+              </button>
+            </div>
           </div>
 
           {activeCalls.length > 0 ? (
             <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
               {activeCalls.map((call) => (
-                <div key={call.id} className="min-w-[16rem] shrink-0 rounded-2xl border border-s2d-gold/40 bg-white/10 p-3">
+                <button
+                  key={call.id}
+                  type="button"
+                  onClick={() => navigate(`/calls?callId=${encodeURIComponent(call.id)}`)}
+                  className="min-w-[16rem] shrink-0 rounded-2xl border border-s2d-gold/40 bg-white/10 p-3 text-left transition hover:bg-white/15"
+                >
                   <div className="flex items-center gap-2">
                     <span className="relative flex h-3 w-3">
                       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -108,7 +123,7 @@ export default function RestaurantLive() {
                     {call.lineLabel ? `${call.lineLabel} · ` : ''}{call.status}
                     {call.elapsedSec != null ? ` · ${elapsedLabel(call.elapsedSec)}` : ''}
                   </p>
-                </div>
+                </button>
               ))}
             </div>
           ) : (
@@ -120,9 +135,11 @@ export default function RestaurantLive() {
           {recentCalls.length > 0 && (
             <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
               {recentCalls.map((call) => (
-                <span
+                <button
                   key={call.id}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-s2d-cream"
+                  type="button"
+                  onClick={() => navigate(`/calls?callId=${encodeURIComponent(call.id)}`)}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-s2d-cream hover:bg-white/20"
                   title={`${call.direction} · ${call.status}${call.outcome ? ` · ${call.outcome}` : ''}`}
                 >
                   {call.direction === 'outbound'
@@ -130,7 +147,7 @@ export default function RestaurantLive() {
                     : <PhoneIncoming className="h-3.5 w-3.5 text-emerald-300" />}
                   {call.contactName || (call.direction === 'outbound' ? call.to : call.from)}
                   <span className="text-s2d-cream/60">{timeLabel(call.startedAt)}</span>
-                </span>
+                </button>
               ))}
             </div>
           )}
