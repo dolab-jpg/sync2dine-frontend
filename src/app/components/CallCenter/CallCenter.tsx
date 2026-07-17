@@ -23,9 +23,12 @@ import LapsedCampaignPanel from './LapsedCampaignPanel';
 import CsvCampaignUploadPanel from './CsvCampaignUploadPanel';
 import { AppContext } from '../../App';
 import { integrationService } from '../../engine/integrations/integrationService';
+import { getExperience } from '../../engine/platform/experience';
 import CallRecordingPlayer from '../restaurant/CallRecordingPlayer';
+import CallTranscriptTurns from './CallTranscriptTurns';
 import CallContextChip from '../restaurant/CallContextChip';
 import LiveCallSpeakerButton from '../restaurant/LiveCallSpeakerButton';
+import CallLinkedOrderSync from './CallLinkedOrderSync';
 
 interface CallTurn {
   role: 'caller' | 'agent' | 'system';
@@ -306,6 +309,9 @@ export default function CallCenter() {
   const [queueSettingsSaving, setQueueSettingsSaving] = useState(false);
 
   const app = useContext(AppContext);
+  /** Platform sales shell uses Sally; restaurant tenants keep Lizzie (food orders). */
+  const agentLabel = getExperience(app?.user?.role ?? 'staff') === 'sales' ? 'Sally' : 'Lizzie';
+  const isSalesShell = agentLabel === 'Sally';
   const [leadFormCallId, setLeadFormCallId] = useState<string | null>(null);
   const [leadFormName, setLeadFormName] = useState('');
   const [leadFormEmail, setLeadFormEmail] = useState('');
@@ -454,7 +460,11 @@ export default function CallCenter() {
       });
       const data = await res.json();
       setIsActive(data.isActive !== false);
-      toast.success(checked ? 'Lizzie is now answering calls' : 'Lizzie paused — calls will not be answered');
+      toast.success(
+        checked
+          ? `${agentLabel} is now live`
+          : `${agentLabel} paused — calls will not be answered`,
+      );
     } catch {
       setIsActive(!checked);
       toast.error('Failed to update agent status');
@@ -862,9 +872,13 @@ export default function CallCenter() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <Phone className="w-7 h-7 text-amber-600" />
-            Call Centre — Lizzie
+            Call Centre — {agentLabel}
           </h1>
-          <p className="text-slate-600 mt-1">AI voice agent control dashboard</p>
+          <p className="text-slate-600 mt-1">
+            {isSalesShell
+              ? 'Sally sells Sync2Dine to restaurants (outbound signup) — separate from restaurant order-taking'
+              : 'AI voice agent control dashboard'}
+          </p>
         </div>
         <Button variant="outline" onClick={refreshAll} disabled={loading}>
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
@@ -881,7 +895,9 @@ export default function CallCenter() {
               <div>
                 <p className="font-semibold text-slate-900">AI Agent Master Switch</p>
                 <p className="text-sm text-slate-600">
-                  {isActive ? 'Lizzie is answering inbound calls' : 'Lizzie is paused — calls will not be answered'}
+                  {isActive
+                    ? (isSalesShell ? 'Sally can place outbound sales calls' : 'Lizzie is answering inbound calls')
+                    : `${agentLabel} is paused — calls will not be answered`}
                 </p>
               </div>
             </div>
@@ -1132,17 +1148,8 @@ export default function CallCenter() {
                           recordingUrl={call.recordingUrl}
                           testId={`callcenter-recording-${call.id}`}
                         />
-                        <div className="space-y-2 max-h-[240px] overflow-y-auto">
-                          {(call.transcript ?? []).map((turn, i) => (
-                            <div
-                              key={i}
-                              className={`p-2 rounded text-sm ${turn.role === 'agent' ? 'bg-amber-100 ml-4' : 'bg-white border mr-4'}`}
-                            >
-                              <span className="text-xs text-slate-400">{turn.role === 'agent' ? 'Lizzie' : 'Caller'}: </span>
-                              {turn.content}
-                            </div>
-                          ))}
-                        </div>
+                        <CallLinkedOrderSync callId={call.id} />
+                        <CallTranscriptTurns turns={call.transcript} agentLabel={agentLabel} />
                         <div className="flex flex-wrap gap-2">
                           {call.customerId ? (
                             <Button
