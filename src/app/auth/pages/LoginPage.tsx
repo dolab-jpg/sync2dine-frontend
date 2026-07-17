@@ -12,6 +12,7 @@ import { AuthFormError } from '../components/AuthFormError';
 import { PasswordField } from '../components/PasswordField';
 import { SeedAccountsPanel, SEED_PASSWORD, SEED_ACCOUNTS, type SeedAccount } from '../components/SeedAccountsPanel';
 import { homePathForRole, isStaffLoginRole, resolveUsername } from '../lib/authApi';
+import IntegrationsLogoStrip from '../../components/restaurant/IntegrationsLogoStrip';
 
 interface LoginProps {
   onLogin: (user: {
@@ -286,6 +287,9 @@ export default function LoginPage({ onLogin }: LoginProps) {
       </Card>
 
       <SeedAccountsPanel onFill={fillSeedAccount} />
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-4">
+        <IntegrationsLogoStrip compact />
+      </div>
     </AuthLayout>
   );
 }

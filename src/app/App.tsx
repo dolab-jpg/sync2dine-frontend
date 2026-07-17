@@ -61,6 +61,9 @@ import RestaurantAccounts from './components/restaurant/RestaurantAccounts';
 import RestaurantLive from './components/restaurant/RestaurantLive';
 import MenuManager from './components/restaurant/MenuManager';
 import RestaurantSettings from './components/restaurant/RestaurantSettings';
+import BookingsBoard from './components/restaurant/BookingsBoard';
+import IntegrationsPublicPage from './components/restaurant/IntegrationsPublicPage';
+import type { AllergenCode, DietaryCode } from './engine/restaurant/allergens';
 import { getExperience } from './engine/platform/experience';
 import {
   ensureActiveOrgId,
@@ -186,6 +189,12 @@ export interface Product {
   deal?: {
     roles: Array<{ role: string; qtyPerDeal: number; choices: string[] }>;
   };
+  /** UK 14 allergen / dietary facts (stored on products.data) */
+  allergensContains?: AllergenCode[];
+  allergensMayContain?: AllergenCode[];
+  dietary?: DietaryCode[];
+  allergenNotes?: string;
+  allergenDeclared?: boolean;
 }
 
 export interface PricingRule {
@@ -1241,6 +1250,7 @@ export default function App() {
         <Routes>
           <Route path="/cursor-paste" element={<CursorPastePage />} />
           <Route path="/front" element={<FrontKiosk />} />
+          <Route path="/integrations" element={<IntegrationsPublicPage />} />
           <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -1281,6 +1291,10 @@ export default function App() {
               <Route path="/orders/till" element={<Navigate to="/orders/kitchen" replace />} />
               <Route path="/orders/delivery" element={<RestaurantOrders tab="delivery" showTabs={false} />} />
               <Route
+                path="/bookings"
+                element={<ProtectedRoute element={<BookingsBoard />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
                 path="/menu"
                 element={<ProtectedRoute element={<MenuManager />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
@@ -1299,6 +1313,7 @@ export default function App() {
               />
               <Route path="/team" element={<Navigate to="/settings" replace />} />
               <Route path="/settings" element={<RestaurantSettings />} />
+              <Route path="/integrations" element={<IntegrationsPublicPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/profile/password" element={<ChangePasswordPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />

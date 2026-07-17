@@ -131,6 +131,39 @@ test.describe('Responsive smoke — staff routes (demo login)', () => {
   });
 });
 
+test.describe('Responsive smoke — restaurant routes', () => {
+  const restaurantRoutes = [
+    { path: '/menu', name: 'menu' },
+    { path: '/orders/kitchen', name: 'kitchen' },
+    { path: '/orders/delivery', name: 'delivery' },
+    { path: '/bookings', name: 'bookings' },
+    { path: '/settings', name: 'settings' },
+    { path: '/integrations', name: 'integrations-public' },
+  ];
+
+  for (const route of restaurantRoutes) {
+    test(`${route.name} (${route.path}) — no horizontal overflow`, async ({ page, viewport }) => {
+      // Public integrations needs no login
+      if (route.path === '/integrations') {
+        await page.goto('/integrations', { waitUntil: 'domcontentloaded' });
+        await expect(page.getByTestId('integrations-public-page').or(page.getByTestId('integrations-page')).or(page.getByTestId('integrations-logo-strip'))).toBeVisible({ timeout: 15_000 });
+        await assertNoHorizontalOverflow(page);
+        return;
+      }
+      await demoLoginAsStaff(page, viewport);
+      await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(400);
+      await assertNoHorizontalOverflow(page);
+    });
+  }
+
+  test('login integrations strip fits viewport', async ({ page }) => {
+    await page.goto('/login', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('integrations-logo-strip')).toBeVisible({ timeout: 15_000 });
+    await assertNoHorizontalOverflow(page);
+  });
+});
+
 test.describe('Responsive snapshots — key screens', () => {
   const snapshotProjects = new Set(['phone', 'tablet', 'desktop']);
 

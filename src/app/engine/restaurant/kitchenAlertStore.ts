@@ -1,11 +1,17 @@
+import {
+  loadAlertSettings,
+  isInQuietHours,
+  notifyBrowserNewOrder,
+} from './alertSettings';
+
 /**
  * Shared kitchen alert state across Live / Kitchen / Delivery mounts.
  * Persists seen order IDs in sessionStorage so remounts do not re-beep everything.
+ * Flash means unacknowledged only — never "any status===new forever".
  */
 
 const SEEN_KEY = 's2d.kitchen.seenOrderIds';
 const AUDIO_KEY = 's2d.kitchen.audioUnlocked';
-const FLASH_MS = 45_000;
 
 let audioUnlocked = false;
 try {
@@ -16,6 +22,14 @@ try {
 
 const flashUntil = new Map<string, number>();
 const listeners = new Set<() => void>();
+let repeatTimer: number | null = null;
+let overdueBeepIds = new Set<string>();
+
+function flashMs(): number {
+  const s = loadAlertSettings();
+  if (!s.flashEnabled) return 0;
+  return (s.flashDurationSec || 45) * 1000;
+}
 
 function loadSeen(): Set<string> {
   try {
@@ -28,9 +42,9 @@ function loadSeen(): Set<string> {
   }
 }
 
-function saveSeen(seen: Set<string>) {
+function saveSeen(seenSet: Set<string>) {
   try {
-    const arr = [...seen].slice(-500);
+    const arr = [...seenSet].slice(-500);
     sessionStorage.setItem(SEEN_KEY, JSON.stringify(arr));
   } catch {
     /* ignore */
@@ -55,7 +69,9 @@ export function unlockKitchenAudio(): void {
 }
 
 export function playKitchenBeep(): void {
-  if (!audioUnlocked) return;
+  const settings = loadAlertSettings();
+  if (!audioUnlocked || !settings.soundEnabled) return;
+  if (isInQuietHours(settings)) return;
   try {
     const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const ctx = new Ctx();
@@ -63,7 +79,7 @@ export function playKitchenBeep(): void {
     const gain = ctx.createGain();
     osc.type = 'square';
     osc.frequency.value = 880;
-    gain.gain.value = 0.08;
+    gain.gain.value = Math.max(0.001, Math.min(1, settings.soundVolume));
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start();
@@ -77,13 +93,18 @@ export function playKitchenBeep(): void {
 
 export function noteOrdersSeen(orderIds: string[], newOrderIds: string[]): void {
   const now = Date.now();
+  const ms = flashMs();
   for (const id of newOrderIds) {
-    flashUntil.set(id, now + FLASH_MS);
+    if (ms > 0) flashUntil.set(id, now + ms);
   }
   for (const id of orderIds) seen.add(id);
   saveSeen(seen);
   if (newOrderIds.length) {
     playKitchenBeep();
+    notifyBrowserNewOrder(
+      `New order${newOrderIds.length > 1 ? `s (${newOrderIds.length})` : ''}`,
+      'Open Kitchen or Delivery board',
+    );
     notify();
   }
 }
@@ -113,7 +134,25 @@ export function isOrderFlashing(id: string): boolean {
 
 export function acknowledgeOrderFlash(id: string): void {
   flashUntil.delete(id);
+  overdueBeepIds.delete(id);
   notify();
+}
+
+/** Register overdue order ids for optional repeat beep until acknowledged. */
+export function setOverdueAlertIds(ids: string[]): void {
+  overdueBeepIds = new Set(ids);
+  const settings = loadAlertSettings();
+  const interval = settings.repeatUntilAck ? settings.repeatIntervalSec : 0;
+  if (repeatTimer != null) {
+    window.clearInterval(repeatTimer);
+    repeatTimer = null;
+  }
+  if (interval > 0 && overdueBeepIds.size > 0) {
+    repeatTimer = window.setInterval(() => {
+      if (overdueBeepIds.size === 0) return;
+      playKitchenBeep();
+    }, interval * 1000);
+  }
 }
 
 function notify() {
@@ -123,4 +162,30 @@ function notify() {
 export function subscribeKitchenAlerts(fn: () => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
+}
+
+/** Nav badge counts shared across Kitchen / Delivery / Bookings. */
+export type BoardBadgeCounts = {
+  kitchenNew: number;
+  kitchenOverdue: number;
+  deliveryNew: number;
+  deliveryOverdue: number;
+  bookingsToday: number;
+};
+
+let boardBadges: BoardBadgeCounts = {
+  kitchenNew: 0,
+  kitchenOverdue: 0,
+  deliveryNew: 0,
+  deliveryOverdue: 0,
+  bookingsToday: 0,
+};
+
+export function getBoardBadgeCounts(): BoardBadgeCounts {
+  return { ...boardBadges };
+}
+
+export function setBoardBadgeCounts(patch: Partial<BoardBadgeCounts>): void {
+  boardBadges = { ...boardBadges, ...patch };
+  notify();
 }

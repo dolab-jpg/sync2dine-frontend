@@ -22,6 +22,7 @@ import { SoftPhonePanel } from './SoftPhonePanel';
 import LapsedCampaignPanel from './LapsedCampaignPanel';
 import { AppContext } from '../../App';
 import { integrationService } from '../../engine/integrations/integrationService';
+import CallRecordingPlayer from '../restaurant/CallRecordingPlayer';
 
 interface CallTurn {
   role: 'caller' | 'agent' | 'system';
@@ -47,6 +48,7 @@ interface CallRecord {
   endedAt?: string;
   campaignTemplate?: string;
   transferredTo?: string;
+  recordingUrl?: string;
   metadata?: {
     callerKind?: 'customer' | 'staff' | 'foreman';
     callerRole?: string;
@@ -1077,6 +1079,10 @@ export default function CallCenter() {
                           <span className="text-xs text-slate-500">Caller number:</span>
                           <span className="font-mono font-semibold text-sm text-slate-900">{formatPhone(call.from)}</span>
                         </div>
+                        <CallRecordingPlayer
+                          recordingUrl={call.recordingUrl}
+                          testId={`callcenter-recording-${call.id}`}
+                        />
                         <div className="space-y-2 max-h-[240px] overflow-y-auto">
                           {(call.transcript ?? []).map((turn, i) => (
                             <div

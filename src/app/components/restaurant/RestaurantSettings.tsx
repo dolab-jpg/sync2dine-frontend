@@ -1,13 +1,20 @@
-import { useEffect, useState, type KeyboardEvent } from 'react';
+import { useContext, useEffect, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
-import { Copy, MapPinned, Megaphone, MonitorSmartphone, PhoneCall, Store, Users, X, Plug, CreditCard, MessageCircle, Sparkles, Radio } from 'lucide-react';
+import { Copy, MapPinned, Megaphone, MonitorSmartphone, PhoneCall, Store, Users, X, Plug, CreditCard, MessageCircle, Sparkles, Radio, Grid3x3 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Textarea } from '../ui/textarea';
 import { Input } from '../ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { buildPublicKioskUrl, getActiveOrgId } from '../../engine/platform/orgContext';
 import { isOrgUuid } from '../../engine/platform/homeOrg';
+import { AppContext } from '../../App';
+import AllergenMatrix from './AllergenMatrix';
+import ConnectedSystemsPanel from './ConnectedSystemsPanel';
+import KitchenAlertSettingsPanel from './KitchenAlertSettingsPanel';
+import TablesInventoryPanel from './TablesInventoryPanel';
+import IntegrationsLogoStrip from './IntegrationsLogoStrip';
 
 /**
  * Restaurant settings (Super Master B2): phone agent on/off, About us,
@@ -19,6 +26,7 @@ function normalizePrefix(raw: string): string {
 }
 
 export default function RestaurantSettings() {
+  const app = useContext(AppContext);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isActive, setIsActive] = useState(true);
@@ -27,6 +35,7 @@ export default function RestaurantSettings() {
   const [deliveryPrefixes, setDeliveryPrefixes] = useState<string[]>([]);
   const [deliveryNotes, setDeliveryNotes] = useState('');
   const [prefixDraft, setPrefixDraft] = useState('');
+  const [matrixOpen, setMatrixOpen] = useState(false);
   const orgId = getActiveOrgId();
   const kioskUrl = isOrgUuid(orgId) ? buildPublicKioskUrl(orgId) : '';
 
@@ -186,6 +195,16 @@ export default function RestaurantSettings() {
               <p className="mb-2 text-sm text-slate-600">
                 Opening hours, address, parking, allergens — shared with callers when they ask.
               </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="mb-3 min-h-12 font-bold"
+                onClick={() => setMatrixOpen(true)}
+                data-testid="settings-allergen-matrix"
+              >
+                <Grid3x3 className="mr-2 h-4 w-4" />
+                View allergen matrix
+              </Button>
               <Textarea
                 value={aboutUs}
                 onChange={(e) => setAboutUs(e.target.value)}
@@ -281,6 +300,18 @@ export default function RestaurantSettings() {
         </Button>
 
         <div className="rounded-[1.5rem] border border-s2d-teal/15 bg-white p-5 shadow-sm">
+          <KitchenAlertSettingsPanel />
+        </div>
+
+        <div className="rounded-[1.5rem] border border-s2d-teal/15 bg-white p-5 shadow-sm">
+          <TablesInventoryPanel />
+        </div>
+
+        <div className="rounded-[1.5rem] border border-s2d-teal/15 bg-white p-5 shadow-sm">
+          <ConnectedSystemsPanel />
+        </div>
+
+        <div className="rounded-[1.5rem] border border-s2d-teal/15 bg-white p-5 shadow-sm">
           <div className="flex items-start gap-3">
             <Plug className="mt-1 h-6 w-6 text-s2d-teal" />
             <div className="flex-1 space-y-4">
@@ -290,6 +321,7 @@ export default function RestaurantSettings() {
                   Connect payments, messaging, and AI for this restaurant. Status refreshes when you open Settings.
                 </p>
               </div>
+              <IntegrationsLogoStrip compact showIntro={false} />
               <IntegrationStatusCards />
             </div>
           </div>
@@ -305,6 +337,15 @@ export default function RestaurantSettings() {
           </Link>
         </div>
       </section>
+
+      <Dialog open={matrixOpen} onOpenChange={setMatrixOpen}>
+        <DialogContent className="max-h-[90dvh] max-w-5xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Allergen matrix</DialogTitle>
+          </DialogHeader>
+          <AllergenMatrix products={app?.products ?? []} onClose={() => setMatrixOpen(false)} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

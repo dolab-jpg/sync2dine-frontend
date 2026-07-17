@@ -7,8 +7,15 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Search, Trash2, Edit, UtensilsCrossed, EyeOff } from 'lucide-react';
+import { Plus, Search, Trash2, Edit, UtensilsCrossed, EyeOff, Grid3x3 } from 'lucide-react';
 import { toast } from 'sonner';
+import DietaryFactsEditor, { type DietaryFactsValue } from './DietaryFactsEditor';
+import AllergenMatrix from './AllergenMatrix';
+import {
+  allergenBadgeLabels,
+  isAllergenIncomplete,
+  normalizeAllergenFields,
+} from '../../engine/restaurant/allergens';
 
 /**
  * Restaurant food menu manager (Super Master C12).
@@ -39,6 +46,15 @@ type FoodForm = {
   dealMains: string;
   dealSides: string;
   dealDrinks: string;
+  dietary: DietaryFactsValue;
+};
+
+const EMPTY_DIETARY: DietaryFactsValue = {
+  allergensContains: [],
+  allergensMayContain: [],
+  dietary: [],
+  allergenNotes: '',
+  allergenDeclared: false,
 };
 
 const EMPTY_FORM: FoodForm = {
@@ -51,6 +67,7 @@ const EMPTY_FORM: FoodForm = {
   dealMains: '',
   dealSides: '',
   dealDrinks: '',
+  dietary: EMPTY_DIETARY,
 };
 
 function parseChoiceList(raw: string): string[] {
@@ -90,7 +107,9 @@ export default function MenuManager() {
   const context = useContext(AppContext);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [missingAllergensOnly, setMissingAllergensOnly] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [matrixOpen, setMatrixOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FoodForm>(EMPTY_FORM);
   if (!context) return null;
@@ -112,7 +131,8 @@ export default function MenuManager() {
   const filtered = foodItems.filter((p) => {
     const matchesSearch = String(p.name ?? '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategory === 'all' || p.category === filterCategory;
-    return matchesSearch && matchesCategory;
+    const matchesAllergen = !missingAllergensOnly || isAllergenIncomplete(p);
+    return matchesSearch && matchesCategory && matchesAllergen;
   });
 
   const grouped = useMemo(() => {
@@ -139,6 +159,14 @@ export default function MenuManager() {
     const deal = (p.deal ?? rec.deal) as Product['deal'] | undefined;
     const roleChoices = (role: string) =>
       deal?.roles?.find((r) => r.role === role)?.choices?.join(', ') ?? '';
+    const allergens = normalizeAllergenFields({
+      ...rec,
+      allergensContains: p.allergensContains ?? rec.allergensContains,
+      allergensMayContain: p.allergensMayContain ?? rec.allergensMayContain,
+      dietary: p.dietary ?? rec.dietary,
+      allergenNotes: p.allergenNotes ?? rec.allergenNotes,
+      allergenDeclared: p.allergenDeclared ?? rec.allergenDeclared,
+    });
     setEditingId(p.id);
     setForm({
       name: p.name,
@@ -150,6 +178,13 @@ export default function MenuManager() {
       dealMains: roleChoices('main'),
       dealSides: roleChoices('side'),
       dealDrinks: roleChoices('drink'),
+      dietary: {
+        allergensContains: allergens.allergensContains,
+        allergensMayContain: allergens.allergensMayContain,
+        dietary: allergens.dietary,
+        allergenNotes: allergens.allergenNotes ?? '',
+        allergenDeclared: allergens.allergenDeclared,
+      },
     });
     setDialogOpen(true);
   };
@@ -174,6 +209,11 @@ export default function MenuManager() {
       description: form.description.trim(),
       available: form.available,
       deal: deal ?? undefined,
+      allergensContains: form.dietary.allergensContains,
+      allergensMayContain: form.dietary.allergensMayContain,
+      dietary: form.dietary.dietary,
+      allergenNotes: form.dietary.allergenNotes.trim() || undefined,
+      allergenDeclared: form.dietary.allergenDeclared,
     };
     if (editingId) {
       updateProduct(editingId, {
@@ -212,13 +252,25 @@ export default function MenuManager() {
             What Lizzie offers on calls and the kiosk — changes go live on the next call
           </p>
         </div>
-        <Button onClick={openAdd} className="min-h-12 bg-s2d-teal-deep font-bold text-s2d-cream hover:bg-s2d-teal">
-          <Plus className="mr-2 h-5 w-5" />
-          Add dish
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setMatrixOpen(true)}
+            className="min-h-12 font-bold"
+            data-testid="open-allergen-matrix"
+          >
+            <Grid3x3 className="mr-2 h-5 w-5" />
+            Allergen matrix
+          </Button>
+          <Button onClick={openAdd} className="min-h-12 bg-s2d-teal-deep font-bold text-s2d-cream hover:bg-s2d-teal">
+            <Plus className="mr-2 h-5 w-5" />
+            Add dish
+          </Button>
+        </div>
       </div>
 
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-s2d-teal-deep/40" />
           <Input
@@ -239,6 +291,15 @@ export default function MenuManager() {
             ))}
           </SelectContent>
         </Select>
+        <Button
+          type="button"
+          variant={missingAllergensOnly ? 'default' : 'outline'}
+          className={`min-h-12 font-bold ${missingAllergensOnly ? 'bg-amber-600 text-white hover:bg-amber-700' : ''}`}
+          onClick={() => setMissingAllergensOnly((v) => !v)}
+          data-testid="filter-missing-allergens"
+        >
+          Missing allergens
+        </Button>
       </div>
 
       {filtered.length === 0 ? (
@@ -269,6 +330,24 @@ export default function MenuManager() {
                 {group.items.map((item) => {
                   const rec = item as Record<string, unknown>;
                   const soldOut = rec.available === false;
+                  const badges = allergenBadgeLabels(item);
+                  const badgeNodes = [
+                    ...(item.deal || rec.deal
+                      ? [{ key: 'deal', className: 'bg-amber-100 text-amber-900', text: 'Meal deal' }]
+                      : []),
+                    ...badges.labels.map((text, i) => ({
+                      key: `a-${i}`,
+                      className:
+                        badges.tone === 'warn'
+                          ? 'bg-amber-100 text-amber-900'
+                          : badges.tone === 'ok'
+                            ? 'bg-emerald-100 text-emerald-900'
+                            : 'bg-s2d-cream text-s2d-teal-deep',
+                      text,
+                    })),
+                  ];
+                  const shown = badgeNodes.slice(0, 3);
+                  const overflow = badgeNodes.length - shown.length + (badges.overflow > 0 ? badges.overflow : 0);
                   return (
                     <Card key={item.id} className={`border-s2d-teal-deep/10 transition-shadow hover:shadow-md ${soldOut ? 'opacity-60' : ''}`}>
                       <CardContent className="p-4">
@@ -281,21 +360,28 @@ export default function MenuManager() {
                             {typeof rec.description === 'string' && rec.description ? (
                               <p className="mt-0.5 line-clamp-2 text-sm text-s2d-teal-deep/60">{rec.description}</p>
                             ) : null}
-                            {(item.deal || rec.deal) ? (
-                              <p className="mt-1 text-xs font-bold uppercase tracking-wide text-amber-800">
-                                Meal deal
-                              </p>
-                            ) : null}
                           </div>
                           <span className="shrink-0 text-lg font-extrabold text-s2d-teal-deep">
                             £{itemPrice(item).toFixed(2)}
                           </span>
                         </div>
-                        {soldOut && (
-                          <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
-                            <EyeOff className="h-3 w-3" /> Sold out
-                          </span>
-                        )}
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {soldOut && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+                              <EyeOff className="h-3 w-3" /> Sold out
+                            </span>
+                          )}
+                          {shown.map((b) => (
+                            <span key={b.key} className={`rounded-full px-2 py-0.5 text-xs font-bold ${b.className}`}>
+                              {b.text}
+                            </span>
+                          ))}
+                          {overflow > 0 ? (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-700">
+                              +{overflow}
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="mt-3 flex gap-2 border-t border-s2d-teal-deep/10 pt-3">
                           <Button variant="outline" size="sm" className="min-h-10 flex-1" onClick={() => openEdit(item)}>
                             <Edit className="mr-1 h-3.5 w-3.5" />
@@ -319,11 +405,12 @@ export default function MenuManager() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setForm(EMPTY_FORM); setEditingId(null); } }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[90dvh] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>{editingId ? 'Edit dish' : 'Add dish'}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
             <div>
               <Label htmlFor="dish-name">Dish name</Label>
               <Input
@@ -413,6 +500,10 @@ export default function MenuManager() {
                 </div>
               </div>
             )}
+            <DietaryFactsEditor
+              value={form.dietary}
+              onChange={(dietary) => setForm({ ...form, dietary })}
+            />
             <div>
               <Label htmlFor="dish-image">Image URL (optional)</Label>
               <Input
@@ -432,7 +523,8 @@ export default function MenuManager() {
               />
               <span className="font-medium text-s2d-teal-deep">Available to order</span>
             </label>
-            <div className="flex justify-end gap-2 border-t pt-4">
+            </div>
+            <div className="sticky bottom-0 flex shrink-0 justify-end gap-2 border-t bg-white px-6 py-4">
               <Button type="button" variant="outline" className="min-h-12" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>
@@ -441,6 +533,15 @@ export default function MenuManager() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={matrixOpen} onOpenChange={setMatrixOpen}>
+        <DialogContent className="max-h-[90dvh] max-w-5xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Allergen matrix</DialogTitle>
+          </DialogHeader>
+          <AllergenMatrix products={foodItems} onClose={() => setMatrixOpen(false)} />
         </DialogContent>
       </Dialog>
     </div>

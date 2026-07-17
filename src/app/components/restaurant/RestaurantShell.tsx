@@ -2,12 +2,13 @@ import { NavLink, useNavigate } from 'react-router';
 import { useContext, useEffect, useState, type ReactNode } from 'react';
 import {
   ChefHat, LogOut, Radio, Settings as SettingsIcon, Truck, UtensilsCrossed, Users,
-  Phone, Wallet, PanelLeftClose, PanelLeftOpen,
+  Phone, Wallet, PanelLeftClose, PanelLeftOpen, CalendarDays,
 } from 'lucide-react';
 import { AppContext } from '../../App';
 import { BrandLogo } from '../BrandLogo';
 import { OnlineStatusBanner } from '../OnlineStatusBanner';
 import { Toaster } from '../ui/sonner';
+import { getNavBadgeCounts, subscribeNavBadges } from '../../engine/restaurant/navBadgeStore';
 
 /**
  * Tablet-first shell for restaurant tenant staff.
@@ -21,16 +22,18 @@ type TabDef = {
   end: boolean;
   railOnly?: boolean;
   roles?: string[];
+  badge?: 'kitchen' | 'delivery' | 'bookings';
 };
 
 const SIDEBAR_KEY = 's2d.restaurant.sidebarCollapsed';
 
 const TABS: TabDef[] = [
   { to: '/', icon: Radio, label: 'Live', end: true },
-  { to: '/orders/kitchen', icon: ChefHat, label: 'Kitchen', end: false },
-  { to: '/orders/delivery', icon: Truck, label: 'Delivery', end: false },
+  { to: '/orders/kitchen', icon: ChefHat, label: 'Kitchen', end: false, badge: 'kitchen' },
+  { to: '/orders/delivery', icon: Truck, label: 'Delivery', end: false, badge: 'delivery' },
+  { to: '/bookings', icon: CalendarDays, label: 'Bookings', end: false, badge: 'bookings' },
   { to: '/menu', icon: UtensilsCrossed, label: 'Menu', end: false },
-  { to: '/calls', icon: Phone, label: 'Calls', end: false, roles: ['super_admin', 'manager', 'staff'] },
+  { to: '/calls', icon: Phone, label: 'Calls', end: false, roles: ['super_admin', 'manager', 'staff'], railOnly: true },
   { to: '/customers', icon: Users, label: 'Customers', end: false, railOnly: true, roles: ['super_admin', 'manager', 'staff'] },
   { to: '/accounts', icon: Wallet, label: 'Accounts', end: false, railOnly: true, roles: ['super_admin', 'manager'] },
   { to: '/settings', icon: SettingsIcon, label: 'Settings', end: false },
@@ -114,6 +117,29 @@ function tabVisible(tab: TabDef, role: string): boolean {
   return tab.roles.includes(role);
 }
 
+function NavBadge({ kind, compact }: { kind?: TabDef['badge']; compact?: boolean }) {
+  const [, setTick] = useState(0);
+  useEffect(() => subscribeNavBadges(() => setTick((n) => n + 1)), []);
+  if (!kind) return null;
+  const c = getNavBadgeCounts();
+  const n =
+    kind === 'kitchen' ? c.kitchenNew + c.kitchenOverdue
+      : kind === 'delivery' ? c.deliveryNew + c.deliveryOverdue
+        : c.bookingsToday;
+  if (!n) return null;
+  return (
+    <span
+      className={
+        compact
+          ? 'absolute -right-2 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-s2d-gold px-1 text-[9px] font-black text-s2d-teal-deep'
+          : 'ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-s2d-gold px-1.5 text-[10px] font-black text-s2d-teal-deep'
+      }
+    >
+      {n > 99 ? '99+' : n}
+    </span>
+  );
+}
+
 export default function RestaurantShell({ children }: { children: ReactNode }) {
   const context = useContext(AppContext);
   const live = useAgentLive();
@@ -172,7 +198,7 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
           </button>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto p-2" aria-label="Restaurant navigation">
-          {railTabs.map(({ to, icon: Icon, label, end }) => (
+          {railTabs.map(({ to, icon: Icon, label, end, badge }) => (
             <NavLink
               key={to}
               to={to}
@@ -181,7 +207,12 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
               className={({ isActive }) => tabClasses(isActive, collapsed ? 'rail-collapsed' : 'rail')}
             >
               <Icon className="h-6 w-6 shrink-0" />
-              {!collapsed && label}
+              {!collapsed && (
+                <>
+                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  <NavBadge kind={badge} />
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -257,10 +288,13 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
           aria-label="Restaurant navigation"
           data-testid="restaurant-bottom-nav"
         >
-          {bottomTabs.map(({ to, icon: Icon, label, end }) => (
+          {bottomTabs.map(({ to, icon: Icon, label, end, badge }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => tabClasses(isActive, 'bottom')}>
-              <Icon className="h-6 w-6" />
-              {label}
+              <span className="relative">
+                <Icon className="h-6 w-6" />
+                <NavBadge kind={badge} compact />
+              </span>
+              <span className="max-w-[4.5rem] truncate">{label}</span>
             </NavLink>
           ))}
         </nav>

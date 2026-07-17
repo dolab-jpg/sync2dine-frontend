@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { PhoneIncoming, PhoneOutgoing, Radio } from 'lucide-react';
+import { Headphones, PhoneIncoming, PhoneOutgoing, Radio } from 'lucide-react';
 import RestaurantOrders from '../RestaurantOrders';
 import { useAgentLive, LiveIndicator } from './RestaurantShell';
 
@@ -29,6 +29,7 @@ interface RecentCall {
   outcome?: string;
   startedAt: string;
   durationSec?: number;
+  recordingUrl?: string;
 }
 
 function elapsedLabel(sec?: number) {
@@ -42,6 +43,10 @@ function timeLabel(iso: string) {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return '';
   return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function hasRecording(url?: string) {
+  return typeof url === 'string' && /^https?:\/\//i.test(url.trim());
 }
 
 export default function RestaurantLive() {
@@ -96,7 +101,7 @@ export default function RestaurantLive() {
               <button
                 type="button"
                 onClick={() => navigate('/calls')}
-                className="rounded-xl bg-white/10 px-3 py-2 text-sm font-bold hover:bg-white/20"
+                className="min-h-12 rounded-xl bg-white/10 px-3 py-2 text-sm font-bold hover:bg-white/20 touch-manipulation"
               >
                 Open Calls
               </button>
@@ -139,14 +144,18 @@ export default function RestaurantLive() {
                   key={call.id}
                   type="button"
                   onClick={() => navigate(`/calls?callId=${encodeURIComponent(call.id)}`)}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-s2d-cream hover:bg-white/20"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-s2d-cream hover:bg-white/20 min-h-10"
                   title={`${call.direction} · ${call.status}${call.outcome ? ` · ${call.outcome}` : ''}`}
+                  data-testid={`live-recent-call-${call.id}`}
                 >
                   {call.direction === 'outbound'
                     ? <PhoneOutgoing className="h-3.5 w-3.5 text-s2d-gold" />
                     : <PhoneIncoming className="h-3.5 w-3.5 text-emerald-300" />}
                   {call.contactName || (call.direction === 'outbound' ? call.to : call.from)}
                   <span className="text-s2d-cream/60">{timeLabel(call.startedAt)}</span>
+                  {hasRecording(call.recordingUrl) ? (
+                    <Headphones className="h-3.5 w-3.5 text-violet-200" aria-label="Recording available" data-testid="live-recording-icon" />
+                  ) : null}
                 </button>
               ))}
             </div>
