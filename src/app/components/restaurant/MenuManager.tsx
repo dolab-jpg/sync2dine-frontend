@@ -51,9 +51,12 @@ function itemPrice(p: Product): number {
   return Number.isFinite(price) ? price : 0;
 }
 
+// BD legacy bathroom categories — filter by category (not tradeId) because the
+// legacy product migration stamped tradeId onto every synced row, food included.
+const BATHROOM_CATEGORIES = new Set(['toilet', 'basin', 'shower', 'bath', 'tap', 'accessory', 'tile']);
+
 function isFoodItem(p: Product): boolean {
-  // Bathroom/trade legacy rows carry a tradeId — never show them as food.
-  return !p.tradeId;
+  return !BATHROOM_CATEGORIES.has(String(p.category ?? '').toLowerCase());
 }
 
 export default function MenuManager() {

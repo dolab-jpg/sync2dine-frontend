@@ -522,8 +522,16 @@ export default function App() {
     return mergeCrmLeads(base);
   });
 
+  // Food menu rows (Sync2Dine) must never get the BD 'bathroom' tradeId stamp —
+  // the phone agent's getMenu filters bathroom categories out of the menu.
+  const FOOD_MENU_CATEGORIES = new Set(['starters', 'mains', 'sides', 'drinks', 'desserts', 'specials']);
   const migrateProducts = (items: Product[]): Product[] =>
-    items.map(p => ({ ...p, tradeId: p.tradeId ?? 'bathroom' }));
+    items.map(p => ({
+      ...p,
+      tradeId: FOOD_MENU_CATEGORIES.has(String(p.category ?? '').toLowerCase())
+        ? null
+        : (p.tradeId ?? 'bathroom'),
+    }));
 
   const migrateQuotes = (items: Quote[]): Quote[] =>
     items.map(q => {
@@ -1236,7 +1244,7 @@ export default function App() {
               <Route path="/" element={<RestaurantLive />} />
               <Route path="/orders" element={<Navigate to="/orders/kitchen" replace />} />
               <Route path="/orders/kitchen" element={<RestaurantOrders tab="kitchen" showTabs={false} />} />
-              <Route path="/orders/till" element={<RestaurantOrders tab="till" showTabs={false} />} />
+              <Route path="/orders/till" element={<Navigate to="/orders/kitchen" replace />} />
               <Route path="/orders/delivery" element={<RestaurantOrders tab="delivery" showTabs={false} />} />
               <Route
                 path="/menu"
