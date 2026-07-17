@@ -4,6 +4,7 @@ import {
   Building2, MessageCircle, Phone, PhoneCall, TrendingUp, Users,
 } from 'lucide-react';
 import { AppContext } from '../App';
+import { useAIAssistant } from '../context/AIAssistantContext';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 
@@ -22,6 +23,7 @@ interface TodayStats {
 export default function SalesDashboard() {
   const context = useContext(AppContext);
   const navigate = useNavigate();
+  const { setIsOpen: setAiOpen } = useAIAssistant();
   const [agentActive, setAgentActive] = useState<boolean | null>(null);
   const [today, setToday] = useState<TodayStats | null>(null);
 
@@ -52,12 +54,17 @@ export default function SalesDashboard() {
     total: customers.length,
   };
 
-  const quickActions = [
-    { label: 'CRM & dial list', icon: TrendingUp, to: '/crm' },
-    { label: 'Call Centre', icon: Phone, to: '/calls' },
-    { label: 'Lizzie chat', icon: MessageCircle, to: '/cynthia' },
+  const quickActions: Array<{
+    label: string;
+    icon: typeof TrendingUp;
+    onClick: () => void;
+  }> = [
+    { label: 'CRM & dial list', icon: TrendingUp, onClick: () => navigate('/crm') },
+    { label: 'Call Centre', icon: Phone, onClick: () => navigate('/calls') },
+    // Opens the floating Cynthia staff AI popup — not the full /cynthia page
+    { label: 'Cynthia chat', icon: MessageCircle, onClick: () => setAiOpen(true) },
     ...(user.role === 'platform_owner'
-      ? [{ label: 'Platform clients', icon: Building2, to: '/platform/clients' }]
+      ? [{ label: 'Platform clients', icon: Building2, onClick: () => navigate('/platform/clients') }]
       : []),
   ];
 
@@ -73,11 +80,11 @@ export default function SalesDashboard() {
           {today ? ` · ${today.totalCalls} calls today · ${today.callbacksBooked} callbacks booked` : ''}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
-          {quickActions.map(({ label, icon: Icon, to }) => (
+          {quickActions.map(({ label, icon: Icon, onClick }) => (
             <Button
-              key={to}
+              key={label}
               type="button"
-              onClick={() => navigate(to)}
+              onClick={onClick}
               className="min-h-11 rounded-xl bg-s2d-gold font-bold text-s2d-teal-deep hover:bg-s2d-gold-soft"
             >
               <Icon className="mr-2 h-4 w-4" />

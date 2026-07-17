@@ -201,7 +201,13 @@ export default function AppShell({ children }: AppShellProps) {
   };
 
   /** Sync2Dine sales-org nav (Super Master B2/C2–C6/C15). Restaurant tenants use RestaurantShell. */
-  const getNavItems = () => {
+  const getNavItems = (): Array<{
+    to: string;
+    icon: typeof Home;
+    label: string;
+    /** Opens the floating Cynthia AI overlay instead of navigating */
+    overlay?: boolean;
+  }> => {
     if (user.role === 'recruitment') {
       return [
         { to: '/recruitment', icon: UserPlus, label: t('nav.recruitment') },
@@ -217,7 +223,7 @@ export default function AppShell({ children }: AppShellProps) {
       { to: '/crm', icon: TrendingUp, label: 'CRM' },
       { to: '/customers', icon: Users, label: t('nav.customers') },
       { to: '/communications', icon: Mail, label: t('nav.communications') },
-      { to: '/cynthia', icon: MessageCircle, label: 'Lizzie' },
+      { to: '/cynthia', icon: MessageCircle, label: 'Cynthia', overlay: true },
       { to: '/calls', icon: Phone, label: t('nav.callCenter') },
       ...(user.role === 'platform_owner'
         ? [
@@ -259,7 +265,30 @@ export default function AppShell({ children }: AppShellProps) {
   }
 
   const renderNavLinks = (showLabels: boolean, onNavigate?: () => void) =>
-    navItems.map(({ to, icon: Icon, label }) => (
+    navItems.map(({ to, icon: Icon, label, overlay }) =>
+      overlay ? (
+        <button
+          key={to}
+          type="button"
+          title={label}
+          onClick={() => {
+            onNavigate?.();
+            setAiOpen(true);
+          }}
+          className={`w-full flex items-center gap-3 rounded-xl transition-all duration-200 font-medium text-sm min-h-11 touch-manipulation text-s2d-cream/90 hover:bg-white/8 hover:text-white ${
+            showLabels ? 'px-3 justify-start' : 'px-0 justify-center'
+          }`}
+        >
+          <Icon className="w-5 h-5 shrink-0" />
+          <span
+            className={`truncate whitespace-nowrap transition-all duration-300 ${
+              showLabels ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'
+            }`}
+          >
+            {label}
+          </span>
+        </button>
+      ) : (
       <NavLink
         key={to}
         to={to}
@@ -286,7 +315,8 @@ export default function AppShell({ children }: AppShellProps) {
           {label}
         </span>
       </NavLink>
-    ));
+      )
+    );
 
   return (
     <div className="native-shell h-screen flex flex-col bg-gradient-to-br from-s2d-cream to-white overflow-hidden safe-area-x">
@@ -536,7 +566,7 @@ export default function AppShell({ children }: AppShellProps) {
             data-testid="staff-bottom-nav"
           >
             {[
-              { to: '/cynthia', icon: MessageCircle, label: 'Lizzie' },
+              { to: '/cynthia', icon: MessageCircle, label: 'Cynthia' },
               { to: '/crm', icon: TrendingUp, label: 'CRM' },
               { to: '/calls', icon: Phone, label: 'Calls' },
               { to: '/customers', icon: Users, label: 'Customers' },
