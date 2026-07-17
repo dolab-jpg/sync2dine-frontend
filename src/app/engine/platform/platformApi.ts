@@ -43,6 +43,10 @@ export interface CreateOrganizationResult {
   organization: PlatformOrganization;
   mainUserEmail?: string;
   mainUserCreated?: boolean;
+  /** One-time kiosk credentials — displayed once after provisioning, never again. */
+  kioskEmail?: string;
+  kioskPasswordOnce?: string;
+  kioskWarning?: string;
   stripeCheckoutUrl?: string;
   stripeWarning?: string;
 }

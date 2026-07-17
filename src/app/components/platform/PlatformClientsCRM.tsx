@@ -59,6 +59,13 @@ export default function PlatformClientsCRM() {
   const [selected, setSelected] = useState<PlatformOrganization | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [onceCreds, setOnceCreds] = useState<{
+    orgName: string;
+    mainEmail: string;
+    kioskEmail?: string;
+    kioskPassword?: string;
+    kioskWarning?: string;
+  } | null>(null);
 
   const [form, setForm] = useState({
     name: '',
@@ -145,6 +152,13 @@ export default function PlatformClientsCRM() {
         `${org.name} ready — main Super Admin login: ${mainEmail}`,
         { duration: 10_000 },
       );
+      setOnceCreds({
+        orgName: org.name,
+        mainEmail,
+        kioskEmail: result.kioskEmail,
+        kioskPassword: result.kioskPasswordOnce,
+        kioskWarning: result.kioskWarning,
+      });
       if (result.stripeCheckoutUrl) {
         window.open(result.stripeCheckoutUrl, '_blank');
       } else if (result.stripeWarning) {
@@ -454,6 +468,55 @@ export default function PlatformClientsCRM() {
                 </div>
               </div>
             </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* One-time credentials after provisioning — kiosk password is never shown again */}
+      <Dialog open={Boolean(onceCreds)} onOpenChange={(open) => { if (!open) setOnceCreds(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Logins for {onceCreds?.orgName}</DialogTitle>
+          </DialogHeader>
+          {onceCreds && (
+            <div className="space-y-4">
+              <div>
+                <Label className="font-bold">Super Admin</Label>
+                <p className="rounded-lg bg-gray-50 p-3 font-mono text-sm">{onceCreds.mainEmail}</p>
+                <p className="mt-1 text-xs text-gray-500">Password: the one you set on the form.</p>
+              </div>
+              {onceCreds.kioskEmail && onceCreds.kioskPassword ? (
+                <div>
+                  <Label className="font-bold">Front kiosk (counter tablet)</Label>
+                  <p className="rounded-lg bg-gray-50 p-3 font-mono text-sm">
+                    {onceCreds.kioskEmail}
+                    <br />
+                    {onceCreds.kioskPassword}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-amber-700">
+                    Copy this now — the kiosk password is shown only once.
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="mt-2 w-full"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(
+                        `Kiosk login\nEmail: ${onceCreds.kioskEmail}\nPassword: ${onceCreds.kioskPassword}`,
+                      );
+                      toast.success('Kiosk credentials copied');
+                    }}
+                  >
+                    Copy kiosk credentials
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-amber-700">
+                  Kiosk login was not created{onceCreds.kioskWarning ? ` — ${onceCreds.kioskWarning}` : ''}. You can
+                  invite a kiosk user from the client&apos;s Team page instead.
+                </p>
+              )}
+              <Button className="w-full" onClick={() => setOnceCreds(null)}>Done</Button>
+            </div>
           )}
         </DialogContent>
       </Dialog>

@@ -58,6 +58,7 @@ import FrontKiosk from './components/FrontKiosk';
 import RestaurantOrders from './components/RestaurantOrders';
 import RestaurantShell from './components/restaurant/RestaurantShell';
 import RestaurantLive from './components/restaurant/RestaurantLive';
+import MenuManager from './components/restaurant/MenuManager';
 import RestaurantSettings from './components/restaurant/RestaurantSettings';
 import { getExperience } from './engine/platform/experience';
 import {
@@ -172,6 +173,10 @@ export interface Product {
   source: string;
   category: string;
   tradeId?: TradeId | null;
+  /** Restaurant food menu fields (Sync2Dine) — same row Lizzie reads via getMenu */
+  price?: number;
+  description?: string;
+  available?: boolean;
 }
 
 export interface PricingRule {
@@ -1235,7 +1240,7 @@ export default function App() {
               <Route path="/orders/delivery" element={<RestaurantOrders tab="delivery" showTabs={false} />} />
               <Route
                 path="/menu"
-                element={<ProtectedRoute element={<ProductCatalog />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+                element={<ProtectedRoute element={<MenuManager />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route path="/products" element={<Navigate to="/menu" replace />} />
               <Route
