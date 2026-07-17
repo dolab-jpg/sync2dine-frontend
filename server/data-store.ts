@@ -154,6 +154,20 @@ export interface AgentSettings {
   callQueueQuietStart?: string;
   /** Quiet hours end (HH:mm local) */
   callQueueQuietEnd?: string;
+  /** Max simultaneous outbound dials (legacy; prefer maxOutboundSlots) */
+  callQueueMaxConcurrent?: number;
+  /** Outbound worker state */
+  outboundQueueState?: 'running' | 'paused' | 'stopped';
+  /** Total AI agent slots (inbound + outbound). Default 5. */
+  maxAgentSlots?: number;
+  /** Reserved inbound AI slots. Default 4. */
+  maxInboundSlots?: number;
+  /** Max concurrent outbound dials. Default 1. */
+  maxOutboundSlots?: number;
+  /** When all slots busy, divert inbound to this PSTN number */
+  overflowNumber?: string;
+  /** Enable overflow divert when at capacity */
+  overflowWhenFull?: boolean;
   updatedAt: string;
 }
 
@@ -167,6 +181,12 @@ const defaultAgentSettings: AgentSettings = {
   callQueueRetryMinutes: 60,
   callQueueQuietStart: '20:00',
   callQueueQuietEnd: '08:00',
+  callQueueMaxConcurrent: 1,
+  outboundQueueState: 'running',
+  maxAgentSlots: 5,
+  maxInboundSlots: 4,
+  maxOutboundSlots: 1,
+  overflowWhenFull: true,
   updatedAt: new Date().toISOString(),
 };
 
@@ -489,24 +509,107 @@ export function resolveContactByPhone(phone: string): {
   const contact = store.contacts.find(
     c => normalizePhone(String(c.phone ?? '')) === normalized
   );
-  const customerId = contact ? String(contact.customerId) : null;
+  let customerId = contact ? String(contact.customerId) : null;
+  let customerFromPhone: Record<string, unknown> | undefined;
+  if (!customerId && normalized) {
+    customerFromPhone = store.customers.find(
+      (c) => normalizePhone(String(c.phone ?? '')) === normalized,
+    );
+    if (customerFromPhone?.id) customerId = String(customerFromPhone.id);
+  }
   const primaryContact = customerId
     ? store.contacts.find(c => String(c.customerId) === customerId && c.isPrimary)
     : null;
   const project = store.projects.find(
     p => String(p.customerId) === customerId && p.status !== 'completed'
   );
+  const customerRow = customerId
+    ? store.customers.find((c) => String(c.id) === customerId)
+    : customerFromPhone;
   const accountName = primaryContact
     ? String(primaryContact.name)
-    : (contact ? String(contact.name) : 'Guest');
+    : contact
+      ? String(contact.name)
+      : customerRow?.name
+        ? String(customerRow.name)
+        : 'Guest';
   return {
     customerId,
     customerName: accountName,
-    contactName: contact ? String(contact.name) : 'Guest',
-    contactRole: contact ? String(contact.role ?? 'primary') : 'guest',
+    contactName: contact ? String(contact.name) : accountName,
+    contactRole: contact ? String(contact.role ?? 'primary') : (customerId ? 'primary' : 'guest'),
     projectId: project ? String(project.id) : null,
     activeQuotes: getActiveQuotes(customerId),
   };
+}
+
+/**
+ * Ensure phone agent sees Customers-tab rows (specials may live in Supabase).
+ */
+export async function hydrateCallerFromCloud(phone: string): Promise<ReturnType<typeof resolveContactByPhone>> {
+  try {
+    const { findCustomerByPhoneFromSupabase } = await import('./supabase-crm');
+    const cloud = await findCustomerByPhoneFromSupabase(phone, getRequestOrgId());
+    if (cloud) saveCustomerRecord(cloud);
+  } catch {
+    // ignore — fall through to in-memory resolve
+  }
+  return resolveContactByPhone(phone);
+}
+
+/**
+ * Match existing customer by phone, or create a minimal Guest CRM row on ring.
+ * Never creates a lead against a staff handset.
+ */
+export function ensureGuestCustomerForCall(
+  phone: string,
+  callId?: string,
+): { customerId: string | null; isNew: boolean; contactName: string } {
+  const normalized = normalizePhone(phone);
+  if (!normalized) {
+    return { customerId: null, isNew: false, contactName: 'Guest' };
+  }
+  if (resolveStaffByPhone(phone)) {
+    return { customerId: null, isNew: false, contactName: 'Guest' };
+  }
+  const resolved = resolveContactByPhone(phone);
+  if (resolved.customerId) {
+    if (callId) {
+      appendCustomerCallActivity({
+        customerId: resolved.customerId,
+        callId,
+        summary: 'Inbound call started',
+        updateCallQueue: true,
+      });
+      saveCall({ id: callId, customerId: resolved.customerId, contactName: resolved.customerName });
+    }
+    return {
+      customerId: resolved.customerId,
+      isNew: false,
+      contactName: resolved.customerName || resolved.contactName || 'Guest',
+    };
+  }
+
+  const customer = saveCustomerRecord({
+    name: 'Guest',
+    phone,
+    email: '',
+    address: '',
+    status: 'lead',
+    source: 'phone',
+    sourceCallId: callId,
+  });
+  const customerId = String(customer.id);
+  if (callId) {
+    saveCall({ id: callId, customerId, contactName: 'Guest' });
+    appendCustomerCallActivity({
+      customerId,
+      callId,
+      summary: 'Inbound call started — Guest created',
+      updateCallQueue: true,
+    });
+  }
+  return { customerId, isNew: true, contactName: 'Guest' };
 }
 
 // Local copy (quote-lookup.ts imports this module, so importing it back would be a cycle).
@@ -1154,6 +1257,111 @@ function isOpenCallStatus(status: unknown): boolean {
   return s === 'ringing' || s === 'in_progress';
 }
 
+export function countOpenCallsForOrg(): number {
+  expireStaleOpenCalls();
+  return getDataStore().calls.filter((c) => isOpenCallStatus(c.status)).length;
+}
+
+export function countOpenCallsByDirection(): { inbound: number; outbound: number; total: number } {
+  expireStaleOpenCalls();
+  const open = getDataStore().calls.filter((c) => isOpenCallStatus(c.status));
+  let inbound = 0;
+  let outbound = 0;
+  for (const c of open) {
+    if (String(c.direction ?? '') === 'outbound') outbound += 1;
+    else inbound += 1;
+  }
+  return { inbound, outbound, total: open.length };
+}
+
+export function getMaxConcurrentCallsPerOrg(): number {
+  const settings = getAgentSettings();
+  const fromSlots = settings.maxAgentSlots;
+  if (Number.isFinite(fromSlots) && fromSlots! > 0) {
+    return Math.max(1, Math.min(10, Math.floor(fromSlots!)));
+  }
+  const fromSettings = settings.callQueueMaxConcurrent;
+  if (Number.isFinite(fromSettings) && fromSettings! > 0) {
+    return Math.max(1, Math.min(5, Math.floor(fromSettings!)));
+  }
+  const n = Number(process.env.MAX_CONCURRENT_CALLS_PER_ORG ?? 5);
+  return Number.isFinite(n) && n > 0 ? Math.min(5, Math.floor(n)) : 5;
+}
+
+export function getInboundOutboundSlotLimits(): { maxInbound: number; maxOutbound: number; maxTotal: number } {
+  const settings = getAgentSettings();
+  const maxTotal = getMaxConcurrentCallsPerOrg();
+  const maxInbound = Math.max(1, Math.min(maxTotal, Math.floor(settings.maxInboundSlots ?? 4)));
+  const maxOutbound = Math.max(1, Math.min(maxTotal, Math.floor(settings.maxOutboundSlots ?? 1)));
+  return { maxInbound, maxOutbound, maxTotal };
+}
+
+export function getOutboundQueueState(): 'running' | 'paused' | 'stopped' {
+  const state = getAgentSettings().outboundQueueState;
+  return state === 'paused' || state === 'stopped' ? state : 'running';
+}
+
+export function isWithinCallQueueQuietHours(now = new Date()): boolean {
+  const { callQueueQuietStart, callQueueQuietEnd } = getAgentSettings();
+  const start = String(callQueueQuietStart ?? '20:00').trim();
+  const end = String(callQueueQuietEnd ?? '08:00').trim();
+  const toMins = (hhmm: string) => {
+    const [h, m] = hhmm.split(':').map((v) => Number(v));
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+    return h * 60 + m;
+  };
+  const startM = toMins(start);
+  const endM = toMins(end);
+  if (startM == null || endM == null) return false;
+  const cur = now.getHours() * 60 + now.getMinutes();
+  if (startM === endM) return false;
+  if (startM < endM) return cur >= startM && cur < endM;
+  return cur >= startM || cur < endM;
+}
+
+/** Capacity snapshot for Call Centre UI + outbound worker. */
+export function getAgentCapacitySnapshot(): {
+  inboundActive: number;
+  outboundActive: number;
+  totalActive: number;
+  maxInbound: number;
+  maxOutbound: number;
+  maxTotal: number;
+  outboundSlotsFree: number;
+  inboundSlotsFree: number;
+  overflowArmed: boolean;
+  overflowNumber?: string;
+  canAcceptInboundAi: boolean;
+} {
+  const counts = countOpenCallsByDirection();
+  const limits = getInboundOutboundSlotLimits();
+  const settings = getAgentSettings();
+  const diallingJobs = (getDataStore().outboundQueue ?? []).filter(
+    (j) => String(j.status ?? '') === 'dialling',
+  ).length;
+  const outboundActive = counts.outbound + diallingJobs;
+  const inboundSlotsFree = Math.max(0, limits.maxInbound - counts.inbound);
+  const outboundSlotsFree = Math.max(0, Math.min(
+    limits.maxOutbound - outboundActive,
+    limits.maxTotal - counts.total - diallingJobs,
+  ));
+  const overflowArmed = settings.overflowWhenFull !== false;
+  const atCapacity = counts.total >= limits.maxTotal;
+  return {
+    inboundActive: counts.inbound,
+    outboundActive,
+    totalActive: counts.total,
+    maxInbound: limits.maxInbound,
+    maxOutbound: limits.maxOutbound,
+    maxTotal: limits.maxTotal,
+    outboundSlotsFree,
+    inboundSlotsFree,
+    overflowArmed,
+    overflowNumber: settings.overflowNumber || settings.transferNumbers?.general || undefined,
+    canAcceptInboundAi: !atCapacity && inboundSlotsFree > 0,
+  };
+}
+
 export function getLinesSummary(): { total: number; registered: number; onCall: number } {
   expireStaleOpenCalls();
   const store = getDataStore();
@@ -1210,6 +1418,9 @@ function startOfTodayLocal(): number {
 export function getAgentStatusSnapshot(): {
   activeCall: Record<string, unknown> | null;
   activeCalls: Array<Record<string, unknown>>;
+  ringingCount: number;
+  inProgressCount: number;
+  capacity: ReturnType<typeof getAgentCapacitySnapshot>;
   linesSummary: { total: number; registered: number; onCall: number };
   todayStats: {
     totalCalls: number;
@@ -1228,12 +1439,37 @@ export function getAgentStatusSnapshot(): {
 
   const activeCalls = store.calls
     .filter(c => isOpenCallStatus(c.status))
-    .map(call => ({
-      ...call,
-      elapsedSec: computeCallDurationSec(call),
-      contactName: call.contactName ?? resolveContactByPhone(String(call.from ?? '')).customerName,
-      lineLabel: call.lineLabel ?? store.phoneLines.find(l => l.id === call.lineId)?.label,
-    }));
+    .map(call => {
+      const phone = String(
+        (call.metadata as Record<string, unknown> | undefined)?.partyPhone
+        ?? (call.direction === 'outbound' ? call.to : call.from)
+        ?? '',
+      );
+      const resolved = resolveContactByPhone(phone || String(call.from ?? ''));
+      const contactName = String(call.contactName ?? resolved.customerName ?? 'Guest');
+      const isGuest = !resolved.customerId
+        || /^guest$/i.test(contactName)
+        || contactName.trim() === '';
+      const meta = (call.metadata as Record<string, unknown> | undefined) || {};
+      const listenUrl = isOpenCallStatus(call.status)
+        ? String(call.listenUrl ?? meta.listenUrl ?? '')
+        : '';
+      const controlUrl = isOpenCallStatus(call.status)
+        ? String(call.controlUrl ?? meta.controlUrl ?? '')
+        : '';
+      return {
+        ...call,
+        elapsedSec: computeCallDurationSec(call),
+        contactName,
+        customerId: call.customerId ?? resolved.customerId,
+        isGuest,
+        direction: call.direction ?? 'inbound',
+        status: call.status,
+        listenUrl: listenUrl || undefined,
+        controlUrl: controlUrl || undefined,
+        lineLabel: call.lineLabel ?? store.phoneLines.find(l => l.id === call.lineId)?.label,
+      };
+    });
 
   const activeCall = activeCalls[0] ?? null;
 
@@ -1262,6 +1498,10 @@ export function getAgentStatusSnapshot(): {
     return Number.isFinite(t) && t >= todayStart;
   }).length;
 
+  const capacity = getAgentCapacitySnapshot();
+  const ringingCount = activeCalls.filter((c) => String(c.status) === 'ringing').length;
+  const inProgressCount = activeCalls.filter((c) => String(c.status) === 'in_progress').length;
+
   return {
     activeCall: activeCall
       ? {
@@ -1269,6 +1509,9 @@ export function getAgentStatusSnapshot(): {
         }
       : null,
     activeCalls,
+    ringingCount,
+    inProgressCount,
+    capacity,
     linesSummary: getLinesSummary(),
     todayStats: {
       totalCalls: todayCalls.length,

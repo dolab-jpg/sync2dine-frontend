@@ -37,6 +37,7 @@ import {
 } from '../engine/restaurant/foodOrderTypes';
 import { ALLERGEN_LABELS, normalizeAllergenCodes, type AllergenCode } from '../engine/restaurant/allergens';
 import CallRecordingPlayer, { CallRecordingBadge } from './restaurant/CallRecordingPlayer';
+import CallContextChip from './restaurant/CallContextChip';
 
 function paymentBadge(order: FoodOrder): { label: string; className: string } {
   if (order.payment === 'paid') {
@@ -258,18 +259,18 @@ function OrderItemsList({
   showAllergens?: boolean;
 }) {
   return (
-    <ul className={`${dense ? 'space-y-0.5' : 'space-y-2'} ${maxHeightClass ?? ''} ${maxHeightClass ? 'overflow-y-auto' : ''}`}>
+    <ul className={`${dense ? 'space-y-px' : 'space-y-1'} ${maxHeightClass ?? ''} ${maxHeightClass ? 'overflow-y-auto pr-1' : ''}`}>
       {items.map((item, idx) => (
         <li
           key={`${item.label}-${idx}`}
-          className={`flex flex-col gap-0.5 border-l-2 bg-slate-50 font-semibold text-slate-900 ${
+          className={`flex flex-col border-l-2 bg-slate-50 font-semibold text-slate-900 ${
             item.dealName ? 'border-amber-400' : 'border-slate-200'
-          } ${dense ? 'rounded-md px-2 py-1 text-sm' : 'rounded-xl px-3 py-2 text-lg'}`}
+          } ${dense ? 'rounded-md px-2.5 py-1 text-[15px]' : 'rounded-lg px-3 py-1.5 text-lg'}`}
         >
           <div className="flex items-baseline justify-between gap-2">
-            <span className="min-w-0 leading-snug">{item.label}</span>
+            <span className="min-w-0 leading-tight">{item.label}</span>
             {item.price != null ? (
-              <span className={`shrink-0 font-medium text-slate-500 ${dense ? 'text-xs' : 'text-sm'}`}>
+              <span className={`shrink-0 font-bold text-slate-600 ${dense ? 'text-sm' : 'text-sm'}`}>
                 £{item.price.toFixed(2)}
               </span>
             ) : null}
@@ -469,6 +470,18 @@ function OrderCard({
         <div>
           <p className="text-sm font-bold uppercase tracking-wide text-slate-500">Order #{order.number}</p>
           <h2 className="text-2xl font-black text-slate-950">{order.customer}</h2>
+          {(order.sourceCallId || order.recordingUrl) ? (
+            <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+              <CallContextChip
+                callId={order.sourceCallId}
+                phone={order.phone}
+                contactName={order.customer}
+                isGuest={/^guest$/i.test(order.customer || '')}
+                recordingUrl={order.recordingUrl}
+                compact
+              />
+            </div>
+          ) : null}
           <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-slate-600">
             <span className="rounded-lg bg-slate-100 px-2 py-0.5 capitalize">{order.type}</span>
             {src ? <span className="rounded-lg bg-indigo-100 px-2 py-0.5 text-indigo-900">{src}</span> : null}

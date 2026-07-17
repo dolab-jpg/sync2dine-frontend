@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Headphones, PhoneIncoming, PhoneOutgoing, Radio } from 'lucide-react';
+import { PhoneIncoming, PhoneOutgoing, Radio } from 'lucide-react';
 import RestaurantOrders from '../RestaurantOrders';
 import { useAgentLive, LiveIndicator } from './RestaurantShell';
+import CallContextChip from './CallContextChip';
 
 /**
  * Restaurant Live board: inbound/outbound calls strip above the orders board.
@@ -13,9 +14,13 @@ interface ActiveCall {
   from: string;
   to?: string;
   contactName?: string;
+  customerId?: string | null;
   elapsedSec?: number;
   status: string;
   lineLabel?: string;
+  listenUrl?: string;
+  isGuest?: boolean;
+  direction?: string;
 }
 
 interface RecentCall {
@@ -30,6 +35,7 @@ interface RecentCall {
   startedAt: string;
   durationSec?: number;
   recordingUrl?: string;
+  customerId?: string;
 }
 
 function elapsedLabel(sec?: number) {
@@ -43,10 +49,6 @@ function timeLabel(iso: string) {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return '';
   return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function hasRecording(url?: string) {
-  return typeof url === 'string' && /^https?:\/\//i.test(url.trim());
 }
 
 export default function RestaurantLive() {
@@ -101,7 +103,7 @@ export default function RestaurantLive() {
               <button
                 type="button"
                 onClick={() => navigate('/calls')}
-                className="min-h-12 rounded-xl bg-white/10 px-3 py-2 text-sm font-bold hover:bg-white/20 touch-manipulation"
+                className="rounded-xl bg-white/10 px-3 py-2 text-sm font-bold hover:bg-white/20"
               >
                 Open Calls
               </button>
@@ -109,27 +111,51 @@ export default function RestaurantLive() {
           </div>
 
           {activeCalls.length > 0 ? (
-            <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
-              {activeCalls.map((call) => (
-                <button
-                  key={call.id}
-                  type="button"
-                  onClick={() => navigate(`/calls?callId=${encodeURIComponent(call.id)}`)}
-                  className="min-w-[16rem] shrink-0 rounded-2xl border border-s2d-gold/40 bg-white/10 p-3 text-left transition hover:bg-white/15"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="relative flex h-3 w-3">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-400" />
-                    </span>
-                    <p className="truncate text-lg font-bold">{call.contactName || call.from}</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {activeCalls.map((call) => {
+                const guest = call.isGuest || /^guest$/i.test(call.contactName || '');
+                return (
+                  <div
+                    key={call.id}
+                    className="min-h-[5.5rem] rounded-2xl border border-s2d-gold/40 bg-white/10 p-3 text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-3 w-3">
+                        <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                          call.status === 'ringing' ? 'animate-ping bg-amber-400' : 'animate-ping bg-emerald-400'
+                        }`} />
+                        <span className={`relative inline-flex h-3 w-3 rounded-full ${
+                          call.status === 'ringing' ? 'bg-amber-400' : 'bg-emerald-400'
+                        }`} />
+                      </span>
+                      <p className="truncate text-lg font-bold">{call.contactName || call.from}</p>
+                      {guest ? (
+                        <span className="rounded-full bg-s2d-gold px-2 py-0.5 text-[10px] font-black text-s2d-teal-deep">
+                          NEW CALLER
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-sm text-s2d-cream/80">
+                      {call.status === 'ringing' ? 'RINGING' : 'ON CALL'}
+                      {call.lineLabel ? ` · ${call.lineLabel}` : ''}
+                      {call.elapsedSec != null ? ` · ${elapsedLabel(call.elapsedSec)}` : ''}
+                    </p>
+                    <p className="font-mono text-xs text-s2d-cream/60">{call.from}</p>
+                    <div className="mt-2">
+                      <CallContextChip
+                        callId={call.id}
+                        customerId={call.customerId}
+                        phone={call.from}
+                        contactName={call.contactName}
+                        status={call.status}
+                        isGuest={guest}
+                        listenUrl={call.listenUrl}
+                        elapsedSec={call.elapsedSec}
+                      />
+                    </div>
                   </div>
-                  <p className="mt-1 text-sm text-s2d-cream/80">
-                    {call.lineLabel ? `${call.lineLabel} · ` : ''}{call.status}
-                    {call.elapsedSec != null ? ` · ${elapsedLabel(call.elapsedSec)}` : ''}
-                  </p>
-                </button>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="mt-3 text-sm text-s2d-cream/70">
@@ -144,18 +170,14 @@ export default function RestaurantLive() {
                   key={call.id}
                   type="button"
                   onClick={() => navigate(`/calls?callId=${encodeURIComponent(call.id)}`)}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-s2d-cream hover:bg-white/20 min-h-10"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-s2d-cream hover:bg-white/20"
                   title={`${call.direction} · ${call.status}${call.outcome ? ` · ${call.outcome}` : ''}`}
-                  data-testid={`live-recent-call-${call.id}`}
                 >
                   {call.direction === 'outbound'
                     ? <PhoneOutgoing className="h-3.5 w-3.5 text-s2d-gold" />
                     : <PhoneIncoming className="h-3.5 w-3.5 text-emerald-300" />}
                   {call.contactName || (call.direction === 'outbound' ? call.to : call.from)}
                   <span className="text-s2d-cream/60">{timeLabel(call.startedAt)}</span>
-                  {hasRecording(call.recordingUrl) ? (
-                    <Headphones className="h-3.5 w-3.5 text-violet-200" aria-label="Recording available" data-testid="live-recording-icon" />
-                  ) : null}
                 </button>
               ))}
             </div>

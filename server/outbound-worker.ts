@@ -1,4 +1,10 @@
-import { getDataStore, updateOutboundJob } from './data-store';
+import {
+  getDataStore,
+  updateOutboundJob,
+  getOutboundQueueState,
+  isWithinCallQueueQuietHours,
+  getAgentCapacitySnapshot,
+} from './data-store';
 
 const POLL_MS = Number(process.env.OUTBOUND_POLL_MS ?? 15000);
 
@@ -14,6 +20,13 @@ export function startOutboundWorker(): void {
 }
 
 async function processOutboundQueue(): Promise<void> {
+  const queueState = getOutboundQueueState();
+  if (queueState !== 'running') return;
+  if (isWithinCallQueueQuietHours()) return;
+
+  const capacity = getAgentCapacitySnapshot();
+  if (capacity.outboundSlotsFree <= 0) return;
+
   const store = getDataStore();
   const queue = (store.outboundQueue ?? []).filter((j) => {
     if (String(j.status ?? '') !== 'queued') return false;
@@ -23,7 +36,7 @@ async function processOutboundQueue(): Promise<void> {
   });
   if (!queue.length) return;
 
-  for (const job of queue.slice(0, 3)) {
+  for (const job of queue.slice(0, capacity.outboundSlotsFree)) {
     const id = String(job.id ?? '');
     updateOutboundJob(id, { status: 'dialling', startedAt: new Date().toISOString() });
     try {
@@ -49,7 +62,6 @@ async function processOutboundQueue(): Promise<void> {
       });
       if (res.ok) {
         const data = await res.json().catch(() => ({})) as { callId?: string };
-        // Stay dialling until end-of-call webhook marks completed
         updateOutboundJob(id, {
           status: 'dialling',
           callId: data.callId ?? job.callId,

@@ -20,9 +20,12 @@ import {
 import { toast } from 'sonner';
 import { SoftPhonePanel } from './SoftPhonePanel';
 import LapsedCampaignPanel from './LapsedCampaignPanel';
+import CsvCampaignUploadPanel from './CsvCampaignUploadPanel';
 import { AppContext } from '../../App';
 import { integrationService } from '../../engine/integrations/integrationService';
 import CallRecordingPlayer from '../restaurant/CallRecordingPlayer';
+import CallContextChip from '../restaurant/CallContextChip';
+import LiveCallSpeakerButton from '../restaurant/LiveCallSpeakerButton';
 
 interface CallTurn {
   role: 'caller' | 'agent' | 'system';
@@ -102,6 +105,8 @@ interface AgentStatus {
     lineLabel?: string;
     to?: string;
     customerId?: string;
+    listenUrl?: string;
+    isGuest?: boolean;
   } | null;
   activeCalls?: Array<{
     id: string;
@@ -112,7 +117,20 @@ interface AgentStatus {
     status: string;
     lineLabel?: string;
     customerId?: string;
+    listenUrl?: string;
+    isGuest?: boolean;
   }>;
+  ringingCount?: number;
+  inProgressCount?: number;
+  capacity?: {
+    inboundActive: number;
+    outboundActive: number;
+    maxInbound: number;
+    maxOutbound: number;
+    maxTotal: number;
+    overflowArmed: boolean;
+    overflowNumber?: string;
+  };
   linesSummary?: { total: number; registered: number; onCall: number };
   todayStats: {
     totalCalls: number;
@@ -936,6 +954,8 @@ export default function CallCenter() {
                         </div>
                       </div>
                       <Badge className="shrink-0">{call.status.replace(/_/g, ' ')}</Badge>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <LiveCallSpeakerButton listenUrl={call.listenUrl} />
                       {customerId ? (
                         <Button
                           size="sm"
@@ -958,6 +978,17 @@ export default function CallCenter() {
                         </Button>
                       )}
                     </div>
+                    <CallContextChip
+                      callId={call.id}
+                      customerId={customerId}
+                      phone={call.from}
+                      contactName={call.contactName}
+                      status={call.status}
+                      isGuest={call.isGuest || !call.contactName || call.contactName === 'Guest'}
+                      listenUrl={call.listenUrl}
+                      elapsedSec={call.elapsedSec}
+                      compact
+                    />
                     {renderLeadForm({ id: call.id, from: call.from })}
                   </div>
                 );
@@ -965,6 +996,23 @@ export default function CallCenter() {
             </div>
           ) : (
             <p className="text-slate-500 text-sm py-2">No active calls right now</p>
+          )}
+
+          {agentStatus?.capacity && (
+            <div className="rounded-lg border bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 flex flex-wrap gap-3">
+              <span>
+                Agent slots · In {agentStatus.capacity.inboundActive}/{agentStatus.capacity.maxInbound}
+              </span>
+              <span>
+                Out {agentStatus.capacity.outboundActive}/{agentStatus.capacity.maxOutbound}
+              </span>
+              <span>
+                Total max {agentStatus.capacity.maxTotal}
+                {agentStatus.capacity.overflowArmed
+                  ? ` · Overflow ${agentStatus.capacity.overflowNumber || 'armed'}`
+                  : ''}
+              </span>
+            </div>
           )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1664,6 +1712,7 @@ export default function CallCenter() {
           </div>
           <div className="mt-4">
             <LapsedCampaignPanel onQueued={() => void fetchCalls()} />
+            <CsvCampaignUploadPanel onQueued={() => void fetchCalls()} />
           </div>
         </TabsContent>
       </Tabs>

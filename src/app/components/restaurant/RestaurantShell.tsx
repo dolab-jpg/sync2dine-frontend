@@ -22,7 +22,7 @@ type TabDef = {
   end: boolean;
   railOnly?: boolean;
   roles?: string[];
-  badge?: 'kitchen' | 'delivery' | 'bookings';
+  badge?: 'kitchen' | 'delivery' | 'bookings' | 'calls';
 };
 
 const SIDEBAR_KEY = 's2d.restaurant.sidebarCollapsed';
@@ -33,7 +33,7 @@ const TABS: TabDef[] = [
   { to: '/orders/delivery', icon: Truck, label: 'Delivery', end: false, badge: 'delivery' },
   { to: '/bookings', icon: CalendarDays, label: 'Bookings', end: false, badge: 'bookings' },
   { to: '/menu', icon: UtensilsCrossed, label: 'Menu', end: false },
-  { to: '/calls', icon: Phone, label: 'Calls', end: false, roles: ['super_admin', 'manager', 'staff'], railOnly: true },
+  { to: '/calls', icon: Phone, label: 'Calls', end: false, roles: ['super_admin', 'manager', 'staff'], railOnly: true, badge: 'calls' },
   { to: '/customers', icon: Users, label: 'Customers', end: false, railOnly: true, roles: ['super_admin', 'manager', 'staff'] },
   { to: '/accounts', icon: Wallet, label: 'Accounts', end: false, railOnly: true, roles: ['super_admin', 'manager'] },
   { to: '/settings', icon: SettingsIcon, label: 'Settings', end: false },
@@ -43,10 +43,33 @@ export interface AgentLiveState {
   reachable: boolean;
   isActive: boolean;
   activeCallCount: number;
+  ringingCount: number;
+  inProgressCount: number;
 }
 
-export function useAgentLive(pollMs = 10_000): AgentLiveState {
-  const [state, setState] = useState<AgentLiveState>({ reachable: false, isActive: false, activeCallCount: 0 });
+export type ActiveCallSnapshot = {
+  id: string;
+  from?: string;
+  to?: string;
+  contactName?: string;
+  customerId?: string | null;
+  status?: string;
+  direction?: string;
+  elapsedSec?: number;
+  listenUrl?: string;
+  isGuest?: boolean;
+  lineLabel?: string;
+};
+
+export function useAgentLive(pollMs = 10_000): AgentLiveState & { activeCalls: ActiveCallSnapshot[] } {
+  const [state, setState] = useState<AgentLiveState & { activeCalls: ActiveCallSnapshot[] }>({
+    reachable: false,
+    isActive: false,
+    activeCallCount: 0,
+    ringingCount: 0,
+    inProgressCount: 0,
+    activeCalls: [],
+  });
   useEffect(() => {
     let cancelled = false;
     async function poll() {
@@ -55,14 +78,29 @@ export function useAgentLive(pollMs = 10_000): AgentLiveState {
         if (!res.ok) throw new Error(String(res.status));
         const data = await res.json() as {
           isActive?: boolean;
-          activeCall?: unknown;
-          activeCalls?: unknown[];
+          activeCall?: ActiveCallSnapshot | null;
+          activeCalls?: ActiveCallSnapshot[];
+          ringingCount?: number;
+          inProgressCount?: number;
         };
         if (cancelled) return;
-        const count = Array.isArray(data.activeCalls)
-          ? data.activeCalls.length
-          : data.activeCall ? 1 : 0;
-        setState({ reachable: true, isActive: data.isActive !== false, activeCallCount: count });
+        const activeCalls = Array.isArray(data.activeCalls)
+          ? data.activeCalls
+          : data.activeCall ? [data.activeCall] : [];
+        const ringingCount = typeof data.ringingCount === 'number'
+          ? data.ringingCount
+          : activeCalls.filter((c) => c.status === 'ringing').length;
+        const inProgressCount = typeof data.inProgressCount === 'number'
+          ? data.inProgressCount
+          : activeCalls.filter((c) => c.status === 'in_progress').length;
+        setState({
+          reachable: true,
+          isActive: data.isActive !== false,
+          activeCallCount: activeCalls.length,
+          ringingCount,
+          inProgressCount,
+          activeCalls,
+        });
       } catch {
         if (!cancelled) setState((prev) => ({ ...prev, reachable: false }));
       }
@@ -117,10 +155,25 @@ function tabVisible(tab: TabDef, role: string): boolean {
   return tab.roles.includes(role);
 }
 
-function NavBadge({ kind, compact }: { kind?: TabDef['badge']; compact?: boolean }) {
+function NavBadge({ kind, compact, ringing }: { kind?: TabDef['badge']; compact?: boolean; ringing?: number }) {
   const [, setTick] = useState(0);
   useEffect(() => subscribeNavBadges(() => setTick((n) => n + 1)), []);
   if (!kind) return null;
+  if (kind === 'calls') {
+    const n = ringing ?? 0;
+    if (!n) return null;
+    return (
+      <span
+        className={
+          compact
+            ? 'absolute -right-2 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-s2d-gold px-1 text-[9px] font-black text-s2d-teal-deep animate-pulse'
+            : 'ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-s2d-gold px-1.5 text-[10px] font-black text-s2d-teal-deep animate-pulse'
+        }
+      >
+        {n > 99 ? '99+' : n}
+      </span>
+    );
+  }
   const c = getNavBadgeCounts();
   const n =
     kind === 'kitchen' ? c.kitchenNew + c.kitchenOverdue
@@ -206,11 +259,18 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
               title={label}
               className={({ isActive }) => tabClasses(isActive, collapsed ? 'rail-collapsed' : 'rail')}
             >
-              <Icon className="h-6 w-6 shrink-0" />
+              <span className="relative">
+                <Icon
+                  className={`h-6 w-6 shrink-0 ${
+                    badge === 'calls' && live.ringingCount > 0 ? 'animate-pulse text-s2d-gold' : ''
+                  }`}
+                />
+                {collapsed && <NavBadge kind={badge} compact ringing={live.ringingCount} />}
+              </span>
               {!collapsed && (
                 <>
                   <span className="min-w-0 flex-1 truncate">{label}</span>
-                  <NavBadge kind={badge} />
+                  <NavBadge kind={badge} ringing={live.ringingCount} />
                 </>
               )}
             </NavLink>
@@ -221,9 +281,17 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
           {collapsed && live.activeCallCount > 0 && (
             <button
               type="button"
-              title={`${live.activeCallCount} on call`}
+              title={
+                live.ringingCount > 0
+                  ? `${live.ringingCount} ringing`
+                  : `${live.activeCallCount} on call`
+              }
               onClick={() => navigate('/calls')}
-              className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300"
+              className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full ${
+                live.ringingCount > 0
+                  ? 'animate-pulse bg-amber-500/30 text-amber-200'
+                  : 'bg-emerald-500/20 text-emerald-300'
+              }`}
             >
               <Phone className="h-5 w-5" />
             </button>

@@ -14,6 +14,7 @@ import {
   markCustomerDialling,
   resolveCandidateByPhone,
   resolveContactByPhone,
+  ensureGuestCustomerForCall,
   resolvePhoneLineByDid,
   saveCall,
   syncData,
@@ -90,6 +91,10 @@ function getOrCreateCall(event: CallEvent): Record<string, unknown> {
   if (existing) return existing;
 
   const matchedLine = resolvePhoneLineByDid(event.to);
+  const partyPhone = event.direction === 'outbound' ? event.to : event.from;
+  const guest = event.direction === 'inbound'
+    ? ensureGuestCustomerForCall(partyPhone, event.callId)
+    : { customerId: resolveContactByPhone(partyPhone).customerId, contactName: resolveContactByPhone(partyPhone).customerName, isNew: false };
   const call = saveCall({
     id: event.callId,
     providerCallId: event.providerCallId,
@@ -99,7 +104,8 @@ function getOrCreateCall(event: CallEvent): Record<string, unknown> {
     status: event.status ?? 'in_progress',
     transcript: [],
     startedAt: new Date().toISOString(),
-    contactName: resolveContactByPhone(event.from).customerName,
+    contactName: guest.contactName || resolveContactByPhone(event.from).customerName,
+    customerId: guest.customerId,
     lineId: matchedLine?.id ?? 'unknown',
     lineLabel: matchedLine?.label ?? (matchedLine ? undefined : 'Unknown line'),
   });
@@ -181,14 +187,17 @@ async function processCallTurn(
   const partyPhone = event.direction === 'outbound'
     ? String(event.to || call.to || event.from || '')
     : String(event.from || call.from || '');
+  const guest = event.direction === 'inbound'
+    ? ensureGuestCustomerForCall(partyPhone, String(call.id))
+    : null;
   const resolved = resolveContactByPhone(partyPhone);
   const afterHours = isAfterHours();
 
-  if (resolved.customerId) {
+  if (guest?.customerId || resolved.customerId) {
     saveCall({
       id: call.id,
-      customerId: resolved.customerId,
-      contactName: resolved.customerName,
+      customerId: guest?.customerId ?? resolved.customerId,
+      contactName: guest?.contactName ?? resolved.customerName,
       to: event.to,
       from: event.from,
       direction: event.direction,

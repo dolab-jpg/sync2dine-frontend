@@ -61,6 +61,47 @@ export async function mirrorCustomerToSupabase(
   return { ok: true };
 }
 
+function normalizePhoneDigits(phone: string): string {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('44') && digits.length > 10) return digits;
+  if (digits.startsWith('0')) return `44${digits.slice(1)}`;
+  return digits;
+}
+
+/**
+ * Find a CRM customer by phone for inbound agent (UI often writes specials only to Supabase).
+ */
+export async function findCustomerByPhoneFromSupabase(
+  phone: string,
+  orgIdHint?: string | null,
+): Promise<Record<string, unknown> | null> {
+  const client = getAdmin();
+  if (!client) return null;
+  const orgId = resolveCrmOrgId(orgIdHint);
+  if (!orgId) return null;
+  const normalized = normalizePhoneDigits(phone);
+  if (!normalized) return null;
+
+  const { data, error } = await client
+    .from('customers')
+    .select('id, data')
+    .eq('org_id', orgId)
+    .limit(500);
+  if (error || !data?.length) return null;
+
+  for (const row of data) {
+    const payload = (row.data && typeof row.data === 'object')
+      ? (row.data as Record<string, unknown>)
+      : {};
+    const rowPhone = normalizePhoneDigits(String(payload.phone ?? ''));
+    if (rowPhone && rowPhone === normalized) {
+      return { ...payload, id: String(row.id) };
+    }
+  }
+  return null;
+}
+
 /** Fire-and-forget mirror — never throws into callers. */
 export function mirrorCustomerToSupabaseAsync(
   customer: Record<string, unknown>,

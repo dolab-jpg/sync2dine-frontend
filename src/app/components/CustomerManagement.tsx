@@ -1,4 +1,4 @@
-import { useContext, useState, useEffect } from 'react';
+import { useContext, useState, useEffect, useMemo } from 'react';
 import { AppContext, Customer } from '../App';
 import { Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -19,6 +19,8 @@ import { getAllTrades } from '../config/trades';
 import type { TradeId } from '../config/types';
 import { LANG_OPTIONS } from '../i18n/languages';
 import { getExperience } from '../engine/platform/experience';
+import CallContextChip from './restaurant/CallContextChip';
+import { useAgentLive } from './restaurant/RestaurantShell';
 
 export default function CustomerManagement() {
   const context = useContext(AppContext);
@@ -26,6 +28,25 @@ export default function CustomerManagement() {
 
   const { customers, addCustomer, updateCustomer, deleteCustomer, user } = context;
   const isRestaurant = getExperience(user.role) === 'restaurant';
+  const live = useAgentLive(5_000);
+
+  const liveByCustomerId = useMemo(() => {
+    const map = new Map<string, (typeof live.activeCalls)[number]>();
+    for (const c of live.activeCalls) {
+      if (c.customerId) map.set(String(c.customerId), c);
+    }
+    return map;
+  }, [live.activeCalls]);
+
+  const liveByPhone = useMemo(() => {
+    const map = new Map<string, (typeof live.activeCalls)[number]>();
+    const norm = (p: string) => p.replace(/\D/g, '').replace(/^0/, '44');
+    for (const c of live.activeCalls) {
+      const phone = norm(String(c.from ?? ''));
+      if (phone) map.set(phone, c);
+    }
+    return map;
+  }, [live.activeCalls]);
 
   useEffect(() => {
     seedContactsFromCustomers(customers);
@@ -148,8 +169,22 @@ export default function CustomerManagement() {
     const matchesSearch = (customer.name ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (customer.email ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.phone.includes(searchTerm);
-    const matchesStatus = filterStatus === 'all' || customer.status === filterStatus;
+    const matchesStatus = filterStatus === 'all'
+      || (filterStatus === 'on_call' && (
+        liveByCustomerId.has(customer.id)
+        || liveByPhone.has(customer.phone.replace(/\D/g, '').replace(/^0/, '44'))
+      ))
+      || (filterStatus === 'guests' && /^guest$/i.test(customer.name || ''))
+      || customer.status === filterStatus;
     return matchesSearch && matchesStatus;
+  }).slice().sort((a, b) => {
+    const aLive = liveByCustomerId.has(a.id) || liveByPhone.has(a.phone.replace(/\D/g, '').replace(/^0/, '44'));
+    const bLive = liveByCustomerId.has(b.id) || liveByPhone.has(b.phone.replace(/\D/g, '').replace(/^0/, '44'));
+    if (aLive !== bLive) return aLive ? -1 : 1;
+    const aGuest = /^guest$/i.test(a.name || '');
+    const bGuest = /^guest$/i.test(b.name || '');
+    if (aGuest !== bGuest) return aGuest ? -1 : 1;
+    return 0;
   });
 
   const getStatusColor = (status: Customer['status']) => {
@@ -396,6 +431,8 @@ export default function CustomerManagement() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="on_call">On call now</SelectItem>
+            <SelectItem value="guests">Guests</SelectItem>
             <SelectItem value="lead">Leads</SelectItem>
             <SelectItem value="quoted">Quoted</SelectItem>
             <SelectItem value="won">Won</SelectItem>
@@ -420,10 +457,16 @@ export default function CustomerManagement() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredCustomers.map(customer => (
+          {filteredCustomers.map(customer => {
+            const liveCall = liveByCustomerId.get(customer.id)
+              || liveByPhone.get(customer.phone.replace(/\D/g, '').replace(/^0/, '44'));
+            const isGuest = /^guest$/i.test(customer.name || '');
+            return (
             <Card
               key={customer.id}
-              className="hover:shadow-lg transition-shadow cursor-pointer"
+              className={`hover:shadow-lg transition-shadow cursor-pointer ${
+                liveCall ? 'ring-2 ring-amber-400 border-amber-300' : isGuest ? 'border-l-4 border-l-amber-400' : ''
+              }`}
               onClick={() => setViewingCustomer(customer)}
             >
               <CardHeader>
@@ -433,6 +476,11 @@ export default function CustomerManagement() {
                     <span className={`inline-block px-2 py-1 text-xs rounded-full mt-2 ${getStatusColor(customer.status)}`}>
                       {customer.status}
                     </span>
+                    {isGuest ? (
+                      <span className="ml-2 inline-block rounded-full bg-amber-500 px-2 py-1 text-[10px] font-black text-white">
+                        NEW CALLER
+                      </span>
+                    ) : null}
                   </div>
                   <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                     <Button variant="ghost" size="sm" onClick={() => handleEdit(customer)}>
@@ -446,6 +494,25 @@ export default function CustomerManagement() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
+                  {liveCall ? (
+                    <CallContextChip
+                      callId={liveCall.id}
+                      customerId={customer.id}
+                      phone={liveCall.from || customer.phone}
+                      contactName={liveCall.contactName || customer.name}
+                      status={liveCall.status}
+                      isGuest={isGuest}
+                      listenUrl={liveCall.listenUrl}
+                      elapsedSec={liveCall.elapsedSec}
+                      compact
+                    />
+                  ) : null}
+                  {customer.lastCallAt ? (
+                    <p className="text-xs text-slate-500">
+                      Last call {new Date(customer.lastCallAt).toLocaleString()}
+                      {customer.lastCallSummary ? ` · ${customer.lastCallSummary}` : ''}
+                    </p>
+                  ) : null}
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Phone className="w-4 h-4" />
                     <a href={`tel:${customer.phone}`} className="hover:text-blue-600" onClick={(e) => e.stopPropagation()}>{customer.phone}</a>
@@ -497,7 +564,8 @@ export default function CustomerManagement() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 
