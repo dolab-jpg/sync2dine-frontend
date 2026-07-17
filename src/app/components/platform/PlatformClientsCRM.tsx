@@ -29,7 +29,7 @@ import {
   type PlatformOrganization,
   type PlatformStats,
 } from '../../engine/platform/platformApi';
-import { setActiveOrgId } from '../../engine/platform/orgContext';
+import { setActiveOrgId, buildPublicKioskUrl } from '../../engine/platform/orgContext';
 import { useNavigate } from 'react-router';
 
 type ClientTab = 'all' | OrgStatus;
@@ -62,9 +62,8 @@ export default function PlatformClientsCRM() {
   const [onceCreds, setOnceCreds] = useState<{
     orgName: string;
     mainEmail: string;
-    kioskEmail?: string;
-    kioskPassword?: string;
-    kioskWarning?: string;
+    orgId: string;
+    kioskUrl: string;
   } | null>(null);
 
   const [form, setForm] = useState({
@@ -155,9 +154,8 @@ export default function PlatformClientsCRM() {
       setOnceCreds({
         orgName: org.name,
         mainEmail,
-        kioskEmail: result.kioskEmail,
-        kioskPassword: result.kioskPasswordOnce,
-        kioskWarning: result.kioskWarning,
+        orgId: org.id,
+        kioskUrl: result.kioskUrl || buildPublicKioskUrl(org.id),
       });
       if (result.stripeCheckoutUrl) {
         window.open(result.stripeCheckoutUrl, '_blank');
@@ -472,49 +470,36 @@ export default function PlatformClientsCRM() {
         </DialogContent>
       </Dialog>
 
-      {/* One-time credentials after provisioning — kiosk password is never shown again */}
+      {/* Credentials after provisioning — staff login + public kiosk URL */}
       <Dialog open={Boolean(onceCreds)} onOpenChange={(open) => { if (!open) setOnceCreds(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Logins for {onceCreds?.orgName}</DialogTitle>
+            <DialogTitle>Access for {onceCreds?.orgName}</DialogTitle>
           </DialogHeader>
           {onceCreds && (
             <div className="space-y-4">
               <div>
-                <Label className="font-bold">Super Admin</Label>
+                <Label className="font-bold">Staff login (Super Admin)</Label>
                 <p className="rounded-lg bg-gray-50 p-3 font-mono text-sm">{onceCreds.mainEmail}</p>
-                <p className="mt-1 text-xs text-gray-500">Password: the one you set on the form.</p>
+                <p className="mt-1 text-xs text-gray-500">Password: the one you set on the form. Same /login as Sync2Dine staff.</p>
               </div>
-              {onceCreds.kioskEmail && onceCreds.kioskPassword ? (
-                <div>
-                  <Label className="font-bold">Front kiosk (counter tablet)</Label>
-                  <p className="rounded-lg bg-gray-50 p-3 font-mono text-sm">
-                    {onceCreds.kioskEmail}
-                    <br />
-                    {onceCreds.kioskPassword}
-                  </p>
-                  <p className="mt-1 text-xs font-semibold text-amber-700">
-                    Copy this now — the kiosk password is shown only once.
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="mt-2 w-full"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(
-                        `Kiosk login\nEmail: ${onceCreds.kioskEmail}\nPassword: ${onceCreds.kioskPassword}`,
-                      );
-                      toast.success('Kiosk credentials copied');
-                    }}
-                  >
-                    Copy kiosk credentials
-                  </Button>
-                </div>
-              ) : (
-                <p className="text-sm text-amber-700">
-                  Kiosk login was not created{onceCreds.kioskWarning ? ` — ${onceCreds.kioskWarning}` : ''}. You can
-                  invite a kiosk user from the client&apos;s Team page instead.
+              <div>
+                <Label className="font-bold">Front kiosk (counter tablet — no login)</Label>
+                <p className="rounded-lg bg-gray-50 p-3 font-mono text-sm break-all">{onceCreds.kioskUrl}</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Open this URL on the counter tablet. Diners order without an account.
                 </p>
-              )}
+                <Button
+                  variant="outline"
+                  className="mt-2 w-full"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(onceCreds.kioskUrl);
+                    toast.success('Kiosk URL copied');
+                  }}
+                >
+                  Copy kiosk URL
+                </Button>
+              </div>
               <Button className="w-full" onClick={() => setOnceCreds(null)}>Done</Button>
             </div>
           )}

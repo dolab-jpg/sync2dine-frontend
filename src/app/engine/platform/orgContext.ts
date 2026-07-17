@@ -57,6 +57,32 @@ export function setActiveOrgId(orgId: string | null): void {
   }
 }
 
+/**
+ * Public diner kiosk: `/front?org=<uuid>` sets the tenant for API calls
+ * without a staff login. Returns the applied org id, or null if missing/invalid.
+ */
+export function applyOrgFromUrlSearch(search?: string): string | null {
+  try {
+    const qs = search ?? (typeof window !== 'undefined' ? window.location.search : '');
+    const params = new URLSearchParams(qs.startsWith('?') ? qs : `?${qs}`);
+    const fromQuery = sanitizeOrgId(params.get('org'));
+    if (fromQuery) {
+      setActiveOrgId(fromQuery);
+      return fromQuery;
+    }
+    return getActiveOrgId();
+  } catch {
+    return getActiveOrgId();
+  }
+}
+
+/** Public counter-tablet URL for a restaurant tenant (no login). */
+export function buildPublicKioskUrl(orgId: string, origin?: string): string {
+  const base = (origin ?? (typeof window !== 'undefined' ? window.location.origin : 'https://app.sync2dine.io')).replace(/\/$/, '');
+  const sanitized = sanitizeOrgId(orgId) ?? orgId.trim();
+  return `${base}/front?org=${encodeURIComponent(sanitized)}`;
+}
+
 /** @deprecated Use Supabase session — kept for transition */
 export function getAuthToken(): string | null {
   try {

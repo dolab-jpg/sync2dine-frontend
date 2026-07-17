@@ -1,20 +1,34 @@
-import { useContext, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { Mic, MicOff, ReceiptText, Sparkles } from 'lucide-react';
-import { AppContext } from '../App';
 import { useCynthiaVapiVoice } from '../hooks/useCynthiaVapiVoice';
+import { applyOrgFromUrlSearch } from '../engine/platform/orgContext';
+import { isOrgUuid } from '../engine/platform/homeOrg';
 import { Button } from './ui/button';
 import { BrandLogo } from './BrandLogo';
 
+/**
+ * Public diner ordering surface — no staff/customer login.
+ * Tenant comes from `?org=<uuid>` (printed in Settings / Platform Clients).
+ */
 export default function FrontKiosk() {
-  const context = useContext(AppContext);
-  const userId = context?.user?.id ?? 'kiosk-device';
+  const [searchParams] = useSearchParams();
+  const orgParam = searchParams.get('org');
+  const [orgId, setOrgId] = useState<string | null>(() => applyOrgFromUrlSearch());
   const [lines, setLines] = useState<Array<{ role: 'user' | 'assistant'; text: string }>>([]);
+
+  useEffect(() => {
+    const applied = applyOrgFromUrlSearch(searchParams.toString());
+    setOrgId(applied);
+  }, [searchParams, orgParam]);
+
   const voice = useCynthiaVapiVoice({
-    userId,
+    userId: orgId ? `kiosk-${orgId}` : 'kiosk-device',
     onTranscript: (role, text) => setLines((prev) => [...prev.slice(-5), { role, text }]),
   });
 
   const active = voice.isActive;
+  const orgReady = isOrgUuid(orgId);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#fff8df_0,#f6efe0_32%,#0f3d3e_100%)] text-slate-950">
@@ -26,8 +40,17 @@ export default function FrontKiosk() {
           </div>
         </div>
 
+        {!orgReady && (
+          <div className="mx-auto mt-8 max-w-lg rounded-2xl border border-amber-300 bg-amber-50 p-5 text-center shadow-sm">
+            <p className="text-lg font-bold text-amber-900">Restaurant not selected</p>
+            <p className="mt-2 text-sm text-amber-800">
+              Open this screen with your restaurant link from Settings, for example{' '}
+              <code className="rounded bg-white/80 px-1">/front?org=…</code>
+            </p>
+          </div>
+        )}
+
         <div className="grid flex-1 place-items-center py-6">
-          {/* Portrait: stacked. Landscape tablet: avatar left, controls right. */}
           <div className="grid w-full max-w-3xl gap-6 rounded-[2rem] bg-white/88 p-6 shadow-2xl shadow-s2d-teal-ink/20 sm:p-8 landscape:lg:max-w-5xl landscape:lg:grid-cols-2 landscape:lg:items-center">
             <div className="mx-auto flex w-full max-w-[46vh] flex-col items-center landscape:lg:max-w-full">
               <div
@@ -58,8 +81,9 @@ export default function FrontKiosk() {
                 <Button
                   type="button"
                   size="lg"
+                  disabled={!orgReady}
                   onClick={() => void voice.toggle()}
-                  className="min-h-[64px] w-full max-w-sm rounded-2xl bg-s2d-teal-deep text-xl font-bold text-white hover:bg-s2d-teal"
+                  className="min-h-[64px] w-full max-w-sm rounded-2xl bg-s2d-teal-deep text-xl font-bold text-white hover:bg-s2d-teal disabled:opacity-50"
                 >
                   {active ? <MicOff className="mr-3 h-6 w-6" /> : <Mic className="mr-3 h-6 w-6" />}
                   {active ? 'End conversation' : 'Start order'}

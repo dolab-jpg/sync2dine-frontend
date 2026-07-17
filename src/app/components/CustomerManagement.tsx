@@ -8,12 +8,9 @@ import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Plus, Search, Phone, Mail, MapPin, FileText, Trash2, Edit, MessageCircle, KeyRound } from 'lucide-react';
+import { Plus, Search, Phone, Mail, MapPin, FileText, Trash2, Edit, MessageCircle } from 'lucide-react';
 import { Switch } from './ui/switch';
 import { toast } from 'sonner';
-import { PasswordField } from '../auth/components/PasswordField';
-import { createCustomerLogin } from '../auth/lib/authApi';
-import { getSupabase, isSupabaseConfigured } from '../../lib/supabase/client';
 import { AddressMapLink } from './ui/AddressMapLink';
 import { CustomerContactsPanel } from './CustomerContactsPanel';
 import { seedContactsFromCustomers } from '../engine/contacts/contactStore';
@@ -48,7 +45,6 @@ export default function CustomerManagement() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [portalPassword, setPortalPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -58,6 +54,8 @@ export default function CustomerManagement() {
     address: '',
     status: 'lead' as Customer['status'],
     notes: '',
+    specialName: '',
+    specialDealNote: '',
     photos: [] as string[],
     whatsappOptIn: false,
     preferredChannel: 'email' as Customer['preferredChannel'],
@@ -82,6 +80,8 @@ export default function CustomerManagement() {
       address: '',
       status: 'lead',
       notes: '',
+      specialName: '',
+      specialDealNote: '',
       photos: [],
       whatsappOptIn: false,
       preferredChannel: 'email',
@@ -89,7 +89,6 @@ export default function CustomerManagement() {
       interestedTrades: [],
     });
     setEditingCustomer(null);
-    setPortalPassword('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -100,40 +99,15 @@ export default function CustomerManagement() {
       updateCustomer(editingCustomer.id, formData);
       toast.success('Customer updated successfully');
       setIsAddDialogOpen(false);
+      // #region agent log
+      fetch('http://127.0.0.1:7261/ingest/6cf14313-b666-4982-884a-814f1f19f4c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'342d7b'},body:JSON.stringify({sessionId:'342d7b',runId:'pre-fix',hypothesisId:'A',location:'CustomerManagement.tsx:update',message:'customer special saved in UI',data:{customerId:editingCustomer.id,specialNameLen:(formData.specialName||'').length,dealNoteLen:(formData.specialDealNote||'').length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       resetForm();
-      return;
-    }
-
-    const wantsPortalLogin = portalPassword.trim().length > 0;
-    if (wantsPortalLogin && portalPassword.length < 8) {
-      toast.error('Portal password must be at least 8 characters');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      if (wantsPortalLogin) {
-        if (!isSupabaseConfigured()) {
-          toast.error('Supabase is not configured — cannot create a portal login');
-          return;
-        }
-        const { data } = await getSupabase().auth.getSession();
-        const accessToken = data.session?.access_token;
-        if (!accessToken) {
-          toast.error('You must be signed in to create a customer portal login');
-          return;
-        }
-        try {
-          const result = await createCustomerLogin(
-            { name: formData.name, email: formData.email, password: portalPassword },
-            accessToken,
-          );
-          toast.success(`Portal login created for ${result.user.email}`);
-        } catch (err) {
-          toast.error(err instanceof Error ? err.message : 'Failed to create portal login');
-          return;
-        }
-      }
       addCustomer(formData);
       toast.success('Customer added successfully');
       setIsAddDialogOpen(false);
@@ -152,6 +126,8 @@ export default function CustomerManagement() {
       address: customer.address,
       status: customer.status,
       notes: customer.notes,
+      specialName: customer.specialName ?? '',
+      specialDealNote: customer.specialDealNote ?? '',
       photos: customer.photos,
       whatsappOptIn: customer.whatsappOptIn ?? false,
       preferredChannel: customer.preferredChannel ?? 'email',
@@ -281,6 +257,34 @@ export default function CustomerManagement() {
                 />
               </div>
 
+              <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4 space-y-3">
+                <div>
+                  <Label htmlFor="specialName">Named special (phone)</Label>
+                  <p className="text-xs text-amber-900/70 mb-1">
+                    Lizzie asks for this by name — e.g. “Family Friday” or “VIP ten percent”.
+                  </p>
+                  <Input
+                    id="specialName"
+                    value={formData.specialName}
+                    onChange={e => setFormData({ ...formData, specialName: e.target.value })}
+                    placeholder="e.g. Family Friday"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="specialDealNote">Deal note for Lizzie</Label>
+                  <p className="text-xs text-amber-900/70 mb-1">
+                    Exact deal she must apply when they use that special. Include “10% off” for an automatic discount.
+                  </p>
+                  <Textarea
+                    id="specialDealNote"
+                    value={formData.specialDealNote}
+                    onChange={e => setFormData({ ...formData, specialDealNote: e.target.value })}
+                    rows={2}
+                    placeholder="e.g. 10% off the whole order · or free garlic bread with any main"
+                  />
+                </div>
+              </div>
+
               <div>
                 <Label>Interested trades</Label>
                 <p className="text-xs text-gray-500 mb-2">Select all trades this customer may need — AI can also set these</p>
@@ -351,27 +355,6 @@ export default function CustomerManagement() {
                 </div>
                 <p className="text-xs text-green-800">Phone format: UK mobile e.g. 07700 900000 or +447700900000</p>
               </div>
-
-              {!editingCustomer && (
-                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-3">
-                  <div className="flex items-center gap-2 font-medium text-blue-900">
-                    <KeyRound className="w-4 h-4" /> Create portal login (optional)
-                  </div>
-                  <p className="text-xs text-blue-800">
-                    Set a password to create a real login for this customer using the email above.
-                    They can sign in at /login to view their projects. Leave blank to skip.
-                  </p>
-                  <PasswordField
-                    id="portalPassword"
-                    label="Portal password"
-                    value={portalPassword}
-                    onChange={setPortalPassword}
-                    placeholder="Min 8 characters — leave blank to skip"
-                    autoComplete="new-password"
-                    disabled={isSubmitting}
-                  />
-                </div>
-              )}
 
               {editingCustomer && (
                 <CustomerContactsPanel
@@ -481,6 +464,15 @@ export default function CustomerManagement() {
                           </span>
                         );
                       })}
+                    </div>
+                  )}
+                  {customer.specialName && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5">
+                      <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Special</p>
+                      <p className="text-sm font-semibold text-amber-950">{customer.specialName}</p>
+                      {customer.specialDealNote ? (
+                        <p className="text-xs text-amber-900/80 line-clamp-2 mt-0.5">{customer.specialDealNote}</p>
+                      ) : null}
                     </div>
                   )}
                   {customer.notes && (

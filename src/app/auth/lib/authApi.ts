@@ -166,8 +166,6 @@ export async function fetchPendingInvites(accessToken: string, orgId?: string): 
 
 export function homePathForRole(role: string): string {
   switch (role) {
-    case 'kiosk':
-      return '/front';
     case 'recruitment':
       return '/recruitment';
     case 'platform_owner':
@@ -177,4 +175,18 @@ export function homePathForRole(role: string): string {
       // both are '/' and the experience gate picks the right shell.
       return '/';
   }
+}
+
+/** Roles allowed on the single staff /login (no customer or kiosk Auth). */
+export const STAFF_LOGIN_ROLES = [
+  'platform_owner',
+  'super_admin',
+  'manager',
+  'staff',
+  'builder',
+  'recruitment',
+] as const;
+
+export function isStaffLoginRole(role: string | null | undefined): boolean {
+  return Boolean(role && (STAFF_LOGIN_ROLES as readonly string[]).includes(role));
 }

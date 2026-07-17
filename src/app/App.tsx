@@ -117,6 +117,10 @@ export interface Customer {
   createdAt: string;
   photos: string[];
   notes: string;
+  /** Named customer special they can ask for on the phone (e.g. "Family Friday") */
+  specialName?: string;
+  /** Deal instructions Lizzie must honour when that special applies */
+  specialDealNote?: string;
   interestedTrades?: TradeId[];
   tradeId?: TradeId;
   whatsappOptIn: boolean;
@@ -412,7 +416,7 @@ interface ProtectedRouteProps {
 
 function ProtectedRoute({ element, allowedRoles, user }: ProtectedRouteProps): ReactElement {
   if (!roleAllowed(user.role, allowedRoles)) {
-    return <Navigate to={user.role === 'kiosk' ? '/front' : '/'} replace />;
+    return <Navigate to="/" replace />;
   }
   return element;
 }
@@ -438,7 +442,7 @@ export default function App() {
    */
   const [experienceReady, setExperienceReady] = useState(() => {
     if (!savedUser) return true;
-    if (savedUser.role === 'kiosk' || savedUser.role === 'platform_owner') return true;
+    if (savedUser.role === 'platform_owner') return true;
     return Boolean(typeof window !== 'undefined' && getActiveOrgId());
   });
 
@@ -446,8 +450,27 @@ export default function App() {
 
   useEffect(() => {
     const restore = async () => {
+      const rejectNonStaff = async (role: string) => {
+        if (role === 'customer' || role === 'kiosk') {
+          clearSessionUser();
+          setIsLoggedIn(false);
+          if (isSupabaseConfigured()) {
+            try {
+              const { getSupabase } = await import('../lib/supabase/client');
+              await getSupabase().auth.signOut();
+            } catch {
+              // ignore
+            }
+          }
+          setExperienceReady(true);
+          return true;
+        }
+        return false;
+      };
+
       const stored = loadSessionUser();
       if (stored) {
+        if (await rejectNonStaff(stored.role)) return;
         setUser(stored);
         setIsLoggedIn(true);
         await syncActiveOrgFromProfile();
@@ -469,11 +492,13 @@ export default function App() {
               .eq('id', data.session.user.id)
               .single();
             if (profile) {
+              const role = (profile.role ?? 'staff') as UserRole;
+              if (await rejectNonStaff(role)) return;
               const restored: User = {
                 id: profile.id,
                 name: profile.name ?? profile.email?.split('@')[0] ?? 'User',
                 email: profile.email ?? data.session.user.email ?? '',
-                role: (profile.role ?? 'staff') as UserRole,
+                role,
               };
               saveSessionUser(restored);
               setUser(restored);
@@ -1194,6 +1219,7 @@ export default function App() {
         <OnlineStatusBanner />
         <Routes>
           <Route path="/cursor-paste" element={<CursorPastePage />} />
+          <Route path="/front" element={<FrontKiosk />} />
           <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -1201,6 +1227,7 @@ export default function App() {
           <Route path="/invite/:token" element={<InviteAcceptPage />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+        <Toaster />
       </BrowserRouter>
     );
   }
@@ -1213,26 +1240,12 @@ export default function App() {
     );
   }
 
-  if (experience === 'kiosk') {
-    return (
-      <AppContext.Provider value={contextValue}>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/front" element={<FrontKiosk />} />
-            <Route path="*" element={<Navigate to="/front" replace />} />
-          </Routes>
-          <Toaster />
-        </BrowserRouter>
-      </AppContext.Provider>
-    );
-  }
-
   if (experience === 'restaurant') {
     return (
       <AppContext.Provider value={contextValue}>
         <BrowserRouter>
           <Routes>
-            {/* Diner kiosk stays shell-less on the same tenant org */}
+            {/* Public diner kiosk (also reachable logged-in for staff preview) */}
             <Route path="/front" element={<FrontKiosk />} />
             <Route
               element={(
@@ -1285,10 +1298,7 @@ export default function App() {
                 path="/customers"
                 element={<ProtectedRoute element={<CustomerManagement />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
-              <Route
-                path="/front"
-                element={<ProtectedRoute element={<FrontKiosk />} allowedRoles={['kiosk', 'platform_owner', 'super_admin', 'manager', 'staff']} user={user} />}
-              />
+              <Route path="/front" element={<FrontKiosk />} />
               <Route
                 path="/orders"
                 element={<ProtectedRoute element={<RestaurantOrders />} allowedRoles={['platform_owner', 'super_admin', 'manager', 'staff']} user={user} />}

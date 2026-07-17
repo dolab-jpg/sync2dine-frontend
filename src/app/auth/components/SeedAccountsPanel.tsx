@@ -11,7 +11,6 @@ export const SEED_ACCOUNTS = [
   { role: 'staff', label: 'Front of House', username: 'priya.patel', email: 'priya@demo.sync2dine.io', name: 'Priya Patel' },
   { role: 'builder', label: 'Kitchen / Ops', username: 'kai.brooks', email: 'kai@demo.sync2dine.io', name: 'Kai Brooks' },
   { role: 'recruitment', label: 'Hiring', username: 'nina.ross', email: 'nina@demo.sync2dine.io', name: 'Nina Ross' },
-  { role: 'customer', label: 'Guest', username: 'guest.chen', email: 'guest@demo.sync2dine.io', name: 'Guest Chen' },
 ] as const;
 
 export type SeedAccount = (typeof SEED_ACCOUNTS)[number];

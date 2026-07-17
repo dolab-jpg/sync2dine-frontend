@@ -11,7 +11,7 @@ import { AuthLayout } from '../AuthLayout';
 import { AuthFormError } from '../components/AuthFormError';
 import { PasswordField } from '../components/PasswordField';
 import { SeedAccountsPanel, SEED_PASSWORD, SEED_ACCOUNTS, type SeedAccount } from '../components/SeedAccountsPanel';
-import { homePathForRole, resolveUsername } from '../lib/authApi';
+import { homePathForRole, isStaffLoginRole, resolveUsername } from '../lib/authApi';
 
 interface LoginProps {
   onLogin: (user: {
@@ -58,6 +58,15 @@ export default function LoginPage({ onLogin }: LoginProps) {
           return;
         }
         const role = (profile.role ?? 'staff') as DemoRole;
+        if (!isStaffLoginRole(role)) {
+          await supabase.auth.signOut();
+          if (!cancelled) {
+            setError(
+              'This login is for restaurant and platform staff only. Diners order at the counter kiosk (/front) — no account needed.',
+            );
+          }
+          return;
+        }
         await syncActiveOrgFromProfile();
         await integrationService.initOrgOpenAIKey(role);
         onLogin({
@@ -159,6 +168,13 @@ export default function LoginPage({ onLogin }: LoginProps) {
         return;
       }
       const role = (profile?.role ?? 'staff') as DemoRole;
+      if (!isStaffLoginRole(role)) {
+        await supabase.auth.signOut();
+        setError(
+          'This login is for restaurant and platform staff only. Diners order at the counter kiosk (/front) — no account needed.',
+        );
+        return;
+      }
       await finishLogin({
         id: profile?.id ?? data.user.id,
         name: profile?.name ?? data.user.email?.split('@')[0] ?? 'User',

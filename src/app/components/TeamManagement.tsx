@@ -22,7 +22,7 @@ import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { LANG_OPTIONS, normalizeLang } from '../i18n/languages';
 
-type InviteRole = 'manager' | 'staff' | 'builder' | 'recruitment' | 'customer' | 'kiosk';
+type InviteRole = 'manager' | 'staff' | 'builder' | 'recruitment';
 
 const ROLE_BADGES: Record<string, string> = {
   platform_owner: 'bg-indigo-100 text-indigo-700',
@@ -31,8 +31,6 @@ const ROLE_BADGES: Record<string, string> = {
   staff: 'bg-green-100 text-green-700',
   builder: 'bg-purple-100 text-purple-700',
   recruitment: 'bg-amber-100 text-amber-700',
-  customer: 'bg-pink-100 text-pink-700',
-  kiosk: 'bg-orange-100 text-orange-700',
 };
 
 function roleLabel(role: string): string {
@@ -251,8 +249,6 @@ export default function TeamManagement() {
                       <option value="manager">Manager</option>
                       <option value="builder">Builder</option>
                       <option value="recruitment">Recruitment</option>
-                      <option value="customer">Customer</option>
-                      <option value="kiosk">Kiosk (front screen)</option>
                     </select>
                   </div>
                 </div>
