@@ -22,7 +22,14 @@ type OrderStatus = 'new' | 'coming' | 'paid' | 'preparing' | 'ready' | 'delivery
 type PayStatus = 'unpaid' | 'paid';
 type PayMethod = 'cash' | 'card';
 
-type OrderLine = { label: string; qty: number; price?: number };
+type OrderLine = {
+  label: string;
+  qty: number;
+  price?: number;
+  dealName?: string;
+  dealIndex?: number;
+  role?: string;
+};
 
 type FoodOrder = {
   id: string;
@@ -110,10 +117,18 @@ function mapApiOrder(raw: Record<string, unknown>): FoodOrder {
           const name = String(row.name ?? row.title ?? 'Item');
           const qty = Number(row.qty ?? row.quantity ?? 1) || 1;
           const price = row.price != null ? Number(row.price) : undefined;
+          const dealName = row.dealName != null ? String(row.dealName) : undefined;
+          const dealIndex = row.dealIndex != null ? Number(row.dealIndex) : undefined;
+          const role = row.role != null ? String(row.role) : undefined;
+          const roleHint = role ? ` (${role})` : '';
+          const dealHint = dealName && dealIndex ? ` · ${dealName} #${dealIndex}` : dealName ? ` · ${dealName}` : '';
           return {
-            label: qty > 1 ? `${qty}× ${name}` : name,
+            label: (qty > 1 ? `${qty}× ${name}` : name) + roleHint + dealHint,
             qty,
             price: Number.isFinite(price) ? price : undefined,
+            dealName,
+            dealIndex,
+            role,
           };
         }
         return { label: String(item), qty: 1 };
@@ -204,6 +219,37 @@ function AddressBlock({ order }: { order: FoodOrder }) {
         </span>
       </p>
     </div>
+  );
+}
+
+/** Compact item list — denser on delivery so ~15 lines stay readable. */
+function OrderItemsList({
+  items,
+  dense,
+  maxHeightClass,
+}: {
+  items: OrderLine[];
+  dense?: boolean;
+  maxHeightClass?: string;
+}) {
+  return (
+    <ul className={`${dense ? 'space-y-0.5' : 'space-y-2'} ${maxHeightClass ?? ''} ${maxHeightClass ? 'overflow-y-auto' : ''}`}>
+      {items.map((item, idx) => (
+        <li
+          key={`${item.label}-${idx}`}
+          className={`flex items-baseline justify-between gap-2 border-l-2 bg-slate-50 font-semibold text-slate-900 ${
+            item.dealName ? 'border-amber-400' : 'border-slate-200'
+          } ${dense ? 'rounded-md px-2 py-1 text-sm' : 'rounded-xl px-3 py-2 text-lg'}`}
+        >
+          <span className="min-w-0 leading-snug">{item.label}</span>
+          {item.price != null ? (
+            <span className={`shrink-0 font-medium text-slate-500 ${dense ? 'text-xs' : 'text-sm'}`}>
+              £{item.price.toFixed(2)}
+            </span>
+          ) : null}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -524,8 +570,9 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
             const pay = paymentBadge(order);
             const flashing = isOrderFlashing(order.id) || order.status === 'new';
             const unpaidAttention = order.payment === 'unpaid' && order.type === 'delivery';
-            const preview = order.items.slice(0, 4);
-            const more = Math.max(0, order.items.length - preview.length);
+            const denseItems = tab === 'delivery' || order.type === 'delivery';
+            const preview = denseItems ? order.items : order.items.slice(0, 4);
+            const more = denseItems ? 0 : Math.max(0, order.items.length - preview.length);
             return (
               <article
                 key={order.id}
@@ -572,14 +619,11 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
                   <div className="space-y-2">
-                    {preview.map((item, idx) => (
-                      <div key={`${item.label}-${idx}`} className="rounded-xl bg-slate-50 px-3 py-2 text-lg font-semibold text-slate-900">
-                        {item.label}
-                        {item.price != null ? (
-                          <span className="ml-2 text-sm font-medium text-slate-500">£{item.price.toFixed(2)}</span>
-                        ) : null}
-                      </div>
-                    ))}
+                    <OrderItemsList
+                      items={preview}
+                      dense={denseItems}
+                      maxHeightClass={denseItems && order.items.length > 10 ? 'max-h-56' : undefined}
+                    />
                     {more > 0 && (
                       <p className="text-sm font-bold text-s2d-teal-deep">+{more} more — open</p>
                     )}
@@ -638,14 +682,11 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
 
                 <div>
                   <p className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Items</p>
-                  <ul className="max-h-64 space-y-2 overflow-y-auto">
-                    {selected.items.map((item, idx) => (
-                      <li key={`${item.label}-${idx}`} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-base font-semibold">
-                        <span>{item.label}</span>
-                        {item.price != null ? <span className="text-slate-600">£{item.price.toFixed(2)}</span> : null}
-                      </li>
-                    ))}
-                  </ul>
+                  <OrderItemsList
+                    items={selected.items}
+                    dense={selected.type === 'delivery' || selected.items.length > 6}
+                    maxHeightClass="max-h-72"
+                  />
                 </div>
 
                 {(selected.specialName || selected.notes) && (

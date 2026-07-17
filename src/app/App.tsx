@@ -182,6 +182,10 @@ export interface Product {
   price?: number;
   description?: string;
   available?: boolean;
+  /** Meal deal composition (specials) — expands on placeFoodOrder */
+  deal?: {
+    roles: Array<{ role: string; qtyPerDeal: number; choices: string[] }>;
+  };
 }
 
 export interface PricingRule {

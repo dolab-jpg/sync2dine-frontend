@@ -35,6 +35,10 @@ type FoodForm = {
   description: string;
   image: string;
   available: boolean;
+  /** Comma-separated choice lists for meal deals (specials). */
+  dealMains: string;
+  dealSides: string;
+  dealDrinks: string;
 };
 
 const EMPTY_FORM: FoodForm = {
@@ -44,7 +48,30 @@ const EMPTY_FORM: FoodForm = {
   description: '',
   image: '',
   available: true,
+  dealMains: '',
+  dealSides: '',
+  dealDrinks: '',
 };
+
+function parseChoiceList(raw: string): string[] {
+  return raw
+    .split(/[,;\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function buildDealFromForm(form: FoodForm): Product['deal'] | null {
+  if (form.category !== 'specials') return null;
+  const mains = parseChoiceList(form.dealMains);
+  const sides = parseChoiceList(form.dealSides);
+  const drinks = parseChoiceList(form.dealDrinks);
+  if (!mains.length && !sides.length && !drinks.length) return null;
+  const roles: NonNullable<Product['deal']>['roles'] = [];
+  if (mains.length) roles.push({ role: 'main', qtyPerDeal: 1, choices: mains });
+  if (sides.length) roles.push({ role: 'side', qtyPerDeal: 1, choices: sides });
+  if (drinks.length) roles.push({ role: 'drink', qtyPerDeal: 1, choices: drinks });
+  return roles.length ? { roles } : null;
+}
 
 function itemPrice(p: Product): number {
   const price = Number((p as Record<string, unknown>).price ?? p.sellPrice ?? p.basePrice ?? 0);
@@ -109,6 +136,9 @@ export default function MenuManager() {
 
   const openEdit = (p: Product) => {
     const rec = p as Record<string, unknown>;
+    const deal = (p.deal ?? rec.deal) as Product['deal'] | undefined;
+    const roleChoices = (role: string) =>
+      deal?.roles?.find((r) => r.role === role)?.choices?.join(', ') ?? '';
     setEditingId(p.id);
     setForm({
       name: p.name,
@@ -117,6 +147,9 @@ export default function MenuManager() {
       description: typeof rec.description === 'string' ? rec.description : '',
       image: p.image ?? '',
       available: rec.available !== false,
+      dealMains: roleChoices('main'),
+      dealSides: roleChoices('side'),
+      dealDrinks: roleChoices('drink'),
     });
     setDialogOpen(true);
   };
@@ -128,6 +161,7 @@ export default function MenuManager() {
       toast.error('A dish needs a name and a valid price');
       return;
     }
+    const deal = buildDealFromForm(form);
     const payload = {
       name: form.name.trim(),
       image: form.image.trim(),
@@ -139,13 +173,17 @@ export default function MenuManager() {
       price,
       description: form.description.trim(),
       available: form.available,
+      deal: deal ?? undefined,
     };
     if (editingId) {
-      updateProduct(editingId, payload as Partial<Product>);
+      updateProduct(editingId, {
+        ...payload,
+        ...(form.category !== 'specials' || !deal ? { deal: undefined } : {}),
+      } as Partial<Product>);
       toast.success('Dish updated — Lizzie will offer the new details on the next call');
     } else {
       addProduct(payload as Omit<Product, 'id' | 'sellPrice'>);
-      toast.success('Dish added to the menu');
+      toast.success(deal ? 'Meal deal added to the menu' : 'Dish added to the menu');
     }
     setDialogOpen(false);
     setForm(EMPTY_FORM);
@@ -243,6 +281,11 @@ export default function MenuManager() {
                             {typeof rec.description === 'string' && rec.description ? (
                               <p className="mt-0.5 line-clamp-2 text-sm text-s2d-teal-deep/60">{rec.description}</p>
                             ) : null}
+                            {(item.deal || rec.deal) ? (
+                              <p className="mt-1 text-xs font-bold uppercase tracking-wide text-amber-800">
+                                Meal deal
+                              </p>
+                            ) : null}
                           </div>
                           <span className="shrink-0 text-lg font-extrabold text-s2d-teal-deep">
                             £{itemPrice(item).toFixed(2)}
@@ -330,6 +373,46 @@ export default function MenuManager() {
                 rows={2}
               />
             </div>
+            {form.category === 'specials' && (
+              <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/80 p-3">
+                <p className="text-sm font-bold text-amber-950">
+                  Meal deal choices (comma-separated dish names from your menu)
+                </p>
+                <p className="text-xs text-amber-900/80">
+                  Lizzie will ask for one of each per deal when the customer orders 2× or 3×.
+                </p>
+                <div>
+                  <Label htmlFor="deal-mains">Mains</Label>
+                  <Input
+                    id="deal-mains"
+                    value={form.dealMains}
+                    onChange={(e) => setForm({ ...form, dealMains: e.target.value })}
+                    placeholder="Chicken biryani, Butter chicken"
+                    className="min-h-11 bg-white"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="deal-sides">Sides</Label>
+                  <Input
+                    id="deal-sides"
+                    value={form.dealSides}
+                    onChange={(e) => setForm({ ...form, dealSides: e.target.value })}
+                    placeholder="Pilau rice, Chips, Garlic naan"
+                    className="min-h-11 bg-white"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="deal-drinks">Drinks</Label>
+                  <Input
+                    id="deal-drinks"
+                    value={form.dealDrinks}
+                    onChange={(e) => setForm({ ...form, dealDrinks: e.target.value })}
+                    placeholder="Coke, Mango lassi"
+                    className="min-h-11 bg-white"
+                  />
+                </div>
+              </div>
+            )}
             <div>
               <Label htmlFor="dish-image">Image URL (optional)</Label>
               <Input
