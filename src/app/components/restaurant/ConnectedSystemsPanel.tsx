@@ -7,9 +7,10 @@ import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { getActiveOrgId } from '../../engine/platform/orgContext';
 import IntegrationsLogoStrip from './IntegrationsLogoStrip';
+import SquareConnectPanel from './SquareConnectPanel';
 
 type Direction = 'inbound' | 'outbound' | 'both';
-type Provider = 'mock' | 'deliverect' | 'otter' | 'custom';
+type Provider = 'mock' | 'deliverect' | 'otter' | 'custom' | 'square';
 
 type ConnectorPublicConfig = {
   orgId?: string;
@@ -127,6 +128,12 @@ export default function ConnectedSystemsPanel() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b4e46'},body:JSON.stringify({sessionId:'6b4e46',runId:'debug-square',hypothesisId:'E',location:'ConnectedSystemsPanel.tsx:provider',message:'connected systems provider state',data:{provider:config.provider,apiMissing,loading,host:typeof window!=='undefined'?window.location.host:null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }, [config.provider, apiMissing, loading]);
+
   async function save() {
     setSaving(true);
     try {
@@ -203,7 +210,7 @@ export default function ConnectedSystemsPanel() {
           <h2 className="text-xl font-bold text-s2d-teal-deep">Connected systems</h2>
           <p className="text-sm text-slate-600">
             Direction A: receive marketplace orders from Deliverect/Otter onto this board.
-            Direction B: send phone/kiosk orders and menu into your existing hub.
+            Direction B: send phone orders into Square (or a delivery hub webhook).
           </p>
         </div>
       </div>
@@ -226,9 +233,17 @@ export default function ConnectedSystemsPanel() {
               <select
                 className="mt-1 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 font-semibold"
                 value={config.provider}
-                onChange={(e) => setConfig({ ...config, provider: e.target.value as Provider })}
+                onChange={(e) => {
+                  const provider = e.target.value as Provider;
+                  setConfig({
+                    ...config,
+                    provider,
+                    ...(provider === 'square' ? { direction: 'outbound' as Direction } : {}),
+                  });
+                }}
                 data-testid="connector-provider"
               >
+                <option value="square">Square (POS outbound)</option>
                 <option value="mock">Mock (E2E)</option>
                 <option value="deliverect">Deliverect</option>
                 <option value="otter">Otter</option>
@@ -250,6 +265,10 @@ export default function ConnectedSystemsPanel() {
             </div>
           </div>
 
+          {config.provider === 'square' ? (
+            <SquareConnectPanel />
+          ) : (
+            <>
           <label className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3">
             <span className="font-bold text-s2d-teal-deep">Enabled</span>
             <Switch checked={config.enabled} onCheckedChange={(v) => setConfig({ ...config, enabled: v })} />
@@ -374,6 +393,8 @@ export default function ConnectedSystemsPanel() {
               </ul>
             )}
           </div>
+            </>
+          )}
         </div>
       )}
     </div>

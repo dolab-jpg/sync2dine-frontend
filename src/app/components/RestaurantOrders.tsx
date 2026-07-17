@@ -1,9 +1,8 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, ChevronDown, Clock, Download, MapPin, MoreHorizontal, Phone, Truck, Utensils, Volume2, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { AppContext } from '../App';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
@@ -38,6 +37,7 @@ import {
 import { ALLERGEN_LABELS, normalizeAllergenCodes, type AllergenCode } from '../engine/restaurant/allergens';
 import CallRecordingPlayer, { CallRecordingBadge } from './restaurant/CallRecordingPlayer';
 import CallContextChip from './restaurant/CallContextChip';
+import OrderPosSyncBadge from './restaurant/OrderPosSyncBadge';
 
 function paymentBadge(order: FoodOrder): { label: string; className: string } {
   if (order.payment === 'paid') {
@@ -266,7 +266,7 @@ function OrderItemsList({
           key={`${item.label}-${idx}`}
           className={`flex flex-col border-l-2 bg-slate-50 font-semibold text-slate-900 ${
             item.dealName ? 'border-amber-400' : 'border-slate-200'
-          } ${dense ? 'rounded-md px-2.5 py-1 text-[15px]' : 'rounded-lg px-3 py-1.5 text-lg'}`}
+          } ${dense ? 'rounded-md px-2 py-0.5 text-[13px]' : 'rounded-lg px-3 py-1.5 text-lg'}`}
         >
           <div className="flex items-baseline justify-between gap-2">
             <span className="min-w-0 leading-tight">{item.label}</span>
@@ -415,18 +415,13 @@ function SecondaryActions({
 
 function OrderCard({
   order,
-  tab,
   patchOrder,
   openOrder,
-  menuAllergens,
 }: {
   order: FoodOrder;
-  tab: BoardTab;
   patchOrder: (id: string, patch: Partial<FoodOrder>) => Promise<void>;
   openOrder: (order: FoodOrder) => void;
-  menuAllergens: Map<string, AllergenCode[]>;
 }) {
-  const [moreOpen, setMoreOpen] = useState(false);
   const pay = paymentBadge(order);
   const flashing = isOrderFlashing(order.id);
   const unpaidAttention = order.payment === 'unpaid' && order.type === 'delivery';
@@ -462,7 +457,7 @@ function OrderCard({
           openOrder(order);
         }
       }}
-      className={`cursor-pointer rounded-[1.5rem] border bg-white p-3 shadow-sm transition outline-none focus-visible:ring-2 focus-visible:ring-s2d-teal flex flex-col min-h-[12rem] max-h-[22rem] ${
+      className={`flex h-[13.5rem] cursor-pointer flex-col gap-1.5 rounded-2xl border bg-white p-2.5 shadow-sm transition outline-none focus-visible:ring-2 focus-visible:ring-s2d-teal ${
         flashing
           ? 'border-s2d-gold animate-pulse ring-2 ring-s2d-gold/70'
           : unpaidAttention
@@ -472,79 +467,69 @@ function OrderCard({
               : 'border-slate-200 hover:border-s2d-teal/40'
       }`}
     >
-      {/* Compact header */}
-      <header className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
+      <header className="flex shrink-0 items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-400">#{order.number}</p>
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">#{order.number}</p>
           <h2
-            className={`text-lg font-black truncate leading-tight ${canListen ? 'text-s2d-teal-deep underline decoration-dotted underline-offset-2 hover:text-s2d-teal' : 'text-slate-950'}`}
-            title={canListen ? 'Press name to listen to the call' : customerName}
-            onClick={(e) => {
-              if (!canListen) return;
-              e.stopPropagation();
-              // Open detail so CallContextChip / recording player is available, and focus listen.
-              openOrder(order);
-            }}
+            className={`truncate text-base font-black leading-tight ${canListen ? 'text-s2d-teal-deep underline decoration-dotted underline-offset-2 hover:text-s2d-teal' : 'text-slate-950'}`}
+            title={canListen ? 'Open to listen to the call' : customerName}
           >
             {customerName}
-            {canListen ? <span className="ml-1 text-xs font-bold text-s2d-teal">▶</span> : null}
+            {canListen ? <span className="ml-1 text-[10px] font-bold text-s2d-teal">▶</span> : null}
           </h2>
-          {(order.sourceCallId || order.recordingUrl || order.listenUrl) ? (
-            <div className="mt-1" onClick={(e) => e.stopPropagation()}>
-              <CallContextChip
-                callId={order.sourceCallId}
-                phone={order.phone}
-                contactName={customerName}
-                isGuest={/^guest$/i.test(customerName)}
-                listenUrl={order.listenUrl}
-                recordingUrl={order.recordingUrl}
-                compact
-              />
-            </div>
-          ) : null}
         </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <div className="rounded-xl bg-slate-950 px-3 py-1 text-center text-white">
-            <p className="text-lg font-black leading-tight">£{order.total.toFixed(2)}</p>
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <div className="rounded-lg bg-slate-950 px-2.5 py-0.5 text-center text-white">
+            <p className="text-base font-black leading-tight">£{order.total.toFixed(2)}</p>
           </div>
           <SlaChip order={order} />
         </div>
       </header>
 
-      {/* Compact summary */}
-      <div className="mt-2 flex-1 min-h-0 overflow-hidden space-y-1">
-        <div className="flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-600">
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
+        <div className="flex shrink-0 flex-wrap items-center gap-1 text-[10px] font-semibold text-slate-600">
           <span className="rounded-md bg-slate-100 px-1.5 py-0.5 capitalize">{order.type}</span>
           <Badge className="rounded-md bg-s2d-teal-deep px-1.5 py-0.5 text-[10px] text-white">{statusLabel(order.status)}</Badge>
-          <Badge className={`${pay.className} !text-[10px] !px-1.5 !py-0.5`}>{pay.label}</Badge>
+          <Badge className={`${pay.className} !px-1.5 !py-0.5 !text-[10px]`}>{pay.label}</Badge>
           {src ? <span className="rounded-md bg-indigo-100 px-1.5 py-0.5 text-indigo-900">{src}</span> : null}
+          {order.syncState && order.syncState !== 'local' ? (
+            <span onClick={(e) => e.stopPropagation()}>
+              <OrderPosSyncBadge
+                orderId={order.id}
+                syncState={order.syncState}
+                externalId={order.externalId}
+                compact
+              />
+            </span>
+          ) : null}
         </div>
         {order.customerAllergies ? (
-          <div className="flex items-center gap-1 rounded-md border border-red-400 bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-900">
+          <div className="flex shrink-0 items-center gap-1 rounded-md border border-red-400 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-900">
             <AlertTriangle className="h-3 w-3 shrink-0" />
-            Allergy: {order.customerAllergies}
+            <span className="truncate">Allergy: {order.customerAllergies}</span>
           </div>
         ) : null}
-        <p className="text-xs font-medium text-slate-500 truncate">
-          {order.items.length} item{order.items.length !== 1 ? 's' : ''}
-          {order.items.slice(0, 3).map((i) => ` · ${i.name || i.label}`).join('')}
-          {order.items.length > 3 ? ` +${order.items.length - 3}` : ''}
-        </p>
-        {noteAsSpecial && (
-          <p className="text-[11px] font-semibold text-amber-800 truncate">Special: {noteAsSpecial}</p>
-        )}
-        {order.notes && !noteAsSpecial && (
-          <p className="text-[11px] font-medium text-amber-800/80 truncate line-clamp-1">{order.notes}</p>
-        )}
+        <div className="min-h-0 flex-1 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <OrderItemsList
+            items={order.items}
+            dense
+            showAllergens
+            maxHeightClass="h-full"
+          />
+        </div>
+        {noteAsSpecial ? (
+          <p className="shrink-0 truncate text-[10px] font-semibold text-amber-800">Special: {noteAsSpecial}</p>
+        ) : order.notes ? (
+          <p className="shrink-0 truncate text-[10px] font-medium text-amber-800/80">{order.notes}</p>
+        ) : null}
       </div>
 
-      {/* Compact footer */}
-      <footer className="mt-2 pt-2 border-t border-slate-100 space-y-1" onClick={(e) => e.stopPropagation()}>
-        {bump && (
+      <footer className="shrink-0 border-t border-slate-100 pt-1.5" onClick={(e) => e.stopPropagation()}>
+        {bump ? (
           <Button
             type="button"
             data-testid={`order-bump-${order.id}`}
-            className="min-h-10 w-full rounded-xl bg-s2d-gold text-sm font-bold text-s2d-teal-deep hover:bg-s2d-gold-soft"
+            className="min-h-9 w-full rounded-xl bg-s2d-gold text-sm font-bold text-s2d-teal-deep hover:bg-s2d-gold-soft"
             onClick={() => void patchOrder(order.id, { status: bump.status })}
           >
             {order.type === 'delivery' && bump.status === 'delivery' ? (
@@ -552,14 +537,13 @@ function OrderCard({
             ) : null}
             {bump.label}
           </Button>
-        )}
+        ) : null}
       </footer>
     </article>
   );
 }
 
 export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedded = false }: RestaurantOrdersProps = {}) {
-  const app = useContext(AppContext);
   const [tabState, setTab] = useState<BoardTab>('kitchen');
   const tab = tabProp ?? tabState;
   const [orders, setOrders] = useState<FoodOrder[]>([]);
@@ -575,17 +559,6 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
     }
   });
   const orgId = getActiveOrgId();
-
-  const menuAllergens = useMemo(() => {
-    const map = new Map<string, AllergenCode[]>();
-    for (const p of app?.products ?? []) {
-      const contains = normalizeAllergenCodes(
-        (p as unknown as Record<string, unknown>).allergensContains,
-      );
-      if (contains.length) map.set(String(p.name).toLowerCase(), contains);
-    }
-    return map;
-  }, [app?.products]);
 
   useEffect(() => subscribeKitchenAlerts(() => setAlertTick((n) => n + 1)), []);
 
@@ -867,21 +840,19 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
               <section
                 key={stage}
                 data-testid={`orders-stage-${stage}`}
-                className="min-w-0 flex-1 lg:min-w-[16rem] lg:max-w-sm"
+                className="min-w-0 flex-1 lg:min-w-[16rem] lg:max-w-[20rem]"
               >
                 <header className="sticky top-0 z-[1] mb-2 flex items-center justify-between rounded-xl bg-s2d-teal-deep/95 px-3 py-2 text-white backdrop-blur">
                   <h3 className="text-sm font-black uppercase tracking-wide">{stageLabel(stage, tab)}</h3>
                   <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold">{list.length}</span>
                 </header>
-                <div className="grid gap-3">
+                <div className="grid gap-2">
                   {list.map((order) => (
                     <OrderCard
                       key={order.id}
                       order={order}
-                      tab={tab}
                       patchOrder={patchOrder}
                       openOrder={openOrder}
-                      menuAllergens={menuAllergens}
                     />
                   ))}
                   {list.length === 0 && (
@@ -918,6 +889,11 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
                       <Badge className="rounded-xl bg-indigo-100 px-3 py-1 text-indigo-900">{sourceBadge(selected)}</Badge>
                     ) : null}
                     <CallRecordingBadge recordingUrl={selected.recordingUrl} />
+                    <OrderPosSyncBadge
+                      orderId={selected.id}
+                      syncState={selected.syncState}
+                      externalId={selected.externalId}
+                    />
                   </div>
                   {selected.phone ? (
                     <a href={`tel:${selected.phone}`} className="mt-2 inline-flex items-center gap-1 font-semibold text-s2d-teal-deep hover:underline">
@@ -929,6 +905,16 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
 
                 {selected.customerAllergies ? <AllergyBanner text={selected.customerAllergies} /> : null}
                 <AddressBlock order={selected} />
+                {(selected.sourceCallId || selected.recordingUrl || selected.listenUrl) ? (
+                  <CallContextChip
+                    callId={selected.sourceCallId}
+                    phone={selected.phone}
+                    contactName={detailName}
+                    isGuest={/^guest$/i.test(detailName)}
+                    listenUrl={selected.listenUrl}
+                    recordingUrl={selected.recordingUrl}
+                  />
+                ) : null}
                 <CallRecordingPlayer recordingUrl={selected.recordingUrl} testId={`order-detail-recording-${selected.id}`} />
 
                 <div>

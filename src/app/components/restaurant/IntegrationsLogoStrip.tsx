@@ -14,6 +14,7 @@ export type IntegrationMark = {
 export const INTEGRATION_MARKS: IntegrationMark[] = [
   { id: 'stripe', name: 'Stripe', status: 'live', statusLabel: 'Live today', blurb: 'Card payments where configured for your org.' },
   { id: 'whatsapp', name: 'WhatsApp', status: 'live', statusLabel: 'Live today', blurb: 'Staff messaging when WhatsApp is connected.' },
+  { id: 'square', name: 'Square', status: 'ready', statusLabel: 'POS outbound (beta)', blurb: 'Send phone orders to Square till/kitchen from Settings.' },
   { id: 'deliverect', name: 'Deliverect', status: 'ready', statusLabel: 'Integration ready', blurb: 'Connector-ready hub for marketplace orders.' },
   { id: 'otter', name: 'Otter', status: 'ready', statusLabel: 'Integration ready', blurb: 'Connector-ready hub for marketplace orders.' },
   { id: 'deliveroo', name: 'Deliveroo', status: 'via_hub', statusLabel: 'Via your delivery hub', blurb: 'Orders arrive via Deliverect/Otter — not a direct partnership claim.' },
@@ -30,6 +31,7 @@ function MarkGlyph({ id }: { id: string }) {
   const colors: Record<string, string> = {
     stripe: '#635BFF',
     whatsapp: '#25D366',
+    square: '#006AFF',
     deliverect: '#00A3A1',
     otter: '#FF6B35',
     deliveroo: '#00CCBC',
