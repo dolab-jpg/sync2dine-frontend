@@ -8,16 +8,12 @@ import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
 
-const LANGS = [
-  { code: 'en', label: 'English' },
-  { code: 'sq', label: 'Albanian' },
-  { code: 'uk', label: 'Ukrainian' },
-  { code: 'ru', label: 'Russian' },
-  { code: 'zh', label: 'Chinese' },
-  { code: 'es', label: 'Spanish' },
-  { code: 'pl', label: 'Polish' },
-  { code: 'fa', label: 'Farsi' },
-] as const;
+import { LANG_OPTIONS } from '../../i18n/languages';
+
+const LANGS = LANG_OPTIONS.map((o) => ({
+  code: o.code,
+  label: `${o.flag} ${o.label} (${o.persona})`,
+}));
 
 interface LanguagePack {
   label: string;

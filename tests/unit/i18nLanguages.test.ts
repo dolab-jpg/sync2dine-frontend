@@ -21,9 +21,10 @@ describe('i18n languages helpers', () => {
     expect(normalizeLang(undefined)).toBe('en');
   });
 
-  it('isRtlLang only for Farsi', () => {
+  it('isRtlLang for Farsi and Arabic', () => {
     expect(isRtlLang('fa')).toBe(true);
     expect(isRtlLang('fa-IR')).toBe(true);
+    expect(isRtlLang('ar')).toBe(true);
     expect(isRtlLang('en')).toBe(false);
     expect(isRtlLang('ru')).toBe(false);
   });

@@ -100,7 +100,7 @@ if (!i18n.isInitialized) {
       resources,
       lng: initial,
       fallbackLng: 'en',
-      supportedLngs: ['en', 'sq', 'uk', 'ru', 'zh', 'es', 'pl', 'fa'],
+      supportedLngs: ['en', 'es', 'pl', 'ru', 'uk', 'zh', 'hi', 'tr', 'ar', 'ro', 'pt', 'it', 'sq', 'fa'],
       defaultNS: 'common',
       ns: ['common', 'shell', 'auth', 'ai'],
       interpolation: { escapeValue: false },

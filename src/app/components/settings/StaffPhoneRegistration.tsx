@@ -128,7 +128,9 @@ export function StaffPhoneRegistration() {
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {LANG_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.code} value={opt.code}>{opt.label}</SelectItem>
+                  <SelectItem key={opt.code} value={opt.code}>
+                    {opt.flag} {opt.label} — {opt.persona}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>

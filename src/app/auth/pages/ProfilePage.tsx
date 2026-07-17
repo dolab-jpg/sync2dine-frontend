@@ -151,7 +151,7 @@ export default function ProfilePage() {
                 <SelectContent>
                   {LANG_OPTIONS.map((opt) => (
                     <SelectItem key={opt.code} value={opt.code}>
-                      {opt.label}
+                      {opt.flag} {opt.label} — {opt.persona}
                     </SelectItem>
                   ))}
                 </SelectContent>

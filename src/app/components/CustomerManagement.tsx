@@ -20,6 +20,7 @@ import { seedContactsFromCustomers } from '../engine/contacts/contactStore';
 import { syncToServer } from '../engine/project/projectStore';
 import { getAllTrades } from '../config/trades';
 import type { TradeId } from '../config/types';
+import { LANG_OPTIONS } from '../i18n/languages';
 
 export default function CustomerManagement() {
   const context = useContext(AppContext);
@@ -337,14 +338,11 @@ export default function CustomerManagement() {
                   >
                     <SelectTrigger id="preferredLanguage"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="sq">Albanian</SelectItem>
-                      <SelectItem value="uk">Ukrainian</SelectItem>
-                      <SelectItem value="ru">Russian</SelectItem>
-                      <SelectItem value="zh">Chinese</SelectItem>
-                      <SelectItem value="es">Spanish</SelectItem>
-                      <SelectItem value="pl">Polish</SelectItem>
-                      <SelectItem value="fa">Farsi</SelectItem>
+                      {LANG_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.code} value={opt.code}>
+                          {opt.flag} {opt.label} — {opt.persona}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-green-800 mt-1">

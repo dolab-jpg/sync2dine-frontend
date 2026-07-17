@@ -374,7 +374,7 @@ export default function TeamManagement() {
                             <SelectContent>
                               {LANG_OPTIONS.map((opt) => (
                                 <SelectItem key={opt.code} value={opt.code}>
-                                  {opt.label}
+                                  {opt.flag} {opt.label}
                                 </SelectItem>
                               ))}
                             </SelectContent>
