@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { toast } from 'sonner';
-import { Megaphone, PhoneCall, Store } from 'lucide-react';
+import { Megaphone, PhoneCall, Store, UserPlus, Users } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Textarea } from '../ui/textarea';
@@ -137,6 +138,23 @@ export default function RestaurantSettings() {
         >
           {saving ? 'Saving…' : 'Save'}
         </Button>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Link
+            to="/team"
+            className="flex min-h-[52px] items-center gap-3 rounded-[1.25rem] border border-s2d-teal/15 bg-white px-4 py-3 font-bold text-s2d-teal-deep shadow-sm transition hover:border-s2d-teal/40"
+          >
+            <UserPlus className="h-5 w-5 text-s2d-teal" />
+            Team & invites
+          </Link>
+          <Link
+            to="/customers"
+            className="flex min-h-[52px] items-center gap-3 rounded-[1.25rem] border border-s2d-teal/15 bg-white px-4 py-3 font-bold text-s2d-teal-deep shadow-sm transition hover:border-s2d-teal/40"
+          >
+            <Users className="h-5 w-5 text-s2d-teal" />
+            Customers
+          </Link>
+        </div>
       </section>
     </div>
   );

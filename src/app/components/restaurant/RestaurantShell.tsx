@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router';
 import { useContext, useEffect, useState, type ReactNode } from 'react';
 import {
-  ChefHat, CreditCard, LogOut, Radio, Settings as SettingsIcon, Truck, UtensilsCrossed,
+  ChefHat, CreditCard, LogOut, Radio, Settings as SettingsIcon, Truck, UtensilsCrossed, Users, UserPlus,
 } from 'lucide-react';
 import { AppContext } from '../../App';
 import { BrandLogo } from '../BrandLogo';
@@ -13,12 +13,24 @@ import { Toaster } from '../ui/sonner';
  * Portrait: bottom tab bar. Landscape/desktop: left rail. ≥48px touch targets.
  */
 
-const TABS = [
+type TabDef = {
+  to: string;
+  icon: typeof Radio;
+  label: string;
+  end: boolean;
+  /** Hide from cramped bottom bar; still on desktop rail */
+  railOnly?: boolean;
+  roles?: string[];
+};
+
+const TABS: TabDef[] = [
   { to: '/', icon: Radio, label: 'Live', end: true },
   { to: '/orders/kitchen', icon: ChefHat, label: 'Kitchen', end: false },
   { to: '/orders/till', icon: CreditCard, label: 'Till', end: false },
   { to: '/orders/delivery', icon: Truck, label: 'Delivery', end: false },
   { to: '/menu', icon: UtensilsCrossed, label: 'Menu', end: false },
+  { to: '/customers', icon: Users, label: 'Customers', end: false, railOnly: true, roles: ['super_admin', 'manager', 'staff'] },
+  { to: '/team', icon: UserPlus, label: 'Team', end: false, railOnly: true, roles: ['super_admin', 'manager'] },
   { to: '/settings', icon: SettingsIcon, label: 'Settings', end: false },
 ];
 
@@ -90,11 +102,18 @@ function tabClasses(isActive: boolean, layout: 'rail' | 'bottom') {
   }`;
 }
 
+function tabVisible(tab: TabDef, role: string): boolean {
+  if (!tab.roles?.length) return true;
+  return tab.roles.includes(role);
+}
+
 export default function RestaurantShell({ children }: { children: ReactNode }) {
   const context = useContext(AppContext);
   const live = useAgentLive();
   if (!context) return null;
   const { user, logout } = context;
+  const railTabs = TABS.filter((t) => tabVisible(t, user.role));
+  const bottomTabs = TABS.filter((t) => !t.railOnly && tabVisible(t, user.role));
 
   return (
     <div className="native-shell flex min-h-dvh flex-col bg-s2d-cream lg:flex-row">
@@ -106,7 +125,7 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
           <BrandLogo size="md" showWordmark subtitle="Restaurant Live" />
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="Restaurant navigation">
-          {TABS.map(({ to, icon: Icon, label, end }) => (
+          {railTabs.map(({ to, icon: Icon, label, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => tabClasses(isActive, 'rail')}>
               <Icon className="h-6 w-6 shrink-0" />
               {label}
@@ -163,7 +182,7 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
           aria-label="Restaurant navigation"
           data-testid="restaurant-bottom-nav"
         >
-          {TABS.map(({ to, icon: Icon, label, end }) => (
+          {bottomTabs.map(({ to, icon: Icon, label, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => tabClasses(isActive, 'bottom')}>
               <Icon className="h-6 w-6" />
               {label}

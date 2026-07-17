@@ -1238,6 +1238,14 @@ export default function App() {
                 element={<ProtectedRoute element={<ProductCatalog />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route path="/products" element={<Navigate to="/menu" replace />} />
+              <Route
+                path="/customers"
+                element={<ProtectedRoute element={<CustomerManagement />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
+                path="/team"
+                element={<ProtectedRoute element={<TeamManagement />} allowedRoles={['super_admin', 'manager']} user={user} />}
+              />
               <Route path="/settings" element={<RestaurantSettings />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/profile/password" element={<ChangePasswordPage />} />
