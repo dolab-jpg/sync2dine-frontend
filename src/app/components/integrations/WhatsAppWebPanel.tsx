@@ -76,6 +76,34 @@ export function WhatsAppWebPanel() {
   const framePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const frameImgRef = useRef<HTMLImageElement | null>(null);
+  const browserLoginRef = useRef(false);
+  const prevStatusRef = useRef<WWebStatusValue | null>(null);
+  const stoppingBrowserLoginRef = useRef(false);
+
+  useEffect(() => {
+    browserLoginRef.current = browserLogin;
+  }, [browserLogin]);
+
+  const toastConnectedOnce = useCallback((nextStatus: WWebStatusValue) => {
+    if (nextStatus === 'ready' && prevStatusRef.current !== 'ready') {
+      toast.success('WhatsApp connected');
+    }
+    prevStatusRef.current = nextStatus;
+  }, []);
+
+  const finishBrowserLogin = useCallback(() => {
+    setBrowserLogin(false);
+    setBrowserFrame(null);
+    if (stoppingBrowserLoginRef.current) return;
+    stoppingBrowserLoginRef.current = true;
+    void fetch(`${API}/api/whatsapp-web/browser-login/stop`, { method: 'POST' })
+      .catch(() => {
+        /* ignore — UI is already closed */
+      })
+      .finally(() => {
+        stoppingBrowserLoginRef.current = false;
+      });
+  }, []);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -90,7 +118,16 @@ export function WhatsAppWebPanel() {
       setWwebStatus(data);
       if (data.error) setLastError(data.error);
       else if (data.status === 'ready' || data.status === 'qr_pending') setLastError(null);
-      if (typeof data.browserLoginActive === 'boolean') {
+      toastConnectedOnce(data.status);
+      if (data.status === 'ready') {
+        // Connected sessions must not keep the live login panel open / toasting.
+        if (browserLoginRef.current || data.browserLoginActive) {
+          finishBrowserLogin();
+        } else {
+          setBrowserLogin(false);
+          setBrowserFrame(null);
+        }
+      } else if (typeof data.browserLoginActive === 'boolean') {
         setBrowserLogin(data.browserLoginActive);
       }
       return data.status;
@@ -99,7 +136,7 @@ export function WhatsAppWebPanel() {
       setLastError(err instanceof Error ? err.message : 'Cannot reach WhatsApp API');
       return 'disconnected' as WWebStatusValue;
     }
-  }, []);
+  }, [finishBrowserLogin, toastConnectedOnce]);
 
   const fetchQR = useCallback(async () => {
     try {
@@ -124,21 +161,21 @@ export function WhatsAppWebPanel() {
         active: boolean;
         error?: string;
       };
-      if (data.frame) setBrowserFrame(data.frame);
       if (data.error) setLastError(data.error);
-      setBrowserLogin(data.active);
       if (data.status) {
         setWwebStatus((prev) => ({ ...prev, status: data.status }));
+        toastConnectedOnce(data.status);
       }
       if (data.status === 'ready') {
-        toast.success('WhatsApp connected');
-        setBrowserLogin(false);
-        setBrowserFrame(null);
+        finishBrowserLogin();
+        return;
       }
+      if (data.frame) setBrowserFrame(data.frame);
+      setBrowserLogin(data.active);
     } catch {
       /* ignore frame poll errors */
     }
-  }, []);
+  }, [finishBrowserLogin, toastConnectedOnce]);
 
   const stopWs = useCallback(() => {
     if (wsRef.current) {
@@ -168,10 +205,9 @@ export function WhatsAppWebPanel() {
           }
           if (msg.status) {
             setWwebStatus((prev) => ({ ...prev, status: msg.status! }));
+            toastConnectedOnce(msg.status);
             if (msg.status === 'ready') {
-              toast.success('WhatsApp connected');
-              setBrowserLogin(false);
-              setBrowserFrame(null);
+              finishBrowserLogin();
             }
           }
         } catch {
@@ -184,7 +220,7 @@ export function WhatsAppWebPanel() {
     } catch {
       /* proxy may block WS — poll still works */
     }
-  }, [stopWs]);
+  }, [finishBrowserLogin, stopWs, toastConnectedOnce]);
 
   useEffect(() => {
     void fetchStatus();
@@ -252,6 +288,7 @@ export function WhatsAppWebPanel() {
     setLoading(true);
     setLastError(null);
     setBrowserFrame(null);
+    prevStatusRef.current = null;
     try {
       const res = await fetch(`${API}/api/whatsapp-web/browser-login/start`, {
         method: 'POST',
@@ -307,6 +344,7 @@ export function WhatsAppWebPanel() {
     try {
       await fetch(`${API}/api/whatsapp-web/logout`, { method: 'POST' });
       toast.success('WhatsApp disconnected');
+      prevStatusRef.current = 'disconnected';
       setWwebStatus({ status: 'disconnected' });
       setQrData(null);
       setQrImageUrl(null);
