@@ -1264,6 +1264,28 @@ export function saveCustomerRecord(customer: Record<string, unknown>): Record<st
   return saved;
 }
 
+/** Stamp lastRecordingUrl (and optional lastCallId) onto a customer when a call recording lands. */
+export function stampCustomerLastRecording(
+  customerId: string,
+  recordingUrl: string | undefined | null,
+  callId?: string,
+): void {
+  const url = String(recordingUrl ?? '').trim();
+  if (!customerId || !url || !/^https?:\/\//i.test(url)) return;
+  const store = getDataStore();
+  const idx = store.customers.findIndex((c) => String(c.id) === customerId);
+  if (idx < 0) return;
+  const customer = store.customers[idx] as Record<string, unknown>;
+  if (customer.lastRecordingUrl === url && (!callId || customer.lastCallId === callId)) return;
+  store.customers[idx] = {
+    ...customer,
+    lastRecordingUrl: url,
+    ...(callId ? { lastCallId: callId } : {}),
+    updatedAt: new Date().toISOString(),
+  };
+  syncData(store);
+}
+
 /** Append a phone-call activity note onto the customer record. */
 export function appendCustomerCallActivity(input: {
   customerId: string;
@@ -1278,6 +1300,7 @@ export function appendCustomerCallActivity(input: {
   /** When true, also update lastCall* / callQueueStatus denormalised fields */
   updateCallQueue?: boolean;
   transferredTo?: string;
+  recordingUrl?: string;
 }): Record<string, unknown> {
   const store = getDataStore();
   const idx = store.customers.findIndex(c => String(c.id) === input.customerId);
@@ -1349,6 +1372,11 @@ export function appendCustomerCallActivity(input: {
       callAttemptCount: attemptCount,
       callQueueStatus: callQueueStatus ?? 'called',
     });
+  }
+
+  const recUrl = String(input.recordingUrl ?? '').trim();
+  if (recUrl && /^https?:\/\//i.test(recUrl)) {
+    patch.lastRecordingUrl = recUrl;
   }
 
   store.customers[idx] = patch;

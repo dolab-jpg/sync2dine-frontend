@@ -307,5 +307,45 @@ export async function handlePlatformRoutes(
     return true;
   }
 
+  if (pathname === '/api/platform/sally-offer' && req.method === 'GET') {
+    const { getSallyOfferTerms } = await import('./sally-sales');
+    const { getSallyOfferStored } = await import('./sally-offer-store');
+    const effective = getSallyOfferTerms();
+    const stored = getSallyOfferStored();
+    sendJson(res, 200, {
+      offer: effective,
+      stored,
+      sourceNote: 'UI-saved values override env; empty fields fall back to env then defaults.',
+    });
+    return true;
+  }
+
+  if (pathname === '/api/platform/sally-offer' && req.method === 'PUT') {
+    try {
+      const raw = await readBody(req);
+      const body = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+      const { updateSallyOfferStored } = await import('./sally-offer-store');
+      const { getSallyOfferTerms } = await import('./sally-sales');
+      const ctx = isAuthEnforced() ? requireAuth(req) : null;
+      const stored = updateSallyOfferStored({
+        monthlyPriceGbp: body.monthlyPriceGbp != null ? Number(body.monthlyPriceGbp) : undefined,
+        setupFeeGbp: body.setupFeeGbp != null ? Number(body.setupFeeGbp) : undefined,
+        minimumTerm: body.minimumTerm != null ? String(body.minimumTerm) : undefined,
+        cancelPolicy: body.cancelPolicy != null ? String(body.cancelPolicy) : undefined,
+        demoPhone: body.demoPhone != null ? String(body.demoPhone) : undefined,
+        demoVideoUrl: body.demoVideoUrl != null ? String(body.demoVideoUrl) : undefined,
+        salesPdfUrl: body.salesPdfUrl != null ? String(body.salesPdfUrl) : undefined,
+      }, ctx?.userId || 'platform_owner');
+      sendJson(res, 200, {
+        ok: true,
+        stored,
+        offer: getSallyOfferTerms(),
+      });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : 'Invalid body' });
+    }
+    return true;
+  }
+
   return false;
 }

@@ -1,4 +1,9 @@
-import { ensureOrgOpenAIKeyLoaded, getOrgOpenAIApiKey } from './organizations';
+import {
+  ensureOrgOpenAIKeyLoaded,
+  getOrgOpenAIApiKey,
+  listOrganizations,
+} from './organizations';
+import { getHomeOrgId } from './home-org';
 
 export type OpenAIConnectionReason = 'missing' | 'rejected';
 
@@ -10,6 +15,47 @@ export class OpenAIConnectionError extends Error {
     this.name = 'OpenAIConnectionError';
     this.code = code;
   }
+}
+
+/**
+ * Resolve the Company AI Brain OpenAI key the same way Cynthia / realtime do:
+ * preferred org → home org → any org with a saved key → OPENAI_API_KEY env.
+ * Returns both the key and which org it came from (null = env fallback).
+ */
+export async function resolveCompanyAiBrainOpenAIKey(preferredOrgId?: string | null): Promise<{
+  apiKey: string;
+  orgId: string | null;
+}> {
+  const candidates = [
+    preferredOrgId?.trim(),
+    getHomeOrgId(),
+    ...listOrganizations().map((o) => o.id),
+  ].filter((id): id is string => Boolean(id && id !== 'default'));
+
+  const seen = new Set<string>();
+  for (const orgId of candidates) {
+    if (seen.has(orgId)) continue;
+    seen.add(orgId);
+    await ensureOrgOpenAIKeyLoaded(orgId);
+    const key = getOrgOpenAIApiKey(orgId);
+    if (key) return { apiKey: key, orgId };
+  }
+
+  // Also try preferred/home even if not in listOrganizations (Supabase-only orgs).
+  for (const orgId of [preferredOrgId?.trim(), getHomeOrgId()].filter(Boolean) as string[]) {
+    if (seen.has(orgId)) continue;
+    await ensureOrgOpenAIKeyLoaded(orgId);
+    const key = getOrgOpenAIApiKey(orgId);
+    if (key) return { apiKey: key, orgId };
+  }
+
+  const envKey = (process.env.OPENAI_API_KEY || '').trim();
+  if (envKey) return { apiKey: envKey, orgId: preferredOrgId?.trim() || getHomeOrgId() || null };
+
+  throw new OpenAIConnectionError(
+    'OpenAI not connected — add your API key in Settings → Integrations → Company AI Brain and Save.',
+    'missing',
+  );
 }
 
 export function sanitizeBodyApiKey(bodyApiKey?: string): string | undefined {

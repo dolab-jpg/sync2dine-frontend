@@ -38,6 +38,7 @@ import {
 import type { AgentContext } from '../../engine/ai/agentContext';
 import type { WizardAnswers } from '../../config/types';
 import { useAIAssistant } from '../../context/AIAssistantContext';
+import { getExperience } from '../../engine/platform/experience';
 
 type LocalBubble =
   | { id: string; kind: 'text'; role: 'user' | 'assistant'; content: string; ts: string }
@@ -47,8 +48,9 @@ type LocalBubble =
 /** Local copy of Builder Diddies staff photo from https://b-diddies.com */
 const CYNTHIA_AVATAR_SRC = '/cynthia-avatar.png';
 
-function cynthiaName(): string {
-  // Staff assistant is always Cynthia; Lizzie is the phone/kiosk agent only.
+function assistantName(role?: string): string {
+  // Sales experience / platform_owner → Sally (Sync2Dine sales OS). Restaurant ops keep Cynthia.
+  if (getExperience(role || 'staff') === 'sales') return 'Sally';
   return 'Cynthia';
 }
 
@@ -69,7 +71,7 @@ function CynthiaAvatar({
         className={`${sizeClass} rounded-full bg-emerald-300/30 flex items-center justify-center text-lg font-semibold shrink-0 ${className}`}
         aria-hidden="true"
       >
-        C
+        {name.slice(0, 1).toUpperCase()}
       </div>
     );
   }
@@ -94,7 +96,9 @@ export default function CynthiaHome() {
   } = useAIAssistant();
   const highlightCardId = params.get('card') || '';
   const ingestText = params.get('text') || '';
-  const name = cynthiaName();
+  const name = assistantName(app?.user?.role);
+  const isSally = name === 'Sally';
+  const orchestratorMode = isSally ? 'sally' : 'staff';
 
   const userId = app?.user.id || 'default-staff';
   const [composer, setComposer] = useState('');
@@ -127,7 +131,7 @@ export default function CynthiaHome() {
     projectId: null,
     planningApplicationId: null,
     tradeId: null,
-    approvedBy: app?.user.name ?? 'Cynthia',
+    approvedBy: app?.user.name ?? name,
     role: agentContext.role,
     userId: app?.user.id,
     customerId: null,
@@ -145,7 +149,7 @@ export default function CynthiaHome() {
       setActiveTradeId(trades[0]?.tradeId ?? null);
     },
   }), [
-    app, navigate, agentContext.role,
+    app, navigate, agentContext.role, name,
     setPendingQuoteFields, setLastAcceptedFields, setJobGroupId, setActiveTradeId,
     setDetectedTrades, setAiDetectedTrade,
   ]);
@@ -344,12 +348,13 @@ export default function CynthiaHome() {
         { role: 'user', content: userContent },
       ];
 
-      const companyName = integrationService.getConfig('company').companyName || 'Builder Diddies';
+      const companyName = integrationService.getConfig('company').companyName
+        || (isSally ? 'Sync2Dine' : 'Builder Diddies');
       const orchestratorResult = await sendOrchestratorMessage(history, agentContext, {
         userName: app.user.name,
         userId: app.user.id,
         companyName,
-        orchestratorMode: 'staff',
+        orchestratorMode,
         channel: 'overlay_chat',
         images: images.length ? images : undefined,
         customers: app.customers.slice(0, 80).map((c) => ({

@@ -36,7 +36,9 @@ export function SalesCsvDialPanel({ onImport }: Props) {
   const [open, setOpen] = useState(false);
   const [paste, setPaste] = useState('');
   const [batchId, setBatchId] = useState(() => `sales-${new Date().toISOString().slice(0, 10)}`);
-  const [brief, setBrief] = useState('Introduce Sync2Dine takeaway phone — AI answers, takes orders, and drives repeat business.');
+  const [brief, setBrief] = useState(
+    'Sally from Sync2Dine: introduce the takeaway phone platform — AI answers, takes orders, and drives repeat business. If they want to sign up, research their restaurant online and confirm details before creating their account.',
+  );
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
@@ -55,6 +57,8 @@ export function SalesCsvDialPanel({ onImport }: Props) {
           template: 'lead_callback',
           batchId,
           brief,
+          agentPersona: 'sally',
+          aim: 'sales_outreach',
         }),
       });
       const data = await res.json();
@@ -72,12 +76,14 @@ export function SalesCsvDialPanel({ onImport }: Props) {
           callQueueStatus: 'queued' as const,
           callAttemptCount: 0,
           status: 'lead' as const,
-          tags: [...new Set([...(c.tags ?? []), 'sales-csv', batchId])],
+          tags: [...new Set([...(c.tags ?? []), 'sales-csv', 'sally', batchId])],
         }));
         if (stamped.length) await onImport(stamped);
       }
 
-      toast.success(`Queued ${data.queued ?? rows.length} outbound call${(data.queued ?? rows.length) === 1 ? '' : 's'}`);
+      toast.success(
+        `Queued ${data.queued ?? rows.length} Sally outbound call${(data.queued ?? rows.length) === 1 ? '' : 's'}`,
+      );
       setPaste('');
       setOpen(false);
     } catch (err) {
@@ -97,12 +103,12 @@ export function SalesCsvDialPanel({ onImport }: Props) {
       <DialogTrigger asChild>
         <Button variant="outline" className="min-h-11 border-amber-300 bg-amber-50 hover:bg-amber-100">
           <PhoneOutgoing className="w-4 h-4 mr-2" />
-          Sales CSV dial
+          Sally CSV dial
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Sales CSV — queue outbound dials</DialogTitle>
+          <DialogTitle>Sally — queue Sync2Dine sales dials</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div>

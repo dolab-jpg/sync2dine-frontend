@@ -184,6 +184,53 @@ export async function createStripeCheckout(orgId: string): Promise<string> {
   return data.url;
 }
 
+export type SallyOfferTerms = {
+  monthlyPriceGbp: number;
+  setupFeeGbp: number;
+  billing: string;
+  minimumTerm: string;
+  cancelPolicy: string;
+  demoPhone: string;
+  demoVideoUrl: string;
+  salesPdfUrl: string;
+};
+
+export type SallyOfferStored = Partial<Omit<SallyOfferTerms, 'billing'>> & {
+  updatedAt?: string;
+  updatedBy?: string;
+};
+
+async function platformAuthHeaders(init?: HeadersInit): Promise<Headers> {
+  const headers = new Headers(init);
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const token = await getSupabaseAccessToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  return headers;
+}
+
+/** Sally commercial offer — Node platform API (platform_owner). */
+export async function fetchSallyOffer(): Promise<{
+  offer: SallyOfferTerms;
+  stored: SallyOfferStored;
+}> {
+  const headers = await platformAuthHeaders();
+  return parseJson(await fetch('/api/platform/sally-offer', { headers }));
+}
+
+export async function saveSallyOffer(patch: Partial<SallyOfferTerms>): Promise<{
+  offer: SallyOfferTerms;
+  stored: SallyOfferStored;
+}> {
+  const headers = await platformAuthHeaders();
+  return parseJson(
+    await fetch('/api/platform/sally-offer', {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(patch),
+    }),
+  );
+}
+
 export function tokenUsageColor(used: number, cap: number): string {
   if (cap <= 0) return 'bg-gray-400';
   const pct = used / cap;

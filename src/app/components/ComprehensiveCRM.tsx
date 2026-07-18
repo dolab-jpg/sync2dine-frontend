@@ -32,6 +32,7 @@ import { stageLabel } from '../engine/planning/types';
 import { CallThisPersonDialog } from './crm/CallThisPersonDialog';
 import { ScrapeLeadImportDialog } from './crm/ScrapeLeadImportDialog';
 import { SalesCsvDialPanel } from './crm/SalesCsvDialPanel';
+import CallRecordingPlayer from './restaurant/CallRecordingPlayer';
 
 type Lead = Customer & {
   source: NonNullable<Customer['source']>;
@@ -933,7 +934,7 @@ export default function ComprehensiveCRM() {
                   </div>
                 </div>
 
-                {(selectedLead.lastCallSummary || selectedLead.lastCallAt || selectedLead.lastCallId) && (
+                {(selectedLead.lastCallSummary || selectedLead.lastCallAt || selectedLead.lastCallId || selectedLead.lastRecordingUrl) && (
                   <div className="border rounded-2xl p-4 bg-amber-50 space-y-2">
                     <Label className="font-bold text-lg">Call details</Label>
                     {selectedLead.lastCallAt && (
@@ -944,6 +945,12 @@ export default function ComprehensiveCRM() {
                     {selectedLead.lastCallSummary && (
                       <p className="text-sm text-slate-800 whitespace-pre-wrap">{selectedLead.lastCallSummary}</p>
                     )}
+                    {selectedLead.lastRecordingUrl ? (
+                      <CallRecordingPlayer
+                        recordingUrl={selectedLead.lastRecordingUrl}
+                        testId={`crm-lead-recording-${selectedLead.id}`}
+                      />
+                    ) : null}
                     {selectedLead.lastCallId && (
                       <Button
                         variant="link"

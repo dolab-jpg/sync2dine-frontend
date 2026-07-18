@@ -37,6 +37,7 @@ const OPS_BODY_RE =
 function isSelfHealExcludedUrl(url: string): boolean {
   return (
     url.includes('/api/ai/code-fix') ||
+    url.includes('/api/ai/phone-incidents') ||
     url.includes('/api/ai/conversation-log') ||
     url.includes('/api/ai/health') ||
     url.includes('/api/openai/health') ||

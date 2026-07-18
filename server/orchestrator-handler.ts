@@ -20,6 +20,13 @@ import {
   SERVER_READ_TOOLS,
 } from './orchestrator-tool-exec';
 import { PHONE_TOOLS, executePhoneTool, PHONE_AUTO_ACTIONS } from './phone-tools';
+import {
+  getSallyOrchestratorTools,
+  isSallyExclusiveTool,
+  executeSallyTool,
+  resolveSallySessionKey,
+  SALLY_EXCLUSIVE_TOOLS,
+} from './sally-sales';
 import type {
   OrchestratorAction,
   OrchestratorMessage,
@@ -1630,6 +1637,8 @@ export function getToolsForMode(mode: OrchestratorMode, body?: OrchestratorReque
   let tools;
   if (mode === 'planning') {
     tools = [...GENERIC_TOOLS, ...STAFF_TOOLS, ...NAVIGATION_TOOLS, ...PLANNING_TOOLS, ...GAP_CLOSING_TOOLS];
+  } else if (mode === 'sally') {
+    tools = [...getSallyOrchestratorTools()];
   } else if (mode === 'staff') {
     tools = hasProject
       ? [...GENERIC_TOOLS, ...STAFF_TOOLS, ...EMAIL_TOOLS, ...CONTRACT_TOOLS, ...PROJECT_TOOLS, ...COSTING_TOOLS, ...ACCOUNTS_TOOLS, ...LEAD_CYCLE_TOOLS, ...NAVIGATION_TOOLS, ...GAP_CLOSING_TOOLS]
@@ -1703,6 +1712,7 @@ export const AUTO_ACTION_NAMES = new Set([
   ...PHONE_AUTO_ACTIONS,
   ...PLANNING_ACTION_NAMES,
   ...GAP_AUTO_ACTIONS,
+  ...SALLY_EXCLUSIVE_TOOLS,
 ]);
 
 function applyRoleGate(body: OrchestratorRequest, result: OrchestratorResult): OrchestratorResult {
@@ -2972,6 +2982,7 @@ export async function handleOrchestrator(body: OrchestratorRequest): Promise<Orc
       return await runPhoneOrchestrator(openai as unknown as Parameters<typeof runCustomerOrchestrator>[0], body, messages);
     }
 
+    // Sally sales mode reuses the staff tool loop with Sally tools + prompt.
     return await runStaffOrchestrator(openai as unknown as Parameters<typeof runStaffOrchestrator>[0], body, messages);
   } catch (err) {
     throw mapOpenAIError(err);
@@ -3080,7 +3091,26 @@ async function runStaffOrchestrator(
       }
       let output: Record<string, unknown>;
 
-      if (SERVER_READ_TOOLS.has(toolName)) {
+      if (mode === 'sally' && isSallyExclusiveTool(toolName)) {
+        const staffUserId = String(body.staffContext?.userId || '');
+        output = await executeSallyTool(toolName, parsedInput, {
+          sessionKey: resolveSallySessionKey({ staffUserId }),
+          staffUserId,
+          partyPhone: String(parsedInput.phone || ''),
+        });
+        proposedActions.push({
+          action: toolName,
+          input: parsedInput,
+          output: requestedAs ? { ...output, requestedAs } : output,
+        });
+      } else if (mode === 'sally' && (PHONE_AUTO_ACTIONS.has(toolName) || toolName === 'sendCustomerMessage' || toolName === 'placeOutboundCall' || toolName === 'enqueueOutboundCall' || toolName === 'bookCallback' || toolName === 'captureLead' || toolName === 'scheduleAppointment')) {
+        output = await executePhoneTool(toolName, parsedInput, { ...body, orgId });
+        proposedActions.push({
+          action: toolName,
+          input: parsedInput,
+          output: requestedAs ? { ...output, requestedAs } : output,
+        });
+      } else if (SERVER_READ_TOOLS.has(toolName)) {
         output = await executeServerReadTool(toolName, parsedInput, body);
       } else if (toolName === 'sendToStaffCynthia') {
         // Persist the Cynthia card server-side so phone/WhatsApp/channel paths land

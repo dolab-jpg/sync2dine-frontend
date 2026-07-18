@@ -64,7 +64,10 @@ export default function SalesDashboard() {
     // Opens the floating Cynthia staff AI popup — not the full /cynthia page
     { label: 'Cynthia chat', icon: MessageCircle, onClick: () => setAiOpen(true) },
     ...(user.role === 'platform_owner'
-      ? [{ label: 'Platform clients', icon: Building2, onClick: () => navigate('/platform/clients') }]
+      ? [
+          { label: 'Platform clients', icon: Building2, onClick: () => navigate('/platform/clients') },
+          { label: 'Sally offer', icon: TrendingUp, onClick: () => navigate('/platform/sally-offer') },
+        ]
       : []),
   ];
 

@@ -1769,6 +1769,7 @@ export async function executePhoneTool(
       placedAt: new Date().toISOString(),
       etaMinutes: orderType === 'delivery' ? 40 : 20,
     }, firstString(body.orgId) ?? getRequestOrgId());
+    // POS forward (Square) runs on sync2dine-backend in production.
     const spokenTotal = formatSpokenGbp(Number(record.total));
     const where =
       orderType === 'delivery' && deliveryAddress

@@ -17,6 +17,7 @@ import {
   ensureGuestCustomerForCall,
   resolvePhoneLineByDid,
   saveCall,
+  stampCustomerLastRecording,
   syncData,
   setRequestOrgId,
   updateOutboundJob,
@@ -338,6 +339,7 @@ export async function handlePhoneStatus(req: IncomingMessage, res: ServerRespons
   if (event?.providerCallId || event?.callId) {
     const call = getCallByProviderId(event.providerCallId ?? '') ?? getCallById(event.callId);
     if (call && event.status) {
+      const recordingUrl = event.recordingUrl || (call.recordingUrl as string | undefined);
       saveCall({
         id: call.id,
         status: event.status,
@@ -349,6 +351,10 @@ export async function handlePhoneStatus(req: IncomingMessage, res: ServerRespons
           ? computeCallDurationSec({ ...call, endedAt: new Date().toISOString() })
           : undefined,
       });
+      const customerId = call.customerId != null ? String(call.customerId) : '';
+      if (customerId && recordingUrl) {
+        stampCustomerLastRecording(customerId, recordingUrl, String(call.id));
+      }
     }
   }
 
@@ -414,6 +420,11 @@ export async function handleOutboundCallApi(req: IncomingMessage, res: ServerRes
     customerId: context?.customerId,
     aim: context?.aim ?? context?.reason,
     brief: context?.brief ?? context?.aim ?? context?.reason,
+    agentPersona: context?.agentPersona
+      ?? (String(context?.aim ?? context?.reason ?? '') === 'sales_outreach'
+        || String(context?.source ?? '') === 'sales_csv_dial'
+        ? 'sally'
+        : undefined),
   };
 
   // Worker already owns the queue row — dial only, do not enqueue another job.
@@ -527,6 +538,8 @@ export async function handleOutboundBulkApi(req: IncomingMessage, res: ServerRes
     template?: string;
     batchId?: string;
     brief?: string;
+    agentPersona?: string;
+    aim?: string;
   };
   const rows = Array.isArray(body.rows) ? body.rows : [];
   if (!rows.length) {
@@ -536,6 +549,8 @@ export async function handleOutboundBulkApi(req: IncomingMessage, res: ServerRes
   const template = String(body.template ?? 'lead_callback');
   const batchId = String(body.batchId ?? `sales-csv-${new Date().toISOString().slice(0, 10)}`);
   const defaultBrief = String(body.brief ?? 'Sales outreach — introduce Sync2Dine takeaway phone platform.');
+  const agentPersona = String(body.agentPersona ?? 'sally');
+  const aim = String(body.aim ?? 'sales_outreach');
   const { enqueueOutboundCall } = await import('./data-store');
   const jobs: Array<Record<string, unknown>> = [];
   const skipped: string[] = [];
@@ -554,7 +569,8 @@ export async function handleOutboundBulkApi(req: IncomingMessage, res: ServerRes
       context: {
         customerId: row.customerId,
         company,
-        aim: 'sales_outreach',
+        aim,
+        agentPersona,
         brief: company ? `${defaultBrief} Company: ${company}.` : defaultBrief,
         source: 'sales_csv_dial',
         batchId,
@@ -568,21 +584,149 @@ export async function handleOutboundBulkApi(req: IncomingMessage, res: ServerRes
     queued: jobs.length,
     skipped: skipped.length,
     batchId,
+    agentPersona,
     jobs: jobs.slice(0, 50),
   });
 }
 
+function digitsOnly(value: unknown): string {
+  return String(value ?? '').replace(/\D/g, '');
+}
+
+function callPartyName(call: Record<string, unknown>, customersById: Map<string, Record<string, unknown>>): string {
+  const contact = String(call.contactName ?? '').trim();
+  if (contact) return contact;
+  const cid = call.customerId != null ? String(call.customerId) : '';
+  if (cid) {
+    const cust = customersById.get(cid);
+    const name = String(cust?.name ?? '').trim();
+    if (name) return name;
+  }
+  return '';
+}
+
+function isGuestCall(call: Record<string, unknown>, customersById: Map<string, Record<string, unknown>>): boolean {
+  const name = callPartyName(call, customersById);
+  if (/^guest$/i.test(name)) return true;
+  const meta = (call.metadata as Record<string, unknown> | undefined) || {};
+  if (String(meta.callerKind ?? '').toLowerCase() === 'guest') return true;
+  const cid = call.customerId != null ? String(call.customerId) : '';
+  if (cid) {
+    const cust = customersById.get(cid);
+    if (cust && /^guest$/i.test(String(cust.name ?? ''))) return true;
+  }
+  return !name && !cid;
+}
+
+function buildOutboundTodaySummary(
+  calls: Array<Record<string, unknown>>,
+  customersById: Map<string, Record<string, unknown>>,
+): Array<{ to: string; name: string; count: number }> {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const startMs = start.getTime();
+  const map = new Map<string, { to: string; name: string; count: number }>();
+  for (const call of calls) {
+    if (String(call.direction ?? '') !== 'outbound') continue;
+    const started = call.startedAt ? new Date(String(call.startedAt)).getTime() : NaN;
+    if (!Number.isFinite(started) || started < startMs) continue;
+    const to = String(call.to ?? '').trim() || 'unknown';
+    const name = callPartyName(call, customersById) || to;
+    const key = `${digitsOnly(to) || to}|${name.toLowerCase()}`;
+    const prev = map.get(key);
+    if (prev) prev.count += 1;
+    else map.set(key, { to, name, count: 1 });
+  }
+  return Array.from(map.values()).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
 export async function handleCallsListApi(req: IncomingMessage, res: ServerResponse, url?: URL) {
   const store = getDataStore();
-  const limit = Math.min(Number(url?.searchParams.get('limit') ?? 100), 100);
-  const calls = store.calls.slice(0, limit).map(c => ({
+  const params = url?.searchParams;
+  const limit = Math.min(Math.max(Number(params?.get('limit') ?? 100) || 100, 1), 200);
+  const offset = Math.max(Number(params?.get('offset') ?? 0) || 0, 0);
+  const q = String(params?.get('q') ?? '').trim().toLowerCase();
+  const qDigits = digitsOnly(q);
+  const fromIso = String(params?.get('from') ?? '').trim();
+  const toIso = String(params?.get('to') ?? '').trim();
+  const direction = String(params?.get('direction') ?? '').trim().toLowerCase();
+  const customerId = String(params?.get('customerId') ?? '').trim();
+  const guestFilter = String(params?.get('guest') ?? 'all').trim().toLowerCase() as 'all' | 'guest' | 'named';
+  const fromMs = fromIso ? new Date(fromIso).getTime() : NaN;
+  const toMs = toIso ? new Date(toIso).getTime() : NaN;
+
+  const customersById = new Map(
+    store.customers.map((c) => [String(c.id), c as Record<string, unknown>]),
+  );
+
+  let filtered = store.calls as Array<Record<string, unknown>>;
+
+  if (direction === 'inbound' || direction === 'outbound') {
+    filtered = filtered.filter((c) => String(c.direction ?? '') === direction);
+  }
+  if (customerId) {
+    filtered = filtered.filter((c) => String(c.customerId ?? '') === customerId);
+  }
+  if (Number.isFinite(fromMs) || Number.isFinite(toMs)) {
+    filtered = filtered.filter((c) => {
+      const started = c.startedAt ? new Date(String(c.startedAt)).getTime() : NaN;
+      if (!Number.isFinite(started)) return false;
+      if (Number.isFinite(fromMs) && started < fromMs) return false;
+      if (Number.isFinite(toMs) && started > toMs) return false;
+      return true;
+    });
+  }
+  if (guestFilter === 'guest' || guestFilter === 'named') {
+    filtered = filtered.filter((c) => {
+      const guest = isGuestCall(c, customersById);
+      return guestFilter === 'guest' ? guest : !guest;
+    });
+  }
+  if (q) {
+    filtered = filtered.filter((c) => {
+      const name = callPartyName(c, customersById).toLowerCase();
+      const hay = [
+        name,
+        String(c.id ?? ''),
+        String(c.from ?? ''),
+        String(c.to ?? ''),
+        String(c.outcome ?? ''),
+        String(c.intent ?? ''),
+        String(c.contactName ?? ''),
+        String(c.customerId ?? ''),
+      ].join(' ').toLowerCase();
+      if (hay.includes(q)) return true;
+      if (qDigits && (digitsOnly(c.from).includes(qDigits) || digitsOnly(c.to).includes(qDigits))) return true;
+      return false;
+    });
+  }
+
+  const total = filtered.length;
+  const page = filtered.slice(offset, offset + limit).map((c) => ({
     ...c,
+    contactName: callPartyName(c, customersById) || c.contactName,
+    isGuest: isGuestCall(c, customersById),
     sentiment: c.sentiment ?? computeCallSentiment(c),
     durationSec: c.durationSec ?? computeCallDurationSec(c),
   }));
+
+  const inboundGuestCount = filtered.filter((c) => String(c.direction ?? '') !== 'outbound' && isGuestCall(c, customersById)).length;
+  const withRecordingCount = filtered.filter((c) => /^https?:\/\//i.test(String(c.recordingUrl ?? ''))).length;
+  const outboundToday = buildOutboundTodaySummary(store.calls as Array<Record<string, unknown>>, customersById);
+
   sendJson(res, 200, {
-    calls,
+    calls: page,
+    total,
+    limit,
+    offset,
     outboundQueue: store.outboundQueue.slice(0, 50),
+    summary: {
+      outboundToday,
+      outboundTodayTotal: outboundToday.reduce((n, row) => n + row.count, 0),
+      inboundGuestCount,
+      withRecordingCount,
+      matched: total,
+    },
   });
 }
 
