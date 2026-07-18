@@ -391,19 +391,29 @@ async function handleAgentStt(req: IncomingMessage, res: ServerResponse) {
 }
 
 async function handleGetLines(_req: IncomingMessage, res: ServerResponse) {
+  const lines = listPhoneLines();
+  // #region agent log
+  fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'036e91'},body:JSON.stringify({sessionId:'036e91',runId:'cred-check',hypothesisId:'H-B',location:'agent-routes.ts:handleGetLines',message:'list phone lines (masked)',data:{count:lines.length,staff:lines.filter(l=>(l.purpose??'staff')==='staff').map(l=>({id:l.id,label:l.label,did:l.did,hasPassword:Boolean(l.sipPassword),passwordLen:l.sipPassword?.length??0,assignedUserId:l.assignedUserId??null,status:l.status,purpose:l.purpose??'staff'}))},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   sendJson(res, 200, {
     bridgeUrl: getSipBridgeUrl(),
-    lines: listPhoneLines().map(maskPhoneLine),
+    lines: lines.map(maskPhoneLine),
   });
 }
 
 async function handleGetMyLine(req: IncomingMessage, res: ServerResponse) {
   const userId = resolveUserIdFromRequest(req);
   if (!userId) {
+    // #region agent log
+    fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'036e91'},body:JSON.stringify({sessionId:'036e91',runId:'cred-check',hypothesisId:'H-A',location:'agent-routes.ts:handleGetMyLine',message:'mine missing user id',data:{},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     sendJson(res, 401, { error: 'User id required (Authorization or X-User-Id)' });
     return;
   }
   const line = getPhoneLineByAssignedUserId(userId);
+  // #region agent log
+  fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'036e91'},body:JSON.stringify({sessionId:'036e91',runId:'cred-check',hypothesisId:'H-A',location:'agent-routes.ts:handleGetMyLine',message:'mine lookup',data:{userIdSuffix:userId.slice(-8),found:Boolean(line),lineId:line?.id??null,label:line?.label??null,did:line?.did??null,hasPassword:Boolean(line?.sipPassword),passwordLen:line?.sipPassword?.length??0,assignedMatch:line?.assignedUserId===userId,purpose:line?.purpose??null,allStaffAssigned:listPhoneLines().filter(l=>(l.purpose??'staff')==='staff').map(l=>({id:l.id,assignedSuffix:(l.assignedUserId??'').slice(-8)||null,label:l.label}))},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!line) {
     sendJson(res, 200, { line: null, message: 'No softphone line is assigned to your account yet. Ask an admin to assign one in Call Centre → Phone Lines.' });
     return;
@@ -417,6 +427,9 @@ async function handlePostLine(req: IncomingMessage, res: ServerResponse) {
   const sipUsername = String(body.sipUsername ?? '').trim();
   const sipPassword = String(body.sipPassword ?? '').trim();
   const did = String(body.did ?? '').trim();
+  // #region agent log
+  fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'036e91'},body:JSON.stringify({sessionId:'036e91',runId:'cred-check',hypothesisId:'H-C',location:'agent-routes.ts:handlePostLine',message:'create line',data:{label,sipUsername,did,hasPassword:Boolean(sipPassword),passwordLen:sipPassword.length,assignedUserId:typeof body.assignedUserId==='string'?String(body.assignedUserId).slice(-8):body.assignedUserId??null,purpose:body.purpose??'staff'},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!label || !sipUsername || !sipPassword || !did) {
     sendJson(res, 400, { error: 'label, sipUsername, sipPassword, and did are required' });
     return;
@@ -431,6 +444,9 @@ async function handlePostLine(req: IncomingMessage, res: ServerResponse) {
     assignedUserId: parseAssignedUserId(body.assignedUserId),
     purpose: parsePurpose(body.purpose, 'staff'),
   });
+  // #region agent log
+  fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'036e91'},body:JSON.stringify({sessionId:'036e91',runId:'cred-check',hypothesisId:'H-C',location:'agent-routes.ts:handlePostLine:saved',message:'line saved',data:{id:line.id,hasPassword:Boolean(line.sipPassword),passwordLen:line.sipPassword?.length??0,assignedSuffix:(line.assignedUserId??'').slice(-8)||null},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   sendJson(res, 200, { line: maskPhoneLine(line) });
 }
 
@@ -445,6 +461,9 @@ async function handlePatchLine(req: IncomingMessage, res: ServerResponse, lineId
     ? body.sipPassword
     : existing.sipPassword;
   const assignedParsed = parseAssignedUserId(body.assignedUserId);
+  // #region agent log
+  fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'036e91'},body:JSON.stringify({sessionId:'036e91',runId:'cred-check',hypothesisId:'H-C',location:'agent-routes.ts:handlePatchLine',message:'patch line',data:{lineId,label:typeof body.label==='string'?body.label:existing.label,bodyPasswordLen:typeof body.sipPassword==='string'?body.sipPassword.length:null,keptExistingPassword:!(typeof body.sipPassword==='string'&&body.sipPassword&&body.sipPassword!=='••••••'),resolvedPasswordLen:sipPassword?.length??0,prevPasswordLen:existing.sipPassword?.length??0,assignedParsed:assignedParsed===null?null:typeof assignedParsed==='string'?assignedParsed.slice(-8):'unchanged'},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   const line = savePhoneLine({
     id: lineId,
     label: typeof body.label === 'string' ? body.label : existing.label,

@@ -89,7 +89,7 @@ interface TransferNumbers {
 
 const TRANSFER_DEPARTMENTS: Array<{ key: keyof TransferNumbers; label: string; placeholder: string }> = [
   { key: 'general', label: 'Default / General', placeholder: '+4420...' },
-  { key: 'sales', label: 'Sales', placeholder: '+4420...' },
+  { key: 'sales', label: 'Sales (Sally handoff)', placeholder: '+442037732809' },
   { key: 'projects', label: 'Projects', placeholder: '+4420...' },
   { key: 'recruitment', label: 'Recruitment', placeholder: '+4420...' },
   { key: 'accounts', label: 'Accounts', placeholder: '+4420...' },
@@ -1114,7 +1114,7 @@ export default function CallCenter() {
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="lines">Phone Lines</TabsTrigger>
           <TabsTrigger value="test">Test Call (Mock)</TabsTrigger>
-          <TabsTrigger value="softphone">Soft Phone</TabsTrigger>
+          <TabsTrigger value="softphone">{isSalesShell ? 'Sales Soft Phone' : 'Soft Phone'}</TabsTrigger>
           <TabsTrigger value="outbound">Outbound Queue</TabsTrigger>
         </TabsList>
 
@@ -1432,7 +1432,9 @@ export default function CallCenter() {
                 Call Transfer Destinations
               </CardTitle>
               <CardDescription>
-                Where Lizzie puts calls through when she or the caller asks for a human. Leave blank to only take a message for that department.
+                {isSalesShell
+                  ? 'Where Sally puts callers through for a human. Sales should be your softphone DID (e.g. 02037732809) so warm transfers ring your extension.'
+                  : 'Where Lizzie puts calls through when she or the caller asks for a human. Leave blank to only take a message for that department.'}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1717,13 +1719,15 @@ export default function CallCenter() {
         <TabsContent value="softphone" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Soft Phone (JsSIP)</CardTitle>
+              <CardTitle>{isSalesShell ? 'Sales Soft Phone' : 'Soft Phone'}</CardTitle>
               <CardDescription>
-                Registers your assigned Soho66 extension. Incoming calls ring until you answer or reject.
+                {isSalesShell
+                  ? 'Your Soho66 sales extension — keypad for outbound, answer inbound, and point Sally Sales handoffs at this DID.'
+                  : 'Registers your assigned Soho66 extension. Use the keypad to dial; incoming calls ring until you answer or reject.'}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <SoftPhonePanel />
+              <SoftPhonePanel salesMode={isSalesShell} />
             </CardContent>
           </Card>
         </TabsContent>
