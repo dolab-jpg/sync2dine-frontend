@@ -1379,6 +1379,10 @@ export default function App() {
                 element={<ProtectedRoute element={<CyrusConversations />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route
+                path="/whatsapp"
+                element={<ProtectedRoute element={<CyrusConversations />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
                 path="/calls"
                 element={<ProtectedRoute element={<CallCenter />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />

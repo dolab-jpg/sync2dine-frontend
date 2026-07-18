@@ -224,12 +224,16 @@ export default function AppShell({ children }: AppShellProps) {
       { to: '/crm', icon: TrendingUp, label: 'CRM' },
       { to: '/customers', icon: Users, label: t('nav.customers') },
       { to: '/communications', icon: Mail, label: t('nav.communications') },
-      {
-        to: '/cynthia',
-        icon: MessageCircle,
-        label: getExperience(user.role) === 'sales' ? 'Sally' : 'Cynthia',
-        overlay: true,
-      },
+      ...(user.role === 'platform_owner'
+        ? [{ to: '/whatsapp', icon: MessageCircle, label: 'WhatsApp' }]
+        : [
+            {
+              to: '/cynthia',
+              icon: MessageCircle,
+              label: getExperience(user.role) === 'sales' ? 'Sally' : 'Cynthia',
+              overlay: true as const,
+            },
+          ]),
       { to: '/calls', icon: Phone, label: t('nav.callCenter') },
       { to: '/call-register', icon: ClipboardList, label: 'Call Register' },
       ...(user.role === 'platform_owner'
