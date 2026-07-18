@@ -6,7 +6,7 @@ import { isStaffRole } from './rolePermissions';
 import { PLANNING_ACTIONS } from '../planning/planningActionNames';
 import { getActiveOrgId } from '../platform/orgContext';
 
-export type OrchestratorMode = 'staff' | 'project' | 'foreman' | 'buildingControl' | 'planning' | 'customer' | 'cyrus' | 'auto';
+export type OrchestratorMode = 'staff' | 'project' | 'foreman' | 'buildingControl' | 'planning' | 'customer' | 'cyrus' | 'sally' | 'auto';
 
 export type OrchestratorChannel = 'overlay_chat' | 'formal_doc' | 'customer_portal';
 export type TaskPhase = 'chat' | 'clarify' | 'execute' | 'complete';

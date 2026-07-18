@@ -4,7 +4,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   {
     id: 'openai',
     name: 'Company AI Brain',
-    description: 'Company-wide OpenAI key (primary) — powers chat, job pricing, photos, and Cynthia (staff, web, phone). Optional DeepSeek for text only.',
+    description: 'Company-wide OpenAI key (primary) — powers chat, job pricing, photos, Cynthia, and Sally (platform sales phone research + signup). Optional DeepSeek for text only.',
     category: 'ai',
     docsUrl: 'https://platform.openai.com/docs',
     fields: [

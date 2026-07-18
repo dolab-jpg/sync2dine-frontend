@@ -3,7 +3,7 @@ import {
   Home, ClipboardList, Mail, Settings, TrendingUp,
   Sparkles, Users, BarChart3, UserPlus, UserCircle, LogOut,
   ChevronDown, ChevronLeft, ChevronRight, MessageCircle, ShieldCheck, Menu, Phone,
-  Landmark, Building2, Plug, MoreHorizontal,
+  Landmark, Building2, Plug, MoreHorizontal, BadgePoundSterling,
 } from 'lucide-react';
 import { isNativeBridgeAvailable } from '../bridge/nativeBridge';
 import OrgActingAsPicker from './platform/OrgActingAsPicker';
@@ -30,6 +30,7 @@ import type { Customer } from '../App';
 import { BrandLogo } from './BrandLogo';
 import { OnlineStatusBanner } from './OnlineStatusBanner';
 import { useTranslation } from 'react-i18next';
+import { getExperience } from '../engine/platform/experience';
 
 interface AppShellProps {
   children: ReactNode;
@@ -223,11 +224,18 @@ export default function AppShell({ children }: AppShellProps) {
       { to: '/crm', icon: TrendingUp, label: 'CRM' },
       { to: '/customers', icon: Users, label: t('nav.customers') },
       { to: '/communications', icon: Mail, label: t('nav.communications') },
-      { to: '/cynthia', icon: MessageCircle, label: 'Cynthia', overlay: true },
+      {
+        to: '/cynthia',
+        icon: MessageCircle,
+        label: getExperience(user.role) === 'sales' ? 'Sally' : 'Cynthia',
+        overlay: true,
+      },
       { to: '/calls', icon: Phone, label: t('nav.callCenter') },
+      { to: '/call-register', icon: ClipboardList, label: 'Call Register' },
       ...(user.role === 'platform_owner'
         ? [
             { to: '/platform/clients', icon: Building2, label: t('nav.platformClients') },
+            { to: '/platform/sally-offer', icon: BadgePoundSterling, label: 'Sally offer' },
             { to: '/orders', icon: ClipboardList, label: 'Orders' },
           ]
         : []),
@@ -565,9 +573,14 @@ export default function AppShell({ children }: AppShellProps) {
             data-testid="staff-bottom-nav"
           >
             {[
-              { to: '/cynthia', icon: MessageCircle, label: 'Cynthia' },
+              {
+                to: '/cynthia',
+                icon: MessageCircle,
+                label: getExperience(user.role) === 'sales' ? 'Sally' : 'Cynthia',
+              },
               { to: '/crm', icon: TrendingUp, label: 'CRM' },
               { to: '/calls', icon: Phone, label: 'Calls' },
+              { to: '/call-register', icon: ClipboardList, label: 'Register' },
               { to: '/customers', icon: Users, label: 'Customers' },
             ].map(({ to, icon: Icon, label }) => (
               <NavLink

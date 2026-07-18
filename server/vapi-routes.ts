@@ -20,9 +20,16 @@ import {
   resolveContactByPhone,
   saveCall,
   setRequestOrgId,
+  stampCustomerLastRecording,
 } from './data-store';
 import { mapEndedReasonToDisposition } from './lead-call-disposition';
 import { appendConversationMessage } from './conversation-store';
+import {
+  markWebhookError,
+  markWebhookOk,
+  recordPhoneIncident,
+  toolOutputLooksFailed,
+} from './phone-ops-incidents';
 import {
   executeCustomerTool,
   executeServerReadTool,
@@ -510,6 +517,7 @@ function finalizeVapiCall(
       transferredTo ? `Transferred to: ${transferredTo}` : '',
       afterMeta.brief ? `Staff brief was: ${String(afterMeta.brief).slice(0, 200)}` : '',
     ].filter(Boolean);
+    const finalRecordingUrl = recordingUrl || (after?.recordingUrl as string | undefined);
     appendCustomerCallActivity({
       customerId,
       callId,
@@ -521,37 +529,51 @@ function finalizeVapiCall(
       type: 'call',
       updateCallQueue: true,
       transferredTo,
+      recordingUrl: finalRecordingUrl,
     });
+    stampCustomerLastRecording(customerId, finalRecordingUrl, callId);
   }
 }
 
 function buildTransientAssistant(message: Record<string, unknown>) {
   const call = ensureCallFromVapi(message);
-  const partyPhone = String((call.metadata as Record<string, unknown> | undefined)?.partyPhone
+  const callMeta = (call.metadata as Record<string, unknown> | undefined) || {};
+  const partyPhone = String(callMeta.partyPhone
     || partyPhoneFromCall(message.call as Record<string, unknown>)
     || '');
   const direction = (call.direction as 'inbound' | 'outbound') || 'outbound';
   const identity = resolvePhoneCallerIdentity(partyPhone);
-  const { assistant } = buildVapiAssistantForParty({
+  const outboundBrief = callMeta.brief != null
+    ? String(callMeta.brief)
+    : callMeta.aim != null
+      ? String(callMeta.aim)
+      : undefined;
+  const { assistant, agentPersona } = buildVapiAssistantForParty({
     partyPhone,
     direction,
     campaignTemplate: call.campaignTemplate ? String(call.campaignTemplate) : undefined,
     callId: String(call.id),
     contactName: identity.kind !== 'customer'
       ? identity.name
-      : String(call.contactName || ''),
+      : String(call.contactName || callMeta.company || ''),
+    outboundBrief,
+    agentPersona: callMeta.agentPersona != null ? String(callMeta.agentPersona) : undefined,
+    callMetadata: callMeta,
   });
   saveCall({
     id: String(call.id),
     metadata: {
-      ...((call.metadata as Record<string, unknown> | undefined) || {}),
+      ...callMeta,
       callerKind: identity.kind,
       callerRole: identity.role,
       phoneAuth: isPhoneAuthVerified(String(call.id))
         ? 'verified'
         : (identity.needsPin ? 'pending' : 'n/a'),
+      ...(agentPersona ? { agentPersona } : {}),
     },
-    contactName: identity.kind !== 'customer' ? identity.name : (call.contactName as string | undefined),
+    contactName: identity.kind !== 'customer'
+      ? identity.name
+      : (call.contactName as string | undefined) || (callMeta.company != null ? String(callMeta.company) : undefined),
   });
   return assistant;
 }
@@ -628,6 +650,13 @@ async function executeTool(
 ): Promise<Record<string, unknown>> {
   const callId = resolvePhoneAuthCallId(String(call.id));
   const identity = resolvePhoneCallerIdentity(partyPhone);
+  const callRow = getCallById(callId) || call;
+  const callMeta = (callRow.metadata as Record<string, unknown> | undefined) || {};
+
+  const { executeSallyTool, isSallySalesCall, isSallyExclusiveTool } = await import('./sally-sales');
+  if (isSallySalesCall(callMeta) && isSallyExclusiveTool(name)) {
+    return executeSallyTool(name, args, { callId, partyPhone });
+  }
 
   if (!isToolAllowedForPhoneSession(name, callId, identity)) {
     if (isPhoneAuthVerified(callId) && !isIdentityBound(identity)) {
@@ -780,6 +809,30 @@ async function executeTool(
   return executePhoneTool(name, args, orchBody);
 }
 
+function summarizeToolResult(toolName: string, output: unknown, error?: string): string {
+  if (error) return `tool:${toolName} → error: ${error.slice(0, 160)}`;
+  if (output == null) return `tool:${toolName} → ok`;
+  if (typeof output === 'string') {
+    const t = output.trim();
+    return `tool:${toolName} → ${t.slice(0, 180) || 'ok'}`;
+  }
+  if (typeof output === 'object') {
+    const o = output as Record<string, unknown>;
+    if (o.error != null) return `tool:${toolName} → error: ${String(o.error).slice(0, 160)}`;
+    const bits = [
+      o.ok === false ? 'failed' : 'ok',
+      o.customerId != null ? `customer ${String(o.customerId)}` : '',
+      o.orderId != null ? `order ${String(o.orderId)}` : '',
+      o.bookingId != null ? `booking ${String(o.bookingId)}` : '',
+      o.summary != null ? String(o.summary) : '',
+      o.message != null ? String(o.message) : '',
+      o.spoken != null ? String(o.spoken) : '',
+    ].filter(Boolean);
+    return `tool:${toolName} → ${bits.join(' · ').slice(0, 220)}`;
+  }
+  return `tool:${toolName} → ok`;
+}
+
 function persistTranscriptTurn(
   callId: string,
   partyPhone: string,
@@ -891,6 +944,10 @@ async function handleVapiMessage(
     const tools = parseToolCalls(message);
     const results = await Promise.all(tools.map(async (tool) => {
       if (shouldSkipDuplicateTool(String(call.id), tool.id)) {
+        appendCallTurn(String(call.id), {
+          role: 'system',
+          content: `tool:${tool.name} → ok (deduped)`,
+        });
         return {
           toolCallId: tool.id,
           result: JSON.stringify({ ok: true, deduped: true }),
@@ -898,14 +955,50 @@ async function handleVapiMessage(
       }
       try {
         const output = await executeTool(tool.name, tool.arguments, call, partyPhone);
+        const fail = toolOutputLooksFailed(output);
+        if (fail.failed) {
+          recordPhoneIncident({
+            severity: 'tool_fail',
+            error: fail.error,
+            callId: String(call.id),
+            providerCallId: call.providerCallId ? String(call.providerCallId) : undefined,
+            callerPhone: partyPhone || undefined,
+            toolName: tool.name,
+            spokenSoftFail: true,
+            route: '/webhooks/vapi',
+            details: {
+              toolCallId: tool.id,
+              arguments: tool.arguments,
+              output: typeof output === 'object' ? output : { value: output },
+            },
+          });
+        }
+        const summary = summarizeToolResult(tool.name, output, fail.failed ? fail.error : undefined);
+        appendCallTurn(String(call.id), { role: 'system', content: summary });
         return {
           toolCallId: tool.id,
           result: JSON.stringify(output),
         };
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        recordPhoneIncident({
+          severity: 'tool_fail',
+          error: message,
+          callId: String(call.id),
+          providerCallId: call.providerCallId ? String(call.providerCallId) : undefined,
+          callerPhone: partyPhone || undefined,
+          toolName: tool.name,
+          spokenSoftFail: true,
+          route: '/webhooks/vapi',
+          details: { toolCallId: tool.id, arguments: tool.arguments, thrown: true },
+        });
+        appendCallTurn(String(call.id), {
+          role: 'system',
+          content: `tool:${tool.name} → error: ${message.slice(0, 160)}`,
+        });
         return {
           toolCallId: tool.id,
-          result: JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
+          result: JSON.stringify({ error: message }),
         };
       }
     }));
@@ -962,6 +1055,21 @@ async function handleVapiMessage(
         : status.includes('ring')
           ? 'ringing'
           : 'in_progress';
+    if (mapped === 'failed') {
+      const partyPhone = String((call.metadata as Record<string, unknown> | undefined)?.partyPhone
+        || partyPhoneFromCall(message.call as Record<string, unknown>)
+        || '');
+      recordPhoneIncident({
+        severity: 'call_fail',
+        error: `Vapi status-update failed: ${status || 'unknown'}`,
+        callId: String(call.id),
+        providerCallId: call.providerCallId ? String(call.providerCallId) : undefined,
+        callerPhone: partyPhone || undefined,
+        outcome: status || 'failed',
+        route: '/webhooks/vapi',
+        details: { statusUpdate: status, endedReason: message.endedReason },
+      });
+    }
     const monitor = extractMonitorUrls(message);
     if (!terminal && !monitor.listenUrl) {
       const vapiId = String(call.providerCallId || ((message.call || {}) as Record<string, unknown>).id || '');
@@ -1003,12 +1111,26 @@ async function handleVapiMessage(
         || '');
       finalizeVapiCall(String(call.id), message, partyPhone);
     } catch (err) {
-      console.warn('[vapi] finalizeVapiCall error — forcing completed:', err instanceof Error ? err.message : err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn('[vapi] finalizeVapiCall error — forcing completed:', message);
       saveCall({
         id: String(call.id),
         status: 'completed',
         endedAt: new Date().toISOString(),
         outcome: 'finalize_error',
+      });
+      const partyPhone = String((call.metadata as Record<string, unknown> | undefined)?.partyPhone
+        || partyPhoneFromCall(message.call as Record<string, unknown>)
+        || '');
+      recordPhoneIncident({
+        severity: 'finalize_error',
+        error: message,
+        callId: String(call.id),
+        providerCallId: call.providerCallId ? String(call.providerCallId) : undefined,
+        callerPhone: partyPhone || undefined,
+        outcome: 'finalize_error',
+        route: '/webhooks/vapi',
+        details: { phase: 'finalizeVapiCall' },
       });
     }
     // Belt-and-braces: never leave hang/EOC as in_progress
@@ -1133,6 +1255,13 @@ export async function handleVapiRoutes(
   }
 
   if (!verifyVapiRequest(req)) {
+    markWebhookError(401, 'Invalid or missing Vapi webhook secret');
+    recordPhoneIncident({
+      severity: 'webhook_fail',
+      error: 'Invalid or missing Vapi webhook secret',
+      route: pathname,
+      details: { httpStatus: 401 },
+    });
     sendJson(res, 401, { error: 'Invalid or missing Vapi webhook secret' });
     return true;
   }
@@ -1141,15 +1270,37 @@ export async function handleVapiRoutes(
   try {
     body = JSON.parse(await readBody(req) || '{}') as Record<string, unknown>;
   } catch {
+    markWebhookError(400, 'Invalid JSON');
+    recordPhoneIncident({
+      severity: 'webhook_fail',
+      error: 'Invalid JSON body on Vapi webhook',
+      route: pathname,
+      details: { httpStatus: 400 },
+    });
     sendJson(res, 400, { error: 'Invalid JSON' });
     return true;
   }
 
   try {
     await handleVapiMessage(req, res, body);
+    markWebhookOk();
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error('[vapi] webhook error', err);
-    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    markWebhookError(500, message);
+    recordPhoneIncident({
+      severity: 'webhook_fail',
+      error: message,
+      route: pathname,
+      details: {
+        httpStatus: 500,
+        messageType:
+          (typeof body.message === 'object' && body.message && 'type' in body.message
+            ? String((body.message as { type?: unknown }).type ?? '')
+            : String(body.type ?? '')) || undefined,
+      },
+    });
+    sendJson(res, 500, { error: message });
   }
   return true;
 }

@@ -1,4 +1,4 @@
-export type OrchestratorMode = 'staff' | 'project' | 'foreman' | 'planning' | 'customer' | 'cyrus' | 'phone' | 'auto';
+export type OrchestratorMode = 'staff' | 'project' | 'foreman' | 'planning' | 'customer' | 'cyrus' | 'phone' | 'sally' | 'auto';
 
 export interface OrchestratorMessage {
   role: string;

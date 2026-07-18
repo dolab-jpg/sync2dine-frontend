@@ -25,6 +25,10 @@ function metadataFromContext(context: AgentCallContext): Record<string, string> 
   if (context.customerName) meta.customerName = String(context.customerName);
   if (context.projectId) meta.projectId = String(context.projectId);
   if (context.campaignTemplate) meta.campaignTemplate = String(context.campaignTemplate);
+  const ctx = context.metadata || {};
+  for (const key of ['aim', 'brief', 'source', 'batchId', 'company', 'agentPersona'] as const) {
+    if (ctx[key] != null && String(ctx[key]).trim()) meta[key] = String(ctx[key]);
+  }
   return meta;
 }
 
@@ -89,14 +93,27 @@ export const vapiAdapter: TelephonyProvider = {
       config.fromNumber || process.env.SOHO66_FROM_NUMBER || process.env.VAPI_FROM_NUMBER || '',
     );
 
+    const ctxMeta = (context.metadata && typeof context.metadata === 'object')
+      ? context.metadata
+      : {};
+    const outboundBrief = ctxMeta.brief != null
+      ? String(ctxMeta.brief)
+      : ctxMeta.aim != null
+        ? String(ctxMeta.aim)
+        : undefined;
+
     // Shared builder resolves staff/builder/customer identity + PIN gating + tools + transfer/hangup.
+    // Pass brief/persona explicitly — call row may not exist yet at build time.
     const { buildVapiAssistantForParty } = await import('../vapi-assistant');
-    const { assistant, identity } = buildVapiAssistantForParty({
+    const { assistant, identity, agentPersona } = buildVapiAssistantForParty({
       partyPhone: customerNumber,
       direction: 'outbound',
       campaignTemplate: context.campaignTemplate,
       callId,
-      contactName: context.customerName,
+      contactName: context.customerName || (ctxMeta.company != null ? String(ctxMeta.company) : undefined),
+      outboundBrief,
+      agentPersona: ctxMeta.agentPersona != null ? String(ctxMeta.agentPersona) : undefined,
+      callMetadata: ctxMeta,
     });
 
     // Persist TradePro row BEFORE dial so early webhooks can attach via tradeproCallId
@@ -111,15 +128,19 @@ export const vapiAdapter: TelephonyProvider = {
       transcript: [],
       startedAt: new Date().toISOString(),
       customerId: context.customerId,
-      contactName: identity.kind !== 'customer' ? identity.name : context.customerName,
+      contactName: identity.kind !== 'customer'
+        ? identity.name
+        : (context.customerName || (ctxMeta.company != null ? String(ctxMeta.company) : undefined)),
       campaignTemplate: context.campaignTemplate,
       metadata: {
+        ...ctxMeta,
         tradeproCallId: callId,
         partyPhone: customerNumber,
         webhookBase,
         callerKind: identity.kind,
         callerRole: identity.role,
         phoneAuth: identity.needsPin ? 'pending' : 'n/a',
+        ...(agentPersona ? { agentPersona } : {}),
       },
     });
 
@@ -146,15 +167,30 @@ export const vapiAdapter: TelephonyProvider = {
         endedAt: new Date().toISOString(),
         outcome: 'vapi_dial_failed',
         metadata: {
+          ...ctxMeta,
           tradeproCallId: callId,
           partyPhone: customerNumber,
           webhookBase,
           callerKind: identity.kind,
           callerRole: identity.role,
           phoneAuth: identity.needsPin ? 'pending' : 'n/a',
+          ...(agentPersona ? { agentPersona } : {}),
           dialError: result.raw.slice(0, 400),
         },
       });
+      void import('../phone-ops-incidents')
+        .then(({ recordPhoneIncident }) => {
+          recordPhoneIncident({
+            severity: 'call_fail',
+            error: `Vapi dial failed (${result.status}): ${result.raw.slice(0, 400)}`,
+            callId,
+            callerPhone: customerNumber,
+            outcome: 'vapi_dial_failed',
+            route: '/call/phone',
+            details: { httpStatus: result.status, dialError: result.raw.slice(0, 400) },
+          });
+        })
+        .catch(() => undefined);
       throw new Error(`Vapi dial failed (${result.status}): ${result.raw.slice(0, 400)}`);
     }
 

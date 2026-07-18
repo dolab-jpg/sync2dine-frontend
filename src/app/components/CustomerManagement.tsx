@@ -506,6 +506,16 @@ export default function CustomerManagement() {
                       elapsedSec={liveCall.elapsedSec}
                       compact
                     />
+                  ) : customer.lastRecordingUrl || customer.lastCallId ? (
+                    <CallContextChip
+                      callId={customer.lastCallId}
+                      customerId={customer.id}
+                      phone={customer.phone}
+                      contactName={customer.name}
+                      isGuest={isGuest}
+                      recordingUrl={customer.lastRecordingUrl}
+                      compact
+                    />
                   ) : null}
                   {customer.lastCallAt ? (
                     <p className="text-xs text-slate-500">

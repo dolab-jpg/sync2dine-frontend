@@ -52,8 +52,10 @@ import {
 import AccountsHub from './components/accounts/AccountsHub';
 import ConversationAudit from './components/aiStudio/ConversationAudit';
 import CallCenter from './components/CallCenter/CallCenter';
+import CallRegister from './components/CallCenter/CallRegister';
 import AppShell from './components/AppShell';
 import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
+import SallyOfferSettings from './components/platform/SallyOfferSettings';
 import MenuPreview from './components/platform/MenuPreview';
 import FrontKiosk from './components/FrontKiosk';
 import RestaurantOrders from './components/RestaurantOrders';
@@ -155,6 +157,8 @@ export interface Customer {
   lastCallId?: string;
   lastCallDisposition?: string;
   lastCallSummary?: string;
+  /** Latest call recording URL (stamped on end-of-call) for lead/customer replay */
+  lastRecordingUrl?: string;
   callAttemptCount?: number;
   /** Conversation / call timeline (notes with aim + detail for Cynthia) */
   activities?: Array<{
@@ -1309,6 +1313,10 @@ export default function App() {
                 element={<ProtectedRoute element={<CallCenter />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route
+                path="/call-register"
+                element={<ProtectedRoute element={<CallRegister />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
                 path="/accounts"
                 element={<ProtectedRoute element={<RestaurantAccounts />} allowedRoles={['super_admin', 'manager']} user={user} />}
               />
@@ -1375,6 +1383,10 @@ export default function App() {
                 element={<ProtectedRoute element={<CallCenter />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route
+                path="/call-register"
+                element={<ProtectedRoute element={<CallRegister />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
+              <Route
                 path="/agent"
                 element={<Navigate to="/calls" replace />}
               />
@@ -1415,6 +1427,16 @@ export default function App() {
                 element={
                   <ProtectedRoute
                     element={<PlatformClientsCRM />}
+                    allowedRoles={['platform_owner']}
+                    user={user}
+                  />
+                }
+              />
+              <Route
+                path="/platform/sally-offer"
+                element={
+                  <ProtectedRoute
+                    element={<SallyOfferSettings />}
                     allowedRoles={['platform_owner']}
                     user={user}
                   />

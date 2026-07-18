@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router';
 import { useContext, useEffect, useState, type ReactNode } from 'react';
 import {
   ChefHat, LogOut, Radio, Settings as SettingsIcon, Truck, UtensilsCrossed, Users,
-  Phone, Wallet, PanelLeftClose, PanelLeftOpen, CalendarDays,
+  Phone, Wallet, PanelLeftClose, PanelLeftOpen, CalendarDays, ClipboardList,
 } from 'lucide-react';
 import { AppContext } from '../../App';
 import { BrandLogo } from '../BrandLogo';
@@ -34,6 +34,7 @@ const TABS: TabDef[] = [
   { to: '/bookings', icon: CalendarDays, label: 'Bookings', end: false, badge: 'bookings' },
   { to: '/menu', icon: UtensilsCrossed, label: 'Menu', end: false },
   { to: '/calls', icon: Phone, label: 'Calls', end: false, roles: ['super_admin', 'manager', 'staff'], railOnly: true, badge: 'calls' },
+  { to: '/call-register', icon: ClipboardList, label: 'Register', end: false, roles: ['super_admin', 'manager', 'staff'], railOnly: true },
   { to: '/customers', icon: Users, label: 'Customers', end: false, railOnly: true, roles: ['super_admin', 'manager', 'staff'] },
   { to: '/accounts', icon: Wallet, label: 'Accounts', end: false, railOnly: true, roles: ['super_admin', 'manager'] },
   { to: '/settings', icon: SettingsIcon, label: 'Settings', end: false },

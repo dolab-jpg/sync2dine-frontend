@@ -73,6 +73,12 @@ export async function handleAiRequest(req: IncomingMessage, res: ServerResponse,
     return;
   }
 
+  if (pathname.startsWith('/api/ai/phone-incidents')) {
+    const { handlePhoneOpsIncidentRoutes } = await import('./phone-ops-incidents');
+    await handlePhoneOpsIncidentRoutes(req, res, pathname);
+    return;
+  }
+
   if (req.method !== 'POST') {
     sendJson(res, 405, { error: 'Method not allowed' });
     return;

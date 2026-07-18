@@ -24,6 +24,13 @@ async function processOutboundQueue(): Promise<void> {
   if (queueState !== 'running') return;
   if (isWithinCallQueueQuietHours()) return;
 
+  try {
+    const { enqueueSallyRetryLeads } = await import('./sally-sales');
+    enqueueSallyRetryLeads();
+  } catch {
+    /* non-fatal */
+  }
+
   const capacity = getAgentCapacitySnapshot();
   if (capacity.outboundSlotsFree <= 0) return;
 
@@ -57,6 +64,10 @@ async function processOutboundQueue(): Promise<void> {
             aim: ctx.aim ?? ctx.reason,
             brief: ctx.brief ?? ctx.aim ?? ctx.reason,
             source: ctx.source ?? 'outbound_queue',
+            agentPersona: ctx.agentPersona
+              ?? (String(ctx.aim ?? '') === 'sales_outreach' || String(ctx.source ?? '') === 'sales_csv_dial'
+                ? 'sally'
+                : undefined),
           },
         }),
       });

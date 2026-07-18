@@ -14,6 +14,7 @@ import {
   mapOpenAIError,
   requireOpenAIApiKeyAsync,
   resolveOpenAIApiKeyAsync,
+  resolveCompanyAiBrainOpenAIKey,
   sanitizeBodyApiKey,
 } from './openai-connection';
 
@@ -126,5 +127,6 @@ export {
   mapOpenAIError,
   resolveOpenAIApiKeyAsync,
   requireOpenAIApiKeyAsync,
+  resolveCompanyAiBrainOpenAIKey,
   getOrgOpenAIApiKey,
 };

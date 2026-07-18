@@ -708,6 +708,101 @@ function isAdminRole(role: string): boolean {
   return ['super_admin', 'manager', 'platform_owner'].includes(role);
 }
 
+/**
+ * Create a code-fix job from phone-ops (or other server callers).
+ * Does not auto-start beyond existing enqueue → worker behaviour.
+ */
+export function createCodeFixJobInternal(input: {
+  action: 'offer' | 'enqueue';
+  errorCode: string;
+  description: string;
+  route: string;
+  requesterRole?: string;
+  requesterName?: string;
+  requesterUserId?: string;
+  orgId?: string;
+  metadata?: Record<string, unknown>;
+}): { job?: CodeFixJob; skipped?: boolean; reason?: string; dedupe?: boolean; message?: string } {
+  const errorCode = String(input.errorCode ?? '').trim();
+  const description = String(input.description ?? '').trim();
+  const route = String(input.route ?? '').trim();
+  const role = String(input.requesterRole ?? 'platform_owner');
+
+  if (isNonFixableOpsError(errorCode, description)) {
+    return {
+      skipped: true,
+      reason: 'ops_infra',
+      message: 'Ops/infra failure — no Cursor fix created.',
+    };
+  }
+
+  if (input.action === 'offer') {
+    const existing = errorCode ? findDedupe(errorCode, route) : undefined;
+    if (existing) {
+      return { job: existing, dedupe: true, message: 'Already offered or in progress.' };
+    }
+    const job: CodeFixJob = {
+      id: newId(),
+      orgId: input.orgId,
+      requesterUserId: input.requesterUserId,
+      requesterName: String(input.requesterName ?? 'Phone ops'),
+      requesterRole: role,
+      errorCode,
+      description: description || 'Phone / Vapi failure',
+      route,
+      scope: classifyScope({ errorCode, description, route }),
+      status: 'offered',
+      attemptCount: 0,
+      maxAttempts: MAX_ATTEMPTS,
+      repoUrl: pickRepo(route, description),
+      metadata: { ...(input.metadata || {}), source: 'phone_ops' },
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    upsertJob(job);
+    return { job, dedupe: false };
+  }
+
+  const existing = errorCode ? findDedupe(errorCode, route) : undefined;
+  if (existing && ACTIVE_ENQUEUE_STATUSES.includes(existing.status)) {
+    return { job: existing, dedupe: true, message: 'Already being worked on.' };
+  }
+  const base = existing?.status === 'offered' ? existing : undefined;
+  const scope = classifyScope({
+    errorCode: errorCode || base?.errorCode,
+    description: description || base?.description,
+    route: route || base?.route,
+  });
+  const job: CodeFixJob = {
+    id: base?.id ?? newId(),
+    orgId: input.orgId ?? base?.orgId,
+    requesterUserId: input.requesterUserId ?? base?.requesterUserId,
+    requesterName: String(input.requesterName ?? base?.requesterName ?? 'Phone ops'),
+    requesterRole: role,
+    errorCode: errorCode || base?.errorCode || '',
+    description: description || base?.description || '',
+    route: route || base?.route || '',
+    scope,
+    status: scope === 'needs_cursor_approval' ? 'awaiting_cursor_approval' : 'queued',
+    attemptCount: base?.attemptCount ?? 0,
+    maxAttempts: MAX_ATTEMPTS,
+    repoUrl: pickRepo(route || base?.route || '', description || base?.description || ''),
+    metadata: { ...(base?.metadata || {}), ...(input.metadata || {}), source: 'phone_ops', confirmedAt: nowIso() },
+    createdAt: base?.createdAt ?? nowIso(),
+    updatedAt: nowIso(),
+    alertedAt: scope === 'needs_cursor_approval' ? nowIso() : undefined,
+  };
+  upsertJob(job);
+  if (job.status === 'queued') {
+    startCodeFixWorker();
+    void tickWorker();
+  } else if (job.status === 'awaiting_cursor_approval') {
+    startCodeFixWorker();
+    void processOneJob({ ...job, status: 'queued', scope: 'needs_cursor_approval' });
+  }
+  return { job, dedupe: false };
+}
+
 export async function handleCodeFixRoutes(
   req: IncomingMessage,
   res: ServerResponse,

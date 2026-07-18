@@ -14,23 +14,36 @@ import {
 import { canViewAudit } from '../../engine/ai/rolePermissions';
 import { AppContext } from '../../App';
 import { CodeFixesAudit } from './CodeFixesAudit';
+import { PhoneErrorsAudit } from './PhoneErrorsAudit';
 import { listCodeFixJobs } from '../../engine/ai/codeFixService';
+import { listPhoneIncidents } from '../../engine/ai/phoneIncidentsService';
 
-type AuditTab = 'conversations' | 'code_fixes';
+type AuditTab = 'conversations' | 'code_fixes' | 'phone_errors';
+
+function tabFromSearch(raw: string | null): AuditTab {
+  if (raw === 'code_fixes') return 'code_fixes';
+  if (raw === 'phone_errors') return 'phone_errors';
+  return 'conversations';
+}
 
 export default function ConversationAudit() {
   const app = useContext(AppContext);
   const [searchParams] = useSearchParams();
-  const initialTab = searchParams.get('tab') === 'code_fixes' ? 'code_fixes' : 'conversations';
-  const [tab, setTab] = useState<AuditTab>(initialTab);
+  const [tab, setTab] = useState<AuditTab>(() => tabFromSearch(searchParams.get('tab')));
   const [threads, setThreads] = useState<Awaited<ReturnType<typeof fetchConversationThreads>>['threads']>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ConversationLogEntry[]>([]);
   const [roleFilter, setRoleFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [alertCount, setAlertCount] = useState(0);
+  const [phoneAlertCount, setPhoneAlertCount] = useState(0);
+  const phoneIncidentId = searchParams.get('id');
 
   const allowed = Boolean(app && canViewAudit(app.user.role as Parameters<typeof canViewAudit>[0]));
+
+  useEffect(() => {
+    setTab(tabFromSearch(searchParams.get('tab')));
+  }, [searchParams]);
 
   useEffect(() => {
     if (!allowed) return;
@@ -54,6 +67,9 @@ export default function ConversationAudit() {
       void listCodeFixJobs()
         .then((r) => setAlertCount(r.alerts.length))
         .catch(() => setAlertCount(0));
+      void listPhoneIncidents({ status: 'open' })
+        .then((r) => setPhoneAlertCount(r.alerts.length || r.openCount || 0))
+        .catch(() => setPhoneAlertCount(0));
     };
     refreshAlerts();
     const id = window.setInterval(refreshAlerts, 15_000);
@@ -82,11 +98,12 @@ export default function ConversationAudit() {
       <div className="mb-4">
         <h1 className="text-2xl font-bold">AI Audit</h1>
         <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
-          Conversation and code-fix logs are retained for quality and compliance. Do not share outside authorised staff.
+          Conversation, code-fix, and phone/webhook incident logs are retained for quality and ops.
+          Do not share outside authorised staff.
         </p>
       </div>
 
-      <div className="flex gap-2 mb-4 border-b border-slate-200 pb-2">
+      <div className="flex gap-2 mb-4 border-b border-slate-200 pb-2 flex-wrap">
         <button
           type="button"
           onClick={() => setTab('conversations')}
@@ -110,10 +127,26 @@ export default function ConversationAudit() {
             </span>
           )}
         </button>
+        <button
+          type="button"
+          onClick={() => setTab('phone_errors')}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium inline-flex items-center gap-2 ${
+            tab === 'phone_errors' ? 'bg-amber-100 text-amber-900' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          Phone errors
+          {phoneAlertCount > 0 && (
+            <span className="inline-flex min-w-[1.25rem] h-5 px-1 items-center justify-center rounded-full bg-red-600 text-white text-[10px]">
+              {phoneAlertCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {tab === 'code_fixes' ? (
         <CodeFixesAudit />
+      ) : tab === 'phone_errors' ? (
+        <PhoneErrorsAudit initialId={phoneIncidentId} />
       ) : (
         <>
           <div className="flex gap-2 mb-4 flex-wrap">

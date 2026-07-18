@@ -69,7 +69,10 @@ export async function createSubscriptionForOrg(
   });
 }
 
-export async function createCheckoutSessionForOrg(orgId: string): Promise<string> {
+export async function createCheckoutSessionForOrg(
+  orgId: string,
+  opts?: { metadata?: Record<string, string> },
+): Promise<string> {
   const org = getOrganizationById(orgId);
   if (!org) throw new Error('Organization not found');
 
@@ -87,18 +90,86 @@ export async function createCheckoutSessionForOrg(orgId: string): Promise<string
   }
 
   const baseUrl = process.env.APP_BASE_URL?.trim() || 'http://localhost:5174';
+  const extraMeta = opts?.metadata || {};
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
     mode: 'subscription',
     line_items: [{ price: priceIdForPlan(org.plan), quantity: 1 }],
     success_url: `${baseUrl}/platform/clients?stripe=success&org=${orgId}`,
     cancel_url: `${baseUrl}/platform/clients?stripe=cancel&org=${orgId}`,
-    metadata: { orgId },
-    subscription_data: { metadata: { orgId } },
+    metadata: { orgId, ...extraMeta },
+    subscription_data: { metadata: { orgId, ...extraMeta } },
   });
 
   if (!session.url) throw new Error('Stripe did not return a checkout URL');
+  updateOrganization(orgId, {
+    notes: `${org.notes || ''}\n[sally_checkout] session=${session.id} at=${new Date().toISOString()}`.trim(),
+  });
   return session.url;
+}
+
+/** Sally / ops: is this org paid / active on Stripe? */
+export function getOrgPaymentStatus(orgId: string): {
+  organizationId: string;
+  status: string;
+  subscriptionStatus: string | null;
+  paid: boolean;
+  currentPeriodEnd: string | null;
+  contactEmail: string;
+} | null {
+  const org = getOrganizationById(orgId);
+  if (!org) return null;
+  const sub = (org.subscriptionStatus || '').toLowerCase();
+  const paid = org.status === 'active'
+    || sub === 'active'
+    || sub === 'trialing';
+  return {
+    organizationId: org.id,
+    status: org.status,
+    subscriptionStatus: org.subscriptionStatus || null,
+    paid,
+    currentPeriodEnd: org.currentPeriodEnd || null,
+    contactEmail: org.contactEmail,
+  };
+}
+
+async function stampCrmPaidForOrg(orgId: string, detail: string): Promise<void> {
+  try {
+    const org = getOrganizationById(orgId);
+    if (!org) return;
+    const { getDataStore, saveCustomerRecord, appendCustomerCallActivity, syncData } = await import('./data-store');
+    const store = getDataStore();
+    const email = (org.contactEmail || '').trim().toLowerCase();
+    const phone = (org.contactPhone || '').replace(/\D/g, '');
+    let touched = false;
+    for (const c of (store.customers as Array<Record<string, unknown>>) || []) {
+      const cEmail = String(c.email || '').trim().toLowerCase();
+      const cPhone = String(c.phone || '').replace(/\D/g, '');
+      const match = (email && cEmail === email)
+        || (phone && cPhone && cPhone.endsWith(phone.slice(-10)))
+        || String(c.organizationId || '') === orgId
+        || String(c.saasOrgId || '') === orgId;
+      if (!match) continue;
+      saveCustomerRecord({
+        ...c,
+        saasOrgId: orgId,
+        saasPaymentStatus: 'paid',
+        status: String(c.status || '') === 'lead' ? 'customer' : c.status,
+      });
+      appendCustomerCallActivity({
+        customerId: String(c.id),
+        summary: 'Stripe payment confirmed',
+        detail,
+        aim: 'paid',
+        type: 'note',
+        createdBy: 'stripe',
+      });
+      touched = true;
+    }
+    if (touched) syncData({ customers: store.customers });
+  } catch (err) {
+    console.warn('[stripe] stampCrmPaidForOrg failed:', err instanceof Error ? err.message : err);
+  }
 }
 
 export function mapStripeStatusToOrgStatus(
@@ -148,6 +219,9 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
           ? new Date(sub.current_period_end * 1000).toISOString()
           : undefined,
       });
+      if (status === 'active' || status === 'trial') {
+        await stampCrmPaidForOrg(org.id, `Subscription ${sub.id} → ${sub.status}`);
+      }
       break;
     }
     case 'invoice.payment_failed': {
@@ -168,6 +242,22 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
       const org = getOrganizationByStripeCustomerId(customerId);
       if (!org) return;
       updateOrganization(org.id, { status: 'active', subscriptionStatus: 'active' });
+      await stampCrmPaidForOrg(org.id, `Invoice paid ${invoice.id || ''}`.trim());
+      break;
+    }
+    case 'checkout.session.completed': {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const orgId = session.metadata?.orgId;
+      if (!orgId) break;
+      const org = getOrganizationById(orgId);
+      if (!org) break;
+      if (session.mode === 'subscription' || session.payment_status === 'paid') {
+        updateOrganization(orgId, {
+          status: 'active',
+          subscriptionStatus: org.subscriptionStatus || 'active',
+        });
+        await stampCrmPaidForOrg(orgId, `Checkout completed ${session.id}`);
+      }
       break;
     }
     default:
