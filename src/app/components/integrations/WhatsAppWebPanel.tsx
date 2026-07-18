@@ -42,6 +42,16 @@ interface WWebStatus {
   } | null;
   error?: string;
   browserLoginActive?: boolean;
+  debug?: {
+    hasClient?: boolean;
+    hasPupPage?: boolean;
+    ageSinceAuthMs?: number | null;
+    lastLoadingPercent?: number | null;
+    lastLoadingMessage?: string | null;
+    usesExecutablePath?: boolean;
+    usesWebVersionCache?: boolean;
+    puppeteerArgs?: string[];
+  };
 }
 
 interface QRResponse {
@@ -116,6 +126,9 @@ export function WhatsAppWebPanel() {
       const data = (await res.json()) as WWebStatus;
       setApiReachable(true);
       setWwebStatus(data);
+      // #region agent log
+      fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bddce0'},body:JSON.stringify({sessionId:'bddce0',runId:'pre-fix',hypothesisId:data.status==='authenticated'?'H1':data.status==='ready'?'H1':'H4',location:'WhatsAppWebPanel.tsx:fetchStatus',message:'wweb status poll',data:{status:data.status,hasPhone:Boolean(data.info?.phone),hasClient:data.debug?.hasClient??null,hasPupPage:data.debug?.hasPupPage??null,ageSinceAuthMs:data.debug?.ageSinceAuthMs??null,lastLoadingPercent:data.debug?.lastLoadingPercent??null,lastLoadingMessage:data.debug?.lastLoadingMessage??null,usesExecutablePath:data.debug?.usesExecutablePath??null,usesWebVersionCache:data.debug?.usesWebVersionCache??null,puppeteerArgs:data.debug?.puppeteerArgs??null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       if (data.error) setLastError(data.error);
       else if (data.status === 'ready' || data.status === 'qr_pending') setLastError(null);
       toastConnectedOnce(data.status);

@@ -5,6 +5,7 @@
 import { createServer } from 'http';
 import { handleAiRequest } from './ai-proxy';
 import { handleWhatsAppRoutes } from './whatsapp-webhook';
+import { handleWWebRoutes } from './whatsapp-web-routes';
 import { handlePhoneRoutes } from './phone-webhook';
 import { handleVapiRoutes } from './vapi-routes';
 import { handleAgentRoutes } from './agent-routes';
@@ -33,6 +34,7 @@ import { handleGapApiRoutes } from './gap-api-routes';
 import { handleAnalyticsRoutes } from './analytics-routes';
 import { startMailboxPoller } from './mailbox/imapSyncService';
 import { startOutboundWorker } from './outbound-worker';
+import { startUsageAlertsWorker } from './usage-alerts-worker';
 import { ensureBdiddiesHomeOrg } from './organizations';
 
 const PORT = Number(process.env.PORT) || 3001;
@@ -73,6 +75,8 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
   }
 
   if (await handleWhatsAppRoutes(req, res, pathname, url)) return;
+
+  if (await handleWWebRoutes(req, res, pathname, url)) return;
 
   if (await handlePhoneRoutes(req, res, pathname, url)) return;
 
@@ -139,5 +143,10 @@ server.listen(PORT, () => {
   ensureBdiddiesHomeOrg();
   startMailboxPoller();
   startOutboundWorker();
+  startUsageAlertsWorker();
   void import('./code-fix-handler').then(({ startCodeFixWorker }) => startCodeFixWorker());
+  void import('./whatsapp-web-client').then(({ initWWebClient }) => {
+    console.log('Starting WhatsApp Web.js client...');
+    initWWebClient().catch((err) => console.error('WhatsApp Web.js init failed:', err));
+  });
 });
