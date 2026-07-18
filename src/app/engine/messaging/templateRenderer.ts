@@ -24,6 +24,14 @@ export interface TemplateVariables {
   CONTRACT_TOTAL?: string;
   CONTRACT_SIGN_LINK?: string;
   JOB_LINE_ITEMS?: string;
+  RESTAURANT_NAME?: string;
+  MONTHLY_PRICE?: string;
+  SETUP_FEE?: string;
+  DEMO_PHONE?: string;
+  DEMO_VIDEO_URL?: string;
+  SALES_PDF_URL?: string;
+  ASSETS_BLOCK?: string;
+  CHECKOUT_LINK?: string;
   [key: string]: string | undefined;
 }
 
@@ -54,12 +62,18 @@ export function formatJobLineItems(
 export function renderTemplate(template: string, variables: TemplateVariables): string {
   const company = integrationService.getConfig('company');
   const merged: TemplateVariables = {
-    COMPANY_NAME: company.companyName || 'Builder Diddies',
-    COMPANY_PHONE: company.phone || '',
-    COMPANY_EMAIL: company.email || '',
-    COMPANY_WEBSITE: company.website || '',
+    COMPANY_NAME: company.companyName || 'Sync2Dine',
+    COMPANY_PHONE: company.phone || '020 3745 3233',
+    COMPANY_EMAIL: company.email || 'info@sync2dine.io',
+    COMPANY_WEBSITE: company.website || 'https://sync2dine.io',
     COMPANY_REGISTRATION: company.companyRegistrationNumber || '',
     COMPANY_VAT: company.vatNumber || '',
+    MONTHLY_PRICE: '350',
+    SETUP_FEE: '0',
+    DEMO_PHONE: '',
+    RESTAURANT_NAME: variables.RESTAURANT_NAME || 'your restaurant',
+    ASSETS_BLOCK: variables.ASSETS_BLOCK || '',
+    CHECKOUT_LINK: variables.CHECKOUT_LINK || '',
     ...variables,
   };
 
