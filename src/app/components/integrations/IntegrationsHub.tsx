@@ -50,7 +50,16 @@ export default function IntegrationsHub() {
   }, []);
 
   useEffect(() => {
-    void integrationService.initCompanyProfile().then(refresh);
+    // #region agent log
+    fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73adb0'},body:JSON.stringify({sessionId:'73adb0',runId:'pre-deploy',hypothesisId:'H4',location:'IntegrationsHub.tsx:mount',message:'IntegrationsHub mounted',data:{path:typeof window!=='undefined'?window.location.pathname:'',host:typeof window!=='undefined'?window.location.host:''},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    void integrationService.initCompanyProfile().then(() => {
+      const summary = integrationService.getStatusSummary();
+      // #region agent log
+      fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73adb0'},body:JSON.stringify({sessionId:'73adb0',runId:'pre-deploy',hypothesisId:'H4',location:'IntegrationsHub.tsx:afterInit',message:'initCompanyProfile finished',data:{summary,hydrated:integrationService.wasServerHydrated()},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      refresh();
+    });
     return integrationService.subscribe(refresh);
   }, [refresh]);
 

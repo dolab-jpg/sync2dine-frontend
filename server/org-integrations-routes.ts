@@ -119,6 +119,9 @@ export async function handleOrgIntegrationsRoutes(
   // GET /api/org/integrations
   if (pathname === '/api/org/integrations' && req.method === 'GET') {
     const orgId = resolveOrgIdForRequest(req);
+    // #region agent log
+    fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73adb0'},body:JSON.stringify({sessionId:'73adb0',runId:'pre-deploy',hypothesisId:'H1',location:'org-integrations-routes.ts:GET',message:'route hit',data:{orgId,method:req.method,pathname},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!assertHasOrg(req, res, orgId)) return true;
     const integrations = await listOrgIntegrations(orgId!);
     const summary = {
@@ -128,6 +131,9 @@ export async function handleOrgIntegrationsRoutes(
       mock: integrations.filter((i) => i.status === 'mock').length,
       total: integrations.length,
     };
+    // #region agent log
+    fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73adb0'},body:JSON.stringify({sessionId:'73adb0',runId:'pre-deploy',hypothesisId:'H1',location:'org-integrations-routes.ts:GET:done',message:'list complete',data:{orgId,summary,count:integrations.length},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     sendJson(res, 200, { orgId, integrations, summary });
     return true;
   }
@@ -202,24 +208,17 @@ export async function handleOrgIntegrationsRoutes(
       values: body.values,
     });
 
-    // Mirror Company AI Brain into organizations table (OpenAI and/or DeepSeek)
+    // Mirror OpenAI brain key into organizations table (existing path)
     if (integrationId === 'openai' && body.values) {
       const apiKey = body.values.apiKey?.trim();
       const deepseek = body.values.deepseekApiKey;
-      const liveOpenAI = Boolean(apiKey && !isMaskedOrPlaceholder(apiKey));
-      const liveDeepSeek = Boolean(
-        deepseek !== undefined && String(deepseek).trim() && !isMaskedOrPlaceholder(String(deepseek)),
-      );
-      const provider = body.values.provider === 'deepseek' ? 'deepseek' : 'openai';
-      if (liveOpenAI || liveDeepSeek || body.values.provider) {
+      if (apiKey && !isMaskedOrPlaceholder(apiKey)) {
         const updated = setOrgAIBrainConfig(orgId!, {
-          openaiApiKey: liveOpenAI ? apiKey : undefined,
-          deepseekApiKey: liveDeepSeek ? String(deepseek).trim() : (deepseek === '' ? '' : undefined),
-          provider,
+          openaiApiKey: apiKey,
+          deepseekApiKey: deepseek !== undefined && !isMaskedOrPlaceholder(deepseek) ? deepseek : undefined,
+          provider: body.values.provider === 'deepseek' ? 'deepseek' : 'openai',
         });
-        if (liveOpenAI) {
-          await syncOrgOpenAIKeyToSupabase(orgId!, updated.openaiApiKeyEncrypted || encryptSecret(apiKey!));
-        }
+        await syncOrgOpenAIKeyToSupabase(orgId!, updated.openaiApiKeyEncrypted || encryptSecret(apiKey));
       }
     }
 

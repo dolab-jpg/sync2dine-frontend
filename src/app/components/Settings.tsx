@@ -1,4 +1,5 @@
 import { useContext, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { AppContext, PricingRule } from '../App';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -27,6 +28,7 @@ import { BDIDDIES_HOME_ORG_ID } from '../engine/platform/homeOrg';
 
 export default function Settings() {
   const context = useContext(AppContext);
+  const [searchParams, setSearchParams] = useSearchParams();
   const { settings: aiSettings, updateSettings: updateAiSettings } = useAIAssistant();
   const trades = getAllTrades();
 
@@ -45,6 +47,15 @@ export default function Settings() {
 
   const { pricingRules, addPricingRule, updatePricingRule, deletePricingRule, user } = context;
   const mailboxOrgId = getActiveOrgId() || BDIDDIES_HOME_ORG_ID;
+  const isAdmin = user.role === 'super_admin' || user.role === 'platform_owner';
+  const tabFromUrl = searchParams.get('tab');
+  const defaultTab = isAdmin
+    ? (tabFromUrl === 'integrations' || tabFromUrl === 'api'
+      ? 'integrations'
+      : tabFromUrl && ['pricing', 'quote-stages', 'ai', 'phone-soho', 'email-inbox', 'import-export', 'business', 'team'].includes(tabFromUrl)
+        ? tabFromUrl
+        : 'pricing')
+    : 'business';
 
   if (!canManageCompanySettings(user.role as AgentRole)) {
     return (
@@ -129,7 +140,14 @@ export default function Settings() {
         <p className="text-gray-600 mt-1 text-sm sm:text-base">Configure pricing rules, margins, and business settings</p>
       </div>
 
-      <Tabs defaultValue={user.role === 'super_admin' || user.role === 'platform_owner' ? "pricing" : "business"} className="w-full">
+      <Tabs
+        value={defaultTab}
+        onValueChange={(v) => {
+          if (v === 'pricing') setSearchParams({});
+          else setSearchParams({ tab: v });
+        }}
+        className="w-full"
+      >
         <div className="overflow-x-auto -mx-1 px-1 pb-1">
         <TabsList className="w-max min-w-full sm:w-full flex-nowrap sm:flex-wrap h-auto gap-1">
           {(user.role === 'super_admin' || user.role === 'platform_owner') && (
@@ -338,7 +356,7 @@ export default function Settings() {
             <CardHeader>
               <CardTitle>Quote Builder Stages</CardTitle>
               <p className="text-sm text-gray-600 mt-1">
-                Configure the stages customers go through when creating a quote
+                Stages your team follows when quoting Sync2Dine — Phone Agents and/or Audio Management
               </p>
             </CardHeader>
             <CardContent>
@@ -349,56 +367,49 @@ export default function Settings() {
                     <h3 className="font-bold text-blue-900">Current Quote Stages</h3>
                   </div>
                   <p className="text-sm text-blue-800 mb-4">
-                    These stages guide your team through the quote creation process:
+                    Prospects can take one product or both — nothing forces both:
                   </p>
                   <ol className="space-y-2">
                     <li className="flex items-center gap-3 p-3 bg-white rounded-lg">
                       <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white font-bold rounded-full">1</span>
                       <div>
                         <p className="font-semibold">Customer Selection</p>
-                        <p className="text-xs text-gray-600">Choose or create customer record</p>
+                        <p className="text-xs text-gray-600">Choose or create the restaurant / prospect record</p>
                       </div>
                     </li>
                     <li className="flex items-center gap-3 p-3 bg-white rounded-lg">
                       <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white font-bold rounded-full">2</span>
                       <div>
-                        <p className="font-semibold">Measurements</p>
-                        <p className="text-xs text-gray-600">Enter bathroom dimensions and labour days</p>
+                        <p className="font-semibold">Needs Discovery</p>
+                        <p className="text-xs text-gray-600">Capture call volume, hours, ordering vs bookings, and pain points</p>
                       </div>
                     </li>
                     <li className="flex items-center gap-3 p-3 bg-white rounded-lg">
                       <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white font-bold rounded-full">3</span>
                       <div>
-                        <p className="font-semibold">Finish Selection</p>
-                        <p className="text-xs text-gray-600">Choose wall finish (microcement, tiles, paint)</p>
+                        <p className="font-semibold">Products</p>
+                        <p className="text-xs text-gray-600">Select Phone Agents and/or Audio Management (one or both)</p>
                       </div>
                     </li>
                     <li className="flex items-center gap-3 p-3 bg-white rounded-lg">
                       <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white font-bold rounded-full">4</span>
                       <div>
-                        <p className="font-semibold">Second Fix Products</p>
-                        <p className="text-xs text-gray-600">Select toilet, basin, shower, and taps</p>
+                        <p className="font-semibold">Configuration</p>
+                        <p className="text-xs text-gray-600">Configure only the selected products (agents/numbers and/or audio options)</p>
                       </div>
                     </li>
                     <li className="flex items-center gap-3 p-3 bg-white rounded-lg">
                       <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white font-bold rounded-full">5</span>
                       <div>
-                        <p className="font-semibold">Additions</p>
-                        <p className="text-xs text-gray-600">Add extras and optional items</p>
+                        <p className="font-semibold">Deployment Details</p>
+                        <p className="text-xs text-gray-600">Capture go-live date, venues, contacts, and special requirements</p>
                       </div>
                     </li>
                     <li className="flex items-center gap-3 p-3 bg-white rounded-lg">
-                      <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white font-bold rounded-full">6</span>
+                      <span className="flex items-center justify-center w-8 h-8 bg-emerald-600 text-white font-bold rounded-full">6</span>
                       <div>
-                        <p className="font-semibold">Site Details</p>
-                        <p className="text-xs text-gray-600">Capture access and special requirements</p>
-                      </div>
-                    </li>
-                    <li className="flex items-center gap-3 p-3 bg-white rounded-lg">
-                      <span className="flex items-center justify-center w-8 h-8 bg-emerald-600 text-white font-bold rounded-full">7</span>
-                      <div>
-                        <p className="font-semibold">Summary & Review</p>
-                        <p className="text-xs text-gray-600">Final review before creating quote</p>
+                        <p className="font-semibold">Summary &amp; Review</p>
+                        <p className="text-xs text-gray-600">Final review of selected products, pricing, and terms before creating the quote</p>
                       </div>
                     </li>
                   </ol>
@@ -410,7 +421,7 @@ export default function Settings() {
                     <h3 className="font-bold text-amber-900">Advanced Configuration</h3>
                   </div>
                   <p className="text-sm text-amber-800">
-                    Stages are defined per trade in trade config files. Each of the 12 trades has its own wizard flow.
+                    Multi-product quotes are built at Quotes → New Sync2Dine quote. Commercial defaults live under Platform → Sally offer.
                   </p>
                 </div>
               </div>
