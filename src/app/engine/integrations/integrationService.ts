@@ -15,7 +15,7 @@ import {
 } from './integrationsStore';
 import { saveCompanyProfileToSupabase, initCompanyProfile, getCompanyProfile } from './companyProfileSync';
 import { initOrgOpenAIKey as hydrateOrgOpenAIKey, saveOrgOpenAIKey } from './orgOpenAIKeySync';
-import { fetchOrgIntegrations, putOrgIntegration, testOrgIntegration } from './orgIntegrationsApi';
+import { fetchOrgIntegrations, fetchOrgIntegrationsStatus, putOrgIntegration, testOrgIntegration } from './orgIntegrationsApi';
 import { useCloudPersistence } from '../data/cloudPersist';
 
 type StoreListener = (data: IntegrationsStoreData) => void;
@@ -162,41 +162,58 @@ export const integrationService = {
   },
 
   /**
-   * Hydrate from GET /api/org/integrations and migrate legacy localStorage secrets once.
+   * Hydrate from GET /api/org/integrations/status (Supabase + env + runtime).
+   * Falls back to list + voice-config style client probes if status is unavailable.
    */
   async initIntegrationsFromServer(): Promise<void> {
-    const remote = await fetchOrgIntegrations();
-    if (remote?.integrations?.length) {
+    const applyRemote = (remote: Awaited<ReturnType<typeof fetchOrgIntegrationsStatus>>) => {
+      if (!remote?.integrations?.length) return false;
       const store = loadIntegrationsStore();
+      if (typeof window !== 'undefined' && window.location.host.includes('sync2dine.io')) {
+        store.environment = 'production';
+      }
       for (const item of remote.integrations) {
         const id = item.integrationId as IntegrationId;
         if (!store.integrations[id]) continue;
+        const current = store.integrations[id];
         const values = {
-          ...store.integrations[id].values,
+          ...current.values,
           ...item.values,
         };
-        // Surface masked secrets so the UI shows "configured"
         for (const [k, hint] of Object.entries(item.configuredFields || {})) {
+          // Never overwrite a real typed secret with a mask/placeholder
+          if (integrationService.isLiveOpenAIApiKey(values[k]) && isSecretIntegrationField(k)) {
+            continue;
+          }
           if (!values[k]?.trim() || isPlaceholderSecret(values[k])) {
             values[k] = hint;
           }
         }
         store.integrations[id] = {
-          ...store.integrations[id],
-          enabled: item.enabled,
-          mockMode: item.mockMode,
+          ...current,
+          enabled: item.enabled || item.status === 'connected',
+          mockMode: item.status === 'connected' ? false : item.mockMode,
           status: item.status,
           values,
         };
-        if (id === 'openai' && item.hasSecrets) {
+        if ((id === 'openai' || id === 'vapi' || id === 'elevenlabs') && item.status === 'connected') {
           store.masterMockMode = false;
         }
       }
       saveIntegrationsStore(store);
       serverHydrated = true;
       notify();
+      return true;
+    };
+
+    const statusRemote = await fetchOrgIntegrationsStatus();
+    if (applyRemote(statusRemote)) {
+      await integrationService.migrateLegacySecretsOnce();
+      return;
     }
 
+    const remote = await fetchOrgIntegrations();
+    applyRemote(remote);
     await integrationService.migrateLegacySecretsOnce();
   },
 

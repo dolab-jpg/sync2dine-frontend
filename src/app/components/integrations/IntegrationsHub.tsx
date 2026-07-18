@@ -51,103 +51,115 @@ export default function IntegrationsHub() {
 
   useEffect(() => {
     // #region agent log
-    fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73adb0'},body:JSON.stringify({sessionId:'73adb0',runId:'pre-deploy',hypothesisId:'H4',location:'IntegrationsHub.tsx:mount',message:'IntegrationsHub mounted',data:{path:typeof window!=='undefined'?window.location.pathname:'',host:typeof window!=='undefined'?window.location.host:''},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73adb0'},body:JSON.stringify({sessionId:'73adb0',runId:'hydrate',hypothesisId:'H4',location:'IntegrationsHub.tsx:mount',message:'IntegrationsHub mounted',data:{path:typeof window!=='undefined'?window.location.pathname:'',host:typeof window!=='undefined'?window.location.host:''},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
-    void integrationService.initCompanyProfile().then(() => {
+    void (async () => {
+      if (typeof window !== 'undefined' && window.location.host.includes('sync2dine.io')) {
+        integrationService.setEnvironment('production');
+      }
+      await integrationService.initCompanyProfile();
       const summary = integrationService.getStatusSummary();
       // #region agent log
-      fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73adb0'},body:JSON.stringify({sessionId:'73adb0',runId:'pre-deploy',hypothesisId:'H4',location:'IntegrationsHub.tsx:afterInit',message:'initCompanyProfile finished',data:{summary,hydrated:integrationService.wasServerHydrated()},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73adb0'},body:JSON.stringify({sessionId:'73adb0',runId:'hydrate',hypothesisId:'H4',location:'IntegrationsHub.tsx:afterInit',message:'initCompanyProfile finished',data:{summary,hydrated:integrationService.wasServerHydrated()},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       refresh();
-    });
-    return integrationService.subscribe(refresh);
-  }, [refresh]);
 
-  // Seed Integrations status from server env (testing: keys copied from b-diddies).
-  useEffect(() => {
-    void (async () => {
-      try {
-        const res = await fetch('/api/integrations/voice-config');
-        if (!res.ok) return;
-        const data = await res.json() as {
-          vapi?: { configured?: boolean; region?: string; webhookUrl?: string; voiceId?: string };
-          elevenlabs?: { configured?: boolean; voiceId?: string; modelId?: string };
-          openai?: { configured?: boolean };
-          sip?: { username?: string; domain?: string; did?: string; bridgeUrl?: string; hasPassword?: boolean };
-        };
-        if (data.vapi?.configured) {
-          const cur = integrationService.getInstance('vapi');
-          if (!cur?.values?.privateKey) {
-            integrationService.updateIntegration('vapi', {
-              enabled: true,
-              mockMode: false,
-              status: 'connected',
-              values: {
-                ...(cur?.values ?? {}),
-                region: data.vapi.region || 'eu',
-                webhookUrl: data.vapi.webhookUrl || 'https://app.sync2dine.io/webhooks/vapi',
-                privateKey: '(configured on server)',
-                publicKey: '(configured on server)',
-                phoneNumberId: '(configured on server)',
-                serverSecret: '(configured on server)',
-              },
-            });
+      // Fallback when status endpoint unavailable: seed from voice-config + openai-key
+      if (!integrationService.wasServerHydrated()) {
+        try {
+          const res = await fetch('/api/integrations/voice-config');
+          if (res.ok) {
+            const data = await res.json() as {
+              vapi?: { configured?: boolean; region?: string; webhookUrl?: string; voiceId?: string };
+              elevenlabs?: { configured?: boolean; voiceId?: string; modelId?: string };
+              openai?: { configured?: boolean };
+              sip?: { username?: string; domain?: string; did?: string; bridgeUrl?: string; hasPassword?: boolean };
+            };
+            if (data.vapi?.configured) {
+              const cur = integrationService.getInstance('vapi');
+              integrationService.updateIntegration('vapi', {
+                enabled: true,
+                mockMode: false,
+                status: 'connected',
+                values: {
+                  ...(cur?.values ?? {}),
+                  region: data.vapi.region || cur?.values?.region || 'eu',
+                  webhookUrl: data.vapi.webhookUrl || cur?.values?.webhookUrl || '',
+                  privateKey: cur?.values?.privateKey || '(configured on server)',
+                  publicKey: cur?.values?.publicKey || '(configured on server)',
+                  phoneNumberId: cur?.values?.phoneNumberId || '(configured on server)',
+                  serverSecret: cur?.values?.serverSecret || '(configured on server)',
+                },
+              });
+            }
+            if (data.elevenlabs?.configured) {
+              const cur = integrationService.getInstance('elevenlabs');
+              integrationService.updateIntegration('elevenlabs', {
+                enabled: true,
+                mockMode: false,
+                status: 'connected',
+                values: {
+                  ...(cur?.values ?? {}),
+                  voiceId: data.elevenlabs.voiceId || cur?.values?.voiceId || '',
+                  modelId: data.elevenlabs.modelId || cur?.values?.modelId || '',
+                  apiKey: cur?.values?.apiKey || '(configured on server)',
+                },
+              });
+            }
+            if (data.sip?.username || data.sip?.did) {
+              const cur = integrationService.getInstance('voice_telephony');
+              integrationService.updateIntegration('voice_telephony', {
+                enabled: true,
+                mockMode: false,
+                status: 'connected',
+                values: {
+                  ...(cur?.values ?? {}),
+                  provider: 'soho66',
+                  sipUsername: data.sip.username || cur?.values?.sipUsername || '',
+                  sipDomain: data.sip.domain || cur?.values?.sipDomain || 'sbc.soho66.co.uk',
+                  did: data.sip.did || cur?.values?.did || '',
+                  sipBridgeUrl: data.sip.bridgeUrl || cur?.values?.sipBridgeUrl || '',
+                  sipPassword: data.sip.hasPassword
+                    ? (cur?.values?.sipPassword || '(configured on server)')
+                    : (cur?.values?.sipPassword || ''),
+                },
+              });
+            }
           }
-        }
-        if (data.elevenlabs?.configured) {
-          const cur = integrationService.getInstance('elevenlabs');
-          if (!cur?.values?.voiceId && !cur?.values?.apiKey) {
-            integrationService.updateIntegration('elevenlabs', {
-              enabled: true,
-              mockMode: false,
-              status: 'connected',
-              values: {
-                ...(cur?.values ?? {}),
-                voiceId: data.elevenlabs.voiceId || '',
-                modelId: data.elevenlabs.modelId || '',
-                apiKey: '(configured on server)',
-              },
-            });
+          const brainRes = await fetch('/api/org/openai-key');
+          if (brainRes.ok) {
+            const brain = await brainRes.json() as {
+              configured?: boolean;
+              deepseekConfigured?: boolean;
+              provider?: string;
+            };
+            if (brain.provider === 'deepseek' || brain.deepseekConfigured || brain.configured) {
+              const cur = integrationService.getInstance('openai');
+              integrationService.updateIntegration('openai', {
+                enabled: true,
+                mockMode: false,
+                status: 'connected',
+                values: {
+                  ...(cur?.values ?? {}),
+                  provider: brain.provider === 'deepseek' ? 'deepseek' : (cur?.values?.provider || 'openai'),
+                  ...(brain.configured && !integrationService.isLiveOpenAIApiKey(cur?.values?.apiKey)
+                    ? { apiKey: '(configured on server)' }
+                    : {}),
+                  ...(brain.deepseekConfigured && !integrationService.isLiveOpenAIApiKey(cur?.values?.deepseekApiKey)
+                    ? { deepseekApiKey: '(configured on server)' }
+                    : {}),
+                },
+              });
+              integrationService.setMasterMockMode(false);
+            }
           }
+          refresh();
+        } catch {
+          /* offline */
         }
-        if (data.openai?.configured) {
-          const cur = integrationService.getInstance('openai');
-          if (!cur?.values?.apiKey) {
-            integrationService.updateIntegration('openai', {
-              enabled: true,
-              mockMode: false,
-              status: 'connected',
-              values: {
-                ...(cur?.values ?? {}),
-                provider: 'openai',
-                apiKey: '(configured on server)',
-              },
-            });
-            integrationService.setMasterMockMode(false);
-          }
-        }
-        if (data.sip?.username || data.sip?.did) {
-          const cur = integrationService.getInstance('voice_telephony');
-          integrationService.updateIntegration('voice_telephony', {
-            enabled: true,
-            mockMode: false,
-            status: 'connected',
-            values: {
-              ...(cur?.values ?? {}),
-              provider: 'soho66',
-              sipUsername: data.sip.username || cur?.values?.sipUsername || '',
-              sipDomain: data.sip.domain || cur?.values?.sipDomain || 'sbc.soho66.co.uk',
-              did: data.sip.did || cur?.values?.did || '',
-              sipBridgeUrl: data.sip.bridgeUrl || cur?.values?.sipBridgeUrl || '',
-              sipPassword: data.sip.hasPassword ? '(configured on server)' : (cur?.values?.sipPassword || ''),
-            },
-          });
-        }
-        refresh();
-      } catch {
-        /* offline */
       }
     })();
+    return integrationService.subscribe(refresh);
   }, [refresh]);
 
   const filtered = INTEGRATION_REGISTRY.filter(
