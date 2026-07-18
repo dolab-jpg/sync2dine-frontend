@@ -21,8 +21,9 @@ import {
   syncData,
   setRequestOrgId,
   updateOutboundJob,
+  expireStaleOpenCalls,
 } from './data-store';
-import { resolveOrgIdForRequest } from './auth';
+import { resolveOrgIdForRequest, isAuthEnforced, requireAuth } from './auth';
 import { OpenAIConnectionError } from './openai-connection';
 import { getOrganizationByPhoneDid } from './organizations';
 import { handleChannelInbound } from './channel-inbound-handler';
@@ -34,6 +35,9 @@ import {
   type CallEvent,
   type OutboundCampaignTemplate,
 } from './telephony';
+import { enrichCallListRow } from './call-recording-artifacts';
+import { resolveCallPlaybackUrl, ingestCallRecording } from './call-recording-store';
+import { refreshCallFromProvider, refreshCallsMissingArtifacts } from './call-provider-refresh';
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -641,6 +645,11 @@ function buildOutboundTodaySummary(
 }
 
 export async function handleCallsListApi(req: IncomingMessage, res: ServerResponse, url?: URL) {
+  const closed = expireStaleOpenCalls();
+  if (closed > 0) {
+    void refreshCallsMissingArtifacts(3).catch(() => {});
+  }
+
   const store = getDataStore();
   const params = url?.searchParams;
   const limit = Math.min(Math.max(Number(params?.get('limit') ?? 100) || 100, 1), 200);
@@ -685,24 +694,31 @@ export async function handleCallsListApi(req: IncomingMessage, res: ServerRespon
   if (q) {
     filtered = filtered.filter((c) => {
       const name = callPartyName(c, customersById).toLowerCase();
+      const meta = (c.metadata as Record<string, unknown> | undefined) || {};
       const hay = [
         name,
         String(c.id ?? ''),
         String(c.from ?? ''),
         String(c.to ?? ''),
+        String(meta.partyPhone ?? ''),
+        String(meta.lineDid ?? ''),
         String(c.outcome ?? ''),
         String(c.intent ?? ''),
         String(c.contactName ?? ''),
         String(c.customerId ?? ''),
       ].join(' ').toLowerCase();
       if (hay.includes(q)) return true;
-      if (qDigits && (digitsOnly(c.from).includes(qDigits) || digitsOnly(c.to).includes(qDigits))) return true;
+      if (qDigits && (
+        digitsOnly(c.from).includes(qDigits)
+        || digitsOnly(c.to).includes(qDigits)
+        || digitsOnly(meta.partyPhone).includes(qDigits)
+      )) return true;
       return false;
     });
   }
 
   const total = filtered.length;
-  const page = filtered.slice(offset, offset + limit).map((c) => ({
+  const page = filtered.slice(offset, offset + limit).map((c) => enrichCallListRow({
     ...c,
     contactName: callPartyName(c, customersById) || c.contactName,
     isGuest: isGuestCall(c, customersById),
@@ -711,7 +727,7 @@ export async function handleCallsListApi(req: IncomingMessage, res: ServerRespon
   }));
 
   const inboundGuestCount = filtered.filter((c) => String(c.direction ?? '') !== 'outbound' && isGuestCall(c, customersById)).length;
-  const withRecordingCount = filtered.filter((c) => /^https?:\/\//i.test(String(c.recordingUrl ?? ''))).length;
+  const withRecordingCount = filtered.filter((c) => Boolean(enrichCallListRow(c).hasRecording)).length;
   const outboundToday = buildOutboundTodaySummary(store.calls as Array<Record<string, unknown>>, customersById);
 
   sendJson(res, 200, {
@@ -736,7 +752,72 @@ export async function handleCallDetailApi(_req: IncomingMessage, res: ServerResp
     sendJson(res, 404, { error: 'Call not found' });
     return;
   }
-  sendJson(res, 200, { call });
+  sendJson(res, 200, { call: enrichCallListRow(call) });
+}
+
+export async function handleCallRecordingApi(req: IncomingMessage, res: ServerResponse, callId: string) {
+  if (isAuthEnforced() && !requireAuth(req)) {
+    sendJson(res, 401, { error: 'Unauthorized' });
+    return;
+  }
+  const call = getCallById(callId);
+  if (!call) {
+    sendJson(res, 404, { error: 'Call not found' });
+    return;
+  }
+
+  if (!call.recordingStoragePath && (call.recordingUrl || call.stereoRecordingUrl)) {
+    await ingestCallRecording({
+      callId,
+      urls: {
+        recordingUrl: call.recordingUrl ? String(call.recordingUrl) : undefined,
+        stereoRecordingUrl: call.stereoRecordingUrl ? String(call.stereoRecordingUrl) : undefined,
+      },
+    }).catch(() => {});
+  }
+
+  const download = (() => {
+    try {
+      const u = new URL(req.url || '', 'http://localhost');
+      return u.searchParams.get('download') === '1';
+    } catch {
+      return false;
+    }
+  })();
+
+  const playback = await resolveCallPlaybackUrl(callId);
+  if (!playback.url) {
+    sendJson(res, 404, {
+      error: 'No recording available',
+      hint: 'Use POST /api/calls/:id/refresh-from-provider if this call has a Vapi id',
+    });
+    return;
+  }
+
+  res.statusCode = 302;
+  res.setHeader('Location', playback.url);
+  res.setHeader('Cache-Control', 'private, max-age=60');
+  if (download) {
+    res.setHeader('Content-Disposition', `attachment; filename="call-${callId}.audio"`);
+  }
+  res.end();
+}
+
+export async function handleCallRefreshFromProviderApi(
+  req: IncomingMessage,
+  res: ServerResponse,
+  callId: string,
+) {
+  if (isAuthEnforced() && !requireAuth(req)) {
+    sendJson(res, 401, { error: 'Unauthorized' });
+    return;
+  }
+  const result = await refreshCallFromProvider(callId);
+  const status = result.ok ? 200 : (result.found ? 502 : 404);
+  sendJson(res, status, {
+    ...result,
+    call: result.found ? enrichCallListRow(getCallById(callId) || { id: callId }) : undefined,
+  });
 }
 
 export async function handleMockCallApi(req: IncomingMessage, res: ServerResponse) {
@@ -816,6 +897,16 @@ export async function handlePhoneRoutes(
   }
   if (pathname === '/api/calls/mock' && req.method === 'POST') {
     await handleMockCallApi(req, res);
+    return true;
+  }
+  const recordingMatch = pathname.match(/^\/api\/calls\/([^/]+)\/recording$/);
+  if (recordingMatch && req.method === 'GET') {
+    await handleCallRecordingApi(req, res, decodeURIComponent(recordingMatch[1]));
+    return true;
+  }
+  const refreshMatch = pathname.match(/^\/api\/calls\/([^/]+)\/refresh-from-provider$/);
+  if (refreshMatch && req.method === 'POST') {
+    await handleCallRefreshFromProviderApi(req, res, decodeURIComponent(refreshMatch[1]));
     return true;
   }
   const detailMatch = pathname.match(/^\/api\/calls\/([^/]+)$/);

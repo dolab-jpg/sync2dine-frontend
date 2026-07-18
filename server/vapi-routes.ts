@@ -44,6 +44,13 @@ import {
   toE164Uk,
   vapiFetch,
 } from './vapi-client';
+import {
+  extractRecordingUrls,
+  lineDidForDirection,
+  preferredRecordingUrl,
+} from './call-recording-artifacts';
+import { ingestCallRecording } from './call-recording-store';
+import { getHomeOrgId } from './home-org';
 import { buildStaffOrchBody } from './phone-session';
 import { buildVapiAssistantForParty } from './vapi-assistant';
 import { resolveTransferDestination, resolveTransferNumber } from './transfer-numbers';
@@ -175,6 +182,71 @@ function partyPhoneFromCall(call: Record<string, unknown> | undefined): string {
   return toE164Uk(from || customerNumber || to);
 }
 
+/** Fill empty from/to/partyPhone/lineDid on an existing call when later webhooks carry CLI. */
+function backfillCallIdentity(
+  callId: string,
+  vapiCall: Record<string, unknown>,
+  metaIn: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const existing = getCallById(callId);
+  if (!existing) return existing as unknown as Record<string, unknown>;
+  const existingMeta = (existing.metadata as Record<string, unknown> | undefined) || {};
+  const directionRaw = String(vapiCall.type || existing.direction || '').toLowerCase();
+  const direction = directionRaw.includes('outbound') ? 'outbound' : String(existing.direction || 'inbound');
+  const partyPhone = partyPhoneFromCall(vapiCall)
+    || toE164Uk(String(metaIn.partyPhone || existingMeta.partyPhone || ''));
+  const lineDid = lineDidForDirection(
+    direction,
+    vapiCall,
+    String(process.env.SOHO66_FROM_NUMBER || existingMeta.lineDid || ''),
+  );
+  const fromEmpty = !String(existing.from || '').trim();
+  const toEmpty = !String(existing.to || '').trim();
+  const partyEmpty = !String(existingMeta.partyPhone || '').trim();
+  if (!partyPhone && !lineDid && !fromEmpty && !toEmpty) {
+    return existing;
+  }
+  const from = direction === 'outbound'
+    ? (String(existing.from || '').trim() || lineDid)
+    : (String(existing.from || '').trim() || partyPhone);
+  const to = direction === 'outbound'
+    ? (String(existing.to || '').trim() || partyPhone)
+    : (String(existing.to || '').trim() || lineDid);
+
+  let contactName = existing.contactName;
+  let customerId = existing.customerId;
+  if (partyPhone && partyEmpty) {
+    const identity = resolvePhoneCallerIdentity(partyPhone);
+    if (identity.kind === 'customer' && partyPhone) {
+      const guest = ensureGuestCustomerForCall(partyPhone, callId);
+      customerId = guest.customerId;
+      contactName = guest.contactName;
+    } else {
+      const resolved = resolveContactByPhone(partyPhone);
+      customerId = resolved.customerId ?? customerId;
+      contactName = identity.kind !== 'customer'
+        ? identity.name
+        : (resolved.customerName || resolved.contactName || contactName);
+    }
+  }
+
+  return saveCall({
+    id: callId,
+    providerCallId: String(existing.providerCallId || vapiCall.id || ''),
+    ...(fromEmpty || partyPhone ? { from } : {}),
+    ...(toEmpty || lineDid ? { to } : {}),
+    ...(contactName ? { contactName } : {}),
+    ...(customerId != null ? { customerId } : {}),
+    metadata: {
+      ...existingMeta,
+      ...metaIn,
+      vapiCallId: String(existingMeta.vapiCallId || vapiCall.id || ''),
+      ...(partyPhone ? { partyPhone } : {}),
+      ...(lineDid ? { lineDid } : {}),
+    },
+  });
+}
+
 function extractMonitorUrls(callOrMessage: Record<string, unknown>): {
   listenUrl?: string;
   controlUrl?: string;
@@ -234,17 +306,18 @@ function ensureCallFromVapi(message: Record<string, unknown>): Record<string, un
   const byProvider = getCallByProviderId(vapiId);
   if (byProvider) {
     const merged = mergeOrphanVapiCall(String(byProvider.id), vapiId, metaIn);
+    const patched = backfillCallIdentity(String(merged.id), call, metaIn);
     if (monitor.listenUrl || monitor.controlUrl) {
       return saveCall({
-        id: String(merged.id),
+        id: String(patched.id),
         ...monitor,
         metadata: {
-          ...((merged.metadata as Record<string, unknown> | undefined) || {}),
+          ...((patched.metadata as Record<string, unknown> | undefined) || {}),
           ...monitor,
         },
       });
     }
-    return merged;
+    return patched;
   }
   if (tradeproCallId) {
     const byTrade = getCallById(tradeproCallId);
@@ -253,32 +326,34 @@ function ensureCallFromVapi(message: Record<string, unknown>): Record<string, un
         ...((byTrade.metadata as Record<string, unknown> | undefined) || {}),
         ...metaIn,
       });
+      const patched = backfillCallIdentity(String(merged.id), call, metaIn);
       if (monitor.listenUrl || monitor.controlUrl) {
         return saveCall({
-          id: String(merged.id),
+          id: String(patched.id),
           ...monitor,
           metadata: {
-            ...((merged.metadata as Record<string, unknown> | undefined) || {}),
+            ...((patched.metadata as Record<string, unknown> | undefined) || {}),
             ...monitor,
           },
         });
       }
-      return merged;
+      return patched;
     }
   }
   const existing = getCallById(vapiId);
   if (existing) {
+    const patched = backfillCallIdentity(String(existing.id), call, metaIn);
     if (monitor.listenUrl || monitor.controlUrl) {
       return saveCall({
-        id: String(existing.id),
+        id: String(patched.id),
         ...monitor,
         metadata: {
-          ...((existing.metadata as Record<string, unknown> | undefined) || {}),
+          ...((patched.metadata as Record<string, unknown> | undefined) || {}),
           ...monitor,
         },
       });
     }
-    return existing;
+    return patched;
   }
 
   const partyPhone = partyPhoneFromCall(call) || toE164Uk(String(metaIn.partyPhone || ''));
@@ -286,6 +361,7 @@ function ensureCallFromVapi(message: Record<string, unknown>): Record<string, un
   const directionRaw = String(call.type || '').toLowerCase();
   const direction = directionRaw.includes('outbound') ? 'outbound' : 'inbound';
   const callId = tradeproCallId || vapiId;
+  const lineDid = lineDidForDirection(direction, call, String(process.env.SOHO66_FROM_NUMBER || ''));
 
   let customerId: string | null = null;
   let contactName = identity.kind !== 'customer' ? identity.name : 'Guest';
@@ -306,10 +382,8 @@ function ensureCallFromVapi(message: Record<string, unknown>): Record<string, un
     providerCallId: vapiId,
     provider: 'vapi',
     direction,
-    from: direction === 'outbound'
-      ? String(process.env.SOHO66_FROM_NUMBER || '')
-      : partyPhone,
-    to: direction === 'outbound' ? partyPhone : String(process.env.SOHO66_FROM_NUMBER || ''),
+    from: direction === 'outbound' ? lineDid : partyPhone,
+    to: direction === 'outbound' ? partyPhone : lineDid,
     status: 'in_progress',
     transcript: [],
     startedAt: new Date().toISOString(),
@@ -322,6 +396,7 @@ function ensureCallFromVapi(message: Record<string, unknown>): Record<string, un
       vapiCallId: vapiId,
       tradeproCallId: tradeproCallId || undefined,
       partyPhone,
+      lineDid,
       callerKind: identity.kind,
       callerRole: identity.role,
       phoneAuth: identity.needsPin ? 'pending' : 'n/a',
@@ -355,6 +430,11 @@ function mergeOrphanVapiCall(
     providerCallId: vapiId,
     provider: 'vapi',
     ...(orphan?.recordingUrl && !primary?.recordingUrl ? { recordingUrl: orphan.recordingUrl } : {}),
+    ...(orphan?.stereoRecordingUrl && !primary?.stereoRecordingUrl
+      ? { stereoRecordingUrl: orphan.stereoRecordingUrl }
+      : {}),
+    ...(orphan?.from && !primary?.from ? { from: orphan.from } : {}),
+    ...(orphan?.to && !primary?.to ? { to: orphan.to } : {}),
     ...(orphan?.contactName && !primary?.contactName ? { contactName: orphan.contactName } : {}),
     ...(orphan?.customerId && !primary?.customerId ? { customerId: orphan.customerId } : {}),
     transcript: mergedTranscript,
@@ -362,6 +442,20 @@ function mergeOrphanVapiCall(
       ...primaryMeta,
       vapiCallId: vapiId,
       tradeproCallId: tradeproId,
+      ...(primaryMeta.partyPhone
+        || ((orphan?.metadata as Record<string, unknown> | undefined)?.partyPhone)
+        ? {
+            partyPhone: primaryMeta.partyPhone
+              || ((orphan?.metadata as Record<string, unknown> | undefined)?.partyPhone),
+          }
+        : {}),
+      ...(primaryMeta.lineDid
+        || ((orphan?.metadata as Record<string, unknown> | undefined)?.lineDid)
+        ? {
+            lineDid: primaryMeta.lineDid
+              || ((orphan?.metadata as Record<string, unknown> | undefined)?.lineDid),
+          }
+        : {}),
     },
   });
 
@@ -432,12 +526,14 @@ function finalizeVapiCall(
     || (message.analysis as Record<string, unknown> | undefined)?.summary
     || '',
   ).trim();
-  const recordingUrl = String(
-    artifact?.recordingUrl
-    || message.recordingUrl
-    || '',
-  ).trim() || undefined;
+  const extracted = extractRecordingUrls(message);
+  const recordingUrl = preferredRecordingUrl(extracted)
+    || String(artifact?.recordingUrl || message.recordingUrl || '').trim()
+    || undefined;
+  const stereoRecordingUrl = extracted.stereoRecordingUrl;
+  const monoRecordingUrl = extracted.recordingUrl;
   const endedReason = String(message.endedReason || message.ended_reason || message.reason || '');
+  const cost = message.cost ?? (message.costBreakdown as Record<string, unknown> | undefined)?.total;
 
   const after = getCallById(callId);
   const afterMeta = (after?.metadata as Record<string, unknown> | undefined) || {};
@@ -467,26 +563,43 @@ function finalizeVapiCall(
     return 'Outbound call completed (no summary from provider).';
   })();
 
+  const lineDid = String(afterMeta.lineDid || '').trim()
+    || lineDidForDirection(String(after?.direction || 'inbound'), message.call as Record<string, unknown> | undefined);
+
   saveCall({
     id: callId,
     status: 'completed',
     endedAt: new Date().toISOString(),
-    recordingUrl: recordingUrl || (after?.recordingUrl as string | undefined),
+    recordingUrl: monoRecordingUrl || recordingUrl || (after?.recordingUrl as string | undefined),
+    ...(stereoRecordingUrl ? { stereoRecordingUrl } : {}),
     outcome: disposition || endedReason || (after?.outcome as string | undefined),
     transferredTo,
     sentiment: after ? computeCallSentiment(after) : undefined,
     durationSec: after ? computeCallDurationSec(after) : undefined,
     metadata: {
       ...afterMeta,
+      partyPhone: afterMeta.partyPhone || partyPhone || undefined,
+      lineDid: lineDid || afterMeta.lineDid,
       vapiEndedReason: endedReason || undefined,
       vapiSummary: summary || undefined,
+      ...(cost != null ? { vapiCost: cost } : {}),
       disposition,
       brief: afterMeta.brief ?? afterMeta.aim,
     },
   });
 
+  const finalProviderUrl = monoRecordingUrl || stereoRecordingUrl || recordingUrl;
   // Backfill recordingUrl onto any orders placed during this call (9D)
-  void backfillOrderRecordingFromCall(callId, recordingUrl || (after?.recordingUrl as string | undefined));
+  void backfillOrderRecordingFromCall(callId, finalProviderUrl || (after?.recordingUrl as string | undefined));
+  void ingestCallRecording({
+    callId,
+    orgId: getHomeOrgId(),
+    urls: {
+      recordingUrl: monoRecordingUrl || recordingUrl,
+      stereoRecordingUrl,
+    },
+    messageOrCall: message,
+  });
 
   // Push call.ended analytics event (5E)
   void import('./analytics-routes').then(({ pushAnalyticsEvent }) => {
@@ -496,7 +609,7 @@ function finalizeVapiCall(
       direction: after?.direction ?? 'inbound',
       durationSec: after ? computeCallDurationSec(after) : undefined,
       outcome: disposition || endedReason || undefined,
-      recordingUrl: recordingUrl || undefined,
+      recordingUrl: finalProviderUrl || undefined,
     });
   }).catch(() => {});
 

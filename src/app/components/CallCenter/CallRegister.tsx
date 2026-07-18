@@ -37,9 +37,21 @@ type RegisterCall = {
   isGuest?: boolean;
   durationSec?: number | null;
   recordingUrl?: string;
+  recordingStoragePath?: string;
+  displayPhone?: string;
+  lineDid?: string;
+  partyPhone?: string;
+  hasRecording?: boolean;
+  recordingPlaybackPath?: string;
   startedAt?: string;
   endedAt?: string;
   transcript?: CallTurn[];
+  metadata?: {
+    partyPhone?: string;
+    lineDid?: string;
+    vapiSummary?: string;
+    vapiEndedReason?: string;
+  };
 };
 
 type OutboundTodayRow = { to: string; name: string; count: number };
@@ -391,19 +403,34 @@ export default function CallRegister() {
                   <p className="font-bold text-slate-900">{displayName(selected)}</p>
                   <p className="font-mono text-sm text-slate-600">
                     <Phone className="mr-1 inline h-3.5 w-3.5" />
-                    {formatPhone(selected.direction === 'outbound' ? selected.to : selected.from)}
+                    {formatPhone(
+                      selected.displayPhone
+                      || selected.partyPhone
+                      || selected.metadata?.partyPhone
+                      || (selected.direction === 'outbound' ? selected.to : selected.from),
+                    )}
                   </p>
+                  {(selected.lineDid || selected.metadata?.lineDid) && (
+                    <p className="text-xs text-slate-500">
+                      Our line: {formatPhone(selected.lineDid || selected.metadata?.lineDid)}
+                    </p>
+                  )}
                   {selected.isGuest || /^guest$/i.test(String(selected.contactName ?? '')) ? (
                     <Badge className="bg-amber-500 text-white">Guest / Private — number registered</Badge>
                   ) : null}
                 </div>
                 <CallRecordingPlayer
                   recordingUrl={selected.recordingUrl}
+                  playbackPath={
+                    selected.recordingPlaybackPath
+                    || (selected.hasRecording || selected.recordingUrl || selected.recordingStoragePath
+                      ? `/api/calls/${encodeURIComponent(selected.id)}/recording`
+                      : undefined)
+                  }
+                  callId={selected.id}
+                  showEmptyState
                   testId={`call-register-recording-${selected.id}`}
                 />
-                {!selected.recordingUrl ? (
-                  <p className="text-xs text-slate-500">No recording URL on this call yet.</p>
-                ) : null}
                 <CallTranscriptTurns turns={selected.transcript} maxHeightClass="max-h-[360px]" />
                 <div className="flex flex-wrap gap-2">
                   {selected.customerId ? (

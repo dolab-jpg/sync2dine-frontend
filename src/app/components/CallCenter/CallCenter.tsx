@@ -55,12 +55,27 @@ interface CallRecord {
   campaignTemplate?: string;
   transferredTo?: string;
   recordingUrl?: string;
+  stereoRecordingUrl?: string;
+  recordingStoragePath?: string;
+  displayPhone?: string;
+  lineDid?: string;
+  partyPhone?: string;
+  hasRecording?: boolean;
+  recordingPlaybackPath?: string;
+  providerCallId?: string;
   metadata?: {
     callerKind?: 'customer' | 'staff' | 'foreman';
     callerRole?: string;
     phoneAuth?: 'verified' | 'pending' | 'locked' | 'n/a';
     callLanguage?: string;
     transferNumber?: string;
+    partyPhone?: string;
+    lineDid?: string;
+    vapiCallId?: string;
+    vapiSummary?: string;
+    vapiEndedReason?: string;
+    vapiCost?: number | string;
+    disposition?: string;
   };
 }
 
@@ -210,11 +225,26 @@ const CAMPAIGN_TEMPLATES = [
 ];
 
 function formatPhone(phone?: string | null): string {
-  if (!phone) return 'Unknown';
+  if (!phone) return 'Withheld / not provided';
   if (phone.startsWith('44') && phone.length >= 12) {
     return `+${phone.slice(0, 2)} ${phone.slice(2, 6)} ${phone.slice(6)}`;
   }
   return phone;
+}
+
+function callPartyDisplay(call: CallRecord): string {
+  return call.displayPhone
+    || call.partyPhone
+    || call.metadata?.partyPhone
+    || (call.direction === 'outbound' ? call.to : call.from)
+    || '';
+}
+
+function callLineDid(call: CallRecord): string {
+  return call.lineDid
+    || call.metadata?.lineDid
+    || (call.direction === 'outbound' ? call.from : call.to)
+    || '';
 }
 
 function formatTime(iso: string): string {
@@ -250,6 +280,7 @@ export default function CallCenter() {
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [outboundQueue, setOutboundQueue] = useState<OutboundJob[]>([]);
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
+  const [refreshingCallId, setRefreshingCallId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [togglingAgent, setTogglingAgent] = useState(false);
 
@@ -391,6 +422,30 @@ export default function CallCenter() {
       toast.error('Failed to load calls');
     }
   }, []);
+
+  const refreshCallFromProvider = useCallback(async (callId: string) => {
+    setRefreshingCallId(callId);
+    try {
+      const res = await fetch(`/api/calls/${encodeURIComponent(callId)}/refresh-from-provider`, {
+        method: 'POST',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || 'Could not refresh from provider');
+        return;
+      }
+      toast.success(
+        data.recordingUrl || data.recordingStoragePath
+          ? 'Call refreshed — recording updated'
+          : 'Call refreshed from provider',
+      );
+      await fetchCalls();
+    } catch {
+      toast.error('Refresh failed');
+    } finally {
+      setRefreshingCallId(null);
+    }
+  }, [fetchCalls]);
 
   const fetchVoices = useCallback(async () => {
     try {
@@ -766,7 +821,7 @@ export default function CallCenter() {
     }
   }
 
-  function openLeadForm(call: Pick<CallRecord, 'id' | 'from' | 'contactName'>) {
+  function openLeadForm(call: Pick<CallRecord, 'id' | 'from' | 'contactName' | 'displayPhone' | 'partyPhone' | 'metadata'>) {
     setLeadFormCallId(call.id);
     setLeadFormName(call.contactName && call.contactName !== 'Guest' ? call.contactName : '');
     setLeadFormEmail('');
@@ -777,19 +832,20 @@ export default function CallCenter() {
     setLeadFormCallId(null);
   }
 
-  async function submitLeadFromCall(call: Pick<CallRecord, 'id' | 'from'>) {
+  async function submitLeadFromCall(call: Pick<CallRecord, 'id' | 'from' | 'displayPhone' | 'partyPhone' | 'metadata'>) {
     if (!leadFormName.trim()) {
       toast.error('Enter the caller\'s name to create a lead');
       return;
     }
     setCreatingLead(true);
     try {
+      const phone = call.displayPhone || call.partyPhone || call.metadata?.partyPhone || call.from || '';
       const res = await fetch('/api/leads/from-call', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           callId: call.id,
-          phone: call.from,
+          phone,
           name: leadFormName.trim(),
           email: leadFormEmail.trim() || undefined,
           notes: leadFormNotes.trim() || undefined,
@@ -1075,6 +1131,12 @@ export default function CallCenter() {
               )}
               {calls.map(call => {
                 const expanded = expandedCallId === call.id;
+                const partyPhone = callPartyDisplay(call);
+                const lineDid = callLineDid(call);
+                const playbackPath = call.recordingPlaybackPath
+                  || (call.hasRecording || call.recordingUrl || call.recordingStoragePath
+                    ? `/api/calls/${encodeURIComponent(call.id)}/recording`
+                    : undefined);
                 return (
                   <div key={call.id} className="border rounded-lg overflow-hidden">
                     <button
@@ -1087,8 +1149,8 @@ export default function CallCenter() {
                           {call.direction === 'inbound'
                             ? <PhoneIncoming className="w-4 h-4 text-green-600 shrink-0" />
                             : <PhoneOutgoing className="w-4 h-4 text-blue-600 shrink-0" />}
-                          <span className="font-medium text-sm truncate">{call.contactName ?? formatPhone(call.from)}</span>
-                          <span className="text-xs text-slate-400">{formatPhone(call.from)}</span>
+                          <span className="font-medium text-sm truncate">{call.contactName ?? formatPhone(partyPhone)}</span>
+                          <span className="text-xs text-slate-400">{formatPhone(partyPhone)}</span>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-xs text-slate-400">{formatTime(call.startedAt)}</span>
@@ -1098,6 +1160,11 @@ export default function CallCenter() {
                       </div>
                       <div className="flex gap-2 mt-2 flex-wrap">
                         {call.outcome && <Badge variant="outline" className="text-xs">{call.outcome}</Badge>}
+                        {call.outcome === 'stale_timeout' && (
+                          <Badge variant="secondary" className="text-xs">
+                            Closed without provider hang-up
+                          </Badge>
+                        )}
                         {call.sentiment && (
                           <Badge
                             variant={call.sentiment === 'negative' ? 'destructive' : 'secondary'}
@@ -1139,18 +1206,86 @@ export default function CallCenter() {
                     </button>
                     {expanded && (
                       <div className="border-t p-3 bg-slate-50 space-y-3">
-                        <div className="flex items-center gap-2 p-2 rounded-md bg-white border">
-                          <Phone className="w-4 h-4 text-slate-400 shrink-0" />
-                          <span className="text-xs text-slate-500">Caller number:</span>
-                          <span className="font-mono font-semibold text-sm text-slate-900">{formatPhone(call.from)}</span>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-white border">
+                            <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                            <div className="min-w-0">
+                              <span className="text-xs text-slate-500">
+                                {call.direction === 'outbound' ? 'Called number:' : 'Caller number:'}
+                              </span>
+                              <p className="font-mono font-semibold text-sm text-slate-900 truncate">
+                                {formatPhone(partyPhone)}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-white border">
+                            <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                            <div className="min-w-0">
+                              <span className="text-xs text-slate-500">Our line (DID):</span>
+                              <p className="font-mono font-semibold text-sm text-slate-900 truncate">
+                                {formatPhone(lineDid)}
+                              </p>
+                            </div>
+                          </div>
                         </div>
+                        {(call.metadata?.vapiSummary || call.metadata?.vapiEndedReason || call.metadata?.disposition) && (
+                          <div className="rounded-md border bg-white p-2 space-y-1 text-xs text-slate-600">
+                            {call.metadata?.vapiSummary && (
+                              <p><span className="font-semibold text-slate-700">Summary:</span> {call.metadata.vapiSummary}</p>
+                            )}
+                            {call.metadata?.disposition && (
+                              <p><span className="font-semibold text-slate-700">Disposition:</span> {call.metadata.disposition}</p>
+                            )}
+                            {call.metadata?.vapiEndedReason && (
+                              <p><span className="font-semibold text-slate-700">Ended reason:</span> {call.metadata.vapiEndedReason}</p>
+                            )}
+                            {call.metadata?.vapiCost != null && (
+                              <p><span className="font-semibold text-slate-700">Cost:</span> {String(call.metadata.vapiCost)}</p>
+                            )}
+                          </div>
+                        )}
+                        {(call.providerCallId || call.metadata?.vapiCallId) && (
+                          <p className="text-[11px] font-mono text-slate-400 break-all">
+                            Provider id: {call.providerCallId || call.metadata?.vapiCallId}
+                          </p>
+                        )}
+                        {call.outcome === 'stale_timeout' && (
+                          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2">
+                            Session was closed without a provider hang-up. Try Refresh from provider to recover recording and transcript if still available upstream.
+                          </p>
+                        )}
                         <CallRecordingPlayer
-                          recordingUrl={call.recordingUrl}
+                          recordingUrl={call.recordingUrl || call.stereoRecordingUrl}
+                          playbackPath={playbackPath}
+                          callId={call.id}
+                          showEmptyState
+                          emptyHint={
+                            call.outcome === 'stale_timeout'
+                              ? 'No recording stored. Use Refresh from provider if this was a real Vapi call.'
+                              : undefined
+                          }
+                          onRefreshFromProvider={() => refreshCallFromProvider(call.id)}
+                          refreshing={refreshingCallId === call.id}
                           testId={`callcenter-recording-${call.id}`}
                         />
                         <CallLinkedOrderSync callId={call.id} />
-                        <CallTranscriptTurns turns={call.transcript} agentLabel={agentLabel} />
+                        {Array.isArray(call.transcript) && call.transcript.length > 0 ? (
+                          <CallTranscriptTurns turns={call.transcript} agentLabel={agentLabel} />
+                        ) : (
+                          <p className="text-xs text-slate-500 rounded-md border border-dashed bg-white p-3">
+                            No transcript yet.
+                          </p>
+                        )}
                         <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={refreshingCallId === call.id}
+                            onClick={() => void refreshCallFromProvider(call.id)}
+                          >
+                            <RefreshCw className={`w-4 h-4 mr-2 ${refreshingCallId === call.id ? 'animate-spin' : ''}`} />
+                            Refresh from provider
+                          </Button>
                           {call.customerId ? (
                             <Button
                               size="sm"
