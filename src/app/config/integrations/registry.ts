@@ -74,7 +74,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   {
     id: 'email_oauth',
     name: 'Mailbox OAuth (Gmail / Outlook / Yahoo)',
-    description: 'XOAUTH2 inbox connect — read and send from user mailboxes via IMAP. Create a Google Cloud Web client first (see setup guide below).',
+    description: 'Admin setup for XOAUTH2 inbox connect. After saving credentials here, staff sign in under Communications → Mailbox (Connect with Google / Yahoo).',
     category: 'messaging',
     docsUrl: 'https://console.cloud.google.com/apis/credentials',
     npmPackage: 'google-auth-library',
@@ -82,7 +82,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     setupGuide: {
       title: 'Google Cloud OAuth — create a Web client',
       intro:
-        'A Client ID identifies this app to Google’s OAuth servers. Use Application type “Web application”. Paste the Client ID and Client Secret into the fields below, then staff connect Gmail from Communications → Mailbox.',
+        'A Client ID identifies this app to Google’s OAuth servers. Use Application type “Web application”. Paste the Client ID and Client Secret below (or upload JSON), Save with Enabled on and Mock off, then staff click Connect with Google under Communications → Mailbox.',
       steps: [
         {
           label: 'Application type',
@@ -116,7 +116,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
         },
       ],
       footer:
-        'Easiest: Download JSON from Google Cloud → upload it with the green “Upload client_secret JSON” control above → Save (Enabled on, Mock off). Or paste Client ID + Secret manually. Then Communications → Mailbox → Connect with Google.',
+        'Easiest: Download JSON from Google Cloud → upload it with the green “Upload client_secret JSON” control above → Save (Enabled on, Mock off). Or paste Client ID + Secret manually. Then open Communications → Mailbox and click Connect with Google (or Yahoo once Yahoo Client ID/Secret are filled).',
     },
     fields: [
       { key: 'googleClientId', label: 'Google Client ID', type: 'text', placeholder: '….apps.googleusercontent.com' },
@@ -189,13 +189,43 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   {
     id: 'google_calendar',
     name: 'Google Calendar',
-    description: 'Sync booking confirmations to calendar',
+    description: 'Connect Google Calendar via popup OAuth — booking confirmations and AI invites write events when connected',
     category: 'scheduling',
     docsUrl: 'https://developers.google.com/calendar',
+    setupGuide: {
+      title: 'Google Calendar — enable API and connect',
+      intro:
+        'Uses a separate OAuth consent (calendar events only — not Gmail). You can reuse the same Google Cloud Web client as Mailbox OAuth. After saving Client ID/Secret (or leaving blank to fall back to Mailbox Google credentials), click Connect with Google on this card — a popup opens for sign-in.',
+      steps: [
+        {
+          label: 'Enable Google Calendar API',
+          value: 'https://console.cloud.google.com/apis/library/calendar-json.googleapis.com',
+          note: 'In the same Google Cloud project as your OAuth client.',
+        },
+        {
+          label: 'Authorized redirect URI (required)',
+          value: 'https://app.sync2dine.io/api/calendar/callback',
+          note: 'Add this in addition to the mailbox callback. Must match exactly.',
+        },
+        {
+          label: 'Optional local redirect (dev only)',
+          value: 'http://localhost:3001/api/calendar/callback',
+          note: 'Only if the API runs locally.',
+        },
+        {
+          label: 'Calendar ID',
+          value: 'primary',
+          note: 'Use primary for the user’s main calendar, or a shared calendar ID.',
+        },
+      ],
+      footer:
+        'Client ID/Secret: paste here or reuse Integrations → Mailbox OAuth Google fields. Then click Connect with Google (popup). Bookings and createCalendarEvent will write to this calendar when connected.',
+    },
     fields: [
-      { key: 'clientId', label: 'Client ID', type: 'text' },
-      { key: 'clientSecret', label: 'Client Secret', type: 'password' },
+      { key: 'clientId', label: 'Client ID', type: 'text', placeholder: '….apps.googleusercontent.com' },
+      { key: 'clientSecret', label: 'Client Secret', type: 'password', placeholder: 'GOCSPX-…' },
       { key: 'calendarId', label: 'Calendar ID', type: 'text', placeholder: 'primary' },
+      { key: 'redirectUri', label: 'OAuth Redirect URI (must match Google Console)', type: 'readonly', placeholder: 'https://app.sync2dine.io/api/calendar/callback' },
     ],
   },
   {
@@ -403,6 +433,10 @@ export function getDefaultFieldValues(def: IntegrationDefinition): Record<string
   if (def.id === 'email_oauth') {
     values.microsoftTenantId = 'common';
     values.redirectUri = 'https://app.sync2dine.io/api/mailbox/callback';
+  }
+  if (def.id === 'google_calendar') {
+    values.calendarId = 'primary';
+    values.redirectUri = 'https://app.sync2dine.io/api/calendar/callback';
   }
   if (def.id === 'email_smtp') {
     values.host = 'smtp.gmail.com';

@@ -20,6 +20,7 @@ import { mailboxService, type MailboxConnection } from '../engine/mailbox/mailbo
 import { InboxPanel } from './mailbox/InboxPanel';
 import { EmailComposePanel } from './mailbox/EmailComposePanel';
 import { MailboxConnectPanel } from './mailbox/MailboxConnectPanel';
+import { CalendarConnectPanel } from './calendar/CalendarConnectPanel';
 import { LeadInboxPanel } from './mailbox/LeadInboxPanel';
 import { getActiveOrgId } from '../engine/platform/orgContext';
 import { BDIDDIES_HOME_ORG_ID } from '../engine/platform/homeOrg';
@@ -43,7 +44,11 @@ export default function CommunicationsHub() {
   const tabFromUrl = searchParams.get('tab');
   const templateFromUrl = searchParams.get('template');
   const customerFromUrl = searchParams.get('customerId');
-  const [activeTab, setActiveTab] = useState(tabFromUrl === 'leads' ? 'leads' : 'send');
+  const [activeTab, setActiveTab] = useState(
+    tabFromUrl === 'leads' || tabFromUrl === 'mailbox' || tabFromUrl === 'inbox' || tabFromUrl === 'compose'
+      ? tabFromUrl
+      : 'send',
+  );
   const [logs, setLogs] = useState(messagingHub.getLogs());
   const [sendEmail, setSendEmail] = useState(true);
   const [sendWhatsApp, setSendWhatsApp] = useState(false);
@@ -63,7 +68,9 @@ export default function CommunicationsHub() {
   });
 
   useEffect(() => {
-    if (tabFromUrl === 'leads') setActiveTab('leads');
+    if (tabFromUrl === 'leads' || tabFromUrl === 'mailbox' || tabFromUrl === 'inbox' || tabFromUrl === 'compose') {
+      setActiveTab(tabFromUrl);
+    }
   }, [tabFromUrl]);
 
   useEffect(() => {
@@ -313,8 +320,8 @@ export default function CommunicationsHub() {
 
       <Card className="mb-6 border-teal-200 bg-teal-50/60">
         <CardContent className="p-4 text-sm text-teal-950">
-          Connect platform Gmail under <strong>Mailbox</strong> so Sally can brief inbox and send replies.
-          Use <strong>Write with AI</strong> for free-form company emails (OpenAI). Scheduled sends fire automatically.
+          Open the <strong>Mailbox</strong> tab and click <strong>Connect with Google</strong> or <strong>Connect with Yahoo</strong> to sign in and integrate your inbox
+          (a super admin must configure OAuth under Integrations first). Use <strong>Write with AI</strong> for free-form company emails. Scheduled sends fire automatically.
         </CardContent>
       </Card>
 
@@ -489,12 +496,13 @@ export default function CommunicationsHub() {
           />
         </TabsContent>
 
-        <TabsContent value="mailbox" className="mt-4">
+        <TabsContent value="mailbox" className="mt-4 space-y-4">
           <MailboxConnectPanel
             userId={user.id}
             orgId={mailboxOrgId}
             onConnectionChange={() => void loadMailbox()}
           />
+          <CalendarConnectPanel userId={user.id} orgId={mailboxOrgId} />
         </TabsContent>
 
         <TabsContent value="templates" className="mt-4">

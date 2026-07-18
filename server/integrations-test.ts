@@ -177,9 +177,12 @@ export async function handleIntegrationTest(
         (process.env.YAHOO_OAUTH_CLIENT_ID || secrets.yahooClientId)
         && (process.env.YAHOO_OAUTH_CLIENT_SECRET || secrets.yahooClientSecret)
       );
-      const mock = process.env.INTEGRATIONS_MOCK_MODE !== 'false' && !hasGoogle;
-      if (mock && !hasGoogle && !hasMicrosoft && !hasYahoo) {
-        sendJson(res, 200, { success: true, message: 'Mailbox OAuth ready (mock mode — add Google Client ID/Secret)', status: 'mock' });
+      if (!hasGoogle && !hasMicrosoft && !hasYahoo) {
+        sendJson(res, 200, {
+          success: true,
+          message: 'Mailbox OAuth ready (mock mode — add Google, Microsoft, or Yahoo Client ID/Secret)',
+          status: 'mock',
+        });
         return;
       }
       if (hasGoogle) {
@@ -191,9 +194,10 @@ export async function handleIntegrationTest(
             sendJson(res, 400, { success: false, message: 'Google OAuth client ID invalid', status: 'error' });
             return;
           }
+          const extras = [hasMicrosoft && 'Microsoft', hasYahoo && 'Yahoo'].filter(Boolean);
           sendJson(res, 200, {
             success: true,
-            message: `Google OAuth SDK ready (redirect: ${redirectUri})`,
+            message: `Google OAuth ready (redirect: ${redirectUri})${extras.length ? `; also ${extras.join(', ')}` : ''}`,
             status: 'connected',
             authUrlPreview: authUrl.split('&')[0] + '&...',
           });
@@ -209,9 +213,46 @@ export async function handleIntegrationTest(
       }
       sendJson(res, 200, {
         success: true,
-        message: `Mailbox OAuth configured (${[hasMicrosoft && 'Microsoft', hasYahoo && 'Yahoo'].filter(Boolean).join(', ') || 'saved'})`,
+        message: `Mailbox OAuth configured (${[hasMicrosoft && 'Microsoft', hasYahoo && 'Yahoo'].filter(Boolean).join(', ')}) — staff can Connect under Communications → Mailbox`,
         status: 'connected',
       });
+      return;
+    }
+
+    if (integrationId === 'google_calendar') {
+      saveIntegrationSecrets('google_calendar', values);
+      const { getGoogleCalendarOAuthCredentials, hasGoogleCalendarOAuthConfigured, getCalendarRedirectUri, buildCalendarAuthUrl } =
+        await import('./calendar/google-calendar');
+      if (!hasGoogleCalendarOAuthConfigured()) {
+        sendJson(res, 200, {
+          success: true,
+          message: 'Google Calendar ready once Client ID/Secret are set (or reuse Mailbox OAuth Google credentials)',
+          status: 'mock',
+          redirectUri: getCalendarRedirectUri(),
+        });
+        return;
+      }
+      try {
+        const { clientId } = getGoogleCalendarOAuthCredentials();
+        const authUrl = buildCalendarAuthUrl('integration-test');
+        const clientIdPresent = authUrl.includes('client_id=') && clientId.length > 0;
+        if (!clientIdPresent) {
+          sendJson(res, 400, { success: false, message: 'Google Calendar client ID invalid', status: 'error' });
+          return;
+        }
+        sendJson(res, 200, {
+          success: true,
+          message: `Google Calendar OAuth ready (redirect: ${getCalendarRedirectUri()}) — click Connect with Google on this card`,
+          status: 'connected',
+          redirectUri: getCalendarRedirectUri(),
+        });
+      } catch (err) {
+        sendJson(res, 400, {
+          success: false,
+          message: err instanceof Error ? err.message : 'Google Calendar OAuth test failed',
+          status: 'error',
+        });
+      }
       return;
     }
 

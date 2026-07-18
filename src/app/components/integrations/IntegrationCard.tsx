@@ -4,7 +4,8 @@ import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
-import { ChevronDown, ChevronUp, Copy, ExternalLink, Loader2, Zap } from 'lucide-react';
+import { Link } from 'react-router';
+import { ChevronDown, ChevronUp, Copy, ExternalLink, Loader2, Mail, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import type { IntegrationDefinition, IntegrationInstanceState, IntegrationStatus } from '../../config/integrations/types';
 import { IntegrationFieldForm } from './IntegrationFieldForm';
@@ -12,12 +13,17 @@ import { CompanyLogoUpload } from './CompanyLogoUpload';
 import { GoogleOAuthJsonUpload } from './GoogleOAuthJsonUpload';
 import { integrationService } from '../../engine/integrations/integrationService';
 import { fetchEmbedSnippet } from '../../engine/cyrus/cyrusThreadApi';
-import { PRODUCTION_MAILBOX_REDIRECT_URI } from '../../engine/integrations/googleOAuthClientJson';
+import { PRODUCTION_MAILBOX_REDIRECT_URI, PRODUCTION_CALENDAR_REDIRECT_URI } from '../../engine/integrations/googleOAuthClientJson';
+import { CalendarConnectPanel } from '../calendar/CalendarConnectPanel';
+import { getActiveOrgId } from '../../engine/platform/orgContext';
+import { BDIDDIES_HOME_ORG_ID } from '../../engine/platform/homeOrg';
 
 interface IntegrationCardProps {
   definition: IntegrationDefinition;
   instance: IntegrationInstanceState;
   userName: string;
+  userId?: string;
+  orgId?: string;
   onUpdate: () => void;
   simulateWhatsApp?: (message: string) => Promise<void>;
 }
@@ -36,7 +42,7 @@ const STATUS_LABELS: Record<IntegrationStatus, string> = {
   error: 'Error',
 };
 
-export function IntegrationCard({ definition, instance, userName, onUpdate, simulateWhatsApp }: IntegrationCardProps) {
+export function IntegrationCard({ definition, instance, userName, userId, orgId, onUpdate, simulateWhatsApp }: IntegrationCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [testing, setTesting] = useState(false);
   const [localValues, setLocalValues] = useState(instance.values);
@@ -46,6 +52,8 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
 
   const status = integrationService.getStatus(definition.id);
   const hasCredentials = integrationService.hasCredentials(definition.id, localValues);
+  const resolvedUserId = userId || 'default-user';
+  const resolvedOrgId = orgId || getActiveOrgId() || BDIDDIES_HOME_ORG_ID;
 
   useEffect(() => {
     setLocalValues(instance.values);
@@ -57,6 +65,15 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
       prev.redirectUri === PRODUCTION_MAILBOX_REDIRECT_URI
         ? prev
         : { ...prev, redirectUri: PRODUCTION_MAILBOX_REDIRECT_URI }
+    );
+  }, [definition.id, expanded]);
+
+  useEffect(() => {
+    if (definition.id !== 'google_calendar') return;
+    setLocalValues((prev) =>
+      prev.redirectUri === PRODUCTION_CALENDAR_REDIRECT_URI
+        ? prev
+        : { ...prev, redirectUri: PRODUCTION_CALENDAR_REDIRECT_URI, calendarId: prev.calendarId || 'primary' }
     );
   }, [definition.id, expanded]);
 
@@ -97,6 +114,8 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
           toast.error(inst.lastTestError || `Saved but ${providerLabel} did not connect — check the key`);
         }
         if (inst.lastTestError && inst.status === 'connected') toast.warning(inst.lastTestError);
+      } else if (hasCredentials && definition.id === 'email_oauth') {
+        toast.success('Mailbox OAuth saved — Enabled on, Mock off. Staff: Communications → Mailbox → Connect');
       } else if (hasCredentials) {
         toast.success(`${definition.name} settings saved — live mode enabled`);
       } else {
@@ -187,6 +206,41 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
                 }));
               }}
             />
+          )}
+
+          {definition.id === 'email_oauth' && (
+            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 space-y-3">
+              <div className="flex items-start gap-2">
+                <Mail className="w-4 h-4 mt-0.5 text-emerald-800 shrink-0" />
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-emerald-950">Sign-in is not on this page</p>
+                  <p className="text-xs text-emerald-900/85 leading-relaxed">
+                    This card only stores OAuth client credentials. After you upload/save (Enabled on, Mock off),
+                    staff open <strong>Communications → Mailbox</strong> and click <strong>Connect with Google</strong> or{' '}
+                    <strong>Connect with Yahoo</strong> to sign in and integrate their inbox.
+                  </p>
+                </div>
+              </div>
+              <Button asChild size="sm" className="bg-emerald-700 hover:bg-emerald-800">
+                <Link to="/communications?tab=mailbox">Open Communications → Mailbox</Link>
+              </Button>
+            </div>
+          )}
+
+          {definition.id === 'google_calendar' && (
+            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 space-y-3">
+              <p className="text-sm font-semibold text-emerald-950">Connect Google Calendar</p>
+              <p className="text-xs text-emerald-900/85 leading-relaxed">
+                Save Client ID/Secret below (or reuse Mailbox OAuth Google credentials), then sign in with the popup.
+                This is separate from Gmail mailbox connect.
+              </p>
+              <CalendarConnectPanel
+                userId={resolvedUserId}
+                orgId={resolvedOrgId}
+                compact
+                onConnectionChange={onUpdate}
+              />
+            </div>
           )}
 
           {definition.setupGuide && (

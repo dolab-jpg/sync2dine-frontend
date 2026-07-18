@@ -13,6 +13,7 @@ import { Plus, Edit, Trash2, Settings as SettingsIcon, DollarSign, Sparkles, Plu
 import ImportExportPanel from './settings/ImportExportPanel';
 import IntegrationsHub from './integrations/IntegrationsHub';
 import { MailboxConnectPanel } from './mailbox/MailboxConnectPanel';
+import { CalendarConnectPanel } from './calendar/CalendarConnectPanel';
 import { AIStudioPanel } from './aiStudio/AIStudioPanel';
 import { integrationService } from '../engine/integrations/integrationService';
 import { toast } from 'sonner';
@@ -443,6 +444,7 @@ export default function Settings() {
 
         <TabsContent value="email-inbox" className="space-y-6">
           <MailboxConnectPanel userId={user.id} orgId={mailboxOrgId} />
+          <CalendarConnectPanel userId={user.id} orgId={mailboxOrgId} />
         </TabsContent>
 
         <TabsContent value="import-export" className="space-y-6">

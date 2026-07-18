@@ -11,8 +11,19 @@ import { Calendar, Clock, Mail, MessageSquare, User, MapPin, Phone, Search, User
 import { toast } from 'sonner';
 import { messagingHub } from '../engine/messaging/messagingHub';
 import { renderTemplate } from '../engine/messaging/templateRenderer';
+import { calendarService } from '../engine/calendar/calendarService';
+import { getActiveOrgId } from '../engine/platform/orgContext';
+import { BDIDDIES_HOME_ORG_ID } from '../engine/platform/homeOrg';
 
 type BookingCustomerState = Pick<Customer, 'id' | 'name' | 'email' | 'phone' | 'address'>;
+
+function bookingWindowIso(date: string, time: string): { start: string; end: string } | null {
+  const raw = `${date}T${time.length === 5 ? `${time}:00` : time}`;
+  const start = new Date(raw);
+  if (Number.isNaN(start.getTime())) return null;
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
 
 export default function BookingSystem() {
   const context = useContext(AppContext);
@@ -197,6 +208,31 @@ export default function BookingSystem() {
       } catch (err) {
         console.error('[BookingSystem] confirmation message failed', err);
         toast.error('Booking saved, but confirmation message failed to send');
+      }
+    }
+
+    const windowIso = bookingWindowIso(formData.preferredDate, formData.preferredTime);
+    if (windowIso && context.user?.id) {
+      try {
+        const cal = await calendarService.createEvent(
+          {
+            title: `Site visit — ${customer.name}`,
+            start: windowIso.start,
+            end: windowIso.end,
+            description: appointmentNotes,
+            location: customer.address,
+            attendees: customer.email ? [customer.email] : undefined,
+          },
+          context.user.id,
+          getActiveOrgId() || BDIDDIES_HOME_ORG_ID,
+        );
+        if (cal.ok) {
+          toast.success('Added to Google Calendar');
+        } else if (cal.code !== 'not_connected' && cal.error && !/not connected/i.test(cal.error)) {
+          toast.error(`Calendar: ${cal.error}`);
+        }
+      } catch (err) {
+        console.error('[BookingSystem] calendar event failed', err);
       }
     }
 

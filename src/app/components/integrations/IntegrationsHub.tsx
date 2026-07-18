@@ -15,6 +15,8 @@ import { AppContext } from '../../App';
 import { simulateInboundWhatsApp } from '../../engine/cyrus/cyrusChatService';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
+import { getActiveOrgId } from '../../engine/platform/orgContext';
+import { BDIDDIES_HOME_ORG_ID } from '../../engine/platform/homeOrg';
 
 interface PackageUpdate {
   package: string;
@@ -334,6 +336,8 @@ export default function IntegrationsHub() {
             definition={def}
             instance={store.integrations[def.id]}
             userName={context?.user.name ?? 'Admin'}
+            userId={context?.user.id}
+            orgId={getActiveOrgId() || BDIDDIES_HOME_ORG_ID}
             onUpdate={refresh}
             simulateWhatsApp={def.id === 'whatsapp' ? handleSimulateWhatsApp : undefined}
           />

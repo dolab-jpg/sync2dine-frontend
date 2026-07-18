@@ -51,9 +51,20 @@ export const mailboxService = {
     return data.connections ?? [];
   },
 
-  async startConnect(provider: 'google' | 'microsoft' | 'yahoo', userId?: string, orgId?: string, loginHint?: string, live = false): Promise<{ authUrl?: string; mock?: boolean; connection?: MailboxConnection }> {
+  async startConnect(
+    provider: 'google' | 'microsoft' | 'yahoo',
+    userId?: string,
+    orgId?: string,
+    loginHint?: string,
+    live = false,
+    popup = false,
+  ): Promise<{ authUrl?: string; mock?: boolean; connection?: MailboxConnection; popup?: boolean }> {
     const params = new URLSearchParams({ provider });
     if (loginHint) params.set('loginHint', loginHint);
+    if (popup) {
+      params.set('popup', '1');
+      if (typeof window !== 'undefined') params.set('appOrigin', window.location.origin);
+    }
     const res = await fetch(`/api/mailbox/connect?${params}`, { headers: headers(userId, orgId, live) });
     return res.json();
   },

@@ -21,6 +21,7 @@ import { handlePlatformRoutes } from './platform-routes';
 import { handleStripeRoutes } from './stripe-routes';
 import { handleAuthRoutes } from './auth';
 import { handleMailboxRoutes } from './mailbox-routes';
+import { handleCalendarRoutes } from './calendar-routes';
 import { handlePackageUpdatesRoute } from './mailbox/package-updates';
 import { handleChannelRoutes } from './channel-routes';
 import { handleCyrusRoutes } from './cyrus-routes';
@@ -95,6 +96,8 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
   if (await handleBankingRoutes(req, res, pathname, url)) return;
 
   if (await handleMailboxRoutes(req, res, pathname, url)) return;
+
+  if (await handleCalendarRoutes(req, res, pathname, url)) return;
 
   if (await handlePackageUpdatesRoute(pathname, res)) return;
 

@@ -2,6 +2,7 @@
  * Client-side executors for gap-closing tools (G1–G30).
  */
 import { mailboxService } from '../mailbox/mailboxService';
+import { calendarService } from '../calendar/calendarService';
 import { getActiveOrgId } from '../platform/orgContext';
 import { BDIDDIES_HOME_ORG_ID } from '../platform/homeOrg';
 import { getProject, updateProject } from '../project/projectStore';
@@ -820,24 +821,50 @@ export async function executeGapTool(
 
   if (name === 'createCalendarEvent') {
     const title = str(output.title);
-    const start = str(output.start);
-    const end = str(output.end);
+    const start = str(output.start) || str(output.startAt);
+    const end = str(output.end) || str(output.endAt);
     if (!title || !start || !end) {
       return { action: name, summary: 'Need title, start, and end.', output, executed: false };
     }
     const attendees = Array.isArray(output.attendees) ? output.attendees.map(String) : [];
+    const userId = ctx.userId || ctx.app?.user?.id;
+    const orgId = getActiveOrgId() || BDIDDIES_HOME_ORG_ID;
+
+    let googleEvent: { id: string; htmlLink?: string } | undefined;
+    if (userId) {
+      try {
+        const cal = await calendarService.createEvent(
+          {
+            title,
+            start,
+            end,
+            location: str(output.location),
+            description: str(output.description) || str(output.notes),
+            attendees,
+          },
+          userId,
+          orgId,
+        );
+        if (cal.ok && cal.event) {
+          googleEvent = cal.event;
+        }
+      } catch {
+        // fall through to ICS
+      }
+    }
+
     const ics = buildIcs({
       title,
       start,
       end,
       location: str(output.location),
-      description: str(output.description),
+      description: str(output.description) || str(output.notes),
       attendees,
     });
     const b64 = btoa(unescape(encodeURIComponent(ics)));
     const sendTo = str(output.sendEmailTo) || attendees[0];
     let emailed = false;
-    if (sendTo) {
+    if (sendTo && !googleEvent) {
       const sent = await sendMailWithAttachments(ctx, {
         to: sendTo,
         subject: `Invite: ${title}`,
@@ -845,16 +872,34 @@ export async function executeGapTool(
         attachments: [{ filename: 'invite.ics', mimeType: 'text/calendar', content: b64 }],
       });
       emailed = sent.ok;
+    } else if (sendTo && googleEvent) {
+      const sent = await sendMailWithAttachments(ctx, {
+        to: sendTo,
+        subject: `Invite: ${title}`,
+        body: str(output.description)
+          || `Calendar event created${googleEvent.htmlLink ? `: ${googleEvent.htmlLink}` : '.'}`,
+        attachments: [{ filename: 'invite.ics', mimeType: 'text/calendar', content: b64 }],
+      });
+      emailed = sent.ok;
     }
+
+    const summary = googleEvent
+      ? (emailed
+        ? `Google Calendar event created and invite emailed to ${sendTo}.`
+        : 'Google Calendar event created.')
+      : (emailed ? `Calendar invite emailed to ${sendTo}.` : 'Calendar .ics ready.');
+
     return {
       action: name,
-      summary: emailed ? `Calendar invite emailed to ${sendTo}.` : 'Calendar .ics ready.',
+      summary,
       openRoute: '/cynthia',
       output: {
         ...output,
         icsDataUrl: `data:text/calendar;base64,${b64}`,
         icsFilename: 'invite.ics',
         emailed,
+        googleEventId: googleEvent?.id,
+        googleEventLink: googleEvent?.htmlLink,
       },
       executed: true,
     };

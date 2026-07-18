@@ -588,6 +588,23 @@ function finalizeVapiCall(
     },
   });
 
+  try {
+    // sync finalizeVapiCall — load metering modules without making this function async
+    void Promise.all([import('./usage-overage'), import('./home-org')]).then(([overage, home]) => {
+      const durationSec = after ? computeCallDurationSec(after) : undefined;
+      if (durationSec && durationSec > 0) {
+        overage.recordAiCallMinutes({
+          orgId: String(afterMeta.orgId || home.getHomeOrgId() || DEFAULT_ORG_ID),
+          durationSeconds: durationSec,
+          callId,
+          direction: String(after?.direction || 'inbound'),
+        });
+      }
+    }).catch(() => { /* metering must not break call completion */ });
+  } catch {
+    /* metering must not break call completion */
+  }
+
   const finalProviderUrl = monoRecordingUrl || stereoRecordingUrl || recordingUrl;
   // Backfill recordingUrl onto any orders placed during this call (9D)
   void backfillOrderRecordingFromCall(callId, finalProviderUrl || (after?.recordingUrl as string | undefined));

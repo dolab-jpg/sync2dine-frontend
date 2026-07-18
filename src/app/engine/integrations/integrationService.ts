@@ -12,6 +12,7 @@ import {
   peekLegacyIntegrationSecrets,
   clearLegacyIntegrationSecretsFromLocalStorage,
   isSecretIntegrationField,
+  getIntegrationValues,
 } from './integrationsStore';
 import { saveCompanyProfileToSupabase, initCompanyProfile, getCompanyProfile } from './companyProfileSync';
 import { initOrgOpenAIKey as hydrateOrgOpenAIKey, saveOrgOpenAIKey } from './orgOpenAIKeySync';
@@ -137,6 +138,12 @@ export const integrationService = {
       const microsoft = Boolean(values.microsoftClientId?.trim() && values.microsoftClientSecret?.trim());
       const yahoo = Boolean(values.yahooClientId?.trim() && values.yahooClientSecret?.trim());
       return google || microsoft || yahoo;
+    }
+    if (id === 'google_calendar') {
+      if (values.clientId?.trim() && values.clientSecret?.trim()) return true;
+      // Fall back: Mailbox OAuth Google credentials can power Calendar connect
+      const mail = getIntegrationValues('email_oauth');
+      return Boolean(mail.googleClientId?.trim() && mail.googleClientSecret?.trim());
     }
     if (id === 'company' || id === 'whatsapp') {
       return def.fields.some(f => Boolean(values[f.key]?.trim()));
@@ -275,7 +282,7 @@ export const integrationService = {
     if (integrationService.hasCredentials(id, values)) {
       updates.enabled = true;
       updates.mockMode = false;
-      if (id === 'openai') {
+      if (id === 'openai' || id === 'email_oauth') {
         integrationService.setMasterMockMode(false);
         updates.mockMode = false;
       }

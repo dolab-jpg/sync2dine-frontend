@@ -49,6 +49,7 @@ export function parseGoogleOAuthClientJson(raw: unknown): GoogleOAuthClientJson 
 }
 
 export const PRODUCTION_MAILBOX_REDIRECT_URI = 'https://app.sync2dine.io/api/mailbox/callback';
+export const PRODUCTION_CALENDAR_REDIRECT_URI = 'https://app.sync2dine.io/api/calendar/callback';
 export const PRODUCTION_MAILBOX_ORIGIN = 'https://app.sync2dine.io';
 
 export function validateGoogleOAuthForProduction(parsed: GoogleOAuthClientJson): string[] {
@@ -56,6 +57,11 @@ export function validateGoogleOAuthForProduction(parsed: GoogleOAuthClientJson):
   if (parsed.redirectUris.length && !parsed.redirectUris.includes(PRODUCTION_MAILBOX_REDIRECT_URI)) {
     warnings.push(
       `Redirect URI should include ${PRODUCTION_MAILBOX_REDIRECT_URI} (found: ${parsed.redirectUris.join(', ') || 'none'})`
+    );
+  }
+  if (parsed.redirectUris.length && !parsed.redirectUris.includes(PRODUCTION_CALENDAR_REDIRECT_URI)) {
+    warnings.push(
+      `For Google Calendar connect, also add ${PRODUCTION_CALENDAR_REDIRECT_URI}`
     );
   }
   if (parsed.javascriptOrigins.length && !parsed.javascriptOrigins.includes(PRODUCTION_MAILBOX_ORIGIN)) {

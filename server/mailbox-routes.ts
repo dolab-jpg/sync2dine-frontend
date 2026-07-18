@@ -26,6 +26,7 @@ import {
 import type { MailProviderId, SendMailboxPayload } from './mailbox/types';
 import { verifyToken, extractBearerToken } from './auth';
 import { BDIDDIES_HOME_ORG_ID } from './home-org';
+import { sendOAuthPopupResult } from './oauth-popup';
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -85,7 +86,7 @@ export async function handleMailboxRoutes(
     }
     const loginHint = url.searchParams.get('loginHint') ?? undefined;
 
-    if (!shouldUseLiveMailbox(req)) {
+    if (!shouldUseLiveMailbox(req, provider)) {
       const conn = createConnection({
         orgId,
         userId,
@@ -99,9 +100,17 @@ export async function handleMailboxRoutes(
       return true;
     }
 
-    const state = encodeOAuthState({ userId, orgId, provider, ts: Date.now() });
-    const authUrl = getProvider(provider).buildAuthUrl(state, loginHint);
-    sendJson(res, 200, { authUrl, redirectUri: getRedirectUri() });
+    const popup = url.searchParams.get('popup') === '1' || url.searchParams.get('popup') === 'true';
+    const appOrigin = url.searchParams.get('appOrigin') || undefined;
+    const state = encodeOAuthState({ userId, orgId, provider, popup, appOrigin, ts: Date.now() });
+    try {
+      const authUrl = getProvider(provider).buildAuthUrl(state, loginHint);
+      sendJson(res, 200, { authUrl, redirectUri: getRedirectUri(), popup });
+    } catch (err) {
+      sendJson(res, 400, {
+        error: err instanceof Error ? err.message : `OAuth not configured for ${provider}`,
+      });
+    }
     return true;
   }
 
@@ -111,7 +120,18 @@ export async function handleMailboxRoutes(
     const error = url.searchParams.get('error');
     const appBase = process.env.VITE_APP_URL || process.env.APP_BASE_URL || 'http://localhost:5174';
 
+    const earlyState = stateRaw ? decodeOAuthState(stateRaw) : null;
+    const isPopup = Boolean(earlyState?.popup);
+    const targetOrigin = typeof earlyState?.appOrigin === 'string' ? earlyState.appOrigin : '*';
+
     if (error || !code || !stateRaw) {
+      if (isPopup) {
+        sendOAuthPopupResult(res, 'mailbox_oauth', {
+          ok: false,
+          error: error || 'OAuth cancelled or missing code',
+        }, targetOrigin);
+        return true;
+      }
       res.statusCode = 302;
       res.setHeader('Location', `${appBase}/settings?mailbox=error`);
       res.end();
@@ -122,6 +142,8 @@ export async function handleMailboxRoutes(
     const userId = String(state?.userId ?? 'default-user');
     const orgId = String(state?.orgId ?? 'default');
     const provider = (state?.provider as MailProviderId) || 'google';
+    const popup = Boolean(state?.popup);
+    const postOrigin = typeof state?.appOrigin === 'string' ? state.appOrigin : '*';
 
     try {
       const tokens = await getProvider(provider).exchangeCode(code);
@@ -135,12 +157,25 @@ export async function handleMailboxRoutes(
       });
       await saveTokens(conn.id, tokens);
       await syncConnection(conn.id);
+      if (popup) {
+        sendOAuthPopupResult(res, 'mailbox_oauth', {
+          ok: true,
+          email: conn.emailAddress,
+          provider,
+        }, postOrigin);
+        return true;
+      }
       res.statusCode = 302;
       res.setHeader('Location', `${appBase}/settings?mailbox=connected`);
       res.end();
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'OAuth failed';
+      if (popup) {
+        sendOAuthPopupResult(res, 'mailbox_oauth', { ok: false, error: message, provider }, postOrigin);
+        return true;
+      }
       res.statusCode = 302;
-      res.setHeader('Location', `${appBase}/settings?mailbox=error&message=${encodeURIComponent(err instanceof Error ? err.message : 'OAuth failed')}`);
+      res.setHeader('Location', `${appBase}/settings?mailbox=error&message=${encodeURIComponent(message)}`);
       res.end();
     }
     return true;
