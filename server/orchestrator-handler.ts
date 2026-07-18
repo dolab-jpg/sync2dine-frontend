@@ -1964,11 +1964,16 @@ async function executeVisionTool(
   const photoIds = readStringArray(input.photoIds);
   const images = resolvePhotoUrlsFromContext(body.projectContext, photoIds);
   const tradeId = firstString(input.tradeId, body.staffContext?.tradeId, body.projectContext?.tradeId) ?? 'general';
+  const { resolveOrgIdFromBody } = await import('./org-context');
+  const orgId = resolveOrgIdFromBody(body as { orgId?: string });
 
   if (name === 'assessExtraFromPhotos') {
     const builderNote = firstString(input.builderNote) ?? 'Assess whether this is extra scope.';
     const extra = await assessExtraFromVision({
       apiKey,
+      deepseekApiKey: body.deepseekApiKey,
+      provider: body.provider,
+      orgId,
       tradeId,
       builderNote,
       images,
@@ -1986,6 +1991,9 @@ async function executeVisionTool(
   if (name === 'assessProgress') {
     const progress = await assessProgressFromVision({
       apiKey,
+      deepseekApiKey: body.deepseekApiKey,
+      provider: body.provider,
+      orgId,
       tradeId,
       images,
       projectContext: body.projectContext,
@@ -2953,7 +2961,6 @@ export async function handleOrchestrator(body: OrchestratorRequest): Promise<Orc
   const messages = Array.isArray(body.messages) ? body.messages : [];
   const lastMessage = messages[messages.length - 1]?.content ?? '';
   const { mapOpenAIError } = await import('./openai-connection');
-  const { createLLMClientForOrg } = await import('./llm-connection');
   const { resolveOrgIdFromBody } = await import('./org-context');
   const orgId = resolveOrgIdFromBody(body as { orgId?: string });
   const mode = resolveMode(body);
@@ -2968,22 +2975,28 @@ export async function handleOrchestrator(body: OrchestratorRequest): Promise<Orc
   }
 
   try {
-    const { client: openai } = await createLLMClientForOrg(orgId, '/api/ai/orchestrate', {
+    const { createLLMClientForOrg, defaultChatModelForProvider } = await import('./llm-connection');
+    const { client: openai, provider } = await createLLMClientForOrg(orgId, '/api/ai/orchestrate', {
       bodyOpenAIApiKey: body.apiKey,
       bodyDeepSeekApiKey: (body as { deepseekApiKey?: string }).deepseekApiKey,
       provider: (body as { provider?: string }).provider,
     });
+    const mappedBody: OrchestratorRequest = {
+      ...body,
+      model: defaultChatModelForProvider(provider, body.model),
+      provider: provider,
+    };
 
     if (mode === 'customer' || mode === 'cyrus') {
-      return await runCustomerOrchestrator(openai as unknown as Parameters<typeof runCustomerOrchestrator>[0], body, messages);
+      return await runCustomerOrchestrator(openai as unknown as Parameters<typeof runCustomerOrchestrator>[0], mappedBody, messages);
     }
 
     if (mode === 'phone') {
-      return await runPhoneOrchestrator(openai as unknown as Parameters<typeof runCustomerOrchestrator>[0], body, messages);
+      return await runPhoneOrchestrator(openai as unknown as Parameters<typeof runCustomerOrchestrator>[0], mappedBody, messages);
     }
 
     // Sally sales mode reuses the staff tool loop with Sally tools + prompt.
-    return await runStaffOrchestrator(openai as unknown as Parameters<typeof runStaffOrchestrator>[0], body, messages);
+    return await runStaffOrchestrator(openai as unknown as Parameters<typeof runStaffOrchestrator>[0], mappedBody, messages);
   } catch (err) {
     throw mapOpenAIError(err);
   }

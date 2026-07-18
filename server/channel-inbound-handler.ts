@@ -25,7 +25,8 @@ import { getOfficeTeamRoster } from './team-snapshot';
 import { buildBritishVoicePrompt, formatKnowledgeChunks } from './british-voice';
 import type { ServerAgentRole } from './role-permissions';
 import type { OrchestratorRequest } from './orchestrator-types';
-import { OpenAIConnectionError, requireOpenAIApiKeyAsync } from './openai-connection';
+import { OpenAIConnectionError } from './openai-connection';
+import { createLLMClientForOrg, defaultChatModelForProvider } from './llm-connection';
 
 export type ChannelInboundChannel = 'whatsapp' | 'phone' | 'app' | 'web' | 'portal' | 'email';
 
@@ -38,6 +39,8 @@ export interface ChannelInboundRequest {
   projectId?: string | null;
   voiceReply?: boolean;
   apiKey?: string;
+  deepseekApiKey?: string;
+  provider?: 'openai' | 'deepseek' | string;
   model?: string;
   /** When true, skip AI even if handoff is ai_active (used for staff composer logs). */
   skipAi?: boolean;
@@ -193,10 +196,15 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
     };
   }
 
-  // Resolve org OpenAI key up front — no silent mock for live Cyrus channels
-  let resolvedApiKey = req.apiKey;
+  // Resolve active AI brain (DeepSeek or OpenAI) — no silent mock for live Cyrus channels
+  let resolvedProvider: 'openai' | 'deepseek' = 'openai';
   try {
-    resolvedApiKey = await requireOpenAIApiKeyAsync(req.apiKey, orgId);
+    const brain = await createLLMClientForOrg(orgId, '/api/ai/channel-inbound', {
+      bodyOpenAIApiKey: req.apiKey,
+      bodyDeepSeekApiKey: req.deepseekApiKey,
+      provider: req.provider,
+    });
+    resolvedProvider = brain.provider;
   } catch (err) {
     if (err instanceof OpenAIConnectionError) throw err;
     throw err;
@@ -268,7 +276,9 @@ export async function handleChannelInbound(req: ChannelInboundRequest): Promise<
     channel: orchestratorChannel,
     voicePrompt,
     apiKey: req.apiKey,
-    model: req.model ?? 'gpt-4o-mini',
+    deepseekApiKey: req.deepseekApiKey,
+    provider: resolvedProvider,
+    model: defaultChatModelForProvider(resolvedProvider, req.model),
     aiStudio: {
       humourLevel,
       companyInstructions,

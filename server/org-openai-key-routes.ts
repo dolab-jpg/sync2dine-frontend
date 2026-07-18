@@ -140,7 +140,21 @@ export async function handleOrgOpenAIKeyRoutes(
 
     let probeOk = true;
     let probeMessage: string | undefined;
-    if (body.probe !== false && openaiApiKey) {
+    const resolvedProvider = resolveBrainProvider(provider, orgId);
+    if (body.probe !== false && resolvedProvider === 'deepseek') {
+      try {
+        const { resolveDeepSeekApiKeyAsync } = await import('./llm-connection');
+        const key = await resolveDeepSeekApiKeyAsync(deepseekApiKey, orgId);
+        if (key) await probeLLMConnection('deepseek', key);
+        else {
+          probeOk = false;
+          probeMessage = 'DeepSeek API key not configured';
+        }
+      } catch (err) {
+        probeOk = false;
+        probeMessage = mapOpenAIError(err).message;
+      }
+    } else if (body.probe !== false && openaiApiKey) {
       try {
         const key = await resolveOpenAIApiKeyAsync(openaiApiKey, orgId);
         if (key) await probeLLMConnection('openai', key);
@@ -148,24 +162,18 @@ export async function handleOrgOpenAIKeyRoutes(
         probeOk = false;
         probeMessage = mapOpenAIError(err).message;
       }
-    } else if (body.probe !== false && provider === 'deepseek' && deepseekApiKey) {
-      try {
-        await probeLLMConnection('deepseek', deepseekApiKey);
-      } catch (err) {
-        probeOk = false;
-        probeMessage = mapOpenAIError(err).message;
-      }
     }
 
     const status = getOrgOpenAIKeyStatus(orgId!);
+    const brainConfigured = status.configured || status.deepseekConfigured || Boolean(openaiApiKey) || Boolean(deepseekApiKey);
     sendJson(res, probeOk ? 200 : 200, {
       ...status,
       configured: status.configured || Boolean(openaiApiKey),
       syncedToCloud: syncResult.synced,
       cloudSyncWarning: syncResult.warning,
-      connected: probeOk && (status.configured || Boolean(openaiApiKey)),
+      connected: probeOk && brainConfigured,
       probeMessage,
-      provider: resolveBrainProvider(provider, orgId),
+      provider: resolvedProvider,
     });
     return true;
   }

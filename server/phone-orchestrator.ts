@@ -12,6 +12,8 @@ export interface PhoneOrchestratorRequest {
   callContext: AgentCallContext;
   messages: Array<{ role: string; content: string }>;
   apiKey?: string;
+  deepseekApiKey?: string;
+  provider?: string;
   model?: string;
   customerContext?: OrchestratorRequest['customerContext'];
   projectContext?: OrchestratorRequest['projectContext'];
@@ -123,7 +125,9 @@ export async function handlePhoneTurn(body: PhoneOrchestratorRequest): Promise<{
       projectContext: body.projectContext,
     }),
     apiKey: body.apiKey,
-    model: body.model ?? 'gpt-4o-mini',
+    deepseekApiKey: body.deepseekApiKey,
+    provider: body.provider,
+    model: body.model,
     customerContext: {
       ...body.customerContext,
       role: 'agent',

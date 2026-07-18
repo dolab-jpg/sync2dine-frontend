@@ -142,7 +142,7 @@ export async function handleRealtimeSession(
   await ensureOrgOpenAIKeyLoaded(openaiOrgId);
   const apiKey = getOrgOpenAIApiKey(openaiOrgId);
   if (!apiKey) {
-    sendJson(res, 503, { error: 'No OpenAI API key configured for organisation' });
+    sendJson(res, 503, { error: 'OpenAI specialist key required for Realtime phone — add it in Settings → Integrations → Company AI Brain.' });
     return;
   }
 

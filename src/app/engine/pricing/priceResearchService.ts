@@ -60,7 +60,7 @@ export async function researchPrices(req: PriceResearchRequest): Promise<Pricing
   if (!res.ok) {
     throw new Error(
       data.error
-        || 'OpenAI not connected — add your API key in Settings → Integrations → Company AI Brain and Save.',
+        || 'AI brain not connected — add a DeepSeek or OpenAI key in Settings → Integrations → Company AI Brain and Save.',
     );
   }
 

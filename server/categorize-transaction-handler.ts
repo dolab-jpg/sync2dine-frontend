@@ -63,11 +63,8 @@ function mockCategorize(body: CategorizeRequest): CategorizeResponse {
 }
 
 export async function handleCategorizeTransaction(body: CategorizeRequest): Promise<CategorizeResponse> {
-  const { resolveOpenAIApiKey, createOpenAIClientForOrg } = await import('./openai-connection');
   const { resolveOrgIdFromBody } = await import('./org-context');
   const orgId = resolveOrgIdFromBody(body);
-  const apiKey = resolveOpenAIApiKey(body.apiKey, orgId);
-  if (!apiKey) return mockCategorize(body);
 
   const allowed = body.transaction.direction === 'in' ? INCOME : EXPENSE;
   const projectList = (body.context?.projects ?? [])
@@ -76,9 +73,15 @@ export async function handleCategorizeTransaction(body: CategorizeRequest): Prom
     .join('\n');
 
   try {
-    const openai = await createOpenAIClientForOrg(orgId, '/api/ai/categorize-transaction', body.apiKey);
+    const { createLLMClientForOrg, defaultChatModelForProvider } = await import('./llm-connection');
+    const { client: openai, provider } = await createLLMClientForOrg(orgId, '/api/ai/categorize-transaction', {
+      bodyOpenAIApiKey: body.apiKey,
+      bodyDeepSeekApiKey: (body as { deepseekApiKey?: string }).deepseekApiKey,
+      provider: (body as { provider?: string }).provider,
+    });
+    const model = defaultChatModelForProvider(provider);
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model,
       response_format: { type: 'json_object' },
       messages: [
         {

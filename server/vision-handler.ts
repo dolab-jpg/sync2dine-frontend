@@ -142,13 +142,18 @@ export function resolvePhotoUrlsFromContext(
 }
 
 async function runVisionExtraAssessment(
-  apiKey: string,
+  orgId: string | null,
   tradeId: string,
   builderNote: string,
-  images: string[]
+  images: string[],
+  options?: { apiKey?: string; deepseekApiKey?: string; provider?: string },
 ): Promise<VisionExtraAssessment> {
-  const { default: OpenAI } = await import('openai');
-  const openai = new OpenAI({ apiKey });
+  const { createVisionClientForOrg } = await import('./llm-connection');
+  const { client: openai, model } = await createVisionClientForOrg(orgId, '/api/ai/vision-extra', {
+    bodyOpenAIApiKey: options?.apiKey,
+    bodyDeepSeekApiKey: options?.deepseekApiKey,
+    provider: options?.provider,
+  });
   const playbook = getPlaybook(tradeId);
   const commonExtras = playbook?.commonExtras ?? bathroomPlaybook.commonExtras;
   const imageContent = images.map((url) => ({
@@ -157,7 +162,7 @@ async function runVisionExtraAssessment(
   }));
 
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model,
     response_format: { type: 'json_object' },
     messages: [
       {
@@ -197,19 +202,24 @@ async function runVisionExtraAssessment(
 }
 
 async function runVisionProgressAssessment(
-  apiKey: string,
+  orgId: string | null,
   tradeId: string,
-  images: string[]
+  images: string[],
+  options?: { apiKey?: string; deepseekApiKey?: string; provider?: string },
 ): Promise<VisionProgressAssessment> {
-  const { default: OpenAI } = await import('openai');
-  const openai = new OpenAI({ apiKey });
+  const { createVisionClientForOrg } = await import('./llm-connection');
+  const { client: openai, model } = await createVisionClientForOrg(orgId, '/api/ai/vision-progress', {
+    bodyOpenAIApiKey: options?.apiKey,
+    bodyDeepSeekApiKey: options?.deepseekApiKey,
+    provider: options?.provider,
+  });
   const imageContent = images.map((url) => ({
     type: 'image_url' as const,
     image_url: { url },
   }));
 
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model,
     response_format: { type: 'json_object' },
     messages: [
       {
@@ -258,6 +268,9 @@ async function runVisionProgressAssessment(
 
 export async function assessExtraFromVision(options: {
   apiKey?: string;
+  deepseekApiKey?: string;
+  provider?: string;
+  orgId?: string | null;
   tradeId?: string;
   builderNote?: string;
   images: string[];
@@ -265,12 +278,22 @@ export async function assessExtraFromVision(options: {
 }): Promise<VisionExtraAssessment> {
   const tradeId = readString(options.tradeId ?? options.projectContext?.tradeId) || 'bathroom';
   const builderNote = readString(options.builderNote);
-  if (!options.apiKey || options.images.length === 0) {
+  if (options.images.length === 0) {
     return buildMockExtraAssessment(tradeId, builderNote);
   }
 
   try {
-    return await runVisionExtraAssessment(options.apiKey, tradeId, builderNote, options.images.slice(0, 5));
+    return await runVisionExtraAssessment(
+      options.orgId ?? null,
+      tradeId,
+      builderNote,
+      options.images.slice(0, 5),
+      {
+        apiKey: options.apiKey,
+        deepseekApiKey: options.deepseekApiKey,
+        provider: options.provider,
+      },
+    );
   } catch {
     return buildMockExtraAssessment(tradeId, builderNote);
   }
@@ -278,17 +301,29 @@ export async function assessExtraFromVision(options: {
 
 export async function assessProgressFromVision(options: {
   apiKey?: string;
+  deepseekApiKey?: string;
+  provider?: string;
+  orgId?: string | null;
   tradeId?: string;
   images: string[];
   projectContext?: Record<string, unknown>;
 }): Promise<VisionProgressAssessment> {
   const tradeId = readString(options.tradeId ?? options.projectContext?.tradeId) || 'bathroom';
-  if (!options.apiKey || options.images.length === 0) {
+  if (options.images.length === 0) {
     return buildMockProgressAssessment(options.projectContext);
   }
 
   try {
-    return await runVisionProgressAssessment(options.apiKey, tradeId, options.images.slice(0, 5));
+    return await runVisionProgressAssessment(
+      options.orgId ?? null,
+      tradeId,
+      options.images.slice(0, 5),
+      {
+        apiKey: options.apiKey,
+        deepseekApiKey: options.deepseekApiKey,
+        provider: options.provider,
+      },
+    );
   } catch {
     return buildMockProgressAssessment(options.projectContext);
   }

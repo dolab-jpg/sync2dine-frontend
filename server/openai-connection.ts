@@ -53,7 +53,7 @@ export async function resolveCompanyAiBrainOpenAIKey(preferredOrgId?: string | n
   if (envKey) return { apiKey: envKey, orgId: preferredOrgId?.trim() || getHomeOrgId() || null };
 
   throw new OpenAIConnectionError(
-    'OpenAI not connected — add your API key in Settings → Integrations → Company AI Brain and Save.',
+    'OpenAI specialist key required for web search — add it in Settings → Integrations → Company AI Brain (Sally research uses OpenAI Responses web_search).',
     'missing',
   );
 }
@@ -90,12 +90,12 @@ export function requireOpenAIApiKey(bodyApiKey?: string, orgId?: string | null):
   if (!key) {
     if (orgId) {
       throw new OpenAIConnectionError(
-        'OpenAI API key not configured for this company — add a key in Settings → Integrations → Company AI Brain (Super Admin).',
+        'OpenAI specialist key not configured for this company — add it in Settings → Integrations → Company AI Brain (needed for TTS, Whisper, Realtime, image edit, web search).',
         'missing',
       );
     }
     throw new OpenAIConnectionError(
-      'OpenAI not connected — add your API key in Settings → Integrations → Company AI Brain and Save.',
+      'OpenAI specialist key required — add it in Settings → Integrations → Company AI Brain (TTS, Whisper, Realtime, image edit, web search).',
       'missing',
     );
   }
@@ -110,12 +110,12 @@ export async function requireOpenAIApiKeyAsync(
   if (!key) {
     if (orgId) {
       throw new OpenAIConnectionError(
-        'OpenAI API key not configured for this company — add a key in Settings → Integrations → Company AI Brain (Super Admin).',
+        'OpenAI specialist key not configured for this company — add it in Settings → Integrations → Company AI Brain (needed for TTS, Whisper, Realtime, image edit, web search).',
         'missing',
       );
     }
     throw new OpenAIConnectionError(
-      'OpenAI not connected — add your API key in Settings → Integrations → Company AI Brain and Save.',
+      'OpenAI specialist key required — add it in Settings → Integrations → Company AI Brain (TTS, Whisper, Realtime, image edit, web search).',
       'missing',
     );
   }

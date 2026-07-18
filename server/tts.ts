@@ -62,8 +62,8 @@ async function synthesizeWithChatterbox(
   return { buffer, contentType, provider: 'chatterbox' };
 }
 
-async function synthesizeWithOpenAI(text: string, voiceId: string): Promise<TtsResult> {
-  const apiKey = requireOpenAIApiKey();
+async function synthesizeWithOpenAI(text: string, voiceId: string, orgId?: string | null): Promise<TtsResult> {
+  const apiKey = requireOpenAIApiKey(undefined, orgId);
   const { default: OpenAI } = await import('openai');
   const openai = new OpenAI({ apiKey });
   const voice = isOpenAiVoiceId(voiceId) ? voiceId : 'fable';
@@ -76,7 +76,11 @@ async function synthesizeWithOpenAI(text: string, voiceId: string): Promise<TtsR
   return { buffer, contentType: 'audio/mpeg', provider: 'openai' };
 }
 
-export async function synthesizeSpeech(text: string, voiceIdOverride?: string | null): Promise<TtsResult> {
+export async function synthesizeSpeech(
+  text: string,
+  voiceIdOverride?: string | null,
+  orgId?: string | null,
+): Promise<TtsResult> {
   const trimmed = text.trim();
   if (!trimmed) {
     throw new Error('TTS text is required');
@@ -89,20 +93,26 @@ export async function synthesizeSpeech(text: string, voiceIdOverride?: string | 
     try {
       return await synthesizeWithChatterbox(trimmed, voiceId, chatterbox);
     } catch (err) {
-      if (!process.env.OPENAI_API_KEY) throw err;
-      // fall through to OpenAI if cloned voice fails but OpenAI is available
+      try {
+        return await synthesizeWithOpenAI(trimmed, voiceId ?? 'fable', orgId);
+      } catch {
+        throw err;
+      }
     }
   }
 
-  if (process.env.OPENAI_API_KEY) {
-    return synthesizeWithOpenAI(trimmed, voiceId ?? 'fable');
+  try {
+    return await synthesizeWithOpenAI(trimmed, voiceId ?? 'fable', orgId);
+  } catch (openaiErr) {
+    if (chatterbox && voiceId) {
+      return synthesizeWithChatterbox(trimmed, voiceId, chatterbox);
+    }
+    throw openaiErr instanceof Error
+      ? openaiErr
+      : new Error(
+        'No TTS provider configured — set CHATTERBOX_BASE_URL or add an OpenAI specialist key in Settings → Integrations → Company AI Brain.',
+      );
   }
-
-  if (chatterbox && voiceId) {
-    return synthesizeWithChatterbox(trimmed, voiceId, chatterbox);
-  }
-
-  throw new Error('No TTS provider configured — set CHATTERBOX_BASE_URL or OPENAI_API_KEY');
 }
 
 export function resolveTtsTextFromCall(callId: string): string | null {

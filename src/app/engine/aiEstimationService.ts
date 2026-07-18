@@ -121,7 +121,7 @@ export async function estimateFromPhotos(
     const data = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(
       data.error
-        || 'OpenAI not connected — add your API key in Settings → Integrations → Company AI Brain and Save.',
+        || 'AI brain not connected — add a DeepSeek or OpenAI key in Settings → Integrations → Company AI Brain and Save.',
     );
   }
 

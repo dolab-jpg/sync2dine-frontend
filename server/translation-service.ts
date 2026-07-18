@@ -119,15 +119,19 @@ export function __setTranslationClientFactoryForTests(factory: TranslationClient
   clientFactoryOverride = factory;
 }
 
-async function getTranslationClient(orgId?: string | null): Promise<TranslationChatClient> {
-  if (clientFactoryOverride) return clientFactoryOverride(orgId ?? null);
-  const { createLLMClientForOrg } = await import('./llm-connection');
-  const { client } = await createLLMClientForOrg(orgId ?? null, '/api/internal/translate', {});
-  return client as unknown as TranslationChatClient;
+async function getTranslationClient(orgId?: string | null): Promise<{ client: TranslationChatClient; model: string }> {
+  if (clientFactoryOverride) {
+    return { client: await clientFactoryOverride(orgId ?? null), model: 'gpt-4o-mini' };
+  }
+  const { createLLMClientForOrg, defaultChatModelForProvider } = await import('./llm-connection');
+  const { client, provider } = await createLLMClientForOrg(orgId ?? null, '/api/internal/translate', {});
+  return {
+    client: client as unknown as TranslationChatClient,
+    model: defaultChatModelForProvider(provider),
+  };
 }
 
 const TRANSLATE_TIMEOUT_MS = 7000;
-const TRANSLATE_MODEL = 'gpt-4o-mini';
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -145,11 +149,11 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 async function runTranslationModel(systemPrompt: string, userText: string, orgId?: string | null): Promise<string> {
-  const client = await getTranslationClient(orgId);
+  const { client, model } = await getTranslationClient(orgId);
   const completion = await withTimeout(
     Promise.resolve(
       client.chat.completions.create({
-        model: TRANSLATE_MODEL,
+        model,
         temperature: 0,
         max_tokens: 1200,
         messages: [

@@ -4,33 +4,38 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
   {
     id: 'openai',
     name: 'Company AI Brain',
-    description: 'Company-wide OpenAI key (primary) — powers chat, job pricing, photos, Cynthia, and Sally (platform sales phone research + signup). Optional DeepSeek for text only.',
+    description: 'Primary brain powers chat, Cynthia, Sally, and photo pricing (vision). Choose DeepSeek or OpenAI. OpenAI specialist key is optional — only needed for TTS, Whisper STT, Realtime phone, photoreal image edit, and Sally web search.',
     category: 'ai',
-    docsUrl: 'https://platform.openai.com/docs',
+    docsUrl: 'https://api-docs.deepseek.com/',
     fields: [
-      { key: 'provider', label: 'Active text provider', type: 'select', options: [
-        { value: 'openai', label: 'OpenAI (recommended)' },
-        { value: 'deepseek', label: 'DeepSeek (optional text alternate)' },
+      { key: 'provider', label: 'Primary brain provider', type: 'select', options: [
+        { value: 'deepseek', label: 'DeepSeek (primary)' },
+        { value: 'openai', label: 'OpenAI' },
       ]},
-      { key: 'apiKey', label: 'OpenAI API Key', type: 'password', placeholder: 'sk-...', required: true },
-      { key: 'deepseekApiKey', label: 'DeepSeek API Key (optional)', type: 'password', placeholder: 'sk-...' },
+      { key: 'deepseekApiKey', label: 'DeepSeek API Key', type: 'password', placeholder: 'sk-...' },
+      { key: 'apiKey', label: 'OpenAI specialist key (optional — voice / image gen / web search)', type: 'password', placeholder: 'sk-...' },
       { key: 'staffModel', label: 'Staff AI Model', type: 'select', options: [
+        { value: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+        { value: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+        { value: 'deepseek-chat', label: 'deepseek-chat (legacy)' },
+        { value: 'deepseek-reasoner', label: 'deepseek-reasoner (legacy)' },
         { value: 'gpt-4o', label: 'gpt-4o' },
         { value: 'gpt-4o-mini', label: 'gpt-4o-mini' },
-        { value: 'deepseek-chat', label: 'deepseek-chat' },
-        { value: 'deepseek-reasoner', label: 'deepseek-reasoner' },
       ]},
       { key: 'cyrusModel', label: 'Cynthia Model', type: 'select', options: [
+        { value: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+        { value: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+        { value: 'deepseek-chat', label: 'deepseek-chat (legacy)' },
         { value: 'gpt-4o-mini', label: 'gpt-4o-mini' },
         { value: 'gpt-4o', label: 'gpt-4o' },
-        { value: 'deepseek-chat', label: 'deepseek-chat' },
       ]},
       { key: 'summaryModel', label: 'Chat Summary Model', type: 'select', options: [
+        { value: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+        { value: 'deepseek-chat', label: 'deepseek-chat (legacy)' },
         { value: 'gpt-4o-mini', label: 'gpt-4o-mini' },
         { value: 'gpt-4o', label: 'gpt-4o' },
-        { value: 'deepseek-chat', label: 'deepseek-chat' },
       ]},
-      { key: 'ttsVoice', label: 'TTS Voice (OpenAI)', type: 'select', options: [
+      { key: 'ttsVoice', label: 'TTS Voice (OpenAI specialist)', type: 'select', options: [
         { value: 'fable', label: 'fable' },
         { value: 'alloy', label: 'alloy' },
         { value: 'nova', label: 'nova' },

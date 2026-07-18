@@ -6,17 +6,35 @@ import type {
   IntegrationStatus,
   TestConnectionResult,
 } from '../../config/integrations/types';
-import { loadIntegrationsStore, saveIntegrationsStore } from './integrationsStore';
+import {
+  loadIntegrationsStore,
+  saveIntegrationsStore,
+  peekLegacyIntegrationSecrets,
+  clearLegacyIntegrationSecretsFromLocalStorage,
+  isSecretIntegrationField,
+} from './integrationsStore';
 import { saveCompanyProfileToSupabase, initCompanyProfile, getCompanyProfile } from './companyProfileSync';
 import { initOrgOpenAIKey as hydrateOrgOpenAIKey, saveOrgOpenAIKey } from './orgOpenAIKeySync';
+import { fetchOrgIntegrations, putOrgIntegration, testOrgIntegration } from './orgIntegrationsApi';
 import { useCloudPersistence } from '../data/cloudPersist';
 
 type StoreListener = (data: IntegrationsStoreData) => void;
 const listeners = new Set<StoreListener>();
 
+let serverHydrated = false;
+let migratePromise: Promise<void> | null = null;
+
 function notify() {
   const data = loadIntegrationsStore();
   listeners.forEach(fn => fn(data));
+}
+
+function isPlaceholderSecret(value?: string): boolean {
+  const v = value?.trim() ?? '';
+  if (!v) return true;
+  if (v.startsWith('••••')) return true;
+  if (v === '(configured on server)') return true;
+  return false;
 }
 
 export const integrationService = {
@@ -53,10 +71,7 @@ export const integrationService = {
 
   /** True when stored value is a real secret, not a masked UI placeholder. */
   isLiveOpenAIApiKey(value?: string): boolean {
-    const key = value?.trim() ?? '';
-    if (!key) return false;
-    if (key.startsWith('••••')) return false;
-    return true;
+    return !isPlaceholderSecret(value);
   },
 
   /**
@@ -97,10 +112,23 @@ export const integrationService = {
     if (id === 'company' && useCloudPersistence()) {
       void saveCompanyProfileToSupabase(store.integrations.company);
     }
+    // Persist enabled/mock/status toggles to server (skip when a values save is in flight — that path PUTs itself)
+    if (
+      useCloudPersistence()
+      && updates.values === undefined
+      && (updates.enabled !== undefined || updates.mockMode !== undefined || updates.status !== undefined)
+    ) {
+      void putOrgIntegration(id, {
+        enabled: store.integrations[id].enabled,
+        mockMode: store.integrations[id].mockMode,
+        status: store.integrations[id].status,
+        role: 'super_admin',
+      }).catch(() => { /* best-effort */ });
+    }
     notify();
   },
 
-  /** True when required credential fields (e.g. apiKey) are filled in. */
+  /** True when required credential fields are filled (including server-masked configured secrets). */
   hasCredentials(id: IntegrationId, values: Record<string, string>): boolean {
     const def = getIntegrationDefinition(id);
     if (!def) return false;
@@ -110,19 +138,120 @@ export const integrationService = {
       const yahoo = Boolean(values.yahooClientId?.trim() && values.yahooClientSecret?.trim());
       return google || microsoft || yahoo;
     }
+    if (id === 'company' || id === 'whatsapp') {
+      return def.fields.some(f => Boolean(values[f.key]?.trim()));
+    }
+    // Company AI Brain: credentials depend on primary provider (DeepSeek can be sole brain).
+    if (id === 'openai') {
+      const provider = values.provider === 'deepseek' ? 'deepseek' : 'openai';
+      if (provider === 'deepseek') {
+        return Boolean(values.deepseekApiKey?.trim());
+      }
+      return Boolean(values.apiKey?.trim());
+    }
     const credentialFields = def.fields.filter(
-      (f) => f.required === true || (f.key === 'apiKey' && f.type === 'password'),
+      (f) => f.required === true || (f.type === 'password' && (f.key === 'apiKey' || f.required)),
     );
     if (credentialFields.length === 0) {
+      // Any password field with a value (including mask) or any filled field
+      const hasSecret = def.fields.some(f => f.type === 'password' && Boolean(values[f.key]?.trim()));
+      if (hasSecret) return true;
       return def.fields.some(f => Boolean(values[f.key]?.trim()));
     }
     return credentialFields.every(f => Boolean(values[f.key]?.trim()));
   },
 
   /**
-   * Save integration field values and switch to live mode when credentials are present.
-   * OpenAI keys are also persisted org-wide so every user in the company uses them.
-   * Returns a promise when OpenAI org sync + health probe runs.
+   * Hydrate from GET /api/org/integrations and migrate legacy localStorage secrets once.
+   */
+  async initIntegrationsFromServer(): Promise<void> {
+    const remote = await fetchOrgIntegrations();
+    if (remote?.integrations?.length) {
+      const store = loadIntegrationsStore();
+      for (const item of remote.integrations) {
+        const id = item.integrationId as IntegrationId;
+        if (!store.integrations[id]) continue;
+        const values = {
+          ...store.integrations[id].values,
+          ...item.values,
+        };
+        // Surface masked secrets so the UI shows "configured"
+        for (const [k, hint] of Object.entries(item.configuredFields || {})) {
+          if (!values[k]?.trim() || isPlaceholderSecret(values[k])) {
+            values[k] = hint;
+          }
+        }
+        store.integrations[id] = {
+          ...store.integrations[id],
+          enabled: item.enabled,
+          mockMode: item.mockMode,
+          status: item.status,
+          values,
+        };
+        if (id === 'openai' && item.hasSecrets) {
+          store.masterMockMode = false;
+        }
+      }
+      saveIntegrationsStore(store);
+      serverHydrated = true;
+      notify();
+    }
+
+    await integrationService.migrateLegacySecretsOnce();
+  },
+
+  async migrateLegacySecretsOnce(): Promise<void> {
+    if (migratePromise) return migratePromise;
+    migratePromise = (async () => {
+      const legacy = peekLegacyIntegrationSecrets();
+      if (!legacy) return;
+      const ids = Object.keys(legacy) as IntegrationId[];
+      for (const id of ids) {
+        const secrets = legacy[id];
+        if (!secrets) continue;
+        try {
+          const current = loadIntegrationsStore().integrations[id];
+          await putOrgIntegration(id, {
+            values: { ...current.values, ...secrets },
+            enabled: true,
+            mockMode: false,
+            status: current.status === 'error' ? 'error' : 'connected',
+            role: 'super_admin',
+          });
+        } catch {
+          // leave local for retry
+          return;
+        }
+      }
+      clearLegacyIntegrationSecretsFromLocalStorage();
+      // Re-hydrate masks from server
+      const remote = await fetchOrgIntegrations();
+      if (remote?.integrations) {
+        const store = loadIntegrationsStore();
+        for (const item of remote.integrations) {
+          const id = item.integrationId as IntegrationId;
+          if (!store.integrations[id]) continue;
+          const values = { ...store.integrations[id].values, ...item.values };
+          for (const [k, hint] of Object.entries(item.configuredFields || {})) {
+            values[k] = hint;
+          }
+          store.integrations[id] = {
+            ...store.integrations[id],
+            enabled: item.enabled,
+            mockMode: item.mockMode,
+            status: item.status,
+            values,
+          };
+        }
+        saveIntegrationsStore(store);
+        notify();
+      }
+    })();
+    return migratePromise;
+  },
+
+  /**
+   * Save integration field values — secrets go to Supabase via server API.
    */
   async saveIntegrationValues(id: IntegrationId, values: Record<string, string>): Promise<void> {
     const updates: Partial<IntegrationInstanceState> = { values };
@@ -143,63 +272,116 @@ export const integrationService = {
     }
 
     if ((id === 'vapi' || id === 'elevenlabs') && integrationService.hasCredentials(id, values)) {
+      const liveValues: Record<string, string> = {};
+      for (const [k, v] of Object.entries(values)) {
+        if (isSecretIntegrationField(k) && isPlaceholderSecret(v)) continue;
+        liveValues[k] = v;
+      }
       fetch('/api/integrations/voice-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ integration: id, values }),
-      }).catch(() => { /* env push is best-effort; localStorage is source of truth */ });
+        body: JSON.stringify({ integration: id, values: liveValues }),
+      }).catch(() => { /* best-effort env push */ });
+    }
+
+    // Persist to Supabase (encrypted secrets server-side)
+    try {
+      const payloadValues: Record<string, string> = {};
+      for (const [k, v] of Object.entries(values)) {
+        if (isSecretIntegrationField(k) && isPlaceholderSecret(v)) continue;
+        payloadValues[k] = v;
+      }
+      const saved = await putOrgIntegration(id, {
+        values: payloadValues,
+        enabled: loadIntegrationsStore().integrations[id].enabled,
+        mockMode: loadIntegrationsStore().integrations[id].mockMode,
+        status: integrationService.hasCredentials(id, values) ? 'connected' : undefined,
+        role: 'super_admin',
+      });
+      const store = loadIntegrationsStore();
+      const nextValues = { ...store.integrations[id].values, ...saved.values };
+      for (const [k, hint] of Object.entries(saved.configuredFields || {})) {
+        // If user just typed a live key, keep showing mask after save
+        if (!integrationService.isLiveOpenAIApiKey(values[k]) || isSecretIntegrationField(k)) {
+          if (isPlaceholderSecret(values[k]) || !values[k]?.trim()) {
+            nextValues[k] = hint;
+          } else if (isSecretIntegrationField(k)) {
+            nextValues[k] = hint;
+          }
+        }
+      }
+      store.integrations[id] = {
+        ...store.integrations[id],
+        enabled: saved.enabled,
+        mockMode: saved.mockMode,
+        status: saved.status,
+        values: nextValues,
+        lastTestError: saved.cloudSyncWarning,
+      };
+      saveIntegrationsStore(store);
+      notify();
+    } catch (err) {
+      // Fall through to OpenAI-specific path below if put failed for openai
+      if (id !== 'openai') throw err;
     }
 
     if (id === 'openai' && integrationService.hasCredentials(id, values)) {
-      const apiKey = values.apiKey?.trim();
-      if (integrationService.isLiveOpenAIApiKey(apiKey)) {
-        try {
-          const status = await saveOrgOpenAIKey(apiKey!, 'super_admin', {
-            deepseekApiKey: values.deepseekApiKey,
-            provider: values.provider || 'openai',
+      const provider = values.provider === 'deepseek' ? 'deepseek' : 'openai';
+      const apiKey = values.apiKey?.trim() || '';
+      const deepseekApiKey = values.deepseekApiKey?.trim() || '';
+      const liveOpenAI = integrationService.isLiveOpenAIApiKey(apiKey);
+      const liveDeepSeek = integrationService.isLiveOpenAIApiKey(deepseekApiKey);
+      try {
+        const status = await saveOrgOpenAIKey(liveOpenAI ? apiKey : '', 'super_admin', {
+          deepseekApiKey: liveDeepSeek ? deepseekApiKey : (deepseekApiKey === '' ? '' : undefined),
+          provider,
+        });
+        const probeFailed = status.probeMessage && status.connected === false;
+        integrationService.updateIntegration('openai', {
+          enabled: true,
+          mockMode: false,
+          status: probeFailed ? 'error' : 'connected',
+          lastTestedAt: new Date().toISOString(),
+          lastTestError: status.probeMessage || status.cloudSyncWarning,
+        });
+        if (!probeFailed) {
+          const health = await fetch('/api/ai/health', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              apiKey: liveOpenAI ? apiKey : undefined,
+              deepseekApiKey: liveDeepSeek ? deepseekApiKey : undefined,
+              provider,
+            }),
           });
-          const probeFailed = status.probeMessage && status.connected === false;
-          integrationService.updateIntegration('openai', {
-            enabled: true,
-            mockMode: false,
-            status: probeFailed ? 'error' : 'connected',
-            lastTestedAt: new Date().toISOString(),
-            lastTestError: status.probeMessage || status.cloudSyncWarning,
-          });
-          // Confirm live with health endpoint (org key, not only body key).
-          if (!probeFailed) {
-            const health = await fetch('/api/ai/health', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ apiKey, provider: values.provider || 'openai' }),
+          const healthData = await health.json().catch(() => ({})) as {
+            connected?: boolean;
+            message?: string;
+            warning?: string;
+            provider?: string;
+          };
+          if (healthData.connected) {
+            integrationService.updateIntegration('openai', {
+              status: 'connected',
+              lastTestError: healthData.warning || status.cloudSyncWarning,
             });
-            const healthData = await health.json().catch(() => ({})) as {
-              connected?: boolean;
-              message?: string;
-            };
-            if (healthData.connected) {
-              integrationService.updateIntegration('openai', {
-                status: 'connected',
-                lastTestError: status.cloudSyncWarning,
-              });
-            } else {
-              integrationService.updateIntegration('openai', {
-                status: 'error',
-                lastTestError: healthData.message || 'OpenAI health check failed',
-              });
-            }
+          } else {
+            integrationService.updateIntegration('openai', {
+              status: 'error',
+              lastTestError: healthData.message || 'AI brain health check failed',
+            });
           }
-          notify();
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'Failed to activate org OpenAI key';
-          integrationService.updateIntegration('openai', {
-            status: 'error',
-            lastTestError: message,
-            lastTestedAt: new Date().toISOString(),
-          });
-          notify();
-          throw err;
         }
+        notify();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to activate company AI brain';
+        integrationService.updateIntegration('openai', {
+          status: 'error',
+          lastTestError: message,
+          lastTestedAt: new Date().toISOString(),
+        });
+        notify();
+        throw err;
       }
     }
   },
@@ -207,7 +389,6 @@ export const integrationService = {
   getStatus(id: IntegrationId): IntegrationStatus {
     const inst = loadIntegrationsStore().integrations[id];
     if (!inst) return 'not_configured';
-    // OpenAI / Company AI Brain: prefer live connected status over mock when credentials exist.
     if (id === 'openai' && inst.status === 'connected' && !integrationService.isMasterMockMode()) {
       return 'connected';
     }
@@ -226,6 +407,22 @@ export const integrationService = {
     }).length;
   },
 
+  getStatusSummary(): { connected: number; notConfigured: number; error: number; mock: number; total: number } {
+    const store = loadIntegrationsStore();
+    let connected = 0;
+    let notConfigured = 0;
+    let error = 0;
+    let mock = 0;
+    for (const def of INTEGRATION_REGISTRY) {
+      const status = integrationService.getStatus(def.id);
+      if (status === 'connected') connected += 1;
+      else if (status === 'error') error += 1;
+      else if (status === 'mock') mock += 1;
+      else notConfigured += 1;
+    }
+    return { connected, notConfigured, error, mock, total: INTEGRATION_REGISTRY.length };
+  },
+
   getCompanyName(): string {
     return integrationService.getConfig('company').companyName || 'Builder Diddies';
   },
@@ -237,6 +434,7 @@ export const integrationService = {
   async initCompanyProfile(): Promise<void> {
     await initCompanyProfile();
     await hydrateOrgOpenAIKey();
+    await integrationService.initIntegrationsFromServer();
     notify();
   },
 
@@ -245,6 +443,10 @@ export const integrationService = {
     const configured = await hydrateOrgOpenAIKey(role);
     notify();
     return configured;
+  },
+
+  wasServerHydrated(): boolean {
+    return serverHydrated;
   },
 
   getActiveEmailProvider(): IntegrationId | null {
@@ -286,8 +488,29 @@ export const integrationService = {
       return result;
     }
 
+    // Prefer server-side test (uses decrypted secrets from Supabase)
+    try {
+      const liveOverrides: Record<string, string> = {};
+      for (const [k, v] of Object.entries(inst.values)) {
+        if (isSecretIntegrationField(k) && isPlaceholderSecret(v)) continue;
+        liveOverrides[k] = v;
+      }
+      const result = await testOrgIntegration(id, liveOverrides, 'super_admin');
+      integrationService.updateIntegration(id, {
+        status: result.status,
+        lastTestedAt: new Date().toISOString(),
+        lastTestError: result.success ? undefined : result.message,
+        ...(result.success ? { enabled: true, mockMode: false } : {}),
+      });
+      if (result.success && id === 'openai') {
+        integrationService.setMasterMockMode(false);
+      }
+      return result;
+    } catch {
+      // fall through to legacy paths
+    }
+
     if (id === 'openai') {
-      // Use org-aware health probe (same path as live AI routes).
       try {
         const apiKey = inst.values.apiKey?.trim();
         const res = await fetch('/api/ai/health', {
@@ -295,23 +518,35 @@ export const integrationService = {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             apiKey: integrationService.isLiveOpenAIApiKey(apiKey) ? apiKey : undefined,
-            deepseekApiKey: inst.values.deepseekApiKey || undefined,
+            deepseekApiKey: isPlaceholderSecret(inst.values.deepseekApiKey) ? undefined : inst.values.deepseekApiKey,
             provider: inst.values.provider || 'openai',
           }),
         });
-        const data = await res.json() as { connected?: boolean; message?: string };
+        const data = await res.json() as {
+          connected?: boolean;
+          message?: string;
+          warning?: string;
+          provider?: string;
+        };
         if (data.connected) {
           integrationService.updateIntegration(id, {
             status: 'connected',
             lastTestedAt: new Date().toISOString(),
-            lastTestError: undefined,
+            lastTestError: data.warning,
             mockMode: false,
             enabled: true,
           });
           integrationService.setMasterMockMode(false);
-          return { success: true, message: 'Company AI Brain connected (OpenAI live)', status: 'connected' };
+          const label = (data.provider || inst.values.provider) === 'deepseek' ? 'DeepSeek' : 'OpenAI';
+          return {
+            success: true,
+            message: data.warning
+              ? `Company AI Brain connected (${label}) — ${data.warning}`
+              : `Company AI Brain connected (${label})`,
+            status: 'connected',
+          };
         }
-        const message = data.message || 'OpenAI connection failed';
+        const message = data.message || 'AI brain connection failed';
         integrationService.updateIntegration(id, {
           status: 'error',
           lastTestedAt: new Date().toISOString(),
@@ -319,34 +554,12 @@ export const integrationService = {
         });
         return { success: false, message, status: 'error' };
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'OpenAI health check failed';
+        const message = err instanceof Error ? err.message : 'AI brain health check failed';
         integrationService.updateIntegration(id, {
           status: 'error',
           lastTestedAt: new Date().toISOString(),
           lastTestError: message,
         });
-        return { success: false, message, status: 'error' };
-      }
-    }
-
-    if (id === 'supabase') {
-      const url = inst.values.projectUrl || import.meta.env.VITE_SUPABASE_URL;
-      const key = inst.values.anonKey || import.meta.env.VITE_SUPABASE_ANON_KEY;
-      if (!url || !key) {
-        const message = 'Project URL and Anon Key required';
-        integrationService.updateIntegration(id, { status: 'error', lastTestedAt: new Date().toISOString(), lastTestError: message });
-        return { success: false, message, status: 'error' };
-      }
-      try {
-        const { createClient } = await import('@supabase/supabase-js');
-        const client = createClient(url, key);
-        const { error } = await client.from('organizations').select('id').limit(1);
-        if (error) throw new Error(error.message);
-        integrationService.updateIntegration(id, { status: 'connected', lastTestedAt: new Date().toISOString(), lastTestError: undefined });
-        return { success: true, message: 'Supabase connection successful', status: 'connected' };
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Supabase connection failed';
-        integrationService.updateIntegration(id, { status: 'error', lastTestedAt: new Date().toISOString(), lastTestError: message });
         return { success: false, message, status: 'error' };
       }
     }

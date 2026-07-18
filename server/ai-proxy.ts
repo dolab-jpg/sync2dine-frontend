@@ -243,9 +243,12 @@ export async function handleAiRequest(req: IncomingMessage, res: ServerResponse,
     }
 
     if (pathname === '/api/ai/estimate') {
-      // Vision always uses OpenAI specialist client
-      const { createOpenAISpecialistClientForOrg } = await import('./llm-connection');
-      const vision = await createOpenAISpecialistClientForOrg(orgId, pathname, body.apiKey as string | undefined);
+      const { createVisionClientForOrg } = await import('./llm-connection');
+      const { client: vision, model: visionModel } = await createVisionClientForOrg(orgId, pathname, {
+        bodyOpenAIApiKey: body.apiKey as string | undefined,
+        bodyDeepSeekApiKey: body.deepseekApiKey as string | undefined,
+        provider: body.provider as string | undefined,
+      });
       const imageContent = (body.images as string[]).map((img: string) => ({
         type: 'image_url' as const,
         image_url: { url: img },
@@ -257,7 +260,7 @@ export async function handleAiRequest(req: IncomingMessage, res: ServerResponse,
         ? `\n\nReturn JSON matching this schema exactly:\n${JSON.stringify(body.schema)}`
         : '';
       const completion = await vision.chat.completions.create({
-        model: 'gpt-4o',
+        model: visionModel,
         messages: [
           { role: 'system', content: `${body.systemPrompt}${schemaHint}\n\nEach suggestion must have value, confidence (0-1), and optional reason.` },
           {
@@ -287,7 +290,7 @@ export async function handleAiRequest(req: IncomingMessage, res: ServerResponse,
 
     if (pathname === '/api/ai/tts') {
       const { synthesizeSpeech } = await import('./tts');
-      const tts = await synthesizeSpeech(String(body.text ?? ''), body.voice as string | undefined);
+      const tts = await synthesizeSpeech(String(body.text ?? ''), body.voice as string | undefined, orgId);
       res.statusCode = 200;
       res.setHeader('Content-Type', tts.contentType);
       res.end(tts.buffer);
@@ -295,8 +298,14 @@ export async function handleAiRequest(req: IncomingMessage, res: ServerResponse,
     }
 
     if (pathname === '/api/ai/render') {
+      const { createOpenAISpecialistClientForOrg } = await import('./llm-connection');
+      const specialist = await createOpenAISpecialistClientForOrg(
+        orgId,
+        pathname,
+        body.apiKey as string | undefined,
+      );
       const { handleAiRender } = await import('./render-handler');
-      const result = await handleAiRender(body as { image?: string; prompt?: string; tradeId?: string }, openai);
+      const result = await handleAiRender(body as { image?: string; prompt?: string; tradeId?: string }, specialist);
       sendJson(res, 200, result);
       return;
     }

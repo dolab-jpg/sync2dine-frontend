@@ -40,7 +40,7 @@ function buildMockReceipt(): ReceiptParseResult {
     vat: 52.1,
     total: 312.58,
     confidence: 0.72,
-    aiSummary: 'Tiles and fixing materials from Topps Tiles — mock mode (set OPENAI_API_KEY for live OCR).',
+    aiSummary: 'Tiles and fixing materials from Topps Tiles — mock mode (configure Company AI Brain for live OCR).',
     flagged: false,
   };
 }
@@ -84,23 +84,34 @@ function parseReceiptResponse(parsed: Record<string, unknown>): ReceiptParseResu
 
 export async function parseReceiptFromImage(options: {
   apiKey?: string;
+  deepseekApiKey?: string;
+  provider?: string;
+  orgId?: string | null;
   images: string[];
   projectName?: string;
 }): Promise<ReceiptParseResult> {
-  if (!options.apiKey || options.images.length === 0) {
+  if (options.images.length === 0) {
     return buildMockReceipt();
   }
 
   try {
-    const { default: OpenAI } = await import('openai');
-    const openai = new OpenAI({ apiKey: options.apiKey });
+    const { createVisionClientForOrg } = await import('./llm-connection');
+    const { client: openai, model } = await createVisionClientForOrg(
+      options.orgId ?? null,
+      '/api/ai/receipt',
+      {
+        bodyOpenAIApiKey: options.apiKey,
+        bodyDeepSeekApiKey: options.deepseekApiKey,
+        provider: options.provider,
+      },
+    );
     const imageContent = options.images.slice(0, 3).map((url) => ({
       type: 'image_url' as const,
       image_url: { url },
     }));
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model,
       response_format: { type: 'json_object' },
       messages: [
         {
@@ -132,8 +143,17 @@ export async function parseReceiptFromImage(options: {
 }
 
 export async function handleReceiptRequest(body: Record<string, unknown>): Promise<ReceiptParseResult> {
+  const { resolveOrgIdFromBody } = await import('./org-context');
+  const orgId = resolveOrgIdFromBody(body as { orgId?: string });
   const apiKey = (body.apiKey as string) || process.env.OPENAI_API_KEY;
   const images = Array.isArray(body.images) ? (body.images as string[]) : [];
   const projectName = readString(body.projectName);
-  return parseReceiptFromImage({ apiKey, images, projectName });
+  return parseReceiptFromImage({
+    apiKey,
+    deepseekApiKey: body.deepseekApiKey as string | undefined,
+    provider: body.provider as string | undefined,
+    orgId,
+    images,
+    projectName,
+  });
 }

@@ -37,6 +37,8 @@ export interface OrchestratorRequest {
   companyName?: string;
   model?: string;
   apiKey?: string;
+  deepseekApiKey?: string;
+  provider?: 'openai' | 'deepseek' | string;
   messages: OrchestratorMessage[];
   orchestratorMode?: OrchestratorMode;
   channel?: OrchestratorChannel;

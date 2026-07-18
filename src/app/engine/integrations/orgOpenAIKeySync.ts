@@ -42,6 +42,13 @@ export async function saveOrgOpenAIKey(
   role = 'super_admin',
   extras?: { deepseekApiKey?: string; provider?: string },
 ): Promise<OrgOpenAIKeyStatus> {
+  const liveOpenAI = Boolean(apiKey?.trim() && !apiKey.trim().startsWith('••••'));
+  const deepseekRaw = extras?.deepseekApiKey;
+  const liveDeepSeek = Boolean(
+    deepseekRaw !== undefined
+    && deepseekRaw.trim()
+    && !deepseekRaw.trim().startsWith('••••'),
+  );
   const res = await fetch('/api/org/openai-key', {
     method: 'PUT',
     headers: {
@@ -49,9 +56,11 @@ export async function saveOrgOpenAIKey(
       'X-User-Role': role,
     },
     body: JSON.stringify({
-      apiKey,
-      openaiApiKey: apiKey,
-      deepseekApiKey: extras?.deepseekApiKey,
+      apiKey: liveOpenAI ? apiKey.trim() : '',
+      openaiApiKey: liveOpenAI ? apiKey.trim() : '',
+      deepseekApiKey: deepseekRaw !== undefined
+        ? (liveDeepSeek ? deepseekRaw.trim() : deepseekRaw.trim())
+        : undefined,
       provider: extras?.provider,
       role,
       probe: true,
@@ -60,7 +69,7 @@ export async function saveOrgOpenAIKey(
   });
   const data = (await res.json().catch(() => ({}))) as OrgOpenAIKeyStatus & { error?: string };
   if (!res.ok) {
-    throw new Error(data.error || 'Failed to save company OpenAI key');
+    throw new Error(data.error || 'Failed to save company AI brain');
   }
   return data;
 }
@@ -82,7 +91,7 @@ export async function initOrgOpenAIKey(role?: string): Promise<boolean> {
     ...current,
     enabled: true,
     mockMode: false,
-    status: status.configured || status.connected ? 'connected' : current.status,
+    status: status.configured || status.deepseekConfigured || status.connected ? 'connected' : current.status,
     values: {
       ...current.values,
       provider: status.provider || current.values.provider || 'openai',

@@ -219,19 +219,23 @@ function buildMockResult(body: BuildingControlRequest): BuildingControlResult {
 
 async function analyzePhotos(
   orgId: string | null,
-  apiKey: string,
   images: string[],
-  tradeId?: string | null
+  tradeId?: string | null,
+  options?: { apiKey?: string; deepseekApiKey?: string; provider?: string },
 ): Promise<string> {
-  const { createOpenAIClientForOrg } = await import('./openai-connection');
-  const openai = await createOpenAIClientForOrg(orgId, '/api/ai/building-control/photos', apiKey);
+  const { createVisionClientForOrg } = await import('./llm-connection');
+  const { client: openai, model } = await createVisionClientForOrg(orgId, '/api/ai/building-control/photos', {
+    bodyOpenAIApiKey: options?.apiKey,
+    bodyDeepSeekApiKey: options?.deepseekApiKey,
+    provider: options?.provider,
+  });
   const imageContent = images.map((img) => ({
     type: 'image_url' as const,
     image_url: { url: img },
   }));
 
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model,
     messages: [
       {
         role: 'system',
@@ -253,114 +257,122 @@ async function analyzePhotos(
 
 export async function handleBuildingControl(body: BuildingControlRequest): Promise<BuildingControlResult> {
   const messages = Array.isArray(body.messages) ? body.messages : [];
-  const { resolveOpenAIApiKey, createOpenAIClientForOrg } = await import('./openai-connection');
   const { resolveOrgIdFromBody } = await import('./org-context');
   const orgId = resolveOrgIdFromBody(body as { orgId?: string });
-  const apiKey = resolveOpenAIApiKey(body.apiKey, orgId);
 
-  if (!apiKey) {
-    return buildMockResult(body);
-  }
-
-  const openai = await createOpenAIClientForOrg(orgId, '/api/ai/building-control', body.apiKey);
-
-  let photoAnalysis: string | undefined;
-  if (body.images?.length) {
-    try {
-      photoAnalysis = await analyzePhotos(orgId, apiKey, body.images.slice(0, 3), body.tradeId);
-    } catch {
-      photoAnalysis = 'Photo analysis unavailable.';
-    }
-  }
-
-  const systemPrompt = buildBCSystemPrompt(body);
-  const userMessages = messages.map((m) => ({
-    role: m.role === 'assistant' ? 'assistant' as const : m.role === 'system' ? 'system' as const : 'user' as const,
-    content: m.content,
-  }));
-
-  if (photoAnalysis) {
-    userMessages.push({
-      role: 'user',
-      content: `[Photo analysis]\n${photoAnalysis}`,
+  try {
+    const { createLLMClientForOrg, defaultChatModelForProvider } = await import('./llm-connection');
+    const { client: openai, provider } = await createLLMClientForOrg(orgId, '/api/ai/building-control', {
+      bodyOpenAIApiKey: body.apiKey,
+      bodyDeepSeekApiKey: (body as { deepseekApiKey?: string }).deepseekApiKey,
+      provider: (body as { provider?: string }).provider,
     });
-  }
+    const model = defaultChatModelForProvider(provider, body.model);
 
-  const completion = await openai.chat.completions.create({
-    model: body.model ?? 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      ...userMessages,
-    ],
-    tools: BC_TOOLS,
-    tool_choice: 'auto',
-    max_tokens: 1200,
-  });
-
-  const choice = completion.choices[0]?.message;
-  const citations: BCCitation[] = [];
-  let complianceActions: string[] = [];
-  let draftEmailReply: string | undefined;
-
-  if (choice?.tool_calls?.length) {
-    const toolMessages = [];
-    for (const call of choice.tool_calls) {
-      if (call.type !== 'function') continue;
-      const args = JSON.parse(call.function.arguments || '{}') as Record<string, unknown>;
-      const output = await executeBCTool(call.function.name, args, body.tradeId, orgId);
-
-      if (call.function.name === 'citeSource' && Array.isArray(output.citations)) {
-        for (const c of output.citations as BCCitation[]) {
-          citations.push(c);
-        }
+    let photoAnalysis: string | undefined;
+    if (body.images?.length) {
+      try {
+        photoAnalysis = await analyzePhotos(orgId, body.images.slice(0, 3), body.tradeId, {
+          apiKey: body.apiKey,
+          deepseekApiKey: (body as { deepseekApiKey?: string }).deepseekApiKey,
+          provider: (body as { provider?: string }).provider,
+        });
+      } catch {
+        photoAnalysis = 'Photo analysis unavailable.';
       }
-      if (call.function.name === 'proposeComplianceActions' && Array.isArray(output.actions)) {
-        complianceActions = output.actions as string[];
-      }
-      if (call.function.name === 'draftBcEmailReply') {
-        draftEmailReply = String(output.body ?? '');
-      }
-      if (call.function.name === 'searchBuildingRegs' && Array.isArray(output.chunks)) {
-        for (const c of output.chunks as Array<Record<string, string>>) {
-          if (!citations.some((existing) => existing.chunkId === c.chunkId)) {
-            citations.push({
-              chunkId: c.chunkId,
-              docTitle: c.docTitle,
-              section: c.section,
-              versionDate: c.versionDate,
-              sourceUrl: c.sourceUrl,
-            });
-          }
-        }
-      }
+    }
 
-      toolMessages.push({
-        role: 'tool' as const,
-        tool_call_id: call.id,
-        content: JSON.stringify(output),
+    const systemPrompt = buildBCSystemPrompt(body);
+    const userMessages = messages.map((m) => ({
+      role: m.role === 'assistant' ? 'assistant' as const : m.role === 'system' ? 'system' as const : 'user' as const,
+      content: m.content,
+    }));
+
+    if (photoAnalysis) {
+      userMessages.push({
+        role: 'user',
+        content: `[Photo analysis]\n${photoAnalysis}`,
       });
     }
 
-    const secondPass = await openai.chat.completions.create({
-      model: body.model ?? 'gpt-4o-mini',
+    const completion = await openai.chat.completions.create({
+      model,
       messages: [
         { role: 'system', content: systemPrompt },
         ...userMessages,
-        { role: 'assistant', content: choice.content ?? '', tool_calls: choice.tool_calls },
-        ...toolMessages,
       ],
+      tools: BC_TOOLS,
+      tool_choice: 'auto',
       max_tokens: 1200,
     });
 
-    const content = secondPass.choices[0]?.message?.content ?? choice.content ?? '';
-    return { content, citations, complianceActions, draftEmailReply, photoAnalysis };
-  }
+    const choice = completion.choices[0]?.message;
+    const citations: BCCitation[] = [];
+    let complianceActions: string[] = [];
+    let draftEmailReply: string | undefined;
 
-  return {
-    content: choice?.content ?? 'How can I help with your building control question?',
-    citations,
-    complianceActions,
-    draftEmailReply,
-    photoAnalysis,
-  };
+    if (choice?.tool_calls?.length) {
+      const toolMessages = [];
+      for (const call of choice.tool_calls) {
+        if (call.type !== 'function') continue;
+        const args = JSON.parse(call.function.arguments || '{}') as Record<string, unknown>;
+        const output = await executeBCTool(call.function.name, args, body.tradeId, orgId);
+
+        if (call.function.name === 'citeSource' && Array.isArray(output.citations)) {
+          for (const c of output.citations as BCCitation[]) {
+            citations.push(c);
+          }
+        }
+        if (call.function.name === 'proposeComplianceActions' && Array.isArray(output.actions)) {
+          complianceActions = output.actions as string[];
+        }
+        if (call.function.name === 'draftBcEmailReply') {
+          draftEmailReply = String(output.body ?? '');
+        }
+        if (call.function.name === 'searchBuildingRegs' && Array.isArray(output.chunks)) {
+          for (const c of output.chunks as Array<Record<string, string>>) {
+            if (!citations.some((existing) => existing.chunkId === c.chunkId)) {
+              citations.push({
+                chunkId: c.chunkId,
+                docTitle: c.docTitle,
+                section: c.section,
+                versionDate: c.versionDate,
+                sourceUrl: c.sourceUrl,
+              });
+            }
+          }
+        }
+
+        toolMessages.push({
+          role: 'tool' as const,
+          tool_call_id: call.id,
+          content: JSON.stringify(output),
+        });
+      }
+
+      const secondPass = await openai.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...userMessages,
+          { role: 'assistant', content: choice.content ?? '', tool_calls: choice.tool_calls },
+          ...toolMessages,
+        ],
+        max_tokens: 1200,
+      });
+
+      const content = secondPass.choices[0]?.message?.content ?? choice.content ?? '';
+      return { content, citations, complianceActions, draftEmailReply, photoAnalysis };
+    }
+
+    return {
+      content: choice?.content ?? 'How can I help with your building control question?',
+      citations,
+      complianceActions,
+      draftEmailReply,
+      photoAnalysis,
+    };
+  } catch {
+    return buildMockResult(body);
+  }
 }

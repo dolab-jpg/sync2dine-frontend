@@ -282,7 +282,7 @@ export async function sendOrchestratorMessage(
 
   if (!response.ok) {
     let detail = response.status === 503
-      ? 'OpenAI not connected — add your API key in Settings → Integrations → OpenAI and Save.'
+      ? 'AI brain not connected — add a DeepSeek or OpenAI key in Settings → Integrations → Company AI Brain and Save.'
       : `Orchestrator request failed: ${response.status}`;
     try {
       const data = await response.json() as { error?: string; code?: 'missing' | 'rejected' };

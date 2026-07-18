@@ -2,9 +2,27 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { getOrganizationById } from './organizations';
+import { getHomeOrgId } from './home-org';
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), 'data');
 const USAGE_FILE = join(DATA_DIR, 'usage-events.json');
+
+export function normalizeUsageOrgId(orgId: string | null | undefined): string {
+  const raw = (orgId || '').trim();
+  if (!raw || raw === 'default') return getHomeOrgId() || 'default';
+  return raw;
+}
+
+export type UsageProvider =
+  | 'openai'
+  | 'deepseek'
+  | 'elevenlabs'
+  | 'phone'
+  | 'ai_minutes'
+  | 'soho66'
+  | string;
+
+export type UsageUnit = 'tokens' | 'characters' | 'seconds' | 'messages' | string;
 
 export interface UsageEvent {
   id: string;
@@ -17,14 +35,21 @@ export interface UsageEvent {
   totalTokens: number;
   costUsd: number;
   createdAt: string;
+  provider?: UsageProvider;
+  unit?: UsageUnit;
+  quantity?: number;
+  metadata?: Record<string, unknown>;
 }
 
-/** USD per 1M tokens (approximate OpenAI pricing) */
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'gpt-4o': { input: 2.5, output: 10 },
   'gpt-4o-mini': { input: 0.15, output: 0.6 },
   'gpt-4.1': { input: 2, output: 8 },
   'gpt-4.1-mini': { input: 0.4, output: 1.6 },
+  'deepseek-v4-flash': { input: 0.14, output: 0.28 },
+  'deepseek-v4-pro': { input: 0.435, output: 0.87 },
+  'deepseek-chat': { input: 0.14, output: 0.28 },
+  'deepseek-reasoner': { input: 0.55, output: 2.19 },
   'tts-1': { input: 15, output: 0 },
   'whisper-1': { input: 0.006, output: 0 },
 };
@@ -39,10 +64,10 @@ function loadFromDisk(): UsageEvent[] {
   try {
     if (existsSync(USAGE_FILE)) {
       const parsed = JSON.parse(readFileSync(USAGE_FILE, 'utf-8'));
-      return Array.isArray(parsed) ? parsed as UsageEvent[] : [];
+      return Array.isArray(parsed) ? (parsed as UsageEvent[]) : [];
     }
   } catch {
-    // ignore
+    /* ignore */
   }
   return [];
 }
@@ -52,7 +77,7 @@ function persist() {
   try {
     writeFileSync(USAGE_FILE, JSON.stringify(memoryEvents, null, 2));
   } catch {
-    // ignore
+    /* ignore */
   }
 }
 
@@ -91,7 +116,7 @@ export function recordUsage(
   const totalTokens = usage.total_tokens ?? promptTokens + completionTokens;
   const event: UsageEvent = {
     id: `use_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-    orgId,
+    orgId: normalizeUsageOrgId(orgId),
     userId,
     endpoint,
     model,
@@ -100,39 +125,124 @@ export function recordUsage(
     totalTokens,
     costUsd: estimateCostUsd(model, promptTokens, completionTokens),
     createdAt: new Date().toISOString(),
+    provider: 'openai',
+    unit: 'tokens',
+    quantity: totalTokens,
   };
   memoryEvents = [event, ...allEvents()];
   persist();
   return event;
 }
 
+export function recordProviderUsage(input: {
+  orgId: string;
+  provider: UsageProvider;
+  unit: UsageUnit;
+  quantity: number;
+  endpoint: string;
+  model?: string;
+  userId?: string;
+  metadata?: Record<string, unknown>;
+  costUsd?: number;
+}): UsageEvent {
+  const quantity = Math.max(0, Number(input.quantity) || 0);
+  const event: UsageEvent = {
+    id: `use_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    orgId: normalizeUsageOrgId(input.orgId),
+    userId: input.userId,
+    endpoint: input.endpoint,
+    model: input.model ?? String(input.provider),
+    promptTokens: input.unit === 'tokens' ? quantity : 0,
+    completionTokens: 0,
+    totalTokens: input.unit === 'tokens' ? quantity : 0,
+    costUsd: input.costUsd ?? 0,
+    createdAt: new Date().toISOString(),
+    provider: input.provider,
+    unit: input.unit,
+    quantity,
+    metadata: input.metadata,
+  };
+  memoryEvents = [event, ...allEvents()];
+  persist();
+  return event;
+}
+
+export function getProviderEventsThisMonth(orgId: string, provider: UsageProvider): UsageEvent[] {
+  const monthStart = startOfMonth();
+  const oid = normalizeUsageOrgId(orgId);
+  return allEvents().filter(
+    (e) =>
+      e.orgId === oid &&
+      e.provider === provider &&
+      new Date(e.createdAt).getTime() >= monthStart,
+  );
+}
+
+export function getProviderQuantityThisMonth(orgId: string, provider: UsageProvider): number {
+  return getProviderEventsThisMonth(orgId, provider).reduce(
+    (sum, e) => sum + Number(e.quantity ?? e.totalTokens ?? 0),
+    0,
+  );
+}
+
 export function getTokensUsedThisMonth(orgId: string): number {
   const monthStart = startOfMonth();
+  const oid = normalizeUsageOrgId(orgId);
   return allEvents()
-    .filter(e => e.orgId === orgId && new Date(e.createdAt).getTime() >= monthStart)
+    .filter(
+      (e) =>
+        e.orgId === oid &&
+        new Date(e.createdAt).getTime() >= monthStart &&
+        (!e.provider || e.provider === 'openai' || e.provider === 'deepseek') &&
+        (!e.unit || e.unit === 'tokens'),
+    )
     .reduce((sum, e) => sum + e.totalTokens, 0);
+}
+
+export function getTokenCostUsdThisMonth(orgId: string): number {
+  const monthStart = startOfMonth();
+  const oid = normalizeUsageOrgId(orgId);
+  return allEvents()
+    .filter(
+      (e) =>
+        e.orgId === oid &&
+        new Date(e.createdAt).getTime() >= monthStart &&
+        (!e.provider || e.provider === 'openai' || e.provider === 'deepseek') &&
+        (!e.unit || e.unit === 'tokens'),
+    )
+    .reduce((sum, e) => sum + e.costUsd, 0);
 }
 
 export function getUsageSummaryForOrg(orgId: string) {
   const monthStart = startOfMonth();
+  const oid = normalizeUsageOrgId(orgId);
   const events = allEvents().filter(
-    e => e.orgId === orgId && new Date(e.createdAt).getTime() >= monthStart,
+    (e) => e.orgId === oid && new Date(e.createdAt).getTime() >= monthStart,
+  );
+  const tokenEvents = events.filter(
+    (e) => !e.provider || e.provider === 'openai' || e.provider === 'deepseek',
   );
   return {
-    tokensUsed: events.reduce((s, e) => s + e.totalTokens, 0),
+    tokensUsed: tokenEvents.reduce((s, e) => s + e.totalTokens, 0),
     costUsd: events.reduce((s, e) => s + e.costUsd, 0),
     requestCount: events.length,
     byEndpoint: events.reduce<Record<string, number>>((acc, e) => {
-      acc[e.endpoint] = (acc[e.endpoint] ?? 0) + e.totalTokens;
+      acc[e.endpoint] = (acc[e.endpoint] ?? 0) + Number(e.quantity ?? e.totalTokens ?? 0);
       return acc;
     }, {}),
+    aiMinutesSeconds: getProviderQuantityThisMonth(orgId, 'ai_minutes'),
+    phoneOutboundSeconds: getProviderQuantityThisMonth(orgId, 'phone'),
   };
 }
 
 export function getGlobalUsageThisMonth(): number {
   const monthStart = startOfMonth();
   return allEvents()
-    .filter(e => new Date(e.createdAt).getTime() >= monthStart)
+    .filter(
+      (e) =>
+        new Date(e.createdAt).getTime() >= monthStart &&
+        (!e.provider || e.provider === 'openai' || e.provider === 'deepseek'),
+    )
     .reduce((sum, e) => sum + e.totalTokens, 0);
 }
 
@@ -149,10 +259,17 @@ export function assertWithinQuota(orgId: string): void {
   if (org.status === 'suspended' || org.status === 'cancelled') {
     throw new QuotaExceededError(`Organization "${org.name}" is ${org.status}. AI access is disabled.`);
   }
+}
+
+export function getTokenQuotaWarning(orgId: string): string | null {
+  const org = getOrganizationById(orgId);
+  if (!org) return null;
   const used = getTokensUsedThisMonth(orgId);
   if (used >= org.monthlyTokenCap) {
-    throw new QuotaExceededError(
-      `Monthly token cap reached for "${org.name}" (${used.toLocaleString()} / ${org.monthlyTokenCap.toLocaleString()}).`,
-    );
+    return `Token allowance exceeded for "${org.name}" (${used.toLocaleString()} / ${org.monthlyTokenCap.toLocaleString()}). Overage will appear on this month's invoice.`;
   }
+  if (used >= org.monthlyTokenCap * 0.8) {
+    return `Token allowance at ${Math.round((used / org.monthlyTokenCap) * 100)}% for "${org.name}".`;
+  }
+  return null;
 }

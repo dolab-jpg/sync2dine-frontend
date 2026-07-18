@@ -217,9 +217,9 @@ export default function CyrusConversations() {
 
       {openaiState && openaiState.status !== 'connected' && (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {openaiState.message ?? 'OpenAI not connected.'}
+          {openaiState.message ?? 'AI brain not connected.'}
           {' '}
-          Add your API key in <strong>Settings → Integrations → OpenAI</strong> and Save.
+          Add your API key in <strong>Settings → Integrations → Company AI Brain</strong> and Save.
         </div>
       )}
 

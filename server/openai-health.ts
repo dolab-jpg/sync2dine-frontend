@@ -27,7 +27,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
 }
 
 const MISSING_MESSAGE =
-  'OpenAI not connected — add your API key in Settings → Integrations → Company AI Brain and Save.';
+  'AI brain not connected — add a DeepSeek or OpenAI key in Settings → Integrations → Company AI Brain and Save.';
 
 export async function handleOpenAIHealth(req: IncomingMessage, res: ServerResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') {
@@ -64,7 +64,40 @@ export async function handleOpenAIHealth(req: IncomingMessage, res: ServerRespon
   if (orgId) await ensureOrgAIBrainLoaded(orgId);
   const provider = resolveBrainProvider(bodyProvider, orgId);
 
-  // Always verify OpenAI when present — it powers vision/pricing even if text brain is DeepSeek.
+  // Prefer probing the active primary brain provider.
+  if (provider === 'deepseek') {
+    const deepseekKey = await resolveDeepSeekApiKeyAsync(bodyDeepSeekApiKey, orgId);
+    if (deepseekKey) {
+      try {
+        await probeLLMConnection('deepseek', deepseekKey);
+        const openaiKey = await resolveOpenAIApiKeyAsync(bodyApiKey, orgId);
+        let openaiConnected = false;
+        if (openaiKey) {
+          try {
+            await probeLLMConnection('openai', openaiKey);
+            openaiConnected = true;
+          } catch {
+            openaiConnected = false;
+          }
+        }
+        sendJson(res, 200, {
+          connected: true,
+          provider: 'deepseek',
+          openaiConnected,
+          deepseekConfigured: true,
+          warning: openaiConnected
+            ? undefined
+            : 'DeepSeek brain connected. Optional OpenAI specialist key still needed for TTS, Whisper, Realtime, image edit, and Sally web search.',
+        });
+        return;
+      } catch (err) {
+        const mapped = mapOpenAIError(err);
+        sendJson(res, 200, { connected: false, reason: mapped.code, message: mapped.message });
+        return;
+      }
+    }
+  }
+
   const openaiKey = await resolveOpenAIApiKeyAsync(bodyApiKey, orgId);
   if (openaiKey) {
     try {
@@ -86,27 +119,6 @@ export async function handleOpenAIHealth(req: IncomingMessage, res: ServerRespon
         openaiConnected: false,
       });
       return;
-    }
-  }
-
-  // No OpenAI — optionally allow DeepSeek-only for text if that is active.
-  if (provider === 'deepseek') {
-    const deepseekKey = await resolveDeepSeekApiKeyAsync(bodyDeepSeekApiKey, orgId);
-    if (deepseekKey) {
-      try {
-        await probeLLMConnection('deepseek', deepseekKey);
-        sendJson(res, 200, {
-          connected: true,
-          provider: 'deepseek',
-          openaiConnected: false,
-          warning: 'DeepSeek text brain is connected, but OpenAI is still required for photo pricing, vision, and TTS.',
-        });
-        return;
-      } catch (err) {
-        const mapped = mapOpenAIError(err);
-        sendJson(res, 200, { connected: false, reason: mapped.code, message: mapped.message });
-        return;
-      }
     }
   }
 

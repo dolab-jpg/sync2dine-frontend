@@ -68,7 +68,16 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
   }, [definition.id, expanded, savedAt, localValues.website]);
 
   const handleSave = async () => {
-    if (definition.fields.some(f => f.required) && !hasCredentials) {
+    if (definition.id === 'openai') {
+      if (!hasCredentials) {
+        toast.error(
+          localValues.provider === 'deepseek'
+            ? 'Enter your DeepSeek API key before saving'
+            : 'Enter your OpenAI API key before saving',
+        );
+        return;
+      }
+    } else if (definition.fields.some(f => f.required) && !hasCredentials) {
       toast.error('Fill in all required fields before saving');
       return;
     }
@@ -81,10 +90,11 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
 
       if (hasCredentials && definition.id === 'openai') {
         const inst = integrationService.getInstance('openai');
+        const providerLabel = (localValues.provider === 'deepseek' ? 'DeepSeek' : 'OpenAI');
         if (inst.status === 'connected') {
-          toast.success('Company AI Brain connected — OpenAI key live for the whole company');
+          toast.success(`Company AI Brain connected — ${providerLabel} live for the whole company`);
         } else {
-          toast.error(inst.lastTestError || 'Saved but OpenAI did not connect — check the key');
+          toast.error(inst.lastTestError || `Saved but ${providerLabel} did not connect — check the key`);
         }
         if (inst.lastTestError && inst.status === 'connected') toast.warning(inst.lastTestError);
       } else if (hasCredentials) {
@@ -229,7 +239,26 @@ export function IntegrationCard({ definition, instance, userName, onUpdate, simu
           <IntegrationFieldForm
             fields={definition.fields}
             values={localValues}
-            onChange={(key, value) => setLocalValues(prev => ({ ...prev, [key]: value }))}
+            onChange={(key, value) => {
+              setLocalValues((prev) => {
+                const next = { ...prev, [key]: value };
+                if (definition.id === 'openai' && key === 'provider') {
+                  const mapModel = (current?: string) => {
+                    if (value === 'deepseek') {
+                      if (!current || current.startsWith('gpt-')) return 'deepseek-v4-flash';
+                      if (current === 'deepseek-chat' || current === 'deepseek-reasoner') return current;
+                      return current.startsWith('deepseek') ? current : 'deepseek-v4-flash';
+                    }
+                    if (!current || current.startsWith('deepseek')) return 'gpt-4o-mini';
+                    return current;
+                  };
+                  next.staffModel = mapModel(prev.staffModel);
+                  next.cyrusModel = mapModel(prev.cyrusModel);
+                  next.summaryModel = mapModel(prev.summaryModel);
+                }
+                return next;
+              });
+            }}
           />
 
           {integrationService.isMasterMockMode() && definition.id === 'openai' && (

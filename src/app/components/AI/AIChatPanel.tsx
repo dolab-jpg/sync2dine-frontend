@@ -860,8 +860,8 @@ export function AIChatPanel() {
               <p className="mt-1">
                 {connection.message
                   ?? ((agentContext.role === 'customer' || agentContext.role === 'builder')
-                    ? 'Company AI not configured yet — ask your Super Admin to add an OpenAI key in Integrations.'
-                    : 'Add your API key in Settings → Integrations → OpenAI and Save.')}
+                    ? 'Company AI not configured yet — ask your Super Admin to add a DeepSeek or OpenAI key in Integrations.'
+                    : 'Add your API key in Settings → Integrations → Company AI Brain and Save.')}
               </p>
             </div>
           </div>

@@ -141,7 +141,7 @@ export async function handleTranscribeUpload(req: IncomingMessage, res: ServerRe
     res.statusCode = 503;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({
-      error: 'OpenAI not connected — add your API key in Settings → Integrations → OpenAI and Save.',
+      error: 'OpenAI specialist key required for Whisper transcription — add it in Settings → Integrations → Company AI Brain.',
       code: 'missing',
     }));
     return;

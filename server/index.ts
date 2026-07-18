@@ -27,6 +27,7 @@ import { handleCynthiaRoutes } from './cynthia-routes';
 import { handleLeadsRoutes } from './leads-routes';
 import { handleAgentCredentialsRoutes } from './agent-credentials-routes';
 import { handleOrgOpenAIKeyRoutes } from './org-openai-key-routes';
+import { handleOrgIntegrationsRoutes } from './org-integrations-routes';
 import { handlePushRoutes } from './push-routes';
 import { handleGapApiRoutes } from './gap-api-routes';
 import { handleAnalyticsRoutes } from './analytics-routes';
@@ -104,6 +105,8 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
   if (await handleAuthRoutes(req, res, pathname)) return;
 
   if (await handleOrgOpenAIKeyRoutes(req, res, pathname)) return;
+
+  if (await handleOrgIntegrationsRoutes(req, res, pathname)) return;
 
   if (await handlePlatformRoutes(req, res, pathname)) return;
 

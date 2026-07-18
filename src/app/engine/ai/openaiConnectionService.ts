@@ -9,18 +9,26 @@ export interface OpenAIConnectionState {
 }
 
 const MISSING_MESSAGE =
-  'OpenAI not connected — add your API key in Settings → Integrations → Company AI Brain and Save.';
+  'AI brain not connected — add a DeepSeek or OpenAI key in Settings → Integrations → Company AI Brain and Save.';
 
 const MISSING_MESSAGE_NON_ADMIN =
-  'Company AI not configured yet — ask your Super Admin to add an OpenAI key in Integrations.';
+  'Company AI not configured yet — ask your Super Admin to add a DeepSeek or OpenAI key in Integrations.';
 
 export async function checkOpenAIConnection(options?: {
   role?: string;
 }): Promise<OpenAIConnectionState> {
   await syncActiveOrgFromProfile();
+  const openaiConfig = integrationService.getConfig('openai');
+  const provider = openaiConfig.provider === 'deepseek' ? 'deepseek' : 'openai';
   const apiKey = integrationService.getLiveOpenAIApiKey();
-  const body: Record<string, string> = {};
+  const deepseekApiKey = integrationService.isLiveOpenAIApiKey(openaiConfig.deepseekApiKey)
+    ? openaiConfig.deepseekApiKey.trim()
+    : undefined;
+  const body: Record<string, string> = { provider };
   if (apiKey) body.apiKey = apiKey;
+  if (deepseekApiKey) body.deepseekApiKey = deepseekApiKey;
+
+  const hasLocalBrain = provider === 'deepseek' ? Boolean(deepseekApiKey) : Boolean(apiKey);
 
   try {
     const response = await fetch('/api/ai/health', {
@@ -30,7 +38,7 @@ export async function checkOpenAIConnection(options?: {
     });
 
     if (!response.ok) {
-      if (apiKey) {
+      if (hasLocalBrain) {
         return { status: 'connected' };
       }
       return {
@@ -52,13 +60,11 @@ export async function checkOpenAIConnection(options?: {
     if (data.reason === 'rejected') {
       return {
         status: 'rejected',
-        message: data.message ?? 'OpenAI key rejected — check the key and billing on your OpenAI account.',
+        message: data.message ?? 'AI key rejected — check the key and billing on your provider account.',
       };
     }
 
-    // Client has a key that will be sent on /api/ai/orchestrate — don't lock the
-    // overlay when the health probe only checks server env and reports missing.
-    if (apiKey) {
+    if (hasLocalBrain) {
       return { status: 'connected' };
     }
 
@@ -72,9 +78,7 @@ export async function checkOpenAIConnection(options?: {
       message: data.message ?? fallback,
     };
   } catch {
-    // Health probe can 502 when the Vite proxy flaps — if a live key is already
-    // configured locally, allow chat (main Cynthia / overlay share the same key).
-    if (apiKey) {
+    if (hasLocalBrain) {
       return { status: 'connected' };
     }
     return {
@@ -87,17 +91,15 @@ export async function checkOpenAIConnection(options?: {
 export function connectionFromOrchestratorError(err: unknown): OpenAIConnectionState | null {
   if (!(err instanceof Error)) return null;
   const message = err.message;
-  if (/openai not connected|not configured for this company/i.test(message)) {
+  if (/openai not connected|deepseek api key not configured|not configured for this company|ai brain not connected/i.test(message)) {
     return { status: 'missing', message };
   }
-  if (/openai key rejected/i.test(message)) {
+  if (/openai key rejected|deepseek.*rejected|key rejected/i.test(message)) {
     return { status: 'rejected', message };
   }
-  // Only treat as "OpenAI missing" when the 503 is actually about the AI key/service —
-  // not when a tool/orchestrator bug returns a generic HTTP 503 with an unrelated message.
   if (
     /ai service unavailable/i.test(message)
-    || (/503/.test(message) && /openai|api key|not connected|not configured/i.test(message))
+    || (/503/.test(message) && /openai|deepseek|api key|not connected|not configured/i.test(message))
   ) {
     return { status: 'missing', message: MISSING_MESSAGE };
   }

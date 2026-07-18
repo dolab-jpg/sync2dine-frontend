@@ -212,17 +212,21 @@ async function openaiJsonExtract(
     researchText.slice(0, 12000),
   ].join('\n');
 
-  // Metered OpenAI client — same Company AI Brain key as Cynthia / job pricing.
-  const { createOpenAISpecialistClientForOrg } = await import('./llm-connection');
-  const openai = await createOpenAISpecialistClientForOrg(
+  // Metered LLM client — Company AI Brain (DeepSeek or OpenAI text extract).
+  const { createLLMClientForOrg, defaultChatModelForProvider } = await import('./llm-connection');
+  const { client: openai, provider } = await createLLMClientForOrg(
     orgId,
     '/api/ai/restaurant-research',
-    apiKey,
+    { bodyOpenAIApiKey: apiKey },
+  );
+  const model = defaultChatModelForProvider(
+    provider,
+    process.env.OPENAI_RESEARCH_MODEL?.trim(),
   );
 
   try {
     const completion = await openai.chat.completions.create({
-      model: process.env.OPENAI_RESEARCH_MODEL?.trim() || 'gpt-4o',
+      model,
       temperature: 0.2,
       response_format: { type: 'json_object' },
       messages: [

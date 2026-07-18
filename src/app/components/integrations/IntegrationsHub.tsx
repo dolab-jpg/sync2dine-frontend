@@ -146,6 +146,7 @@ export default function IntegrationsHub() {
   );
 
   const connectedCount = integrationService.getConnectedCount();
+  const statusSummary = integrationService.getStatusSummary();
   const bankingProvider = getIntegrationValues('open_banking').provider || 'mock';
   const bankingIsMock =
     bankingProvider === 'mock'
@@ -180,6 +181,22 @@ export default function IntegrationsHub() {
                   {store.masterMockMode ? 'Master Mock Mode ON' : 'Live Mode'}
                 </Badge>
                 <Badge className="bg-white/20 text-white capitalize">{store.environment}</Badge>
+                <Badge className="bg-emerald-500/90 text-white">
+                  Connected: {statusSummary.connected}
+                </Badge>
+                <Badge className="bg-white/20 text-white">
+                  Not configured: {statusSummary.notConfigured}
+                </Badge>
+                {statusSummary.error > 0 && (
+                  <Badge className="bg-red-500/90 text-white">
+                    Error: {statusSummary.error}
+                  </Badge>
+                )}
+                {statusSummary.mock > 0 && (
+                  <Badge className="bg-amber-500/90 text-white">
+                    Mock: {statusSummary.mock}
+                  </Badge>
+                )}
                 <Badge className={bankingIsMock ? 'bg-amber-500/90 text-white' : 'bg-emerald-500/90 text-white'}>
                   Open Banking: {bankingIsMock ? 'Demo / mock feed' : `Connected (${bankingProvider})`}
                 </Badge>
@@ -234,11 +251,11 @@ export default function IntegrationsHub() {
         </div>
       </div>
 
-      <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+      <div className="flex items-start gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800">
         <Shield className="w-4 h-4 mt-0.5 shrink-0" />
         <span>
-          API keys are stored in localStorage for development. At go-live, migrate to Supabase with server-side encryption.
-          Only super admins can access this page.
+          API keys are stored encrypted in Supabase (server-side). Only super admins and platform owners can access this page.
+          Secret values are never kept in browser localStorage when cloud is configured.
         </span>
       </div>
 
