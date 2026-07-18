@@ -10,7 +10,7 @@ export interface OrgIntegrationPublic {
   configuredFields: Record<string, string>;
   hasSecrets: boolean;
   updatedAt?: string;
-  source?: 'supabase' | 'memory' | 'none';
+  source?: 'supabase' | 'memory' | 'none' | 'env' | 'runtime' | 'both';
   syncedToCloud?: boolean;
   cloudSyncWarning?: string;
 }
@@ -24,6 +24,7 @@ export interface OrgIntegrationsListResponse {
     error: number;
     mock: number;
     total: number;
+    registryHint?: number;
   };
 }
 
@@ -50,6 +51,21 @@ export async function fetchOrgIntegrations(): Promise<OrgIntegrationsListRespons
     // #region agent log
     fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73adb0'},body:JSON.stringify({sessionId:'73adb0',runId:'pre-deploy',hypothesisId:'H1',location:'orgIntegrationsApi.ts:fetchOrgIntegrations',message:'GET /api/org/integrations threw',data:{error:err instanceof Error?err.message:String(err)},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
+    return null;
+  }
+}
+
+/** Merged Supabase + env + runtime status for hub cards. */
+export async function fetchOrgIntegrationsStatus(): Promise<OrgIntegrationsListResponse | null> {
+  try {
+    const headers = await orgHeaders();
+    const res = await fetch('/api/org/integrations/status', { headers });
+    // #region agent log
+    fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73adb0'},body:JSON.stringify({sessionId:'73adb0',runId:'hydrate',hypothesisId:'H4',location:'orgIntegrationsApi.ts:fetchOrgIntegrationsStatus',message:'GET status',data:{ok:res.ok,status:res.status},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (!res.ok) return null;
+    return (await res.json()) as OrgIntegrationsListResponse;
+  } catch {
     return null;
   }
 }
