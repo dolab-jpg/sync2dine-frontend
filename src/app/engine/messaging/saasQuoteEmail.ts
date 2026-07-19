@@ -36,10 +36,29 @@ export function buildSaasQuoteEmail(content: SaasQuoteContent): SaasQuoteEmail {
   const venue = content.customer.venueName || content.customer.name;
   const subject = `${content.plan.name} proposal for ${venue} | Sync2Dine`;
   const checkoutUrl = content.quote.checkoutUrl;
+  const { contact } = content.brand;
+  const telHref = `tel:${contact.phoneTel}`;
   const ctaHtml = checkoutUrl
     ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 8px;"><tr><td bgcolor="#e8c26a" style="border-radius:6px;"><a href="${escapeHtml(checkoutUrl)}" style="display:inline-block;padding:15px 25px;color:#102f30;text-decoration:none;font:700 14px Arial,sans-serif;letter-spacing:.04em;">Pay securely with Stripe</a></td></tr></table>
        <p style="margin:8px 0 0;color:#667775;font:12px/1.45 Arial,sans-serif;">Secure checkout · Your payment details are handled by Stripe.</p>`
-    : `<p style="margin:22px 0 0;color:#263b3a;font:700 14px/1.5 Arial,sans-serif;">To accept, reply to this email or call 020 3745 3233.</p>`;
+    : `<p style="margin:22px 0 0;color:#263b3a;font:700 14px/1.5 Arial,sans-serif;">To accept, reply to this email or call <a href="${escapeHtml(telHref)}" style="color:#0f3d3e;text-decoration:none;">${escapeHtml(contact.phone)}</a>.</p>`;
+
+  const sellerBlock = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 0;background:#0f3d3e;">
+            <tr><td style="padding:22px 24px;">
+              <div style="color:#f3dda4;font:700 10px Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;">Your Sync2Dine contact</div>
+              <div style="margin-top:8px;color:#ffffff;font:700 20px Arial,sans-serif;">${escapeHtml(contact.sellerName)}</div>
+              <div style="margin-top:4px;color:#f6efe0;font:13px/1.45 Arial,sans-serif;">${escapeHtml(contact.sellerTitle)} · happy to talk through this proposal</div>
+              <div style="margin-top:14px;">
+                <a href="${escapeHtml(telHref)}" style="color:#e8c26a;text-decoration:none;font:700 26px/1.2 Arial,sans-serif;letter-spacing:.02em;">${escapeHtml(contact.phone)}</a>
+              </div>
+              <div style="margin-top:4px;color:#c9b896;font:11px Arial,sans-serif;">UK landline · tap to call</div>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 0;"><tr>
+                <td bgcolor="#e8c26a" style="border-radius:6px;">
+                  <a href="${escapeHtml(telHref)}" style="display:inline-block;padding:14px 22px;color:#102f30;text-decoration:none;font:700 14px Arial,sans-serif;letter-spacing:.04em;">Call ${escapeHtml(contact.sellerName)} now</a>
+                </td>
+              </tr></table>
+            </td></tr>
+          </table>`;
 
   const html = `<!doctype html>
 <html lang="en">
@@ -75,13 +94,14 @@ export function buildSaasQuoteEmail(content: SaasQuoteContent): SaasQuoteEmail {
           <h2 style="margin:0 0 16px;color:#102f30;font:700 18px Arial,sans-serif;">Included in your plan</h2>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${bulletList(content.inclusions)}</table>
           ${ctaHtml}
+          ${sellerBlock}
         </td></tr>
         <tr><td style="padding:22px 30px;background:#fff8df;border-top:1px solid #eadcb9;">
-          <p style="margin:0;color:#0f3d3e;font:700 14px Arial,sans-serif;">Sync2Dine</p>
+          <p style="margin:0;color:#0f3d3e;font:700 14px Arial,sans-serif;">${escapeHtml(contact.sellerName)} · Sync2Dine</p>
           <p style="margin:7px 0 0;color:#667775;font:12px/1.6 Arial,sans-serif;">
-            <a href="https://sync2dine.io" style="color:#16494a;text-decoration:none;">sync2dine.io</a> ·
-            <a href="tel:+442037453233" style="color:#16494a;text-decoration:none;">020 3745 3233</a> ·
-            <a href="mailto:info@sync2dine.io" style="color:#16494a;text-decoration:none;">info@sync2dine.io</a>
+            <a href="https://${escapeHtml(contact.website)}" style="color:#16494a;text-decoration:none;">${escapeHtml(contact.website)}</a> ·
+            <a href="${escapeHtml(telHref)}" style="color:#16494a;text-decoration:none;">${escapeHtml(contact.phone)}</a> ·
+            <a href="mailto:${escapeHtml(contact.email)}" style="color:#16494a;text-decoration:none;">${escapeHtml(contact.email)}</a>
           </p>
         </td></tr>
       </table>
@@ -105,10 +125,13 @@ export function buildSaasQuoteEmail(content: SaasQuoteContent): SaasQuoteEmail {
     '',
     ...(checkoutUrl
       ? ['Pay securely with Stripe:', checkoutUrl]
-      : ['To accept, reply to this email or call 020 3745 3233.']),
+      : [`To accept, reply to this email or call ${contact.phone}.`]),
+    '',
+    `Your Sync2Dine contact: ${contact.sellerName} (${contact.sellerTitle})`,
+    `Call ${contact.sellerName}: ${contact.phone} (${telHref})`,
     '',
     'Sync2Dine',
-    'sync2dine.io | 020 3745 3233 | info@sync2dine.io',
+    `${contact.website} | ${contact.phone} | ${contact.email}`,
   ].join('\n');
 
   return { subject, html, text };

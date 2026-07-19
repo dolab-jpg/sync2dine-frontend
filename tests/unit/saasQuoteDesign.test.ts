@@ -47,7 +47,10 @@ describe('SaaS quote content', () => {
     expect(content.brand.contact).toEqual({
       website: 'sync2dine.io',
       phone: '020 3745 3233',
+      phoneTel: '+442037453233',
       email: 'info@sync2dine.io',
+      sellerName: 'Sally',
+      sellerTitle: 'Sync2Dine sales',
     });
   });
 
@@ -60,10 +63,22 @@ describe('SaaS quote content', () => {
     expect(email.text).toContain(CHECKOUT_URL);
     expect(email.text).toContain('020 3745 3233');
   });
+
+  it('includes Sally seller details and a click-to-call tel CTA', () => {
+    const email = buildSaasQuoteEmail(completeProContent());
+
+    expect(email.html).toContain('Your Sync2Dine contact');
+    expect(email.html).toContain('Sally');
+    expect(email.html).toContain('href="tel:+442037453233"');
+    expect(email.html).toContain('Call Sally now');
+    expect(email.html).toContain('020 3745 3233');
+    expect(email.text).toContain('Your Sync2Dine contact: Sally');
+    expect(email.text).toContain('tel:+442037453233');
+  });
 });
 
 describe('SaaS quote PDF', () => {
-  it('creates exactly two A4 pages with a Stripe URI annotation', async () => {
+  it('creates exactly two A4 pages with Stripe and tel URI annotations', async () => {
     const photoBytes = new Uint8Array(
       readFileSync(resolve(process.cwd(), 'public/quote-assets/sync2dine-phone-agent.jpg')),
     );
@@ -78,11 +93,17 @@ describe('SaaS quote PDF', () => {
       expect(page.getHeight()).toBeCloseTo(841.89, 1);
     }
 
-    const annots = pdf.getPage(0).node.lookup(PDFName.of('Annots'), PDFArray);
-    expect(annots.size()).toBeGreaterThan(0);
-    const annotation = pdf.context.lookup(annots.get(0), PDFDict);
-    const action = annotation.lookup(PDFName.of('A'), PDFDict);
-    const uri = action.lookup(PDFName.of('URI'), PDFString);
-    expect(uri.decodeText()).toBe(CHECKOUT_URL);
+    const uris: string[] = [];
+    for (const page of pdf.getPages()) {
+      const annots = page.node.lookup(PDFName.of('Annots'), PDFArray);
+      for (let index = 0; index < annots.size(); index += 1) {
+        const annotation = pdf.context.lookup(annots.get(index), PDFDict);
+        const action = annotation.lookup(PDFName.of('A'), PDFDict);
+        const uri = action.lookup(PDFName.of('URI'), PDFString);
+        uris.push(uri.decodeText());
+      }
+    }
+    expect(uris).toContain(CHECKOUT_URL);
+    expect(uris.some((uri) => uri === 'tel:+442037453233')).toBe(true);
   });
 });

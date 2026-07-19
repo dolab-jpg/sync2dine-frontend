@@ -128,20 +128,33 @@ function drawBrand(page: PDFPage, fonts: Fonts, x = 44, y = 786, inverse = false
   });
 }
 
-function drawFooter(page: PDFPage, fonts: Fonts, pageNumber: number): void {
+function drawFooter(
+  doc: PDFDocument,
+  page: PDFPage,
+  fonts: Fonts,
+  pageNumber: number,
+  content: SaasQuoteContent,
+): void {
+  const { contact } = content.brand;
   page.drawLine({
     start: { x: 44, y: 46 },
     end: { x: A4[0] - 44, y: 46 },
     thickness: 0.6,
     color: C.gold,
   });
-  page.drawText('sync2dine.io  |  020 3745 3233  |  info@sync2dine.io', {
+  const footerLeft = `${contact.sellerName} · ${contact.website}  |  ${contact.phone}  |  ${contact.email}`;
+  page.drawText(footerLeft, {
     x: 44,
     y: 28,
     font: fonts.regular,
     size: 8.2,
     color: C.muted,
   });
+  // Phone span in the footer is clickable (approx position after "Sally · sync2dine.io  |  ").
+  const phonePrefix = `${contact.sellerName} · ${contact.website}  |  `;
+  const phoneX = 44 + fonts.regular.widthOfTextAtSize(phonePrefix, 8.2);
+  const phoneW = fonts.regular.widthOfTextAtSize(contact.phone, 8.2);
+  addUriAnnotation(doc, page, `tel:${contact.phoneTel}`, phoneX, 24, phoneW + 4, 14);
   page.drawText(`${pageNumber} / 2`, {
     x: A4[0] - 65,
     y: 28,
@@ -149,6 +162,49 @@ function drawFooter(page: PDFPage, fonts: Fonts, pageNumber: number): void {
     size: 8.2,
     color: C.teal,
   });
+}
+
+function drawSellerContactBand(
+  doc: PDFDocument,
+  page: PDFPage,
+  fonts: Fonts,
+  content: SaasQuoteContent,
+  x: number,
+  y: number,
+  width: number,
+): void {
+  const { contact } = content.brand;
+  const height = 58;
+  page.drawRectangle({ x, y, width, height, color: C.tealDeep });
+  page.drawText('YOUR SYNC2DINE CONTACT', {
+    x: x + 16,
+    y: y + 40,
+    font: fonts.bold,
+    size: 7.5,
+    color: C.goldSoft,
+  });
+  page.drawText(safeText(`${contact.sellerName}  ·  ${contact.sellerTitle}`), {
+    x: x + 16,
+    y: y + 24,
+    font: fonts.bold,
+    size: 11,
+    color: C.white,
+  });
+  page.drawText(safeText(contact.phone), {
+    x: x + 16,
+    y: y + 8,
+    font: fonts.bold,
+    size: 15,
+    color: C.gold,
+  });
+  page.drawText('UK landline · tap to call', {
+    x: x + 16 + fonts.bold.widthOfTextAtSize(contact.phone, 15) + 10,
+    y: y + 10,
+    font: fonts.regular,
+    size: 8,
+    color: C.cream,
+  });
+  addUriAnnotation(doc, page, `tel:${contact.phoneTel}`, x + 14, y + 4, width - 28, height - 8);
 }
 
 function drawSectionLabel(page: PDFPage, fonts: Fonts, label: string, x: number, y: number): void {
@@ -381,12 +437,13 @@ function drawCover(
   }
   page.drawText(`Issued ${content.quote.issuedDate}  |  Valid until ${content.quote.expiryDate}`, {
     x: 44,
-    y: 76,
+    y: 118,
     font: fonts.regular,
     size: 8.7,
     color: C.muted,
   });
-  drawFooter(page, fonts, 1);
+  drawSellerContactBand(doc, page, fonts, content, 44, 54, A4[0] - 88);
+  drawFooter(doc, page, fonts, 1, content);
 }
 
 function drawList(
@@ -503,24 +560,36 @@ function drawDetailsPage(
     });
   }
 
+  const { contact } = content.brand;
   if (content.quote.checkoutUrl) {
     page.drawText('Ready to move forward?', {
       x: 316,
-      y: 151,
+      y: 168,
       font: fonts.bold,
       size: 12,
       color: C.tealDeep,
     });
-    page.drawText('Open the secure Stripe checkout to accept.', {
+    page.drawText('Open Stripe to accept, or call Sally.', {
       x: 316,
-      y: 133,
+      y: 150,
       font: fonts.regular,
       size: 8.5,
       color: C.muted,
     });
-    drawCheckoutButton(doc, page, fonts, content.quote.checkoutUrl, 316, 80, 235);
+    drawCheckoutButton(doc, page, fonts, content.quote.checkoutUrl, 316, 102, 235);
+    page.drawRectangle({ x: 316, y: 58, width: 235, height: 34, color: C.tealDeep });
+    const callLabel = `CALL ${contact.phone}`;
+    const callLabelWidth = fonts.bold.widthOfTextAtSize(callLabel, 9.5);
+    page.drawText(callLabel, {
+      x: 316 + (235 - callLabelWidth) / 2,
+      y: 70,
+      font: fonts.bold,
+      size: 9.5,
+      color: C.gold,
+    });
+    addUriAnnotation(doc, page, `tel:${contact.phoneTel}`, 316, 58, 235, 34);
   } else {
-    page.drawRectangle({ x: 316, y: 80, width: 235, height: 76, color: C.cream });
+    page.drawRectangle({ x: 316, y: 58, width: 235, height: 98, color: C.cream });
     page.drawText('NEXT STEP', {
       x: 334,
       y: 132,
@@ -528,15 +597,30 @@ function drawDetailsPage(
       size: 8,
       color: C.tealSoft,
     });
-    page.drawText('Reply to accept or call 020 3745 3233', {
+    page.drawText(`Speak with ${contact.sellerName}`, {
       x: 334,
-      y: 105,
+      y: 112,
       font: fonts.bold,
-      size: 10,
+      size: 11,
       color: C.tealDeep,
     });
+    page.drawText(safeText(contact.phone), {
+      x: 334,
+      y: 90,
+      font: fonts.bold,
+      size: 14,
+      color: C.teal,
+    });
+    page.drawText('UK landline · tap to call', {
+      x: 334,
+      y: 72,
+      font: fonts.regular,
+      size: 8,
+      color: C.muted,
+    });
+    addUriAnnotation(doc, page, `tel:${contact.phoneTel}`, 316, 58, 235, 98);
   }
-  drawFooter(page, fonts, 2);
+  drawFooter(doc, page, fonts, 2, content);
 }
 
 /**
