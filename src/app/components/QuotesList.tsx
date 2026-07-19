@@ -11,96 +11,19 @@ import { useNavigate } from 'react-router';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { toast } from 'sonner';
 import { messagingHub } from '../engine/messaging/messagingHub';
-import { renderTemplate, buildQuoteVariables, type TemplateVariables } from '../engine/messaging/templateRenderer';
+import { renderTemplate, buildQuoteVariables } from '../engine/messaging/templateRenderer';
 import { buildQuotePdfAttachment } from '../engine/messaging/quotePdfHelpers';
 import { pdfPathFromAttachment } from '../engine/messaging/documentPersist';
 import { AddressMapLink } from './ui/AddressMapLink';
 import { getAllTrades } from '../config/trades';
 import { createProjectFromQuote, getProject, syncToServer } from '../engine/project/projectStore';
-import { getPackage, isSaasPackageId } from '../engine/saas/saasPackages';
+import { buildSaasQuoteContent } from '../engine/messaging/saasQuoteContent';
+import { buildSaasQuoteEmail } from '../engine/messaging/saasQuoteEmail';
+import { sendSaasQuoteFromMailbox } from '../engine/messaging/saasQuoteDelivery';
+import { createQuoteCheckoutLink } from '../engine/saas/quoteCheckoutApi';
 
 function isSaasQuote(quote: Quote): boolean {
   return quote.wizardAnswers?.saas === true || quote.tradeName === 'Sync2Dine SaaS';
-}
-
-function buildSaasQuoteEmail(quote: Quote, vars: TemplateVariables): { subject: string; body: string } {
-  const wa = (quote.wizardAnswers ?? {}) as Record<string, unknown>;
-  const packageId = typeof wa.packageId === 'string' ? wa.packageId : '';
-  const pkg = isSaasPackageId(packageId) ? getPackage(packageId) : null;
-  const packageName = pkg?.name ?? quote.items?.[0]?.name ?? 'Sync2Dine';
-  const interval = wa.billingInterval === 'annual' ? 'annual' : 'weekly';
-  const launchActive = wa.launchActive !== false;
-  const weeklyTotal =
-    typeof wa.weeklyTotal === 'number' && Number.isFinite(wa.weeklyTotal)
-      ? wa.weeklyTotal
-      : interval === 'weekly'
-        ? quote.total
-        : pkg?.launchWeeklyGbp ?? quote.total;
-  const annualTotal =
-    typeof wa.annualTotal === 'number' && Number.isFinite(wa.annualTotal)
-      ? wa.annualTotal
-      : pkg?.annualPrepayGbp;
-  const priceLine =
-    interval === 'annual'
-      ? `£${quote.total.toLocaleString('en-GB')}/year`
-      : `£${weeklyTotal.toLocaleString('en-GB')}/week${launchActive && pkg ? ` launch (normally £${pkg.standardWeeklyGbp}/week)` : ''}`;
-
-  const includesAtmosphere = pkg?.includesAtmosphere === true || packageId.startsWith('combined') || packageId === 'atmosphere';
-  const judieMins = pkg?.weeklyAiMinutes ?? 0;
-  const outboundMins = pkg?.weeklyOutboundMinutes ?? 0;
-  const fareBits: string[] = [];
-  if (judieMins > 0) {
-    fareBits.push(`${judieMins} Judie AI minutes/week`);
-    if (outboundMins > 0) fareBits.push(`${outboundMins} outbound minutes/week`);
-    else if (pkg?.inboundOnly) fareBits.push('inbound calls only');
-  }
-  if (includesAtmosphere) {
-    fareBits.push('Atmosphere — venue audio, promotional messaging, and staff training');
-  }
-
-  const subject = renderTemplate(`Your Sync2Dine quote — ${packageName}`, vars);
-  const body = renderTemplate(
-    [
-      `Dear {CUSTOMER_NAME},`,
-      ``,
-      `Thank you for considering Sync2Dine. Here is your quotation for ${packageName}.`,
-      ``,
-      `Investment: ${priceLine}`,
-      annualTotal != null && interval === 'weekly'
-        ? `Annual prepay alternative: £${Number(annualTotal).toLocaleString('en-GB')}/year (50% off annualized launch).`
-        : null,
-      `Valid until {QUOTE_EXPIRY}.`,
-      ``,
-      `What you get:`,
-      `• Judie — AI phone receptionist for orders, bookings, and call handling, powered by your Company AI Brain`,
-      includesAtmosphere
-        ? `• Atmosphere — venue audio and messaging so the floor sells while the phone is covered`
-        : `• Phone-first hosting with transfers to your team when needed`,
-      fareBits.length ? `• Included: ${fareBits.join('; ')}` : null,
-      `• Integrations — voice telephony, CRM, email/WhatsApp, Stripe, and orders/bookings into the app`,
-      judieMins >= 420
-        ? `• Pro-level capacity — more AI talk time and outbound minutes so you handle busy periods and winbacks without drowning the pass`
-        : `• Clear weekly allowances — minutes reset each week so costs stay predictable`,
-      ``,
-      `Why go ahead with Sync2Dine:`,
-      `• Answer every call — fewer missed orders and bookings at rush`,
-      `• One system for phone and venue — Judie plus Atmosphere instead of juggling add-ons`,
-      `• Launch pricing you keep after you sign — transparent weekly (or annual) fares`,
-      `• Built to grow with you — move up tiers when you need more cells of capacity`,
-      ``,
-      `Please find your quotation PDF attached.`,
-      ``,
-      `Reply to this email or call us with any questions — happy to walk you through go-live.`,
-      ``,
-      `Best regards,`,
-      `{COMPANY_NAME}`,
-    ]
-      .filter((line): line is string => line != null)
-      .join('\n'),
-    vars,
-  );
-
-  return { subject, body };
 }
 
 export default function QuotesList() {
@@ -109,7 +32,7 @@ export default function QuotesList() {
 
   if (!context) return null;
 
-  const { quotes, customers, updateQuote } = context;
+  const { quotes, customers, updateQuote, user } = context;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -166,40 +89,106 @@ export default function QuotesList() {
     }
     setSendingId(quote.id);
     try {
-      const attachment = await buildQuotePdfAttachment(quote);
-      updateQuote(quote.id, { status: 'sent', pdfPath: pdfPathFromAttachment(attachment) });
-      const vars = buildQuoteVariables(customer, quote, undefined, quote.discount);
       const saas = isSaasQuote(quote);
-      const emailCopy = saas
-        ? buildSaasQuoteEmail(quote, vars)
-        : {
-            subject: renderTemplate('Your Quote from {COMPANY_NAME}', vars),
-            body: renderTemplate(
-              `Dear {CUSTOMER_NAME},\n\nYour quote for £{QUOTE_TOTAL} is ready. Valid until {QUOTE_EXPIRY}.\n\nPlease find your quotation PDF attached.\n\nReply to this email or call us with any questions.`,
-              vars,
-            ),
-          };
-      const result = await messagingHub.send({
-        channels: ['email', 'whatsapp'],
-        to: {
-          email: customer.email,
-          phone: customer.phone,
-          customerId: customer.id,
-          customerName: customer.name,
-        },
-        subject: renderTemplate('Your Quote from {COMPANY_NAME}', vars),
-        body: renderTemplate(
+      if (saas && !customer.email) throw new Error('A customer email is required for a payable SaaS quote');
+
+      let checkoutUrl = quote.checkoutLandingUrl;
+      if (saas && !checkoutUrl) {
+        const checkout = await createQuoteCheckoutLink(quote);
+        checkoutUrl = checkout.checkoutUrl;
+        updateQuote(quote.id, {
+          checkoutLandingUrl: checkoutUrl,
+          stripePaymentStatus: quote.stripePaymentStatus ?? 'unpaid',
+        });
+      }
+
+      const deliveryQuote: Quote = { ...quote, checkoutLandingUrl: checkoutUrl };
+      const attachment = await buildQuotePdfAttachment(deliveryQuote, { checkoutUrl });
+      const vars = buildQuoteVariables(customer, quote, undefined, quote.discount);
+      let messageId: string | undefined;
+
+      if (saas) {
+        const content = buildSaasQuoteContent(
+          {
+            ...deliveryQuote,
+            customer: {
+              contactName: customer.name,
+              email: customer.email,
+              phone: customer.phone,
+              address: customer.address,
+            },
+          },
+          { checkoutUrl },
+        );
+        const email = buildSaasQuoteEmail(content);
+        const mailbox = await sendSaasQuoteFromMailbox({
+          userId: user.id,
+          to: customer.email,
+          email,
+          attachment,
+        });
+        if (mailbox.provider === 'gmail' && !mailbox.delivered) {
+          throw new Error(mailbox.error || 'Connected Gmail could not send the quote');
+        }
+        if (mailbox.delivered) {
+          messageId = mailbox.messageId;
+        } else {
+          const fallback = await messagingHub.send({
+            channels: ['email'],
+            to: {
+              email: customer.email,
+              customerId: customer.id,
+              customerName: customer.name,
+            },
+            subject: email.subject,
+            body: email.text,
+            eventType: 'quote_sent',
+            templateId: 'saas_quote_ready',
+            attachment,
+          }, customer);
+          const emailLog = fallback.logs.find((log) => log.channel === 'email');
+          if (!emailLog || emailLog.status !== 'sent') {
+            throw new Error(emailLog?.error || 'No live Gmail, SMTP or Resend provider is available');
+          }
+        }
+      } else {
+        const subject = renderTemplate('Your Quote from {COMPANY_NAME}', vars);
+        const body = renderTemplate(
           `Dear {CUSTOMER_NAME},\n\nYour quote for £{QUOTE_TOTAL} is ready. Valid until {QUOTE_EXPIRY}.\n\nPlease find your quotation PDF attached.\n\nReply to this email or call us with any questions.`,
-          vars
-        ),
-        eventType: 'quote_sent',
-        templateId: 'quote_ready',
-        attachment,
-      }, customer);
-      const mode = result.logs[0]?.status === 'mock' ? ' (mock)' : '';
-      toast.success(`Quote PDF sent to ${quote.customerName}${mode}`);
+          vars,
+        );
+        const result = await messagingHub.send({
+          channels: ['email', 'whatsapp'],
+          to: {
+            email: customer.email,
+            phone: customer.phone,
+            customerId: customer.id,
+            customerName: customer.name,
+          },
+          subject,
+          body,
+          eventType: 'quote_sent',
+          templateId: 'quote_ready',
+          attachment,
+        }, customer);
+        if (!result.logs.some((log) => log.status === 'sent')) {
+          throw new Error(result.errors[0] || 'No live message provider delivered the quote');
+        }
+      }
+
+      const sentAt = new Date().toISOString();
+      const sentPatch: Partial<Quote> = {
+        status: 'sent',
+        pdfPath: pdfPathFromAttachment(attachment),
+        checkoutLandingUrl: checkoutUrl,
+        stripePaymentStatus: saas ? quote.stripePaymentStatus ?? 'unpaid' : quote.stripePaymentStatus,
+        lastSentAt: sentAt,
+        lastEmailMessageId: messageId,
+      };
+      updateQuote(quote.id, sentPatch);
+      toast.success(`Professional quote emailed to ${customer.email}`);
       if (selectedQuote?.id === quote.id) {
-        setSelectedQuote({ ...quote, status: 'sent', pdfPath: pdfPathFromAttachment(attachment) });
+        setSelectedQuote({ ...deliveryQuote, ...sentPatch });
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not generate or send quote PDF');
@@ -225,7 +214,11 @@ export default function QuotesList() {
     const matchesSearch = quote.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          quote.id.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || quote.status === statusFilter;
-    const matchesTrade = tradeFilter === 'all' || quote.tradeId === tradeFilter || (!quote.tradeId && tradeFilter === 'bathroom');
+    const matchesTrade =
+      tradeFilter === 'all' ||
+      quote.tradeId === tradeFilter ||
+      (tradeFilter === 'saas' && (quote.tradeName === 'Sync2Dine SaaS' || quote.wizardAnswers?.saas === true)) ||
+      (!quote.tradeId && !quote.tradeName && tradeFilter === 'bathroom');
     return matchesSearch && matchesStatus && matchesTrade;
   }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -275,9 +268,9 @@ export default function QuotesList() {
             </h1>
             <p className="text-gray-600 mt-1 text-sm sm:text-base">Manage and track all customer quotes</p>
           </div>
-          <Button onClick={() => navigate('/quote')} className="bg-amber-500 hover:bg-amber-600 w-full sm:w-auto min-h-11">
+          <Button onClick={() => navigate('/quote/saas')} className="bg-amber-500 hover:bg-amber-600 w-full sm:w-auto min-h-11">
             <FileText className="w-4 h-4 mr-2" />
-            Create New Quote
+            New Sync2Dine quote
           </Button>
         </div>
 
@@ -351,7 +344,8 @@ export default function QuotesList() {
               <SelectValue placeholder="Trade" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Trades</SelectItem>
+              <SelectItem value="all">All types</SelectItem>
+              <SelectItem value="saas">Sync2Dine SaaS</SelectItem>
               {getAllTrades().map(t => (
                 <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
               ))}
@@ -462,14 +456,14 @@ export default function QuotesList() {
                         Promote to draft
                       </Button>
                     )}
-                    {quote.status === 'draft' && (
+                    {(quote.status === 'draft' || (quote.status === 'sent' && isSaasQuote(quote))) && (
                       <Button
                         className="bg-blue-600 hover:bg-blue-700 min-h-11 flex-1 sm:flex-none"
                         onClick={() => handleSendQuote(quote)}
                         disabled={sendingId === quote.id}
                       >
                         <Send className="w-4 h-4 mr-2" />
-                        {sendingId === quote.id ? 'Sending…' : 'Send'}
+                        {sendingId === quote.id ? 'Sending…' : quote.status === 'sent' ? 'Resend' : 'Send'}
                       </Button>
                     )}
                   </div>
@@ -540,6 +534,34 @@ export default function QuotesList() {
                         <MapPin className="w-4 h-4 mt-0.5" />
                         <AddressMapLink address={customer.address} />
                       </div>
+                    </div>
+                  )}
+
+                  {isSaasQuote(selectedQuote) && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Label className="font-bold text-emerald-950">Stripe payment</Label>
+                        <Badge className={selectedQuote.stripePaymentStatus === 'paid'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-amber-100 text-amber-900'}>
+                          {selectedQuote.stripePaymentStatus === 'paid' ? 'Paid' : 'Awaiting payment'}
+                        </Badge>
+                      </div>
+                      {selectedQuote.checkoutLandingUrl && (
+                        <a
+                          href={selectedQuote.checkoutLandingUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 inline-block font-semibold text-emerald-800 underline underline-offset-2"
+                        >
+                          Open secure customer checkout
+                        </a>
+                      )}
+                      {selectedQuote.lastSentAt && (
+                        <p className="mt-2 text-emerald-900/70">
+                          Last emailed {formatDateTime(selectedQuote.lastSentAt)}
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -619,13 +641,13 @@ export default function QuotesList() {
                         Promote to draft (needs review)
                       </Button>
                     )}
-                    {selectedQuote.status === 'draft' && (
+                    {(selectedQuote.status === 'draft' || (selectedQuote.status === 'sent' && isSaasQuote(selectedQuote))) && (
                       <Button
                         className="flex-1 bg-blue-600 hover:bg-blue-700"
                         onClick={() => handleSendQuote(selectedQuote)}
                       >
                         <Send className="w-4 h-4 mr-2" />
-                        Send to Customer
+                        {selectedQuote.status === 'sent' ? 'Resend professional quote' : 'Send to Customer'}
                       </Button>
                     )}
                     {(selectedQuote.status === 'sent' || selectedQuote.status === 'draft') && !selectedQuote.projectId && (

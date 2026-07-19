@@ -3,6 +3,8 @@ import { migrateQuoteToLines } from '../quotes/quoteLineUtils';
 import { generateQuotePdf } from './pdfGenerator';
 import type { DocumentAttachment } from './types';
 import { persistGeneratedPdf } from './documentPersist';
+import { buildSaasQuoteContent } from './saasQuoteContent';
+import { generateSaasQuotePdf } from './saasQuotePdf';
 
 export function quoteLinesToPdfItems(
   lines: QuoteLine[]
@@ -27,8 +29,36 @@ export function quoteToPdfLineItems(quote: Pick<Quote, 'lines' | 'items' | 'labo
 
 /** Build a branded quote PDF with full line items (not totals-only). */
 export async function buildQuotePdfAttachment(
-  quote: Pick<Quote, 'customerName' | 'total' | 'tradeName' | 'lines' | 'items' | 'labour' | 'extras' | 'projectId'>
+  quote: Pick<
+    Quote,
+    | 'id'
+    | 'customerName'
+    | 'createdAt'
+    | 'expiresAt'
+    | 'total'
+    | 'tradeName'
+    | 'lines'
+    | 'items'
+    | 'labour'
+    | 'extras'
+    | 'projectId'
+    | 'wizardAnswers'
+    | 'checkoutLandingUrl'
+  >,
+  options: { checkoutUrl?: string } = {},
 ): Promise<DocumentAttachment> {
+  const isSaas = quote.wizardAnswers?.saas === true || quote.tradeName === 'Sync2Dine SaaS';
+  if (isSaas) {
+    const content = buildSaasQuoteContent(quote, {
+      checkoutUrl: options.checkoutUrl ?? quote.checkoutLandingUrl,
+    });
+    const pdf = await generateSaasQuotePdf(content);
+    return persistGeneratedPdf(pdf, {
+      projectId: quote.projectId,
+      uploadedBy: 'saas-quote-pdf',
+    });
+  }
+
   const lineItems = quoteToPdfLineItems(quote);
   const pdf = await generateQuotePdf(
     quote.customerName,

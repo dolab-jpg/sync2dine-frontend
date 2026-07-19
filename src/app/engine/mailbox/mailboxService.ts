@@ -104,6 +104,7 @@ export const mailboxService = {
     cc?: string;
     subject: string;
     body: string;
+    html?: string;
     attachments?: Array<{ filename: string; mimeType: string; content: string }>;
   }, userId?: string, orgId?: string) {
     const res = await fetch('/api/mailbox/send', {
