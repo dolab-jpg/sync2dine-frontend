@@ -11,12 +11,97 @@ import { useNavigate } from 'react-router';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { toast } from 'sonner';
 import { messagingHub } from '../engine/messaging/messagingHub';
-import { renderTemplate, buildQuoteVariables } from '../engine/messaging/templateRenderer';
+import { renderTemplate, buildQuoteVariables, type TemplateVariables } from '../engine/messaging/templateRenderer';
 import { buildQuotePdfAttachment } from '../engine/messaging/quotePdfHelpers';
 import { pdfPathFromAttachment } from '../engine/messaging/documentPersist';
 import { AddressMapLink } from './ui/AddressMapLink';
 import { getAllTrades } from '../config/trades';
 import { createProjectFromQuote, getProject, syncToServer } from '../engine/project/projectStore';
+import { getPackage, isSaasPackageId } from '../engine/saas/saasPackages';
+
+function isSaasQuote(quote: Quote): boolean {
+  return quote.wizardAnswers?.saas === true || quote.tradeName === 'Sync2Dine SaaS';
+}
+
+function buildSaasQuoteEmail(quote: Quote, vars: TemplateVariables): { subject: string; body: string } {
+  const wa = (quote.wizardAnswers ?? {}) as Record<string, unknown>;
+  const packageId = typeof wa.packageId === 'string' ? wa.packageId : '';
+  const pkg = isSaasPackageId(packageId) ? getPackage(packageId) : null;
+  const packageName = pkg?.name ?? quote.items?.[0]?.name ?? 'Sync2Dine';
+  const interval = wa.billingInterval === 'annual' ? 'annual' : 'weekly';
+  const launchActive = wa.launchActive !== false;
+  const weeklyTotal =
+    typeof wa.weeklyTotal === 'number' && Number.isFinite(wa.weeklyTotal)
+      ? wa.weeklyTotal
+      : interval === 'weekly'
+        ? quote.total
+        : pkg?.launchWeeklyGbp ?? quote.total;
+  const annualTotal =
+    typeof wa.annualTotal === 'number' && Number.isFinite(wa.annualTotal)
+      ? wa.annualTotal
+      : pkg?.annualPrepayGbp;
+  const priceLine =
+    interval === 'annual'
+      ? `£${quote.total.toLocaleString('en-GB')}/year`
+      : `£${weeklyTotal.toLocaleString('en-GB')}/week${launchActive && pkg ? ` launch (normally £${pkg.standardWeeklyGbp}/week)` : ''}`;
+
+  const includesAtmosphere = pkg?.includesAtmosphere === true || packageId.startsWith('combined') || packageId === 'atmosphere';
+  const judieMins = pkg?.weeklyAiMinutes ?? 0;
+  const outboundMins = pkg?.weeklyOutboundMinutes ?? 0;
+  const fareBits: string[] = [];
+  if (judieMins > 0) {
+    fareBits.push(`${judieMins} Judie AI minutes/week`);
+    if (outboundMins > 0) fareBits.push(`${outboundMins} outbound minutes/week`);
+    else if (pkg?.inboundOnly) fareBits.push('inbound calls only');
+  }
+  if (includesAtmosphere) {
+    fareBits.push('Atmosphere — venue audio, promotional messaging, and staff training');
+  }
+
+  const subject = renderTemplate(`Your Sync2Dine quote — ${packageName}`, vars);
+  const body = renderTemplate(
+    [
+      `Dear {CUSTOMER_NAME},`,
+      ``,
+      `Thank you for considering Sync2Dine. Here is your quotation for ${packageName}.`,
+      ``,
+      `Investment: ${priceLine}`,
+      annualTotal != null && interval === 'weekly'
+        ? `Annual prepay alternative: £${Number(annualTotal).toLocaleString('en-GB')}/year (50% off annualized launch).`
+        : null,
+      `Valid until {QUOTE_EXPIRY}.`,
+      ``,
+      `What you get:`,
+      `• Judie — AI phone receptionist for orders, bookings, and call handling, powered by your Company AI Brain`,
+      includesAtmosphere
+        ? `• Atmosphere — venue audio and messaging so the floor sells while the phone is covered`
+        : `• Phone-first hosting with transfers to your team when needed`,
+      fareBits.length ? `• Included: ${fareBits.join('; ')}` : null,
+      `• Integrations — voice telephony, CRM, email/WhatsApp, Stripe, and orders/bookings into the app`,
+      judieMins >= 420
+        ? `• Pro-level capacity — more AI talk time and outbound minutes so you handle busy periods and winbacks without drowning the pass`
+        : `• Clear weekly allowances — minutes reset each week so costs stay predictable`,
+      ``,
+      `Why go ahead with Sync2Dine:`,
+      `• Answer every call — fewer missed orders and bookings at rush`,
+      `• One system for phone and venue — Judie plus Atmosphere instead of juggling add-ons`,
+      `• Launch pricing you keep after you sign — transparent weekly (or annual) fares`,
+      `• Built to grow with you — move up tiers when you need more cells of capacity`,
+      ``,
+      `Please find your quotation PDF attached.`,
+      ``,
+      `Reply to this email or call us with any questions — happy to walk you through go-live.`,
+      ``,
+      `Best regards,`,
+      `{COMPANY_NAME}`,
+    ]
+      .filter((line): line is string => line != null)
+      .join('\n'),
+    vars,
+  );
+
+  return { subject, body };
+}
 
 export default function QuotesList() {
   const context = useContext(AppContext);
@@ -84,6 +169,16 @@ export default function QuotesList() {
       const attachment = await buildQuotePdfAttachment(quote);
       updateQuote(quote.id, { status: 'sent', pdfPath: pdfPathFromAttachment(attachment) });
       const vars = buildQuoteVariables(customer, quote, undefined, quote.discount);
+      const saas = isSaasQuote(quote);
+      const emailCopy = saas
+        ? buildSaasQuoteEmail(quote, vars)
+        : {
+            subject: renderTemplate('Your Quote from {COMPANY_NAME}', vars),
+            body: renderTemplate(
+              `Dear {CUSTOMER_NAME},\n\nYour quote for £{QUOTE_TOTAL} is ready. Valid until {QUOTE_EXPIRY}.\n\nPlease find your quotation PDF attached.\n\nReply to this email or call us with any questions.`,
+              vars,
+            ),
+          };
       const result = await messagingHub.send({
         channels: ['email', 'whatsapp'],
         to: {
