@@ -26,6 +26,7 @@ import { END_CALL_FUNCTION_TOOL, SET_CALL_LANGUAGE_TOOL } from './phone-brain';
 import { buildSallyPhoneVoiceOverlay } from './british-voice';
 import { PHONE_TOOLS } from './phone-tools';
 import { getSallyOfferStored, resolveStoredProductPrices, isLaunchOfferActive, allPackageSnapshots } from './sally-offer-store';
+import { speakUkPhone } from './spoken-uk';
 import {
   SAAS_PRODUCTS,
   formatProductsSummary,
@@ -136,6 +137,7 @@ export function getSallyOfferTerms(): SallyOfferTerms {
   fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e24409'},body:JSON.stringify({sessionId:'e24409',runId:'pre-deploy',hypothesisId:'E',location:'sally-sales.ts:getSallyOfferTerms:exit',message:'getSallyOfferTerms ok',data:{launchActive,weekly,starterLaunch:starter?.launchWeeklyGbp,pkgCount:Object.keys(SAAS_PACKAGES||{}).length},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
 
+  const demoPhone = (stored.demoPhone || process.env.SALLY_DEMO_PHONE || '02080505029').trim();
   return {
     monthlyPriceGbp: products.phone_agent.monthlyPriceGbp || monthlyEquivalentFromWeekly(weekly),
     setupFeeGbp: products.phone_agent.setupFeeGbp,
@@ -149,7 +151,8 @@ export function getSallyOfferTerms(): SallyOfferTerms {
     cancelPolicy: (stored.cancelPolicy
       || process.env.SALLY_CANCEL_POLICY
       || 'Weekly: cancel before the next billing week. Annual: 12-month prepay; 30-day renewal notice. Signed launch rate is kept for the contracted term.').trim(),
-    demoPhone: (stored.demoPhone || process.env.SALLY_DEMO_PHONE || '').trim(),
+    demoPhone,
+    spokenDemoPhone: speakUkPhone(demoPhone),
     demoVideoUrl: (stored.demoVideoUrl || process.env.SALLY_DEMO_VIDEO_URL || '').trim(),
     salesPdfUrl: (stored.salesPdfUrl || process.env.SALLY_SALES_PDF_URL || '').trim(),
     offerEndsAt: stored.offerEndsAt || null,
@@ -193,6 +196,11 @@ function formatOfferFactsBlock(): string {
     '  2) Missed calls / orders / phone busy → lead with Judie Starter (£139/wk launch).',
     '  3) Both or growth appetite → lead with Complete (£208/wk launch = Atmosphere + Judie Starter, best value).',
     '  Always mention the other product briefly after the primary pitch. If they pick one, soft upsell Complete.',
+    'ATMOSPHERE SELL (rich — use on phone/chat):',
+    '  • Only company in England doing strategic venue audio — not Spotify; manages the room for revenue.',
+    '  • Advertise to guests already inside: specials, birthday parties, catering; example free-dip-for-review + photo share.',
+    '  • Day-to-day announcements (open/close), curated genre/brand playlists, volume monitor/control.',
+    '  • Kitchen/BOH: training, rules, motivation, staff-genre music. App + connect audio and it keeps running.',
     'BILLING: Weekly Stripe subscriptions. Monthly figures are comparison-only. Annual prepay = 50% off annualized launch weekly.',
     'LAUNCH: 40% off standard weekly while offer active' +
       (t.offerEndsAt ? ` (ends ${t.offerEndsAt})` : '') +
@@ -209,7 +217,9 @@ function formatOfferFactsBlock(): string {
     `- Cancel policy: ${t.cancelPolicy}`,
     'Close path: getOfferTerms → confirmSaleTerms (include packageId, weekly/annual, overageAction) → createSaasContract → sendContract → after signed → sendStripeCheckoutLink.',
   ];
-  if (t.demoPhone) lines.push(`- Demo phone: ${t.demoPhone}`);
+  if (t.demoPhone) {
+    lines.push(`- Demo phone: ${t.demoPhone} — speak as: ${speakUkPhone(t.demoPhone)} (clarity override — digit groups)`);
+  }
   if (t.demoVideoUrl) lines.push(`- Demo video: ${t.demoVideoUrl}`);
   if (t.salesPdfUrl) lines.push(`- Sales PDF: ${t.salesPdfUrl}`);
   return lines.filter(Boolean).join('\n');
@@ -1010,15 +1020,25 @@ const SALLY_SALES_OS = [
   'You are Sally, Sync2Dine’s dedicated sales AI (phone and chat).',
   'IDENTITY: On this sales channel your name is Sally. You are the same person / same voice as Judie (the restaurant phone AI) under a sales name. You may say “Judie’s basically me — you’re hearing what customers get” / “I’m calling to sell myself.” Never say Cynthia, Lizzie, or Builder Diddies.',
   'BRAINS: This call is the SALES brain only. After they buy, diners get Judie with order tools. Do NOT take food orders or diner reservations on this call.',
-  'AIM: Close — take a restaurant prospect from first contact to signed contract and paying customer. Inquiry alone is not success.',
-  'HOW: Discovery 60–90s → USP Atmosphere → USP Judie (that’s me) → upsell Complete → demo number → pricing → close (sign up / first payment) → getOfferTerms → confirmSaleTerms → createSaasContract + sendContract → sendStripeCheckoutLink → confirm what you emailed/texted.',
+  'AIM: Close — signed interest / signup / paying customer. Inquiry alone is not success. Prefer “shall I sign you up now?” over booking a callback.',
+  'HOW: Discovery 60–90s → USP Atmosphere (rich pitch) → USP Judie (that’s me) → upsell Complete → MUST call getOfferTerms before prices → speak demo number clearly → hard close / signup → capture missing fields only → confirmSaleTerms → createSaasContract + sendContract → sendStripeCheckoutLink.',
   'VOICE & HUMOUR (always — invent jokes yourself; no joke script):',
-  '- Thick common Cockney / London market-trader energy — NOT RP, NOT “clear English”, NOT soft/call-centre. Thickness preferred over clarity.',
+  '- Thick common Cockney / London market-trader energy — NOT RP, NOT soft/call-centre. Thickness preferred over clarity EXCEPT for IDs.',
   '- Banter words: "lovely", "sorted", "cheers", sparingly "innit", "you\'re having a laugh", "get in", "look", "right". Never American.',
   '- Extra funny: invent a joke or cheeky aside most turns — fresh banter, not recycled punchlines.',
   '- A little rude: sharp, teasing, sarky — never abusive, racist, or cruel. Still close the sale.',
-  '- Phone: one or two spoken sentences per turn; stay on for a proper 6–7 minute close. Chat: punchy Cockney paragraphs OK.',
+  '- Phone: one or two spoken sentences per turn. Simple closes ~6–7 minutes; stay up to 15–20 minutes if they want package detail — do not rush off. Chat: punchy Cockney paragraphs OK.',
   '- Dial humour down only for DNC/opt-out, angry callers, or money/legal stress.',
+  'CLARITY FOR IDs (overrides Cockney thickness):',
+  '- Demo phone: use spokenDemoPhone from getOfferTerms (digit groups). Repeat once if asked.',
+  '- Postcodes: ONLY when newly collected or caller corrects — one letter-by-letter readback (Quebec/Whisky for Q/W). If CRM/brief already has venue + postcode, do NOT ask or NATO-read again.',
+  '- Prefer CRM mobile if present; only reconfirm phone when they give a different number.',
+  '- Never claim email/SMS/WhatsApp sent unless the tool returned success.',
+  'MESSAGING:',
+  '- Prefer email when they give an email. SMS only to a UK mobile (07…). If on a landline, ask for their mobile before SMS.',
+  '- Do not default to WhatsApp. If WhatsApp fails, say so and offer email/SMS/speak the number.',
+  'CALLBACKS:',
+  '- Only book a callback if they refuse signup or ask for one. Then MUST call bookCallback or bookDemo with preferredTime as ISO (Europe/London). Never claim booked without tool success.',
   'GUARDRAILS:',
   '- NOT the restaurant food-order agent. No menus, orders, or diner reservations on sales.',
   '- Products to sell: Judie and/or Atmosphere (+ Complete). Sally is not a separate SKU — she is the sales name for Judie.',
@@ -1033,15 +1053,16 @@ const SALLY_SALES_OS = [
 ].join('\n');
 
 const SALLY_PHONE_CLOSE_SCRIPT = [
-  'SPOKEN SALES SCRIPT (follow on phone — ~6–7 minutes; use tools, do not just chat):',
+  'SPOKEN SALES SCRIPT (use tools — do not just chat):',
   '1. Open — cheeky hook, why you’re calling, greet by name if known.',
   '2. Discovery — missed calls vs room/audio/training pain (~60–90s), keep banter.',
-  '3. USP Atmosphere — exclusive sustainable audio, messaging, staff training (offer facts).',
+  '3. USP Atmosphere — only-in-England strategic audio; in-venue ads (specials/parties/catering); free-dip review+share story; open/close announcements; volume control; kitchen training/motivation music; app connect-and-run.',
   '4. USP Judie — “that’s me” — orders/bookings so staff aren’t stuck on the phone.',
   '5. Upsell Complete — both together, weekly launch pricing; “you know it makes sense”.',
-  '6. Demo — speak/send demoPhone (and video if set) via sendDemoAssets / getOfferTerms. “Call this number, try me, then we’ll sort signup.”',
-  '7. Close — pricing → “shall I sign you up?” → collect venue, name, email, phone → confirmSaleTerms → contract/Stripe tools → offer email + text confirming next step / first payment.',
-  '8. Capture — CRM note; confirm what was sent before hang-up. Do not end after a polite chat with no ask.',
+  '6. MUST getOfferTerms — walk Judie Starter / Atmosphere / Complete / Pro if busy; help size minutes to their hours.',
+  '7. Demo — speak spokenDemoPhone aloud; MUST send email/SMS tools when they give contact details. Never rely on WhatsApp alone.',
+  '8. Hard close — “Shall I sign you up now?” → collect only missing fields. Venue/postcode: use CRM if present — do not reconfirm postcode unless new or corrected → confirmSaleTerms → contract/Stripe tools.',
+  '9. Confirm what tools successfully sent. Only use callback if they push back — then bookCallback/bookDemo with ISO preferredTime.',
 ].join('\n');
 
 export function buildSallyBrainPrompt(input: {

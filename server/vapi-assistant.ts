@@ -186,8 +186,11 @@ export function buildVapiAssistantForParty(opts: {
       model: process.env.VAPI_DEEPGRAM_MODEL?.trim() || 'nova-2',
       language: deepgramLanguageForPack(language as 'en'),
     },
-    silenceTimeoutSeconds: 45,
-    maxDurationSeconds: Number(process.env.VAPI_MAX_CALL_SECONDS || 900),
+    silenceTimeoutSeconds: sally ? 90 : 45,
+    maxDurationSeconds: Number(
+      process.env.VAPI_MAX_CALL_SECONDS
+      || (sally ? 1200 : 900),
+    ),
     backgroundSound: 'off',
     ...(sally
       ? {
