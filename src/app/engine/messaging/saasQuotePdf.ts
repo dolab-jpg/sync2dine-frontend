@@ -110,15 +110,27 @@ function drawParagraph(
   return y;
 }
 
+/** Matches public/brand/brand-icon.svg geometry (rounded teal tile + gold arcs). */
 function drawBrand(page: PDFPage, fonts: Fonts, x = 44, y = 786, inverse = false): void {
-  page.drawRectangle({ x, y: y - 5, width: 34, height: 34, color: inverse ? C.gold : C.teal });
+  const tile = inverse ? C.gold : C.teal;
+  const arc = inverse ? C.tealDeep : C.gold;
+  const arcSoft = inverse ? C.teal : C.creamBright;
+  page.drawRectangle({ x, y: y - 5, width: 34, height: 34, color: tile });
+  // Upper soft arc
   page.drawLine({
-    start: { x: x + 9, y: y + 10 },
-    end: { x: x + 25, y: y + 10 },
-    thickness: 3,
-    color: inverse ? C.tealDeep : C.gold,
+    start: { x: x + 8, y: y + 14 },
+    end: { x: x + 26, y: y + 14 },
+    thickness: 2.5,
+    color: arcSoft,
   });
-  page.drawCircle({ x: x + 17, y: y + 5, size: 2.6, color: inverse ? C.tealDeep : C.gold });
+  // Lower gold arc
+  page.drawLine({
+    start: { x: x + 7, y: y + 8 },
+    end: { x: x + 27, y: y + 8 },
+    thickness: 3,
+    color: arc,
+  });
+  page.drawCircle({ x: x + 17, y: y + 4, size: 2.8, color: arc });
   page.drawText('Sync2Dine', {
     x: x + 44,
     y: y + 8,

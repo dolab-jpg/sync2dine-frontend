@@ -10,7 +10,7 @@ import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client'
 import { AuthLayout } from '../AuthLayout';
 import { AuthFormError } from '../components/AuthFormError';
 import { PasswordField } from '../components/PasswordField';
-import { SeedAccountsPanel, SEED_PASSWORD, SEED_ACCOUNTS, type SeedAccount } from '../components/SeedAccountsPanel';
+import { SEED_ACCOUNTS } from '../components/SeedAccountsPanel';
 import { homePathForRole, isStaffLoginRole, resolveUsername } from '../lib/authApi';
 import IntegrationsLogoStrip from '../../components/restaurant/IntegrationsLogoStrip';
 
@@ -204,12 +204,6 @@ export default function LoginPage({ onLogin }: LoginProps) {
     if (oauthError) setError(oauthError.message);
   };
 
-  const fillSeedAccount = (account: SeedAccount) => {
-    setIdentifier(account.email);
-    setPassword(SEED_PASSWORD);
-    setError('');
-  };
-
   return (
     <AuthLayout wide>
       <Card className="shadow-2xl rounded-2xl border-0">
@@ -286,7 +280,7 @@ export default function LoginPage({ onLogin }: LoginProps) {
         </CardContent>
       </Card>
 
-      <SeedAccountsPanel onFill={fillSeedAccount} />
+      {/* Demo seed accounts hidden while live testing — staff use real credentials */}
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-4">
         <IntegrationsLogoStrip compact />
       </div>

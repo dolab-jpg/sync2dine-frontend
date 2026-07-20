@@ -24,7 +24,38 @@ import {
 } from './restaurant-research';
 import { END_CALL_FUNCTION_TOOL, SET_CALL_LANGUAGE_TOOL } from './phone-brain';
 import { PHONE_TOOLS } from './phone-tools';
-import { getSallyOfferStored } from './sally-offer-store';
+import { getSallyOfferStored, resolveStoredProductPrices, isLaunchOfferActive, allPackageSnapshots } from './sally-offer-store';
+import {
+  SAAS_PRODUCTS,
+  formatProductsSummary,
+  normalizeSaasProductIds,
+  resolveProductLines,
+  resolvePackageLine,
+  sumMonthly,
+  sumQuoteTotal,
+  type SaasProductId,
+  type SaasProductPrices,
+} from './saas-products';
+import {
+  FARE_SCHEDULE_VERSION,
+  OUTBOUND_OVERAGE,
+  SAAS_PACKAGE_IDS,
+  SAAS_PACKAGES,
+  type OverageAction,
+  type SaasPackageId,
+  formatFareSummary,
+  getPackage,
+  isSaasPackageId,
+  monthlyEquivalentFromWeekly,
+} from './saas-packages';
+import { PLAN_CONFIG } from './organizations';
+import {
+  assertContractSignedForCheckout,
+  contractEmailBody,
+  createSaasContract,
+  getSaasContractById,
+  markSaasContractSent,
+} from './saas-contracts';
 
 export const SALLY_PERSONA = 'sally';
 
@@ -46,65 +77,165 @@ export const SALLY_EXCLUSIVE_TOOLS = new Set([
   'confirmSaleTerms',
   'sendSalesAssets',
   'checkPaymentStatus',
+  'createSaasContract',
+  'sendContract',
 ]);
 
 export type SallyOfferTerms = {
+  /** Combined / phone-agent monthly equivalent — kept for legacy callers. */
   monthlyPriceGbp: number;
   setupFeeGbp: number;
+  weeklyPriceGbp: number;
+  standardWeeklyGbp: number;
+  annualPrepayGbp: number;
   billing: string;
   minimumTerm: string;
   cancelPolicy: string;
   demoPhone: string;
   demoVideoUrl: string;
   salesPdfUrl: string;
+  offerEndsAt: string | null;
+  launchActive: boolean;
+  fareScheduleVersion: string;
+  patentRefs?: string;
+  founderName?: string;
+  authorityBlurb?: string;
+  /** Per-SKU prices — legacy Phone Agents / Atmosphere. */
+  products: SaasProductPrices;
+  packages: ReturnType<typeof allPackageSnapshots>;
 };
 
 /** Authoritative Sync2Dine intro offer — UI store first, then env, then defaults. */
 export function getSallyOfferTerms(): SallyOfferTerms {
+  // #region agent log
+  fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e24409'},body:JSON.stringify({sessionId:'e24409',runId:'pre-deploy',hypothesisId:'E',location:'sally-sales.ts:getSallyOfferTerms',message:'getSallyOfferTerms enter',data:{},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   const stored = getSallyOfferStored();
+
   const envMonthly = Number(process.env.SALLY_INTRO_MONTHLY_GBP);
   const envSetup = Number(process.env.SALLY_SETUP_FEE_GBP);
-  const monthlyFromEnv = Number.isFinite(envMonthly) && envMonthly > 0 ? envMonthly : 350;
+  const monthlyFromEnv = Number.isFinite(envMonthly) && envMonthly > 0 ? envMonthly : SAAS_PRODUCTS.phone_agent.defaultMonthlyGbp;
   const setupFromEnv = Number.isFinite(envSetup) && envSetup >= 0 ? envSetup : 0;
 
+  const withEnvFallback = { ...stored };
+  if (!(Number.isFinite(Number(stored.monthlyPriceGbp)) && Number(stored.monthlyPriceGbp) > 0)
+    && !(stored.products?.phone_agent?.monthlyPriceGbp)) {
+    withEnvFallback.monthlyPriceGbp = monthlyFromEnv;
+  }
+  if (!(Number.isFinite(Number(stored.setupFeeGbp)) && Number(stored.setupFeeGbp) >= 0)
+    && stored.products?.phone_agent?.setupFeeGbp == null) {
+    withEnvFallback.setupFeeGbp = setupFromEnv;
+  }
+
+  const products = resolveStoredProductPrices(withEnvFallback);
+  const starter = SAAS_PACKAGES.judie_starter;
+  const launchActive = isLaunchOfferActive(stored);
+  const weekly = launchActive ? starter.launchWeeklyGbp : starter.standardWeeklyGbp;
+  // #region agent log
+  fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e24409'},body:JSON.stringify({sessionId:'e24409',runId:'pre-deploy',hypothesisId:'E',location:'sally-sales.ts:getSallyOfferTerms:exit',message:'getSallyOfferTerms ok',data:{launchActive,weekly,starterLaunch:starter?.launchWeeklyGbp,pkgCount:Object.keys(SAAS_PACKAGES||{}).length},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
   return {
-    monthlyPriceGbp: Number.isFinite(Number(stored.monthlyPriceGbp)) && Number(stored.monthlyPriceGbp) > 0
-      ? Number(stored.monthlyPriceGbp)
-      : monthlyFromEnv,
-    setupFeeGbp: Number.isFinite(Number(stored.setupFeeGbp)) && Number(stored.setupFeeGbp) >= 0
-      ? Number(stored.setupFeeGbp)
-      : setupFromEnv,
-    billing: 'monthly subscription',
-    minimumTerm: (stored.minimumTerm || process.env.SALLY_MINIMUM_TERM || '1 month rolling').trim(),
+    monthlyPriceGbp: products.phone_agent.monthlyPriceGbp || monthlyEquivalentFromWeekly(weekly),
+    setupFeeGbp: products.phone_agent.setupFeeGbp,
+    weeklyPriceGbp: products.phone_agent.weeklyPriceGbp || weekly,
+    standardWeeklyGbp: starter.standardWeeklyGbp,
+    annualPrepayGbp: starter.annualPrepayGbp,
+    products,
+    packages: allPackageSnapshots(stored),
+    billing: 'weekly subscription (Stripe). Annual prepay available at 50% off annualized launch price.',
+    minimumTerm: (stored.minimumTerm || process.env.SALLY_MINIMUM_TERM || 'Weekly rolling; annual is 12-month prepay').trim(),
     cancelPolicy: (stored.cancelPolicy
       || process.env.SALLY_CANCEL_POLICY
-      || 'Cancel anytime with 30 days written notice after the first month.').trim(),
+      || 'Weekly: cancel before the next billing week. Annual: 12-month prepay; 30-day renewal notice. Signed launch rate is kept for the contracted term.').trim(),
     demoPhone: (stored.demoPhone || process.env.SALLY_DEMO_PHONE || '').trim(),
     demoVideoUrl: (stored.demoVideoUrl || process.env.SALLY_DEMO_VIDEO_URL || '').trim(),
     salesPdfUrl: (stored.salesPdfUrl || process.env.SALLY_SALES_PDF_URL || '').trim(),
+    offerEndsAt: stored.offerEndsAt || null,
+    launchActive,
+    fareScheduleVersion: stored.fareScheduleVersion || FARE_SCHEDULE_VERSION,
+    patentRefs: stored.patentRefs || undefined,
+    founderName: stored.founderName || undefined,
+    authorityBlurb: stored.authorityBlurb || undefined,
   };
 }
 
 function formatOfferFactsBlock(): string {
   const t = getSallyOfferTerms();
+  const stored = getSallyOfferStored();
+  const founder = stored.founderName || 'Shervin Dolab';
+  const authority =
+    stored.authorityBlurb ||
+    `Sync2Dine is the restaurant side of Sync2Gear—the system our founder ${founder} created and holds patent licences for. We’re leading in AI for venues. Judie is your AI phone receptionist—orders and bookings so your team isn’t stuck on the line. Plus Atmosphere: the only audio sustainable management of its kind worldwide—room, messaging, and staff training that runs the venue for revenue.`;
+  const patent = stored.patentRefs ? `Patent refs: ${stored.patentRefs}` : '';
+
+  const pkgLines = SAAS_PACKAGE_IDS.map((id) => {
+    const p = SAAS_PACKAGES[id];
+    const weekly = t.launchActive ? p.launchWeeklyGbp : p.standardWeeklyGbp;
+    const mins =
+      p.weeklyAiMinutes > 0
+        ? ` · ${p.weeklyAiMinutes} Judie AI min/wk` +
+          (p.inboundOnly ? ' inbound-only' : '') +
+          (p.weeklyOutboundMinutes ? `, ${p.weeklyOutboundMinutes} outbound min/wk` : '') +
+          ` · overage £${p.aiOverageGbpPerMinute}/min`
+        : '';
+    return `  - ${p.name}: normally £${p.standardWeeklyGbp}/wk — ${t.launchActive ? 'launch ' : ''}£${weekly}/wk · annual £${p.annualPrepayGbp}${mins}`;
+  });
+
   const lines = [
     'OFFER FACTS (authoritative — never invent different prices or terms):',
-    `- Introductory monthly price: £${t.monthlyPriceGbp}`,
-    `- Setup fee: £${t.setupFeeGbp}`,
+    `AUTHORITY: ${authority}`,
+    patent,
+    'PRODUCT NAMES: Sell Judie (restaurant AI receptionist) and/or Atmosphere. NEVER sell Sally as the phone product. Sally is the sales agent only. Never say Cynthia on a Sync2Dine sale.',
+    'ROUTING (after 60–90s discovery):',
+    '  1) Room / reviews / spend / training pain → lead with Atmosphere (£139/wk launch).',
+    '  2) Missed calls / orders / phone busy → lead with Judie Starter (£139/wk launch).',
+    '  3) Both or growth appetite → lead with Complete (£208/wk launch = Atmosphere + Judie Starter, best value).',
+    '  Always mention the other product briefly after the primary pitch. If they pick one, soft upsell Complete.',
+    'BILLING: Weekly Stripe subscriptions. Monthly figures are comparison-only. Annual prepay = 50% off annualized launch weekly.',
+    'LAUNCH: 40% off standard weekly while offer active' +
+      (t.offerEndsAt ? ` (ends ${t.offerEndsAt})` : '') +
+      '. Signed-before-deadline customers keep launch rate for contracted term.',
+    'PACKAGES:',
+    ...pkgLines,
+    `Additional site: ≥ £1/week (contact Commercial if they need a custom multi-site deal).`,
+    `Outbound overage: £${OUTBOUND_OVERAGE.mobileGbpPerMin}/min mobile · £${OUTBOUND_OVERAGE.landlineGbpPerMin}/min landline.`,
+    'Minutes reset weekly; unused do not roll over. Alerts at ~80/100% of allowance. Customer must choose overageAction: continue_bill | pause_transfer | approval_required.',
+    `Judie PAYG: inbound only, app notifications only, no outbound/SMS/WhatsApp/email/campaigns, AI overage £0.45/min, 125k tokens/week.`,
+    `Fare schedule version: ${t.fareScheduleVersion}`,
     `- Billing: ${t.billing}`,
     `- Minimum term: ${t.minimumTerm}`,
     `- Cancel policy: ${t.cancelPolicy}`,
+    'Close path: getOfferTerms → confirmSaleTerms (include packageId, weekly/annual, overageAction) → createSaasContract → sendContract → after signed → sendStripeCheckoutLink.',
   ];
   if (t.demoPhone) lines.push(`- Demo phone: ${t.demoPhone}`);
   if (t.demoVideoUrl) lines.push(`- Demo video: ${t.demoVideoUrl}`);
   if (t.salesPdfUrl) lines.push(`- Sales PDF: ${t.salesPdfUrl}`);
-  return lines.join('\n');
+  return lines.filter(Boolean).join('\n');
 }
 
-type SallyTermsRecord = {
+function formatObjectionPlaybook(): string {
+  return [
+    'OBJECTION PLAYBOOK (short, honest answers):',
+    '- Too expensive / Spotify: Atmosphere is exclusive sustainable audio management + messaging + training — not a music stream. Founder patent licences. Judie frees staff from the phone.',
+    '- We already answer the phone: Judie covers missed/overflow/after-hours, takes orders into the app, transfers exceptions to humans.',
+    '- Afraid of unlimited bills: No unlimited minutes sold. Clear weekly allowance + published overage. They choose continue_bill / pause_transfer / approval_required.',
+    '- Minutes too low: Upsell Judie Pro (420) or Enterprise (840), or explain £/min overage is transparent.',
+    '- Annual too risky: Weekly rolling available; annual is optional 50% prepay with 30-day renewal notice.',
+    '- What if Judie fails: Transfer-to-human; staff stay in control. Sally never pretends to take diner orders.',
+    '- Multi-site discount: Additional sites ≥ £1/week floor; larger deals → Commercial handoff.',
+  ].join('\n');
+}
+
+export type SallyTermsRecord = {
   confirmedAt: string;
   monthlyPriceGbp: number;
   setupFeeGbp: number;
+  weeklyPriceGbp?: number;
+  packageId?: SaasPackageId;
+  billingInterval?: 'weekly' | 'annual';
+  overageAction?: OverageAction;
+  amountGbp?: number;
   summary: string;
 };
 
@@ -142,6 +273,11 @@ function writeTermsConfirmed(
       sallyTermsConfirmedAt: record.confirmedAt,
       sallyTermsMonthlyGbp: record.monthlyPriceGbp,
       sallyTermsSetupGbp: record.setupFeeGbp,
+      sallyTermsWeeklyGbp: record.weeklyPriceGbp,
+      sallyTermsPackageId: record.packageId,
+      sallyTermsBillingInterval: record.billingInterval,
+      sallyTermsOverageAction: record.overageAction,
+      sallyTermsAmountGbp: record.amountGbp,
       sallyTermsSummary: record.summary,
     },
   });
@@ -158,7 +294,7 @@ function requireTermsConfirmed(
     ok: false,
     error: 'terms_confirmation_required',
     spokenHint:
-      'First confirm they understand the service, monthly price, billing, and cancel policy using confirmSaleTerms.',
+      'First confirm they understand Judie/Atmosphere, weekly or annual price, fare/overage action, billing, and cancel policy using confirmSaleTerms.',
   };
 }
 
@@ -197,8 +333,10 @@ export function resolveSallySessionKey(opts: {
   callId?: string;
   staffUserId?: string;
   conversationId?: string;
+  webSessionId?: string;
 }): string {
   if (opts.callId) return `call:${opts.callId}`;
+  if (opts.webSessionId) return `web:${opts.webSessionId}`;
   if (opts.conversationId) return `conv:${opts.conversationId}`;
   if (opts.staffUserId) return `chat:${opts.staffUserId}`;
   return 'chat:default';
@@ -361,16 +499,79 @@ export const SALLY_EXTENDED_TOOLS = [
     function: {
       name: 'confirmSaleTerms',
       description:
-        'Record that the prospect confirmed they understand the service, monthly price, billing, and cancel/term policy. Required before provisionRestaurantClient or sendStripeCheckoutLink.',
+        'Record that the prospect confirmed Judie and/or Atmosphere, weekly or annual price, fare/overage action, billing, and cancel policy. Required before createSaasContract, provisionRestaurantClient, or sendStripeCheckoutLink.',
       parameters: {
         type: 'object',
         properties: {
           confirmed: { type: 'boolean', description: 'Must be true — they confirmed understanding' },
-          monthlyPriceGbp: { type: 'number', description: 'Price they agreed (defaults to intro offer)' },
+          packageId: {
+            type: 'string',
+            enum: [
+              'judie_payg_inbound',
+              'atmosphere',
+              'judie_starter',
+              'judie_pro',
+              'judie_enterprise',
+              'combined',
+              'combined_pro',
+              'atmosphere_enterprise',
+              'combined_enterprise',
+            ],
+          },
+          billingInterval: { type: 'string', enum: ['weekly', 'annual'] },
+          overageAction: {
+            type: 'string',
+            enum: ['continue_bill', 'pause_transfer', 'approval_required'],
+            description: 'What happens when weekly AI/outbound minutes are exceeded',
+          },
+          weeklyPriceGbp: { type: 'number' },
+          monthlyPriceGbp: { type: 'number', description: 'Legacy — prefer weeklyPriceGbp' },
           setupFeeGbp: { type: 'number' },
           notes: { type: 'string' },
         },
         required: ['confirmed'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'createSaasContract',
+      description:
+        'Assemble a server-backed Sync2Dine SaaS subscription contract from the agreed package (after confirmSaleTerms). Returns signing URL; use sendContract to email it.',
+      parameters: {
+        type: 'object',
+        properties: {
+          packageId: {
+            type: 'string',
+            enum: [
+              'judie_payg_inbound',
+              'atmosphere',
+              'judie_starter',
+              'judie_pro',
+              'judie_enterprise',
+              'combined',
+              'combined_pro',
+              'atmosphere_enterprise',
+              'combined_enterprise',
+            ],
+          },
+          billingInterval: { type: 'string', enum: ['weekly', 'annual'] },
+          overageAction: {
+            type: 'string',
+            enum: ['continue_bill', 'pause_transfer', 'approval_required'],
+          },
+          additionalSites: { type: 'number' },
+          customerId: { type: 'string' },
+          organizationId: { type: 'string' },
+          restaurantName: { type: 'string' },
+          contactName: { type: 'string' },
+          contactEmail: { type: 'string' },
+          contactPhone: { type: 'string' },
+          address: { type: 'string' },
+          notes: { type: 'string' },
+        },
+        required: ['packageId', 'restaurantName', 'contactName', 'contactEmail'],
       },
     },
   },
@@ -400,17 +601,46 @@ export const SALLY_EXTENDED_TOOLS = [
     function: {
       name: 'createSaasQuote',
       description:
-        'Create a Sync2Dine SaaS quote on the CRM prospect. Default monthly price is the intro offer from getOfferTerms (not a trade bathroom quote).',
+        'Create a Sync2Dine SaaS quote. Prefer packageId (judie_starter, atmosphere, combined, …). Legacy products phone_agent/audio_management still accepted.',
       parameters: {
         type: 'object',
         properties: {
           customerId: { type: 'string' },
           businessName: { type: 'string' },
+          packageId: {
+            type: 'string',
+            enum: [
+              'judie_payg_inbound',
+              'atmosphere',
+              'judie_starter',
+              'judie_pro',
+              'judie_enterprise',
+              'combined',
+              'combined_pro',
+              'atmosphere_enterprise',
+              'combined_enterprise',
+            ],
+          },
+          billingInterval: { type: 'string', enum: ['weekly', 'annual'] },
+          additionalSites: { type: 'number' },
+          products: {
+            type: 'array',
+            items: { type: 'string', enum: ['phone_agent', 'audio_management'] },
+            description: 'Legacy — prefer packageId',
+          },
+          quantities: {
+            type: 'object',
+            description: 'Optional quantity per product id (default 1)',
+            additionalProperties: { type: 'number' },
+          },
           plan: { type: 'string', enum: ['starter', 'pro', 'enterprise'] },
-          monthlyPriceGbp: { type: 'number' },
+          monthlyPriceGbp: {
+            type: 'number',
+            description: 'Optional override (legacy)',
+          },
+          weeklyPriceGbp: { type: 'number' },
           notes: { type: 'string' },
         },
-        required: ['plan'],
       },
     },
   },
@@ -419,17 +649,19 @@ export const SALLY_EXTENDED_TOOLS = [
     function: {
       name: 'sendStripeCheckoutLink',
       description:
-        'After confirmSaleTerms: create Stripe Checkout for a restaurant org and email and/or WhatsApp the payment link to the prospect. Do not only speak the URL.',
+        'After confirmSaleTerms AND signed contract: create Stripe Checkout (weekly or annual) and email/WhatsApp the link. Pass contractId (preferred) or organizationId with a signed contract on file.',
       parameters: {
         type: 'object',
         properties: {
           organizationId: { type: 'string' },
           customerId: { type: 'string' },
+          contractId: { type: 'string', description: 'Signed Sync2Dine SaaS contract id' },
+          quoteId: { type: 'string', description: 'SaaS quote id with products/lines for multi-product checkout' },
           channel: { type: 'string', enum: ['email', 'whatsapp', 'both'] },
           toEmail: { type: 'string' },
           toPhone: { type: 'string' },
         },
-        required: ['organizationId', 'channel'],
+        required: ['channel'],
       },
     },
   },
@@ -709,14 +941,16 @@ export function getSallyOrchestratorTools() {
       type: 'function' as const,
       function: {
         name: 'sendContract',
-        description: 'Send a Sync2Dine SaaS contract / MSA signing link',
+        description: 'Email a Sync2Dine SaaS contract signing link (created via createSaasContract)',
         parameters: {
           type: 'object',
           properties: {
             contractId: { type: 'string' },
             customerId: { type: 'string' },
+            toEmail: { type: 'string' },
             confirmed: { type: 'boolean' },
           },
+          required: ['contractId'],
         },
       },
     },
@@ -738,6 +972,31 @@ export function getSallyOrchestratorTools() {
   ];
 }
 
+const SALLY_WEB_BLOCKED_TOOLS = new Set([
+  'placeOutboundCall',
+  'enqueueOutboundCall',
+  'leaveVoicemail',
+  'chaseUnpaidInvoice',
+  'schedulePaymentReminder',
+  'provisionRestaurantClient',
+  'searchLeads',
+  'updateLeadStatus',
+  'logFollowUp',
+  'getLeadBrief',
+  'draftEmailReply',
+  'sendEmailReply',
+]);
+
+/** Public website chat — Sally sales tools without staff CRM / outbound blast. */
+export function getSallyWebOrchestratorTools() {
+  return getSallyOrchestratorTools().filter((tool) => {
+    const name = tool && typeof tool === 'object' && 'function' in tool
+      ? String((tool as { function?: { name?: string } }).function?.name || '')
+      : '';
+    return name && !SALLY_WEB_BLOCKED_TOOLS.has(name);
+  });
+}
+
 export function isSallyToolName(name: string): boolean {
   return SALLY_TOOL_NAMES.has(name);
 }
@@ -748,14 +1007,15 @@ export function isSallyExclusiveTool(name: string): boolean {
 
 const SALLY_SALES_OS = [
   'You are Sally, Sync2Dine’s dedicated sales AI (phone and chat).',
-  'IDENTITY: Your name is Sally. You work for Sync2Dine (sync2dine.io). Never say you are Lizzie, Cynthia, or Builder Diddies. Never take food orders.',
-  'AIM: Take a restaurant prospect from first contact as far as possible toward a live, paying Sync2Dine customer, with minimal human help, while ensuring they understand the product and can ask questions.',
-  'HOW: Use tools when useful. Adapt (callback, discovery, demo, close, pay, setup, follow-up, stop if opt-out). Do not force unused steps. There is no fixed stage script.',
+  'IDENTITY: Your name is Sally. You work for Sync2Dine (sync2dine.io), the restaurant side of Sync2Gear. Never say you are Judie, Lizzie, Cynthia, or Builder Diddies. Never take food orders — Judie does that after they buy.',
+  'AIM: Take a restaurant prospect from first contact to a signed contract and live paying customer, with minimal human help.',
+  'HOW: Discovery 60–90s → authority (founder + patent + exclusive Atmosphere) → route to Atmosphere / Judie / Complete → handle objections → getOfferTerms → confirmSaleTerms → createSaasContract + sendContract → after signature sendStripeCheckoutLink → provision/onboard.',
   'GUARDRAILS:',
   '- NOT the restaurant food-order agent. No menus, orders, or diner reservations.',
+  '- NEVER sell Sally as the product. The product is Judie and/or Atmosphere.',
   '- British English, warm professional sales tone. Phone: one or two spoken sentences. Chat: concise paragraphs OK.',
   '- Never invent price, terms, CRM facts, hours, or payment links — use getOfferTerms and tools.',
-  '- Before provisionRestaurantClient or sendStripeCheckoutLink, call confirmSaleTerms after they confirm understanding.',
+  '- Before provisionRestaurantClient or sendStripeCheckoutLink: confirmSaleTerms, then signed contract via createSaasContract/sendContract.',
   '- Payment links must be emailed and/or WhatsApp’d via sendStripeCheckoutLink (channel email|whatsapp|both) — do not rely on reading a long URL aloud.',
   '- Escalate only if stuck or they ask for a human. DNC/opt-out = stop.',
   '- Voicemail: use leaveVoicemail; if live drop unavailable, schedule email/WhatsApp follow-up — never fake a left message.',
@@ -776,6 +1036,7 @@ export function buildSallyBrainPrompt(input: {
   const instructions = [
     SALLY_SALES_OS,
     formatOfferFactsBlock(),
+    formatObjectionPlaybook(),
     '- On phone keep replies short. Confirm fields one at a time after research.',
     input.direction === 'outbound'
       ? '- This is an outbound sales call you placed.'
@@ -785,7 +1046,7 @@ export function buildSallyBrainPrompt(input: {
     `Caller phone: ${input.partyPhone}`,
     input.outboundBrief
       ? `- SALES BRIEF FOR THIS CALL (follow this): ${String(input.outboundBrief).slice(0, 900)}`
-      : '- Pitch Sync2Dine: AI answers the phone, takes orders, and helps grow repeat business.',
+      : '- Pitch Sync2Dine: Judie answers the phone; Atmosphere runs the room; Complete does both.',
     '',
     draftBlock,
   ].filter(Boolean).join('\n');
@@ -803,11 +1064,88 @@ export function buildSallyChatPrompt(input?: {
   return [
     SALLY_SALES_OS,
     formatOfferFactsBlock(),
+    formatObjectionPlaybook(),
     input?.userName ? `You are chatting with platform sales staff: ${input.userName}.` : 'You are chatting with Sync2Dine platform sales staff.',
     'Help them run the sales pipeline with tools. Prefer action over long essays.',
-    'Routes they may need: /crm, /calls, /platform/clients, /sales.',
+    'Routes they may need: /crm, /calls, /platform/clients, /sales, /pricing.',
     draftBlock,
   ].join('\n');
+}
+
+/** Anonymous visitor on sync2dine.io — ChatGPT-style sales + signup guide. */
+export function buildSallyWebPrompt(input?: {
+  page?: string;
+  draft?: RestaurantProfileDraft | null;
+  terms?: SallyTermsRecord | null;
+}): string {
+  const draftBlock = input?.draft && Object.keys(input.draft).length
+    ? `Current signup draft (confirm with visitor — do not invent):\n${JSON.stringify(input.draft, null, 0).slice(0, 2500)}`
+    : 'No signup draft yet — researchRestaurantProfile once they name their restaurant or want to sign up.';
+  const termsBlock = input?.terms
+    ? `Confirmed commercial terms:\n${JSON.stringify(input.terms, null, 0).slice(0, 800)}`
+    : 'No commercial terms confirmed yet.';
+  const page = (input?.page || '/').trim() || '/';
+  return [
+    SALLY_SALES_OS,
+    formatOfferFactsBlock(),
+    formatObjectionPlaybook(),
+    'CHANNEL: Anonymous website visitor on sync2dine.io (Ask Sync2Dine top bar / chat). They are a restaurant prospect, not staff.',
+    `Current page hint: ${page}`,
+    'UI: Visitors see “Ask Sync2Dine”. You are still Sally. Never say you are Judie, Cynthia, Lizzie, or Builder Diddies.',
+    'PRIMARY PRODUCT: Sync2Dine sells Atmosphere first — venue audio management, promotional messaging, and staff training (Sync2Gear). Lead with Atmosphere unless they clearly only care about the phone.',
+    'SECONDARY: Judie is the AI phone receptionist upsell (orders/bookings). Complete = Atmosphere + Judie when they want both. Never lead with Judie on a generic homepage visit.',
+    'AIM: Answer like their search engine for Sync2Dine — clear, concise British English. Guide questions toward Atmosphere pricing, then call or enquire.',
+    'PHONE (always available): Our landline is 020 3745 3233 (+442037453233), answered 24/7. Offer it early and often. Prefer tel:+442037453233. You may bookCallback if they want a scheduled call. Speaking to us is the preferred close while app self-serve checkout is closed for testing.',
+    'SIGNUP PATH: Ask one or two questions at a time — need (Atmosphere / Complete / Judie) → venue name → contact name, email, phone. Use getOfferTerms for prices. Point them to https://sync2dine.io/inquiry/ or Call 020 3745 3233 — do NOT send them to app.sync2dine.io/start while the app storefront is login-gated.',
+    'Do not place outbound dials or blast CRM from this channel. Capture leads with captureLead / bookDemo / bookCallback.',
+    'Food orders / diner bookings: politely redirect — Judie does that for restaurants after they join Sync2Dine.',
+    draftBlock,
+    termsBlock,
+  ].join('\n');
+}
+
+export function getSallyDraftForSession(sessionKey: string): RestaurantProfileDraft {
+  return readDraft(sessionKey);
+}
+
+export function getSallyTermsForSession(sessionKey: string): SallyTermsRecord | null {
+  return readTermsConfirmed(sessionKey);
+}
+
+/** Map Sally web draft + terms into /start query + checkout draft fields. */
+export function buildSallyCheckoutHandoff(sessionKey: string): {
+  startPath: string;
+  venueName?: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  packageId?: SaasPackageId;
+  interval?: 'weekly' | 'annual';
+  overageAction?: OverageAction;
+} {
+  const draft = readDraft(sessionKey);
+  const terms = readTermsConfirmed(sessionKey);
+  const packageId = terms?.packageId && isSaasPackageId(terms.packageId) ? terms.packageId : undefined;
+  const interval = terms?.billingInterval === 'annual' ? 'annual' as const : terms?.billingInterval === 'weekly' ? 'weekly' as const : undefined;
+  const params = new URLSearchParams();
+  if (packageId) params.set('package', packageId);
+  if (interval) params.set('interval', interval);
+  if (draft.businessName) params.set('venue', draft.businessName);
+  if (draft.contactEmail) params.set('email', draft.contactEmail);
+  if (draft.phone) params.set('phone', draft.phone);
+  if (draft.address) params.set('address', draft.address);
+  const qs = params.toString();
+  return {
+    startPath: qs ? `/start?${qs}` : '/start',
+    venueName: draft.businessName || undefined,
+    email: draft.contactEmail || undefined,
+    phone: draft.phone || undefined,
+    address: draft.address || undefined,
+    packageId,
+    interval,
+    overageAction: terms?.overageAction,
+  };
 }
 
 function readDraft(sessionKey: string, callId?: string): RestaurantProfileDraft {
@@ -907,7 +1245,7 @@ async function seedTenantProfile(
       enabled: true,
       mock_mode: false,
       status: 'connected',
-      values: {
+      values_encrypted: {
         companyName: draft.businessName || '',
         website: draft.website || '',
         email: contactEmail,
@@ -1009,10 +1347,27 @@ export async function executeSallyTool(
 
   if (name === 'getOfferTerms') {
     const terms = getSallyOfferTerms();
+    const phone = terms.products.phone_agent;
+    const audio = terms.products.audio_management;
+    const plans = {
+      starter: PLAN_CONFIG.starter,
+      pro: PLAN_CONFIG.pro,
+      enterprise: PLAN_CONFIG.enterprise,
+    };
+    const j = SAAS_PACKAGES.judie_starter;
+    const a = SAAS_PACKAGES.atmosphere;
+    const c = SAAS_PACKAGES.combined;
+    const w = (pkg: typeof j) => (terms.launchActive ? pkg.launchWeeklyGbp : pkg.standardWeeklyGbp);
     return {
       ok: true,
       ...terms,
-      spokenHint: `Introductory Sync2Dine is ${terms.monthlyPriceGbp} pounds a month${terms.setupFeeGbp ? `, plus ${terms.setupFeeGbp} pounds setup` : ''}. ${terms.cancelPolicy}`,
+      plans,
+      fareScheduleVersion: terms.fareScheduleVersion,
+      spokenHint:
+        `Lead with need: Judie from ${w(j)} pounds a week with ${j.weeklyAiMinutes} AI minutes, Atmosphere from ${w(a)} a week, or Complete at ${w(c)} a week best value. ` +
+        `Launch is 40 percent off the standard weekly; annual prepay is 50 percent off. ` +
+        `Minutes reset weekly — overage is published per package. ` +
+        `Comparison monthly for Judie Starter is about ${phone.monthlyPriceGbp} pounds. Atmosphere add path is about ${audio.monthlyPriceGbp} monthly equivalent. ${terms.cancelPolicy}`,
     };
   }
 
@@ -1021,23 +1376,58 @@ export async function executeSallyTool(
       return {
         ok: false,
         error: 'confirmation_required',
-        spokenHint: 'Ask them to confirm they understand the service, monthly price, billing, and cancel policy first.',
+        spokenHint:
+          'Ask them to confirm they understand Judie and/or Atmosphere, the weekly or annual price, fare and overage action, billing, and cancel policy first.',
       };
     }
     const offer = getSallyOfferTerms();
+    const packageRaw = String(args.packageId || args.package || '').trim();
+    const packageId = isSaasPackageId(packageRaw) ? packageRaw : 'judie_starter';
+    const pkg = getPackage(packageId);
+    const billingInterval = String(args.billingInterval || args.interval || 'weekly').toLowerCase() === 'annual'
+      ? 'annual' as const
+      : 'weekly' as const;
+    const overageRaw = String(args.overageAction || 'continue_bill').trim() as OverageAction;
+    const overageAction: OverageAction =
+      overageRaw === 'pause_transfer' || overageRaw === 'approval_required' || overageRaw === 'continue_bill'
+        ? overageRaw
+        : 'continue_bill';
+    const weekly = Number(args.weeklyPriceGbp);
     const monthly = Number(args.monthlyPriceGbp);
     const setup = Number(args.setupFeeGbp);
+    const weeklyPrice =
+      Number.isFinite(weekly) && weekly > 0
+        ? weekly
+        : offer.launchActive
+          ? pkg.launchWeeklyGbp
+          : pkg.standardWeeklyGbp;
+    const amountGbp =
+      billingInterval === 'annual'
+        ? pkg.annualPrepayGbp
+        : weeklyPrice;
     const record: SallyTermsRecord = {
       confirmedAt: new Date().toISOString(),
-      monthlyPriceGbp: Number.isFinite(monthly) && monthly > 0 ? monthly : offer.monthlyPriceGbp,
+      monthlyPriceGbp:
+        Number.isFinite(monthly) && monthly > 0
+          ? monthly
+          : monthlyEquivalentFromWeekly(weeklyPrice),
       setupFeeGbp: Number.isFinite(setup) && setup >= 0 ? setup : offer.setupFeeGbp,
-      summary: String(args.notes || 'Customer confirmed service, price, billing, and cancel policy').trim(),
+      weeklyPriceGbp: weeklyPrice,
+      packageId,
+      billingInterval,
+      overageAction,
+      amountGbp,
+      summary: String(
+        args.notes ||
+          `Customer confirmed ${pkg.name}, ${billingInterval} £${amountGbp}, overageAction=${overageAction}, fare ${offer.fareScheduleVersion}`,
+      ).trim(),
     };
     writeTermsConfirmed(sessionKey, record, callId || undefined);
     return {
       ok: true,
       ...record,
-      spokenHint: `Noted — they confirmed terms at £${record.monthlyPriceGbp}/month. You can provision the account and send the payment link.`,
+      fareSummary: formatFareSummary(pkg),
+      spokenHint: `Noted — they confirmed ${pkg.name} at £${amountGbp}${billingInterval === 'annual' ? ' annual prepay' : '/week'}. Create and send the contract next, then checkout after they sign.`,
     };
   }
 
@@ -1434,11 +1824,55 @@ export async function executeSallyTool(
   if (name === 'createSaasQuote') {
     const plan = String(args.plan || 'starter') as 'starter' | 'pro' | 'enterprise';
     const offer = getSallyOfferTerms();
-    const monthlyArg = Number(args.monthlyPriceGbp);
-    const monthly = Number.isFinite(monthlyArg) && monthlyArg > 0 ? monthlyArg : offer.monthlyPriceGbp;
+    const packageRaw = String(args.packageId || '').trim();
+    const billingInterval =
+      String(args.billingInterval || args.interval || 'weekly').toLowerCase() === 'annual'
+        ? ('annual' as const)
+        : ('weekly' as const);
+    const additionalSites = Math.max(0, Math.floor(Number(args.additionalSites) || 0));
     const customerId = String(args.customerId || '').trim();
     const businessName = String(args.businessName || '').trim() || 'Restaurant';
+
+    let lines: ReturnType<typeof resolvePackageLine>;
+    let products: SaasProductId[] = [];
+    let packageId: SaasPackageId | undefined;
+    let fareSummary: string;
+
+    if (isSaasPackageId(packageRaw)) {
+      packageId = packageRaw;
+      const pkg = getPackage(packageId);
+      lines = resolvePackageLine(packageId, {
+        interval: billingInterval,
+        useLaunch: offer.launchActive,
+        additionalSites,
+      });
+      fareSummary = formatFareSummary(pkg);
+    } else {
+      products = normalizeSaasProductIds(args.products);
+      if (!products.length) {
+        products = ['phone_agent'];
+      }
+      const quantities = (args.quantities && typeof args.quantities === 'object'
+        ? args.quantities
+        : {}) as Partial<Record<SaasProductId, number>>;
+      const monthlyArg = Number(args.monthlyPriceGbp);
+      const weeklyArg = Number(args.weeklyPriceGbp);
+      const priceOverrides: Partial<Record<SaasProductId, number>> = {};
+      if (Number.isFinite(monthlyArg) && monthlyArg > 0 && products.includes('phone_agent')) {
+        priceOverrides.phone_agent = monthlyArg;
+      }
+      if (Number.isFinite(weeklyArg) && weeklyArg > 0 && products.includes('phone_agent')) {
+        priceOverrides.phone_agent = monthlyEquivalentFromWeekly(weeklyArg);
+      }
+      lines = resolveProductLines(products, offer.products, quantities, priceOverrides);
+      const legacyPkg = products.length === 1 ? getPackage(SAAS_PRODUCTS[products[0]!].packageId) : getPackage('judie_starter');
+      fareSummary = formatFareSummary(legacyPkg);
+    }
+
+    const monthly = sumMonthly(lines);
+    const total = sumQuoteTotal(lines);
     const quoteId = `saas-${Date.now().toString(36)}`;
+    const summary = formatProductsSummary(lines);
     const { saveQuoteRecord } = await import('./data-store');
     const quote = {
       id: quoteId,
@@ -1447,19 +1881,50 @@ export async function executeSallyTool(
       tradeId: 'sync2dine_saas',
       tradeName: 'Sync2Dine SaaS',
       status: 'draft',
-      total: monthly,
+      total,
       currency: 'GBP',
-      billing: 'monthly',
+      billing: billingInterval === 'annual' ? 'annual' : 'weekly',
+      billingInterval,
       plan,
-      notes: String(args.notes || `Sync2Dine ${plan} — £${monthly}/mo (intro offer)`),
+      packageId: packageId || null,
+      products,
+      fareSummary,
+      lines: lines.map((l) => ({
+        id: l.id,
+        description: l.description,
+        quantity: l.quantity,
+        unit: l.unit,
+        rate: l.rate,
+        total: l.total,
+        category: l.category,
+        productId: l.productId,
+        packageId: l.packageId,
+        billingInterval: l.billingInterval,
+      })),
+      items: lines
+        .filter((l) => l.category === 'product' || l.category === 'site')
+        .map((l) => ({
+          productId: l.productId,
+          name: l.description,
+          quantity: l.quantity,
+          price: l.rate,
+          total: l.total,
+        })),
+      extras: lines
+        .filter((l) => l.category === 'extra')
+        .map((l) => ({ description: l.description, price: l.total })),
+      labour: [],
+      discount: 0,
+      notes: String(args.notes || `Sync2Dine ${plan} - ${summary}`),
       createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       source: 'sally',
     };
     saveQuoteRecord(quote);
     if (customerId) {
       appendCustomerCallActivity({
         customerId,
-        summary: `SaaS quote ${quoteId}: ${plan} £${monthly}/mo`,
+        summary: `SaaS quote ${quoteId}: ${summary} (total GBP ${total})`,
         detail: quote.notes as string,
         aim: 'quote_requested',
         type: 'note',
@@ -1470,18 +1935,174 @@ export async function executeSallyTool(
       ok: true,
       quoteId,
       plan,
+      packageId,
+      products,
+      billingInterval,
+      fareSummary,
+      lines,
       monthlyPriceGbp: monthly,
-      spokenHint: `I've drafted a Sync2Dine ${plan} quote at ${monthly} pounds a month (${quoteId}).`,
+      total,
+      spokenHint: `I've drafted a Sync2Dine quote for ${summary}, totalling ${total} pounds (${quoteId}).`,
+    };
+  }
+
+  if (name === 'createSaasContract') {
+    const termsGate = requireTermsConfirmed(sessionKey, callId || undefined, args);
+    if (termsGate) return termsGate;
+    const terms = readTermsConfirmed(sessionKey, callId || undefined);
+    const packageRaw = String(args.packageId || terms?.packageId || '').trim();
+    if (!isSaasPackageId(packageRaw)) {
+      return {
+        ok: false,
+        error: 'packageId_required',
+        spokenHint: 'Which Sync2Dine package did they agree to - Judie, Atmosphere, or Complete?',
+      };
+    }
+    const billingInterval =
+      String(args.billingInterval || terms?.billingInterval || 'weekly').toLowerCase() === 'annual'
+        ? ('annual' as const)
+        : ('weekly' as const);
+    const overageRaw = String(args.overageAction || terms?.overageAction || 'continue_bill').trim() as OverageAction;
+    const overageAction: OverageAction =
+      overageRaw === 'pause_transfer' || overageRaw === 'approval_required' || overageRaw === 'continue_bill'
+        ? overageRaw
+        : 'continue_bill';
+    const restaurantName = String(args.restaurantName || '').trim();
+    const contactName = String(args.contactName || '').trim();
+    const contactEmail = String(args.contactEmail || '').trim().toLowerCase();
+    if (!restaurantName || !contactName || !contactEmail || !contactEmail.includes('@')) {
+      return {
+        ok: false,
+        error: 'contact_required',
+        spokenHint: 'I need restaurant name, contact name, and email to create the contract.',
+      };
+    }
+    try {
+      const contract = createSaasContract({
+        packageId: packageRaw,
+        billingInterval,
+        overageAction,
+        additionalSites: Number(args.additionalSites) || 0,
+        customerId: String(args.customerId || '').trim() || undefined,
+        organizationId: String(args.organizationId || '').trim() || undefined,
+        restaurantName,
+        contactName,
+        contactEmail,
+        contactPhone: String(args.contactPhone || partyPhone || '').trim() || undefined,
+        address: String(args.address || '').trim() || undefined,
+        notes: String(args.notes || terms?.summary || '').trim() || undefined,
+        createdBy: 'sally',
+      });
+      const customerId = String(args.customerId || '').trim();
+      if (customerId) {
+        appendCustomerCallActivity({
+          customerId,
+          summary: `SaaS contract ${contract.id} drafted (${contract.packageId})`,
+          detail: contract.signingUrl,
+          aim: 'quote_requested',
+          type: 'note',
+          createdBy: 'sally',
+        });
+      }
+      if (callId) {
+        const call = getCallById(callId);
+        const meta = (call?.metadata as Record<string, unknown> | undefined) || {};
+        saveCall({
+          id: callId,
+          metadata: {
+            ...meta,
+            sallyLastContractId: contract.id,
+            sallyLastContractUrl: contract.signingUrl,
+          },
+        });
+      }
+      return {
+        ok: true,
+        contractId: contract.id,
+        signingUrl: contract.signingUrl,
+        packageId: contract.packageId,
+        billingInterval: contract.billingInterval,
+        fareSummary: contract.fareSummary,
+        amountGbp: contract.amountGbp,
+        spokenHint: `Contract ready for ${restaurantName}. Send it with sendContract, then checkout after they sign.`,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'contract_failed',
+        spokenHint: 'Could not create the Sync2Dine contract - check the package and contact details.',
+      };
+    }
+  }
+
+  if (name === 'sendContract') {
+    const contractId = String(args.contractId || '').trim();
+    if (!contractId) {
+      return {
+        ok: false,
+        error: 'contractId_required',
+        spokenHint: 'Which contract should I email - create one with createSaasContract first.',
+      };
+    }
+    const contract = getSaasContractById(contractId);
+    if (!contract) {
+      return {
+        ok: false,
+        error: 'contract_not_found',
+        spokenHint: 'That contract id was not found - create a new one with createSaasContract.',
+      };
+    }
+    const toEmail = String(args.toEmail || contract.contactEmail || '').trim().toLowerCase();
+    if (!toEmail || !toEmail.includes('@')) {
+      return {
+        ok: false,
+        error: 'email_required',
+        spokenHint: 'What email should I send the signing link to?',
+      };
+    }
+    const { subject, text } = contractEmailBody(contract);
+    const delivered = await deliverSallyChannels({
+      channel: 'email',
+      toEmail,
+      toPhone: String(contract.contactPhone || partyPhone || '').trim(),
+      emailSubject: subject,
+      emailBody: text,
+      whatsappBody: text,
+    });
+    if (!delivered.sentVia.length) {
+      return {
+        ok: false,
+        error: delivered.errors.join(',') || 'delivery_failed',
+        contractId,
+        signingUrl: contract.signingUrl,
+        spokenHint: 'I could not email the contract - confirm their email or escalate.',
+        errors: delivered.errors,
+      };
+    }
+    markSaasContractSent(contractId);
+    const customerId = String(args.customerId || contract.customerId || '').trim();
+    if (customerId) {
+      appendCustomerCallActivity({
+        customerId,
+        summary: `Sync2Dine contract ${contractId} emailed`,
+        detail: contract.signingUrl,
+        aim: 'quote_requested',
+        type: 'note',
+        createdBy: 'sally',
+      });
+    }
+    return {
+      ok: true,
+      contractId,
+      signingUrl: contract.signingUrl,
+      sentVia: delivered.sentVia,
+      spokenHint: `I've emailed the contract signing link to ${toEmail}. Once they sign, use sendStripeCheckoutLink for payment.`,
     };
   }
 
   if (name === 'sendStripeCheckoutLink') {
     const termsGate = requireTermsConfirmed(sessionKey, callId || undefined, args);
     if (termsGate) return termsGate;
-    const organizationId = String(args.organizationId || '').trim();
-    if (!organizationId) {
-      return { ok: false, error: 'organizationId_required', spokenHint: 'Which organisation should get the Stripe checkout link?' };
-    }
     const channel = String(args.channel || args.sendVia || '').toLowerCase() as 'email' | 'whatsapp' | 'both';
     if (!['email', 'whatsapp', 'both'].includes(channel)) {
       return {
@@ -1490,17 +2111,89 @@ export async function executeSallyTool(
         spokenHint: 'Should I email, WhatsApp, or both for the payment link?',
       };
     }
+    const contractIdArg = String(args.contractId || '').trim();
+    let signedContract;
+    try {
+      signedContract = assertContractSignedForCheckout({
+        contractId: contractIdArg || undefined,
+        organizationId: String(args.organizationId || '').trim() || undefined,
+      });
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'contract_not_signed',
+        spokenHint:
+          'They need a signed Sync2Dine contract before checkout - create and send the contract, then try again after they sign.',
+      };
+    }
+    const organizationId = String(args.organizationId || signedContract.organizationId || '').trim();
+    if (!organizationId) {
+      return {
+        ok: false,
+        error: 'organizationId_required',
+        spokenHint: 'Which organisation should get the Stripe checkout link? Provision the restaurant first if needed.',
+      };
+    }
     try {
       const { createCheckoutSessionForOrg } = await import('./stripe-service');
       const { getOrganizationById } = await import('./organizations');
       const org = getOrganizationById(organizationId);
-      const toEmail = String(args.toEmail || org?.contactEmail || '').trim();
-      const toPhone = String(args.toPhone || partyPhone || org?.contactPhone || '').trim();
+      const toEmail = String(args.toEmail || signedContract.contactEmail || org?.contactEmail || '').trim();
+      const toPhone = String(args.toPhone || partyPhone || signedContract.contactPhone || org?.contactPhone || '').trim();
+      const quoteId = String(args.quoteId || '').trim();
+      const stripeInterval = signedContract.billingInterval === 'annual' ? ('year' as const) : ('week' as const);
+      let lineItems: Array<{
+        description: string;
+        unitAmountGbp: number;
+        quantity?: number;
+        recurring?: boolean;
+        interval?: 'week' | 'month' | 'year';
+      }> = resolvePackageLine(signedContract.packageId, {
+        interval: signedContract.billingInterval,
+        useLaunch: signedContract.useLaunch,
+        additionalSites: signedContract.additionalSites,
+      })
+        .map((l) => ({
+          description: l.description,
+          unitAmountGbp: l.rate,
+          quantity: l.quantity,
+          recurring: l.category !== 'extra',
+          interval: l.unit === 'year' ? 'year' : l.unit === 'week' ? 'week' : stripeInterval,
+        }))
+        .filter((l) => l.unitAmountGbp > 0);
+
+      if (!lineItems.length && quoteId) {
+        const { getDataStore } = await import('./data-store');
+        const store = getDataStore();
+        const quote = (store.quotes as Array<Record<string, unknown>>).find((q) => String(q.id) === quoteId);
+        if (quote) {
+          const qInterval =
+            String(quote.billingInterval || quote.billing || 'weekly').toLowerCase() === 'annual' ? 'annual' : 'weekly';
+          const qPackage = String(quote.packageId || '').trim();
+          if (isSaasPackageId(qPackage)) {
+            lineItems = resolvePackageLine(qPackage, {
+              interval: qInterval,
+              useLaunch: getSallyOfferTerms().launchActive,
+              additionalSites: Number(quote.additionalSites) || 0,
+            }).map((l) => ({
+              description: l.description,
+              unitAmountGbp: l.rate,
+              quantity: l.quantity,
+              recurring: l.category !== 'extra',
+              interval: l.unit === 'year' ? 'year' : 'week',
+            }));
+          }
+        }
+      }
+
       const url = await createCheckoutSessionForOrg(organizationId, {
         metadata: {
           sallySession: sessionKey,
           customerEmail: toEmail || org?.contactEmail || '',
+          contractId: signedContract.id,
+          ...(quoteId ? { quoteId } : {}),
         },
+        lineItems,
       });
       const msg = [
         'Your Sync2Dine payment link is ready.',
@@ -1511,7 +2204,7 @@ export async function executeSallyTool(
         channel,
         toEmail,
         toPhone,
-        emailSubject: 'Sync2Dine — complete your subscription',
+        emailSubject: 'Sync2Dine - complete your subscription',
         emailBody: msg,
         whatsappBody: msg,
       });
@@ -1521,12 +2214,13 @@ export async function executeSallyTool(
           error: delivered.errors.join(',') || 'delivery_failed',
           checkoutUrl: url,
           organizationId,
+          contractId: signedContract.id,
           spokenHint:
-            'I created the payment link but could not send it — ask for another email or WhatsApp number, or escalate.',
+            'I created the payment link but could not send it - ask for another email or WhatsApp number, or escalate.',
           errors: delivered.errors,
         };
       }
-      const customerId = String(args.customerId || '').trim();
+      const customerId = String(args.customerId || signedContract.customerId || '').trim();
       if (customerId) {
         appendCustomerCallActivity({
           customerId,
@@ -1547,6 +2241,8 @@ export async function executeSallyTool(
             sallyCheckoutUrl: url,
             sallyCheckoutSentVia: delivered.sentVia,
             sallyCheckoutAt: new Date().toISOString(),
+            sallyCheckoutContractId: signedContract.id,
+            ...(quoteId ? { sallyCheckoutQuoteId: quoteId } : {}),
           },
         });
       }
@@ -1554,19 +2250,20 @@ export async function executeSallyTool(
         ok: true,
         checkoutUrl: url,
         organizationId,
+        contractId: signedContract.id,
+        quoteId: quoteId || undefined,
         sentVia: delivered.sentVia,
         errors: delivered.errors,
-        spokenHint: `I've ${delivered.sentVia.includes('email') && delivered.sentVia.includes('whatsapp') ? 'emailed and WhatsApp’d' : delivered.sentVia.includes('email') ? 'emailed' : 'WhatsApp’d'} the payment link. They can open it now while we stay on the line.`,
+        spokenHint: `I've ${delivered.sentVia.includes('email') && delivered.sentVia.includes('whatsapp') ? 'emailed and WhatsAppd' : delivered.sentVia.includes('email') ? 'emailed' : 'WhatsAppd'} the payment link. They can open it now while we stay on the line.`,
       };
     } catch (err) {
       return {
         ok: false,
         error: err instanceof Error ? err.message : 'stripe_failed',
-        spokenHint: 'Could not create a Stripe checkout link — check Stripe is configured for that organisation.',
+        spokenHint: 'Could not create a Stripe checkout link - check Stripe is configured for that organisation.',
       };
     }
   }
-
   if (name === 'bookOnboarding') {
     const scheduledAt = String(args.scheduledAt || '').trim();
     if (!scheduledAt) {

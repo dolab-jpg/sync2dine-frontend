@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 40" fill="none">
+  <rect x="0" y="0" width="40" height="40" rx="11" fill="#e8c26a"/>
+  <path d="M8 24c5.5-7.2 14.5-7.2 20 0" stroke="#0f3d3e" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M10.5 18c4-4 11-4 15 0" stroke="#0b2223" stroke-width="2.4" stroke-linecap="round" opacity="0.9"/>
+  <circle cx="18" cy="25.5" r="2.8" fill="#0f3d3e"/>
+  <text x="52" y="28" font-family="Georgia, 'Iowan Old Style', ui-serif, serif" font-size="22" font-weight="700" fill="#fff7df">Sync2Dine</text>
+</svg>

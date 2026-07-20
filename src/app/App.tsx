@@ -56,6 +56,18 @@ import CallRegister from './components/CallCenter/CallRegister';
 import AppShell from './components/AppShell';
 import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
 import SallyOfferSettings from './components/platform/SallyOfferSettings';
+import PricingPage from './components/PricingPage';
+import StartCheckoutFlow from './components/StartCheckoutFlow';
+import JudieLandingPage from './components/JudieLandingPage';
+import AtmosphereLandingPage from './components/AtmosphereLandingPage';
+import TermsPage from './components/legal/TermsPage';
+import FairUseAndFaresPage from './components/legal/FairUseAndFaresPage';
+import PrivacyPage from './components/legal/PrivacyPage';
+import AcceptableUsePage from './components/legal/AcceptableUsePage';
+import CookiesPage from './components/legal/CookiesPage';
+import CancellationRefundsPage from './components/legal/CancellationRefundsPage';
+import QuotesList from './components/QuotesList';
+import SaasQuoteBuilder from './components/SaasQuoteBuilder';
 import MenuPreview from './components/platform/MenuPreview';
 import FrontKiosk from './components/FrontKiosk';
 import RestaurantOrders from './components/RestaurantOrders';
@@ -126,7 +138,7 @@ export interface Customer {
   notes: string;
   /** Named customer special they can ask for on the phone (e.g. "Family Friday") */
   specialName?: string;
-  /** Deal instructions Lizzie must honour when that special applies */
+  /** Deal instructions Judie must honour when that special applies */
   specialDealNote?: string;
   interestedTrades?: TradeId[];
   tradeId?: TradeId;
@@ -186,7 +198,7 @@ export interface Product {
   source: string;
   category: string;
   tradeId?: TradeId | null;
-  /** Restaurant food menu fields (Sync2Dine) — same row Lizzie reads via getMenu */
+  /** Restaurant food menu fields (Sync2Dine) — same row Judie reads via getMenu */
   price?: number;
   description?: string;
   available?: boolean;
@@ -286,6 +298,14 @@ export interface Quote {
   pricingResearch?: PricingResearch;
   /** Filename or storage path of last generated quote PDF */
   pdfPath?: string;
+  /** Stable signed Sync2Dine URL that creates a fresh Stripe Checkout session. */
+  checkoutLandingUrl?: string;
+  stripeSessionId?: string;
+  stripePaymentStatus?: 'unpaid' | 'pending' | 'paid';
+  paidAt?: string;
+  organizationId?: string;
+  lastSentAt?: string;
+  lastEmailMessageId?: string;
 }
 
 export interface QuoteItem {
@@ -1249,6 +1269,18 @@ export default function App() {
   }
 
   if (!isLoggedIn) {
+    const RedirectToMarketing = ({ path = '/' }: { path?: string }) => {
+      if (typeof window !== 'undefined') {
+        window.location.replace(`https://sync2dine.io${path}`);
+      }
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-[#f6efe0] px-6 text-center">
+          <p className="text-lg font-semibold text-[#0f3d3e]">
+            Taking you to Sync2Dine…
+          </p>
+        </div>
+      );
+    };
     return (
       <BrowserRouter>
         <OnlineStatusBanner />
@@ -1256,6 +1288,18 @@ export default function App() {
           <Route path="/cursor-paste" element={<CursorPastePage />} />
           <Route path="/front" element={<FrontKiosk />} />
           <Route path="/integrations" element={<IntegrationsPublicPage />} />
+          {/* Public marketing lives on sync2dine.io; app host is login-gated during live testing */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/pricing" element={<RedirectToMarketing path="/pricing/" />} />
+          <Route path="/start" element={<RedirectToMarketing path="/inquiry/" />} />
+          <Route path="/judie" element={<RedirectToMarketing path="/ai-phone-ordering/" />} />
+          <Route path="/atmosphere" element={<RedirectToMarketing path="/" />} />
+          <Route path="/legal/terms" element={<TermsPage />} />
+          <Route path="/legal/fair-use-and-fares" element={<FairUseAndFaresPage />} />
+          <Route path="/legal/privacy" element={<PrivacyPage />} />
+          <Route path="/legal/acceptable-use" element={<AcceptableUsePage />} />
+          <Route path="/legal/cookies" element={<CookiesPage />} />
+          <Route path="/legal/cancellation-refunds" element={<CancellationRefundsPage />} />
           <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -1283,6 +1327,16 @@ export default function App() {
           <Routes>
             {/* Public diner kiosk (also reachable logged-in for staff preview) */}
             <Route path="/front" element={<FrontKiosk />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/start" element={<StartCheckoutFlow />} />
+            <Route path="/judie" element={<JudieLandingPage />} />
+            <Route path="/atmosphere" element={<AtmosphereLandingPage />} />
+            <Route path="/legal/terms" element={<TermsPage />} />
+            <Route path="/legal/fair-use-and-fares" element={<FairUseAndFaresPage />} />
+            <Route path="/legal/privacy" element={<PrivacyPage />} />
+            <Route path="/legal/acceptable-use" element={<AcceptableUsePage />} />
+            <Route path="/legal/cookies" element={<CookiesPage />} />
+            <Route path="/legal/cancellation-refunds" element={<CancellationRefundsPage />} />
             <Route
               element={(
                 <RestaurantShell>
@@ -1337,18 +1391,46 @@ export default function App() {
     <AppContext.Provider value={contextValue}>
       <AIAssistantProvider>
       <BrowserRouter>
-        <AppShell>
             <Routes>
+              <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/start" element={<StartCheckoutFlow />} />
+              <Route path="/judie" element={<JudieLandingPage />} />
+              <Route path="/atmosphere" element={<AtmosphereLandingPage />} />
+              <Route path="/legal/terms" element={<TermsPage />} />
+              <Route path="/legal/fair-use-and-fares" element={<FairUseAndFaresPage />} />
+              <Route path="/legal/privacy" element={<PrivacyPage />} />
+              <Route path="/legal/acceptable-use" element={<AcceptableUsePage />} />
+              <Route path="/legal/cookies" element={<CookiesPage />} />
+              <Route path="/legal/cancellation-refunds" element={<CancellationRefundsPage />} />
+              <Route path="/front" element={<FrontKiosk />} />
+              <Route
+                element={(
+                  <AppShell>
+                    <Outlet />
+                  </AppShell>
+                )}
+              >
               <Route path="/" element={<SalesDashboard />} />
               <Route
                 path="/crm"
                 element={<ProtectedRoute element={<ComprehensiveCRM />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
               <Route
+                path="/quotes"
+                element={<ProtectedRoute element={<QuotesList />} allowedRoles={['super_admin', 'manager', 'staff', 'platform_owner']} user={user} />}
+              />
+              <Route
+                path="/quote/saas"
+                element={<ProtectedRoute element={<SaasQuoteBuilder />} allowedRoles={['super_admin', 'manager', 'staff', 'platform_owner']} user={user} />}
+              />
+              <Route
+                path="/quote/saas/:customerId"
+                element={<ProtectedRoute element={<SaasQuoteBuilder />} allowedRoles={['super_admin', 'manager', 'staff', 'platform_owner']} user={user} />}
+              />
+              <Route
                 path="/customers"
                 element={<ProtectedRoute element={<CustomerManagement />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
-              <Route path="/front" element={<FrontKiosk />} />
               <Route
                 path="/orders"
                 element={<ProtectedRoute element={<RestaurantOrders />} allowedRoles={['platform_owner', 'super_admin', 'manager', 'staff']} user={user} />}
@@ -1463,9 +1545,9 @@ export default function App() {
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/profile/password" element={<ChangePasswordPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
             </Routes>
           <Toaster />
-        </AppShell>
       </BrowserRouter>
       </AIAssistantProvider>
     </AppContext.Provider>
