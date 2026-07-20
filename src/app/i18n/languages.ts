@@ -35,9 +35,9 @@ export const LANG_FLAGS: Record<SupportedLang, string> = {
   fa: '🇮🇷',
 };
 
-/** Spoken persona when Lizzie switches language mid-call. */
+/** Spoken persona when Judie switches language mid-call. */
 export const LANG_PERSONAS: Record<SupportedLang, string> = {
-  en: 'Lizzie / Cynthia',
+  en: 'Judie',
   es: 'Lucía',
   pl: 'Ania',
   ru: 'Nastya',

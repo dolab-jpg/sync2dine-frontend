@@ -18,6 +18,7 @@ import { handleMessageRoutes } from './messages-routes';
 import { handlePriceResearchRoutes } from './price-research-routes';
 import { handleContractRoutes } from './contract-routes';
 import { handlePlatformRoutes } from './platform-routes';
+import { handleSaasContractRoutes } from './saas-contract-routes';
 import { handleStripeRoutes } from './stripe-routes';
 import { handleAuthRoutes } from './auth';
 import { handleMailboxRoutes } from './mailbox-routes';
@@ -25,6 +26,7 @@ import { handleCalendarRoutes } from './calendar-routes';
 import { handlePackageUpdatesRoute } from './mailbox/package-updates';
 import { handleChannelRoutes } from './channel-routes';
 import { handleCyrusRoutes } from './cyrus-routes';
+import { handleSallyWebRoutes } from './sally-web-routes';
 import { handleCynthiaRoutes } from './cynthia-routes';
 import { handleLeadsRoutes } from './leads-routes';
 import { handleAgentCredentialsRoutes } from './agent-credentials-routes';
@@ -60,16 +62,18 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
   const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
   const pathname = url.pathname;
 
-  // Widget on company site needs dynamic CORS — cyrus-routes sets it for /api/cyrus/web*
-  const isCyrusWeb = pathname.startsWith('/api/cyrus/web');
-  if (!isCyrusWeb) {
+  // Widget / marketing chat need dynamic CORS — sally-web + cyrus-web set it themselves
+  const isPublicChat =
+    pathname.startsWith('/api/cyrus/web') || pathname.startsWith('/api/sally/web');
+  if (!isPublicChat) {
     res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Org-Id, X-User-Id, X-User-Role');
 
   if (req.method === 'OPTIONS') {
-    if (isCyrusWeb && await handleCyrusRoutes(req, res, pathname)) return;
+    if (pathname.startsWith('/api/sally/web') && await handleSallyWebRoutes(req, res, pathname)) return;
+    if (pathname.startsWith('/api/cyrus/web') && await handleCyrusRoutes(req, res, pathname)) return;
     res.statusCode = 204;
     res.end();
     return;
@@ -107,6 +111,8 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
 
   if (await handleContractRoutes(req, res, pathname)) return;
 
+  if (await handleSaasContractRoutes(req, res, pathname)) return;
+
   if (await handleStripeRoutes(req, res, pathname)) return;
 
   if (await handleAuthRoutes(req, res, pathname)) return;
@@ -120,6 +126,7 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
   if (await handleChannelRoutes(req, res, pathname)) return;
 
   if (await handleCyrusRoutes(req, res, pathname)) return;
+  if (await handleSallyWebRoutes(req, res, pathname)) return;
   if (await handleCynthiaRoutes(req, res, pathname)) return;
 
   if (await handlePushRoutes(req, res, pathname)) return;
@@ -143,13 +150,21 @@ async function handleRequest(req: import('http').IncomingMessage, res: import('h
 
 server.listen(PORT, () => {
   console.log(`Builder Diddies API server running on port ${PORT}`);
-  ensureBdiddiesHomeOrg();
+  try {
+    ensureBdiddiesHomeOrg();
+  } catch (err) {
+    console.error(err);
+  }
   startMailboxPoller();
   startOutboundWorker();
   startUsageAlertsWorker();
   void import('./code-fix-handler').then(({ startCodeFixWorker }) => startCodeFixWorker());
-  void import('./whatsapp-web-client').then(({ initWWebClient }) => {
-    console.log('Starting WhatsApp Web.js client...');
-    initWWebClient().catch((err) => console.error('WhatsApp Web.js init failed:', err));
-  });
+  if (process.env.SYNC2DINE_SKIP_WWEB === '1') {
+    console.log('Skipping WhatsApp Web.js client (SYNC2DINE_SKIP_WWEB=1)');
+  } else {
+    void import('./whatsapp-web-client').then(({ initWWebClient }) => {
+      console.log('Starting WhatsApp Web.js client...');
+      initWWebClient().catch((err) => console.error('WhatsApp Web.js init failed:', err));
+    });
+  }
 });

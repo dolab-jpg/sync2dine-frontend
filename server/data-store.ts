@@ -6,6 +6,7 @@ import {
   queueStatusAfterDisposition,
   type LeadCallDisposition,
 } from './lead-call-disposition';
+import { speechContactName } from './contact-display-name';
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), 'data');
 export const DEFAULT_ORG_ID = 'default';
@@ -592,11 +593,12 @@ export function resolveContactByPhone(phone: string): {
       ? String(contact.name)
       : customerRow?.name
         ? String(customerRow.name)
-        : 'Guest';
+        : '';
+  const safeAccount = speechContactName(accountName) || accountName;
   return {
     customerId,
-    customerName: accountName,
-    contactName: contact ? String(contact.name) : accountName,
+    customerName: safeAccount || '',
+    contactName: contact ? String(contact.name) : safeAccount || '',
     contactRole: contact ? String(contact.role ?? 'primary') : (customerId ? 'primary' : 'guest'),
     projectId: project ? String(project.id) : null,
     activeQuotes: getActiveQuotes(customerId),
@@ -604,8 +606,8 @@ export function resolveContactByPhone(phone: string): {
 }
 
 /**
- * Match existing customer by phone, or create a minimal Guest CRM row on ring.
- * Never creates a lead against a staff handset.
+ * Match existing customer by phone, or create a minimal CRM row on ring.
+ * contactName for speech/UI is empty when unknown — never "Guest".
  */
 export function ensureGuestCustomerForCall(
   phone: string,
@@ -613,13 +615,14 @@ export function ensureGuestCustomerForCall(
 ): { customerId: string | null; isNew: boolean; contactName: string } {
   const normalized = normalizePhone(phone);
   if (!normalized) {
-    return { customerId: null, isNew: false, contactName: 'Guest' };
+    return { customerId: null, isNew: false, contactName: '' };
   }
   if (resolveStaffByPhone(phone)) {
-    return { customerId: null, isNew: false, contactName: 'Guest' };
+    return { customerId: null, isNew: false, contactName: '' };
   }
   const resolved = resolveContactByPhone(phone);
   if (resolved.customerId) {
+    const display = speechContactName(resolved.customerName || resolved.contactName);
     if (callId) {
       appendCustomerCallActivity({
         customerId: resolved.customerId,
@@ -627,17 +630,17 @@ export function ensureGuestCustomerForCall(
         summary: 'Inbound call started',
         updateCallQueue: true,
       });
-      saveCall({ id: callId, customerId: resolved.customerId, contactName: resolved.customerName });
+      saveCall({ id: callId, customerId: resolved.customerId, contactName: display || undefined });
     }
     return {
       customerId: resolved.customerId,
       isNew: false,
-      contactName: resolved.customerName || resolved.contactName || 'Guest',
+      contactName: display,
     };
   }
 
   const customer = saveCustomerRecord({
-    name: 'Guest',
+    name: '',
     phone,
     email: '',
     address: '',
@@ -647,15 +650,15 @@ export function ensureGuestCustomerForCall(
   });
   const customerId = String(customer.id);
   if (callId) {
-    saveCall({ id: callId, customerId, contactName: 'Guest' });
+    saveCall({ id: callId, customerId, contactName: '' });
     appendCustomerCallActivity({
       customerId,
       callId,
-      summary: 'Inbound call started — Guest created',
+      summary: 'Inbound call started — new lead created',
       updateCallQueue: true,
     });
   }
-  return { customerId, isNew: true, contactName: 'Guest' };
+  return { customerId, isNew: true, contactName: '' };
 }
 
 /**

@@ -339,35 +339,6 @@ export default function SignupPage() {
             </form>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                if (!isSupabaseConfigured()) return;
-                void getSupabase().auth.signInWithOAuth({
-                  provider: 'google',
-                  options: { redirectTo: `${window.location.origin}/login` },
-                });
-              }}
-            >
-              Google
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                if (!isSupabaseConfigured()) return;
-                void getSupabase().auth.signInWithOAuth({
-                  provider: 'github',
-                  options: { redirectTo: `${window.location.origin}/login` },
-                });
-              }}
-            >
-              GitHub
-            </Button>
-          </div>
-
           <p className="text-sm text-center text-slate-600">
             Already have an account?{' '}
             <Link to="/login" className="text-amber-700 font-medium hover:underline">

@@ -3,7 +3,7 @@ import {
   Home, ClipboardList, Mail, Settings, TrendingUp,
   Sparkles, Users, BarChart3, UserPlus, UserCircle, LogOut,
   ChevronDown, ChevronLeft, ChevronRight, MessageCircle, ShieldCheck, Menu, Phone,
-  Landmark, Building2, Plug, MoreHorizontal, BadgePoundSterling,
+  Landmark, Building2, Plug, MoreHorizontal, BadgePoundSterling, FileText,
 } from 'lucide-react';
 import { isNativeBridgeAvailable } from '../bridge/nativeBridge';
 import OrgActingAsPicker from './platform/OrgActingAsPicker';
@@ -31,6 +31,19 @@ import { BrandLogo } from './BrandLogo';
 import { OnlineStatusBanner } from './OnlineStatusBanner';
 import { useTranslation } from 'react-i18next';
 import { getExperience } from '../engine/platform/experience';
+
+function aiAssistantNavLabel(role: string): string {
+  const experience = getExperience(role);
+  if (experience === 'sales') return 'Sally';
+  if (experience === 'restaurant') return 'Judie';
+  return 'Cynthia';
+}
+
+declare global {
+  interface Window {
+    __S2D_EXPERIENCE__?: 'sales' | 'restaurant';
+  }
+}
 
 interface AppShellProps {
   children: ReactNode;
@@ -68,6 +81,15 @@ export default function AppShell({ children }: AppShellProps) {
       navigate('/cynthia', { replace: true });
     }
   }, [isStaffHomeRole, location.pathname, isMobile, navigate]);
+
+  useEffect(() => {
+    if (!context?.user) return;
+    try {
+      window.__S2D_EXPERIENCE__ = getExperience(context.user.role);
+    } catch {
+      /* ignore */
+    }
+  }, [context?.user]);
 
   useEffect(() => {
     if (onCynthiaRoute && aiOpen) {
@@ -222,6 +244,7 @@ export default function AppShell({ children }: AppShellProps) {
     return [
       { to: '/', icon: Home, label: t('nav.dashboard') },
       { to: '/crm', icon: TrendingUp, label: 'CRM' },
+      { to: '/quotes', icon: FileText, label: 'Quotes' },
       { to: '/customers', icon: Users, label: t('nav.customers') },
       { to: '/communications', icon: Mail, label: t('nav.communications') },
       ...(user.role === 'platform_owner'
@@ -230,7 +253,7 @@ export default function AppShell({ children }: AppShellProps) {
             {
               to: '/cynthia',
               icon: MessageCircle,
-              label: getExperience(user.role) === 'sales' ? 'Sally' : 'Cynthia',
+              label: aiAssistantNavLabel(user.role),
               overlay: true as const,
             },
           ]),
@@ -580,7 +603,7 @@ export default function AppShell({ children }: AppShellProps) {
               {
                 to: '/cynthia',
                 icon: MessageCircle,
-                label: getExperience(user.role) === 'sales' ? 'Sally' : 'Cynthia',
+                label: aiAssistantNavLabel(user.role),
               },
               { to: '/crm', icon: TrendingUp, label: 'CRM' },
               { to: '/calls', icon: Phone, label: 'Calls' },

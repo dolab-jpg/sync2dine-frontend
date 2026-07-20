@@ -11,6 +11,9 @@ import {
   type OrgStatus,
 } from './organizations';
 import { getGlobalUsageThisMonth, getTokensUsedThisMonth, getUsageSummaryForOrg } from './usage';
+import { getUsageOverageSummary } from './usage-overage';
+import { getPhoneUsageSummary } from './phone-billing';
+import { getOrgUsageAllowance } from './usage-alerts';
 import { isAuthEnforced, requireAuth } from './auth';
 
 function assertPlatformAccess(req: IncomingMessage, res: ServerResponse): boolean {
@@ -43,12 +46,17 @@ function enrichOrg(org: ReturnType<typeof getOrganizationById>) {
   const tokensUsedThisMonth = getTokensUsedThisMonth(org.id);
   const usage = getUsageSummaryForOrg(org.id);
   const planCfg = PLAN_CONFIG[org.plan];
+  const allowance = getOrgUsageAllowance(org.id);
   return {
     ...maskOrganization(org, tokensUsedThisMonth),
     tokensUsedThisMonth,
     usageCostUsd: usage.costUsd,
     monthlyPriceGbp: planCfg.monthlyPriceGbp,
     planLabel: planCfg.label,
+    planBadge: planCfg.badge,
+    includedAiMinutes: planCfg.includedAiMinutes,
+    aiOverageGbpPerMinute: planCfg.aiOverageGbpPerMinute,
+    usageAllowance: allowance,
   };
 }
 
@@ -290,7 +298,29 @@ export async function handlePlatformRoutes(
       sendJson(res, 404, { error: 'Organization not found' });
       return true;
     }
-    sendJson(res, 200, getUsageSummaryForOrg(orgId));
+    sendJson(res, 200, {
+      ...getUsageSummaryForOrg(orgId),
+      phone: getPhoneUsageSummary(orgId),
+      overage: getUsageOverageSummary(orgId),
+      allowance: getOrgUsageAllowance(orgId),
+    });
+    return true;
+  }
+
+  const usageAlertMatch = pathname.match(/^\/api\/platform\/organizations\/([^/]+)\/usage-alerts\/evaluate$/);
+  if (usageAlertMatch && req.method === 'POST') {
+    const orgId = decodeURIComponent(usageAlertMatch[1]);
+    if (!getOrganizationById(orgId)) {
+      sendJson(res, 404, { error: 'Organization not found' });
+      return true;
+    }
+    try {
+      const { evaluateAndNotifyOrg } = await import('./usage-alerts');
+      const result = await evaluateAndNotifyOrg(orgId);
+      sendJson(res, 200, result);
+    } catch (err) {
+      sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    }
     return true;
   }
 
@@ -326,10 +356,32 @@ export async function handlePlatformRoutes(
       const body = raw ? JSON.parse(raw) as Record<string, unknown> : {};
       const { updateSallyOfferStored } = await import('./sally-offer-store');
       const { getSallyOfferTerms } = await import('./sally-sales');
+      const { SAAS_PRODUCT_IDS } = await import('./saas-products');
       const ctx = isAuthEnforced() ? requireAuth(req) : null;
+
+      let productsPatch: Record<string, { monthlyPriceGbp?: number; setupFeeGbp?: number }> | undefined;
+      if (body.products && typeof body.products === 'object') {
+        productsPatch = {};
+        const rawProducts = body.products as Record<string, unknown>;
+        for (const id of SAAS_PRODUCT_IDS) {
+          const row = rawProducts[id];
+          if (!row || typeof row !== 'object') continue;
+          const r = row as Record<string, unknown>;
+          productsPatch[id] = {
+            monthlyPriceGbp: r.monthlyPriceGbp != null ? Number(r.monthlyPriceGbp) : undefined,
+            setupFeeGbp: r.setupFeeGbp != null ? Number(r.setupFeeGbp) : undefined,
+          };
+        }
+      }
+
       const stored = updateSallyOfferStored({
         monthlyPriceGbp: body.monthlyPriceGbp != null ? Number(body.monthlyPriceGbp) : undefined,
         setupFeeGbp: body.setupFeeGbp != null ? Number(body.setupFeeGbp) : undefined,
+        products: productsPatch as import('./sally-offer-store').SallyOfferStored['products'],
+        offerEndsAt: body.offerEndsAt != null ? String(body.offerEndsAt) : undefined,
+        patentRefs: body.patentRefs != null ? String(body.patentRefs) : undefined,
+        founderName: body.founderName != null ? String(body.founderName) : undefined,
+        authorityBlurb: body.authorityBlurb != null ? String(body.authorityBlurb) : undefined,
         minimumTerm: body.minimumTerm != null ? String(body.minimumTerm) : undefined,
         cancelPolicy: body.cancelPolicy != null ? String(body.cancelPolicy) : undefined,
         demoPhone: body.demoPhone != null ? String(body.demoPhone) : undefined,

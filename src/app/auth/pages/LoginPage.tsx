@@ -10,7 +10,7 @@ import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client'
 import { AuthLayout } from '../AuthLayout';
 import { AuthFormError } from '../components/AuthFormError';
 import { PasswordField } from '../components/PasswordField';
-import { SEED_ACCOUNTS } from '../components/SeedAccountsPanel';
+import { SEED_ACCOUNTS, SEED_PASSWORD, SeedAccountsPanel } from '../components/SeedAccountsPanel';
 import { homePathForRole, isStaffLoginRole, resolveUsername } from '../lib/authApi';
 import IntegrationsLogoStrip from '../../components/restaurant/IntegrationsLogoStrip';
 
@@ -189,21 +189,6 @@ export default function LoginPage({ onLogin }: LoginProps) {
     }
   };
 
-  const handleOAuth = async (provider: 'google' | 'github') => {
-    if (!isSupabaseConfigured()) {
-      setError('Supabase is not configured.');
-      return;
-    }
-    setError('');
-    const supabase = getSupabase();
-    const redirectTo = `${window.location.origin}/login${next ? `?next=${encodeURIComponent(next)}` : ''}`;
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo },
-    });
-    if (oauthError) setError(oauthError.message);
-  };
-
   return (
     <AuthLayout wide>
       <Card className="shadow-2xl rounded-2xl border-0">
@@ -236,15 +221,6 @@ export default function LoginPage({ onLogin }: LoginProps) {
               {isLoading ? 'Signing in...' : 'Sign in'}
             </Button>
           </form>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Button type="button" variant="outline" onClick={() => void handleOAuth('google')}>
-              Continue with Google
-            </Button>
-            <Button type="button" variant="outline" onClick={() => void handleOAuth('github')}>
-              Continue with GitHub
-            </Button>
-          </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <Link to="/forgot-password" className="text-amber-700 hover:text-amber-900 font-medium">
@@ -280,7 +256,14 @@ export default function LoginPage({ onLogin }: LoginProps) {
         </CardContent>
       </Card>
 
-      {/* Demo seed accounts hidden while live testing — staff use real credentials */}
+      <SeedAccountsPanel
+        onFill={(account) => {
+          setIdentifier(account.username);
+          setPassword(SEED_PASSWORD);
+          setError('');
+        }}
+      />
+
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-4">
         <IntegrationsLogoStrip compact />
       </div>

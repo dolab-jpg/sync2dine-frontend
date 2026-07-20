@@ -22,6 +22,7 @@ import {
 import { PHONE_TOOLS, executePhoneTool, PHONE_AUTO_ACTIONS } from './phone-tools';
 import {
   getSallyOrchestratorTools,
+  getSallyWebOrchestratorTools,
   isSallyExclusiveTool,
   executeSallyTool,
   resolveSallySessionKey,
@@ -1638,7 +1639,7 @@ export function getToolsForMode(mode: OrchestratorMode, body?: OrchestratorReque
   if (mode === 'planning') {
     tools = [...GENERIC_TOOLS, ...STAFF_TOOLS, ...NAVIGATION_TOOLS, ...PLANNING_TOOLS, ...GAP_CLOSING_TOOLS];
   } else if (mode === 'sally') {
-    tools = [...getSallyOrchestratorTools()];
+    tools = body?.channel === 'website' ? [...getSallyWebOrchestratorTools()] : [...getSallyOrchestratorTools()];
   } else if (mode === 'staff') {
     tools = hasProject
       ? [...GENERIC_TOOLS, ...STAFF_TOOLS, ...EMAIL_TOOLS, ...CONTRACT_TOOLS, ...PROJECT_TOOLS, ...COSTING_TOOLS, ...ACCOUNTS_TOOLS, ...LEAD_CYCLE_TOOLS, ...NAVIGATION_TOOLS, ...GAP_CLOSING_TOOLS]
@@ -3009,7 +3010,9 @@ async function runStaffOrchestrator(
 ): Promise<OrchestratorResult> {
   const { resolveOrgIdFromBody } = await import('./org-context');
   const orgId = resolveOrgIdFromBody(body as { orgId?: string });
-  const model = body.model ?? 'gpt-4o-mini';
+  const { defaultChatModelForProvider, resolveBrainProvider } = await import('./llm-connection');
+  const provider = resolveBrainProvider(body.provider, orgId);
+  const model = defaultChatModelForProvider(provider, body.model);
   const mode = resolveMode(body);
   const lastMessage = messages[messages.length - 1]?.content ?? '';
   const autonomy = body.aiStudio?.autonomyLevel ?? 'balanced';
@@ -3106,11 +3109,24 @@ async function runStaffOrchestrator(
 
       if (mode === 'sally' && isSallyExclusiveTool(toolName)) {
         const staffUserId = String(body.staffContext?.userId || '');
+        const webSessionId = body.channel === 'website'
+          ? String(body.customerContext?.customerId || '').trim()
+          : '';
         output = await executeSallyTool(toolName, parsedInput, {
-          sessionKey: resolveSallySessionKey({ staffUserId }),
+          sessionKey: resolveSallySessionKey({
+            staffUserId: webSessionId ? undefined : staffUserId,
+            webSessionId: webSessionId || undefined,
+          }),
           staffUserId,
-          partyPhone: String(parsedInput.phone || ''),
+          partyPhone: String(parsedInput.phone || body.customerContext?.phone || ''),
         });
+        proposedActions.push({
+          action: toolName,
+          input: parsedInput,
+          output: requestedAs ? { ...output, requestedAs } : output,
+        });
+      } else if (mode === 'sally' && body.channel === 'website' && (toolName === 'placeOutboundCall' || toolName === 'enqueueOutboundCall' || toolName === 'leaveVoicemail')) {
+        output = { ok: false, error: 'not_allowed_on_website', spokenHint: 'Ask them to call 020 3745 3233, or book a callback.' };
         proposedActions.push({
           action: toolName,
           input: parsedInput,

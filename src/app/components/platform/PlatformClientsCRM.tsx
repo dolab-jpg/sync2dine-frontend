@@ -53,6 +53,7 @@ export default function PlatformClientsCRM() {
   const [clients, setClients] = useState<PlatformOrganization[]>([]);
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ClientTab>('all');
   const [filterPlan, setFilterPlan] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -83,12 +84,41 @@ export default function PlatformClientsCRM() {
 
   const reload = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const [orgs, s] = await Promise.all([fetchOrganizations(), fetchPlatformStats()]);
-      setClients(orgs);
-      setStats(s);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to load clients');
+      const [orgsResult, statsResult] = await Promise.allSettled([
+        fetchOrganizations(),
+        fetchPlatformStats(),
+      ]);
+      if (orgsResult.status === 'fulfilled') {
+        setClients(orgsResult.value);
+      } else {
+        setClients([]);
+        const msg = orgsResult.reason instanceof Error
+          ? orgsResult.reason.message
+          : 'Failed to load clients';
+        setLoadError(msg);
+        toast.error(msg);
+      }
+      if (statsResult.status === 'fulfilled') {
+        setStats(statsResult.value);
+      } else if (orgsResult.status === 'fulfilled') {
+        // Derive basic totals from the list when /stats fails
+        const orgs = orgsResult.value;
+        setStats({
+          total: orgs.length,
+          active: orgs.filter(o => o.status === 'active').length,
+          trialing: orgs.filter(o => o.status === 'trial').length,
+          pastDue: orgs.filter(o => o.status === 'past_due').length,
+          suspended: orgs.filter(o => o.status === 'suspended').length,
+          mrr: orgs
+            .filter(o => o.status === 'active' || o.status === 'trial')
+            .reduce((sum, o) => sum + (o.monthlyPriceGbp || 0), 0),
+          tokensThisMonth: orgs.reduce((sum, o) => sum + (o.tokensUsedThisMonth || 0), 0),
+        });
+      } else {
+        setStats(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -215,7 +245,9 @@ export default function PlatformClientsCRM() {
                 <h1 className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-violet-300 to-indigo-200 bg-clip-text text-transparent">
                   Platform Clients
                 </h1>
-                <p className="text-indigo-100 mt-1 text-sm sm:text-lg">Manage companies you sell Builder Diddies to</p>
+                <p className="text-indigo-100 mt-1 text-sm sm:text-lg">
+                  Manage companies you sell Sync2Dine to — not CRM leads or diners
+                </p>
               </div>
             </div>
 
@@ -367,9 +399,47 @@ export default function PlatformClientsCRM() {
           <p className="text-center text-gray-500 py-12">Loading clients...</p>
         ) : filtered.length === 0 ? (
           <Card className="shadow-lg rounded-2xl">
-            <CardContent className="text-center py-12">
-              <Building2 className="w-14 h-14 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-600 font-medium">No clients match your filters</p>
+            <CardContent className="text-center py-12 px-6 space-y-3">
+              <Building2 className="w-14 h-14 text-gray-300 mx-auto mb-1" />
+              {loadError ? (
+                <>
+                  <p className="text-gray-800 font-medium">Couldn’t load platform clients</p>
+                  <p className="text-sm text-gray-500 max-w-md mx-auto">{loadError}</p>
+                  <Button variant="outline" onClick={() => void reload()}>Retry</Button>
+                </>
+              ) : clients.length === 0 ? (
+                <>
+                  <p className="text-gray-800 font-medium">No provisioned companies yet</p>
+                  <p className="text-sm text-gray-500 max-w-lg mx-auto">
+                    This list is only for restaurant tenants you onboard (Add Client / signup).
+                    Sales leads stay in CRM; diners use the kiosk — they will not appear here automatically.
+                  </p>
+                  <Button
+                    className="bg-gradient-to-r from-violet-500 to-indigo-600"
+                    onClick={() => setIsAddOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Client
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-gray-800 font-medium">No clients match your filters</p>
+                  <p className="text-sm text-gray-500 max-w-md mx-auto">
+                    {clients.length} client{clients.length === 1 ? '' : 's'} loaded — try All status or clear search.
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setActiveTab('all');
+                      setFilterPlan('all');
+                      setSearchTerm('');
+                    }}
+                  >
+                    Show all clients
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -410,23 +480,44 @@ export default function PlatformClientsCRM() {
                           )}
                         </div>
                       </div>
-                      <div className="text-left sm:text-right shrink-0 space-y-1">
+                        <div className="text-left sm:text-right shrink-0 space-y-1">
                         <div className="bg-gradient-to-br from-violet-500 to-indigo-600 text-white px-4 py-2 rounded-full font-bold">
-                          {formatTokens(client.tokensUsedThisMonth)} / {formatTokens(client.monthlyTokenCap)} tokens
+                          £{client.monthlyPriceGbp}/mo · {client.planLabel}
                         </div>
-                        <div className="text-xs text-gray-700">
-                          Phone: {client.phoneOutboundMinutes ?? 0} min
-                          {client.phoneFreeMinutesRemaining != null
-                            ? ` · ${client.phoneFreeMinutesRemaining} free left`
-                            : ''}
-                          {client.phoneEstimatedCostGbp != null && client.phoneEstimatedCostGbp > 0
-                            ? ` · £${client.phoneEstimatedCostGbp.toFixed(2)} overage`
-                            : ''}
-                        </div>
-                        <div className="text-xs text-gray-700">
-                          ElevenLabs: {(client.elevenlabsCharactersThisMonth ?? 0).toLocaleString()} chars
-                        </div>
-                        <div className="text-sm text-gray-600">£{client.monthlyPriceGbp}/mo</div>
+                        {client.usageAllowance?.buckets?.map((b) => (
+                          <div
+                            key={b.metric}
+                            className={`text-xs ${
+                              b.level === 'hard_200' || b.level === 'exceed_100'
+                                ? 'text-red-700 font-semibold'
+                                : b.level === 'warn_80'
+                                  ? 'text-amber-700 font-medium'
+                                  : 'text-gray-700'
+                            }`}
+                          >
+                            {b.label}: {b.unit === 'tokens'
+                              ? `${formatTokens(b.used)} / ${formatTokens(b.included)}`
+                              : `${Number(b.used).toFixed(0)} / ${b.included} ${b.unit}`}
+                            {' '}({b.pct}%)
+                            {b.level !== 'ok' ? ` · ${b.level.replace('_', ' ')}` : ''}
+                          </div>
+                        ))}
+                        {!client.usageAllowance && (
+                          <>
+                            <div className="text-xs text-gray-700">
+                              Tokens: {formatTokens(client.tokensUsedThisMonth)} / {formatTokens(client.monthlyTokenCap)}
+                            </div>
+                            <div className="text-xs text-gray-700">
+                              Phone: {client.phoneOutboundMinutes ?? 0} min
+                            </div>
+                          </>
+                        )}
+                        {client.usageAllowance?.highestLevel && client.usageAllowance.highestLevel !== 'ok' && (
+                          <div className="flex items-center justify-end gap-1 text-xs text-amber-800">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            Alerts: email + call when thresholds hit
+                          </div>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -450,6 +541,32 @@ export default function PlatformClientsCRM() {
                   <div><Label className="font-bold">Status</Label><p className="capitalize">{selected.status.replace('_', ' ')}</p></div>
                   <div><Label className="font-bold">Tokens this month</Label><p>{formatTokens(selected.tokensUsedThisMonth)} / {formatTokens(selected.monthlyTokenCap)}</p></div>
                   <div><Label className="font-bold">Subscription</Label><p>{selected.subscriptionStatus ?? 'Not linked'}</p></div>
+                  {selected.usageAllowance && (
+                    <div className="col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                      <Label className="font-bold">Plan usage (alerts at 80% / 100% / 2×)</Label>
+                      {selected.usageAllowance.buckets.map((b) => (
+                        <div key={b.metric} className="flex justify-between gap-2 text-xs">
+                          <span>{b.label}</span>
+                          <span className={b.level === 'ok' ? 'text-gray-600' : 'text-amber-800 font-semibold'}>
+                            {b.unit === 'tokens'
+                              ? `${formatTokens(b.used)} / ${formatTokens(b.included)}`
+                              : `${Number(b.used).toFixed(1)} / ${b.included} ${b.unit}`}
+                            {' '}· {b.pct}% · {b.level}
+                          </span>
+                        </div>
+                      ))}
+                      {selected.usageAllowance.warnings.length > 0 && (
+                        <ul className="mt-2 list-disc pl-4 text-xs text-amber-900">
+                          {selected.usageAllowance.warnings.map((w) => (
+                            <li key={w}>{w}</li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="text-xs text-gray-500">
+                        When a threshold is crossed we email the contact and queue an outbound call (once per level per month).
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <Label className="font-bold">Phone outbound</Label>
                     <p>

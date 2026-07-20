@@ -1,26 +1,33 @@
-#!/bin/bash
-set -eu
+﻿#!/bin/bash
+set -euo pipefail
 cd /var/www/vhosts/sync2dine.io/sync2dine-backend
-OLD=$(ss -tlnp | grep ':3011' | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -1)
-echo "old_pid=${OLD:-none}"
-if [ -n "${OLD:-}" ]; then
-  kill -9 "$OLD" || true
+
+echo "== Confirm DeepSeek health copy on disk =="
+grep -n "AI brain not connected\|DeepSeek brain connected\|createVisionClientForOrg" server/openai-health.ts server/llm-connection.ts | head -20
+
+PID=$(pgrep -f 'sync2dine.io/sync2dine-backend.*server/index.ts' | head -1 || true)
+echo "old_pid=${PID:-none}"
+if [ -n "${PID:-}" ]; then
+  kill "$PID" || true
   sleep 2
 fi
-# also kill any leftover node server/index for this app
-pkill -f 'sync2dine-backend.*server/index.ts' || true
-sleep 1
+
 nohup /opt/plesk/node/24/bin/node \
   --require ./node_modules/tsx/dist/preflight.cjs \
-  --import "file://$PWD/node_modules/tsx/dist/loader.mjs" \
-  --env-file=.env \
-  server/index.ts > /tmp/sync2dine-api.log 2>&1 &
-sleep 5
-NEW=$(ss -tlnp | grep ':3011' | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -1)
-echo "new_pid=${NEW:-none}"
-tail -40 /tmp/sync2dine-api.log
-echo "---"
-curl -sS -w "\ntemplates:%{http_code}\n" http://127.0.0.1:3011/api/messages/templates | head -c 400
-echo
-curl -sS -o /dev/null -w "public_templates:%{http_code}\n" https://app.sync2dine.io/api/messages/templates
-curl -sS -o /dev/null -w "public_compose:%{http_code}\n" -X POST https://app.sync2dine.io/api/ai/compose-email -H 'Content-Type: application/json' -d '{}'
+  --import file:///var/www/vhosts/sync2dine.io/sync2dine-backend/node_modules/tsx/dist/loader.mjs \
+  --env-file=.env server/index.ts \
+  >/tmp/sync2dine-api.log 2>&1 &
+
+sleep 4
+echo "== new process =="
+pgrep -af 'sync2dine.io/sync2dine-backend.*server/index.ts' | head -5 || true
+echo "== log =="
+tail -30 /tmp/sync2dine-api.log || true
+echo "== health =="
+curl -sS --max-time 10 https://app.sync2dine.io/health; echo
+echo "== ai health deepseek =="
+curl -sS --max-time 10 -X POST https://app.sync2dine.io/api/ai/health \
+  -H 'Content-Type: application/json' \
+  -d '{"provider":"deepseek"}'; echo
+echo "== org integrations route =="
+curl -sS --max-time 10 -o /dev/null -w "%{http_code}\n" https://app.sync2dine.io/api/org/integrations || true

@@ -2,8 +2,16 @@ import { randomUUID } from 'crypto';
 import { getDataStore, syncData, saveRecruitmentCandidate, saveRecruitmentApplication } from '../data-store';
 import { handleCyrusViaOrchestrator } from '../cyrus-orchestrator';
 import { runLeadEmailAgent } from './leadEmailAgent';
+import { runSallyEmailAgent } from './sallyEmailAgent';
+import { getHomeOrgId } from '../home-org';
+import { speechContactName } from '../contact-display-name';
 import type { CachedEmailMessage } from './types';
 import { getConnection } from './mailbox-store';
+
+function isSync2DineHomeOrg(orgId: string): boolean {
+  const home = getHomeOrgId();
+  return Boolean(orgId && home && orgId === home);
+}
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -102,8 +110,21 @@ function tryRouteToRecruitment(message: CachedEmailMessage, orgId: string): bool
 
 export async function processInboundEmail(message: CachedEmailMessage, orgId = 'default'): Promise<void> {
   const conn = getConnection(message.connectionId);
+  const effectiveOrgId = orgId !== 'default' ? orgId : (conn?.orgId || getHomeOrgId() || 'default');
   const resolved = resolveContactByEmail(message.fromAddr);
   const timestamp = message.receivedAt;
+
+  // Sync2Dine home org: Sally owns all inbound mail (known + unknown)
+  if (isSync2DineHomeOrg(effectiveOrgId)) {
+    if (tryRouteToRecruitment(message, effectiveOrgId)) return;
+    try {
+      const known = speechContactName(resolved.customerName);
+      await runSallyEmailAgent(message, effectiveOrgId, known);
+    } catch (err) {
+      console.error('sallyEmailAgent error:', err);
+    }
+    return;
+  }
 
   if (resolved.projectId) {
     appendProjectMessage(resolved.projectId, {
@@ -121,9 +142,9 @@ export async function processInboundEmail(message: CachedEmailMessage, orgId = '
   }
 
   if (!resolved.customerId) {
-    if (tryRouteToRecruitment(message, orgId)) return;
+    if (tryRouteToRecruitment(message, effectiveOrgId)) return;
     try {
-      await runLeadEmailAgent(message, orgId);
+      await runLeadEmailAgent(message, effectiveOrgId);
     } catch (err) {
       console.error('leadEmailAgent error:', err);
     }

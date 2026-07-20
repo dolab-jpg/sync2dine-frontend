@@ -6,6 +6,7 @@ export type SalesTemplateId =
   | 'demo_assets'
   | 'quote'
   | 'quote_chase'
+  | 'contract_offer'
   | 'checkout'
   | 'onboarding'
   | 'followup';
@@ -24,14 +25,14 @@ export const SALES_TEMPLATES: SalesTemplate[] = [
     id: 'intro',
     name: 'Intro to Sync2Dine',
     description: 'First outreach to a restaurant owner',
-    subject: 'Sync2Dine — voice ordering & bookings for {RESTAURANT_NAME}',
+    subject: 'Sync2Dine — Judie + Atmosphere for {RESTAURANT_NAME}',
     body: `Hi {CUSTOMER_NAME},
 
-I'm Sally from Sync2Dine. We help restaurants take takeaway orders and table bookings by phone with an AI host — so your team isn't stuck on the line during rush.
+I'm Sally from Sync2Dine (the restaurant side of Sync2Gear). We help venues with Judie — your AI phone receptionist for orders and bookings — and Atmosphere — exclusive sustainable audio management, messaging, and staff training.
 
-I'd love to show you a quick demo of how it works for a place like yours.
+Launch offer from £{WEEKLY_PRICE}/week (40% off) or £{ANNUAL_PRICE} annual prepay (50% off). Monthly equivalent ~£{MONTHLY_PRICE} for comparison only.
 
-Introductory pricing is £{MONTHLY_PRICE}/month. Happy to send a short video or arrange a call — what works best?
+Happy to send a short video or arrange a call — what works best?
 
 Best regards,
 {USER_NAME}
@@ -43,10 +44,10 @@ Sync2Dine
     id: 'demo_invite',
     name: 'Book a demo',
     description: 'Invite them to try the demo line',
-    subject: 'Try Sync2Dine — demo for {RESTAURANT_NAME}',
+    subject: 'Try Sync2Dine — Judie demo for {RESTAURANT_NAME}',
     body: `Hi {CUSTOMER_NAME},
 
-When you have a moment, you can try our demo line: {DEMO_PHONE}
+When you have a moment, you can try our Judie demo line: {DEMO_PHONE}
 
 Or reply with a couple of times that suit you and I'll arrange a short walkthrough for {RESTAURANT_NAME}.
 
@@ -76,14 +77,22 @@ Sync2Dine`,
   {
     id: 'quote',
     name: 'SaaS quote / pricing',
-    description: 'Clear pricing summary',
+    description: 'Clear weekly pricing + fare summary',
     subject: 'Your Sync2Dine pricing — {RESTAURANT_NAME}',
     body: `Hi {CUSTOMER_NAME},
 
-Here's the Sync2Dine intro offer for {RESTAURANT_NAME}:
+Here's the Sync2Dine offer for {RESTAURANT_NAME}:
 
-• Monthly: £{MONTHLY_PRICE}
-• Setup: £{SETUP_FEE}
+• Package: {PACKAGE_NAME}
+• Normally: £{STANDARD_WEEKLY}/week
+• Launch offer: £{WEEKLY_PRICE}/week (40% off)
+• Annual prepay: £{ANNUAL_PRICE} (50% off annualized launch)
+• Comparison monthly: ~£{MONTHLY_PRICE}
+
+Usage & fares:
+{FARE_SUMMARY}
+
+Full policy: {APP_BASE}/legal/fair-use-and-fares
 
 Happy to walk through anything on a quick call.
 
@@ -100,7 +109,7 @@ Sync2Dine
     subject: 'Just checking in — Sync2Dine for {RESTAURANT_NAME}',
     body: `Hi {CUSTOMER_NAME},
 
-I wanted to follow up on the Sync2Dine pricing we shared (£{MONTHLY_PRICE}/month). Happy to answer any questions.
+I wanted to follow up on the Sync2Dine pricing we shared (£{WEEKLY_PRICE}/week launch for {PACKAGE_NAME}). Happy to answer any questions on Judie minutes, Atmosphere, or annual prepay.
 
 Would a quick call this week work?
 
@@ -110,17 +119,43 @@ Sync2Dine`,
     type: 'followup',
   },
   {
+    id: 'contract_offer',
+    name: 'Contract signing',
+    description: 'Send SaaS subscription contract link',
+    subject: 'Please sign your Sync2Dine contract — {RESTAURANT_NAME}',
+    body: `Hi {CUSTOMER_NAME},
+
+Please review and sign your Sync2Dine subscription for {RESTAURANT_NAME}:
+
+• Package: {PACKAGE_NAME}
+• Billing: {BILLING_INTERVAL} — £{AMOUNT}
+• Overage action: {OVERAGE_ACTION}
+
+{FARE_SUMMARY}
+
+Sign here: {CONTRACT_LINK}
+
+Policies: Terms, Fair Use & Fares, Privacy, Acceptable Use, Cancellation — linked from the signing page.
+
+Best regards,
+{USER_NAME}
+Sync2Dine / Sally`,
+    type: 'custom',
+  },
+  {
     id: 'checkout',
     name: 'Payment link',
-    description: 'After terms confirmed',
+    description: 'After contract signed',
     subject: 'Complete your Sync2Dine setup — payment link',
     body: `Hi {CUSTOMER_NAME},
 
-Thanks for confirming. Here's your secure payment link to get {RESTAURANT_NAME} set up:
+Thanks for signing. Here's your secure payment link for {RESTAURANT_NAME}:
 
 {CHECKOUT_LINK}
 
-Once paid, we'll provision your workspace and book onboarding.
+Package {PACKAGE_NAME} — £{AMOUNT} ({BILLING_INTERVAL}).
+
+Once paid, we'll provision Judie/Atmosphere and book onboarding.
 
 Best regards,
 {USER_NAME}
@@ -134,7 +169,7 @@ Sync2Dine`,
     subject: 'Welcome to Sync2Dine — next steps for {RESTAURANT_NAME}',
     body: `Hi {CUSTOMER_NAME},
 
-Welcome aboard. Next we'll finish provisioning, book a short onboarding call, and get your AI phone host ready for orders and bookings.
+Welcome aboard. Next we'll finish provisioning, book a short onboarding call, and get Judie ready for orders and bookings (and Atmosphere if included).
 
 Reply anytime — {COMPANY_PHONE} / {COMPANY_EMAIL}.
 
@@ -152,7 +187,7 @@ Sync2Dine`,
 
 Just following up from our recent conversation about Sync2Dine for {RESTAURANT_NAME}.
 
-Happy to pick up wherever we left off — demo, pricing, or next steps.
+Happy to pick up wherever we left off — Judie demo, Atmosphere, pricing, or next steps.
 
 Best regards,
 {USER_NAME}

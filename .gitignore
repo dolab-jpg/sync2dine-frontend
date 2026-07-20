@@ -9,3 +9,5 @@ server/data/synced-data-*.json
 server/data/.wwebjs_auth/
 *.log
 .DS_Store
+
+.trae/mcp.local.json

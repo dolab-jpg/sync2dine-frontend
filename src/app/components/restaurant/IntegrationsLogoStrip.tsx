@@ -20,7 +20,7 @@ export const INTEGRATION_MARKS: IntegrationMark[] = [
   { id: 'deliveroo', name: 'Deliveroo', status: 'via_hub', statusLabel: 'Via your delivery hub', blurb: 'Orders arrive via Deliverect/Otter — not a direct partnership claim.' },
   { id: 'justeat', name: 'Just Eat', status: 'via_hub', statusLabel: 'Via your delivery hub', blurb: 'Orders arrive via Deliverect/Otter — not a direct partnership claim.' },
   { id: 'ubereats', name: 'Uber Eats', status: 'via_hub', statusLabel: 'Via your delivery hub', blurb: 'Orders arrive via Deliverect/Otter — not a direct partnership claim.' },
-  { id: 'voice', name: 'AI phone', status: 'built_in', statusLabel: 'Built in', blurb: 'Lizzie voice ordering and table booking on your number.' },
+  { id: 'voice', name: 'AI phone', status: 'built_in', statusLabel: 'Built in', blurb: 'Judie voice ordering and table booking on your number.' },
 ];
 
 /** Alias for public integrations page */

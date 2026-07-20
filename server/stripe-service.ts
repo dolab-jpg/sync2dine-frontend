@@ -5,29 +5,90 @@ import {
   updateOrganization,
   type OrgPlan,
 } from './organizations';
+import { getStripeRuntimeConfig } from './stripe-config';
 
 let stripeClient: Stripe | null = null;
 
 export function getStripe(): Stripe {
   if (!stripeClient) {
-    const key = process.env.STRIPE_SECRET_KEY?.trim();
+    const key = getStripeRuntimeConfig().secretKey;
     if (!key) throw new Error('STRIPE_SECRET_KEY is not configured');
     stripeClient = new Stripe(key);
   }
   return stripeClient;
 }
 
-function priceIdForPlan(plan: OrgPlan): string {
+function priceIdForPlan(plan: OrgPlan): string | null {
   const map: Record<OrgPlan, string | undefined> = {
     starter: process.env.STRIPE_PRICE_STARTER,
     pro: process.env.STRIPE_PRICE_PRO,
     enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
   };
-  const id = map[plan]?.trim();
-  if (!id) {
-    throw new Error(`Stripe price not configured for plan "${plan}". Set STRIPE_PRICE_${plan.toUpperCase()} in env.`);
+  return map[plan]?.trim() || null;
+}
+
+function subscriptionLineItemForPlan(plan: OrgPlan): Stripe.Checkout.SessionCreateParams.LineItem {
+  const priceId = priceIdForPlan(plan);
+  if (priceId) return { price: priceId, quantity: 1 };
+  const cfg = PLAN_CONFIG[plan];
+  return {
+    quantity: 1,
+    price_data: {
+      currency: 'gbp',
+      unit_amount: Math.round((cfg.weeklyPriceGbp ?? cfg.monthlyPriceGbp) * 100),
+      recurring: { interval: 'week' },
+      product_data: {
+        name: `Sync2Dine ${cfg.label}`,
+        description: `${cfg.includedAiMinutes} Judie AI min/week included · weekly billing`,
+      },
+    },
+  };
+}
+
+export async function attachUsageOverageToInvoice(input: {
+  orgId: string;
+  invoiceId: string;
+  customerId: string;
+  periodStart?: number;
+}): Promise<{ added: string[] }> {
+  const { getUsageOverageSummary } = await import('./usage-overage');
+  const summary = getUsageOverageSummary(input.orgId);
+  if (!summary.lines.length) return { added: [] };
+
+  const stripe = getStripe();
+  const periodKey = input.periodStart
+    ? new Date(input.periodStart * 1000).toISOString().slice(0, 10)
+    : summary.periodMonth;
+  const added: string[] = [];
+
+  for (const line of summary.lines) {
+    if (line.amountPence <= 0) continue;
+    const idempotencyKey = `overage_${input.orgId}_${periodKey}_${line.type}`.slice(0, 255);
+    try {
+      await stripe.invoiceItems.create(
+        {
+          customer: input.customerId,
+          invoice: input.invoiceId,
+          amount: line.amountPence,
+          currency: 'gbp',
+          description: line.description,
+          metadata: {
+            orgId: input.orgId,
+            overageType: line.type,
+            periodKey,
+          },
+        },
+        { idempotencyKey },
+      );
+      added.push(line.type);
+    } catch (err) {
+      console.warn(
+        `[stripe] overage invoice item ${line.type} failed:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
-  return id;
+  return { added };
 }
 
 export async function createSubscriptionForOrg(
@@ -52,6 +113,11 @@ export async function createSubscriptionForOrg(
   }
 
   const priceId = priceIdForPlan(org.plan);
+  if (!priceId) {
+    throw new Error(
+      `Stripe price not configured for plan "${org.plan}". Set STRIPE_PRICE_${org.plan.toUpperCase()} or use Checkout.`,
+    );
+  }
   const subscription = await stripe.subscriptions.create({
     customer: customerId,
     items: [{ price: priceId }],
@@ -71,7 +137,18 @@ export async function createSubscriptionForOrg(
 
 export async function createCheckoutSessionForOrg(
   orgId: string,
-  opts?: { metadata?: Record<string, string> },
+  opts?: {
+    metadata?: Record<string, string>;
+    /** Multi-product SaaS lines — uses Stripe price_data when present. */
+    lineItems?: Array<{
+      description: string;
+      unitAmountGbp: number;
+      quantity?: number;
+      recurring?: boolean;
+      /** Stripe recurring interval — defaults to week for Sync2Dine. */
+      interval?: 'week' | 'month' | 'year';
+    }>;
+  },
 ): Promise<string> {
   const org = getOrganizationById(orgId);
   if (!org) throw new Error('Organization not found');
@@ -91,14 +168,58 @@ export async function createCheckoutSessionForOrg(
 
   const baseUrl = process.env.APP_BASE_URL?.trim() || 'http://localhost:5174';
   const extraMeta = opts?.metadata || {};
+
+  const customLines = (opts?.lineItems || []).filter(
+    (l) => Number.isFinite(l.unitAmountGbp) && l.unitAmountGbp > 0 && (l.quantity ?? 1) > 0,
+  );
+
+  let line_items: Stripe.Checkout.SessionCreateParams.LineItem[];
+  let mode: Stripe.Checkout.SessionCreateParams.Mode = 'subscription';
+
+  if (customLines.length) {
+    const hasRecurring = customLines.some((l) => l.recurring !== false);
+    const hasOneOff = customLines.some((l) => l.recurring === false);
+    // Stripe subscription mode can mix recurring + one-time; payment mode if only one-off
+    mode = hasRecurring || !hasOneOff ? 'subscription' : 'payment';
+    line_items = customLines.map((l) => {
+      const recurring = l.recurring !== false;
+      const quantity = Math.max(1, Math.floor(l.quantity ?? 1));
+      const unitAmount = Math.round(l.unitAmountGbp * 100);
+      const interval = l.interval || 'week';
+      if (recurring) {
+        return {
+          quantity,
+          price_data: {
+            currency: 'gbp',
+            unit_amount: unitAmount,
+            recurring: { interval },
+            product_data: { name: l.description || 'Sync2Dine' },
+          },
+        };
+      }
+      return {
+        quantity,
+        price_data: {
+          currency: 'gbp',
+          unit_amount: unitAmount,
+          product_data: { name: l.description || (interval === 'year' ? 'Sync2Dine annual prepay' : 'Setup fee') },
+        },
+      };
+    });
+  } else {
+    line_items = [subscriptionLineItemForPlan(org.plan)];
+  }
+
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
-    mode: 'subscription',
-    line_items: [{ price: priceIdForPlan(org.plan), quantity: 1 }],
+    mode,
+    line_items,
     success_url: `${baseUrl}/platform/clients?stripe=success&org=${orgId}`,
     cancel_url: `${baseUrl}/platform/clients?stripe=cancel&org=${orgId}`,
     metadata: { orgId, ...extraMeta },
-    subscription_data: { metadata: { orgId, ...extraMeta } },
+    ...(mode === 'subscription'
+      ? { subscription_data: { metadata: { orgId, ...extraMeta } } }
+      : {}),
   });
 
   if (!session.url) throw new Error('Stripe did not return a checkout URL');
@@ -222,6 +343,23 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<voi
       if (status === 'active' || status === 'trial') {
         await stampCrmPaidForOrg(org.id, `Subscription ${sub.id} → ${sub.status}`);
       }
+      break;
+    }
+    case 'invoice.upcoming':
+    case 'invoice.created': {
+      const invoice = event.data.object as Stripe.Invoice;
+      if (invoice.status && invoice.status !== 'draft') break;
+      const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
+      if (!customerId || !invoice.id) break;
+      const { getOrganizationByStripeCustomerId } = await import('./organizations');
+      const org = getOrganizationByStripeCustomerId(customerId);
+      if (!org) break;
+      await attachUsageOverageToInvoice({
+        orgId: org.id,
+        invoiceId: invoice.id,
+        customerId,
+        periodStart: invoice.period_start,
+      });
       break;
     }
     case 'invoice.payment_failed': {

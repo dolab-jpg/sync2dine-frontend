@@ -296,7 +296,7 @@ export default function CustomerManagement() {
                 <div>
                   <Label htmlFor="specialName">Named special (phone)</Label>
                   <p className="text-xs text-amber-900/70 mb-1">
-                    Lizzie asks for this by name — e.g. “Family Friday” or “VIP ten percent”.
+                    Judie asks for this by name — e.g. “Family Friday” or “VIP ten percent”.
                   </p>
                   <Input
                     id="specialName"
@@ -306,7 +306,7 @@ export default function CustomerManagement() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="specialDealNote">Deal note for Lizzie</Label>
+                  <Label htmlFor="specialDealNote">Deal note for Judie</Label>
                   <p className="text-xs text-amber-900/70 mb-1">
                     Exact deal she must apply when they use that special. Include “10% off” for an automatic discount.
                   </p>
@@ -563,7 +563,7 @@ export default function CustomerManagement() {
                   )}
                   {!isRestaurant && (
                     <div className="pt-2 mt-2 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
-                      <Link to={`/quote/${customer.interestedTrades?.[0] ?? 'bathroom'}/${customer.id}`}>
+                      <Link to={`/quote/saas/${customer.id}`}>
                         <Button variant="outline" size="sm" className="w-full">
                           <FileText className="w-4 h-4 mr-2" />
                           Create Quote

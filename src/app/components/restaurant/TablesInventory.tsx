@@ -135,7 +135,7 @@ export default function TablesInventory() {
       <div>
         <h2 className="text-xl font-bold text-s2d-teal-deep">Tables inventory</h2>
         <p className="text-sm text-slate-600">
-          How many tables and seats — Lizzie uses this for availability when booking.
+          How many tables and seats — Judie uses this for availability when booking.
         </p>
       </div>
 

@@ -12,9 +12,14 @@ import {
 
 interface Props {
   onParsed: (parsed: GoogleOAuthClientJson) => void;
+  /** Primary redirect URI called out in the help text (mailbox vs calendar). */
+  redirectUriHint?: string;
 }
 
-export function GoogleOAuthJsonUpload({ onParsed }: Props) {
+export function GoogleOAuthJsonUpload({
+  onParsed,
+  redirectUriHint = PRODUCTION_MAILBOX_REDIRECT_URI,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [summary, setSummary] = useState<GoogleOAuthClientJson | null>(null);
@@ -31,7 +36,7 @@ export function GoogleOAuthJsonUpload({ onParsed }: Props) {
       setWarnings(warns);
       onParsed(parsed);
       if (warns.length) {
-        toast.warning('Credentials loaded — check redirect URI warnings below');
+        toast.warning('Credentials loaded — check redirect URI warnings below, then click Save');
       } else {
         toast.success('Google OAuth client JSON loaded — click Save to apply');
       }
@@ -50,9 +55,9 @@ export function GoogleOAuthJsonUpload({ onParsed }: Props) {
         <p className="text-xs text-emerald-900/80 mt-1 leading-relaxed">
           In Google Cloud → Credentials → your Web client → <strong>Download JSON</strong>
           (file name like <code className="text-[11px]">client_secret_….json</code>).
-          Upload it here to fill Client ID, Client Secret, and confirm redirect URI{' '}
-          <code className="text-[11px]">{PRODUCTION_MAILBOX_REDIRECT_URI}</code>.
-          Then click <strong>Save</strong> below.
+          Upload it here to fill Client ID and Client Secret. Confirm your Console includes redirect{' '}
+          <code className="text-[11px]">{redirectUriHint}</code>.
+          Then click <strong>Save</strong> below (the secret will show as masked — that means it saved).
         </p>
       </div>
 

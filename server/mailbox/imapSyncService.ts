@@ -93,7 +93,11 @@ export async function syncConnection(connectionId: string): Promise<{ synced: nu
       lastError: undefined,
     });
 
-    if (newMsgs.length) await processNewMessages(newMsgs);
+    if (newMsgs.length) {
+      const { getHomeOrgId } = await import('../home-org');
+      const orgId = String(conn.orgId || getHomeOrgId() || 'default');
+      await processNewMessages(newMsgs, orgId);
+    }
     return { synced };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Sync failed';

@@ -1,0 +1,8 @@
+#!/bin/bash
+cp /tmp/sally-widget.js /var/www/vhosts/sync2dine.io/app.sync2dine.io/sally-widget.js
+cp /tmp/sync2dine-dual-product.php /var/www/vhosts/sync2dine.io/httpdocs/wp-content/themes/hello-elementor-child/sync2dine-dual-product.php
+sudo -u sync2dine.io_asad090 /usr/local/bin/wp --path=/var/www/vhosts/sync2dine.io/httpdocs cache flush >/dev/null
+W=/var/www/vhosts/sync2dine.io/app.sync2dine.io/sally-widget.js
+echo "fallback_msgs:" $(grep -cE 'Could not reach|chat is unavailable|How can I help' "$W" || true)
+echo "silent_fail:" $(grep -c removeBubble "$W" || true)
+curl -sL 'https://sync2dine.io/' | grep -o 'sally-widget.js?v=[^"]*' | head -1

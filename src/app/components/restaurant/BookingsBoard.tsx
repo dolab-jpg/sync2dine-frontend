@@ -188,7 +188,7 @@ export default function BookingsBoard() {
         ) : visible.length === 0 ? (
           <div className="rounded-[1.5rem] border border-dashed border-s2d-teal/30 bg-white/70 p-10 text-center">
             <p className="text-xl font-bold text-s2d-teal-deep">No bookings in this view</p>
-            <p className="mt-1 text-s2d-teal-soft">Phone table bookings appear here when Lizzie confirms a reservation.</p>
+            <p className="mt-1 text-s2d-teal-soft">Phone table bookings appear here when Judie confirms a reservation.</p>
           </div>
         ) : (
           <div className="space-y-3 lg:space-y-2">

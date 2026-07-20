@@ -1,0 +1,11 @@
+{
+  "orgEmail": "dolab@diamondea.co.uk",
+  "region": "us",
+  "privateKey": "11bd3161-f7d5-4e09-a0ec-fa862d5c64e6",
+  "publicKey": "ea2af560-5182-4d7c-a5d8-451ddf965f9a",
+  "phoneNumberId": "a09912e1-9d13-4a91-8789-7cb3eacd26ca",
+  "sipCredentialId": "bf62dc42-6b14-4e73-a113-20cb996136e3",
+  "assistantId": "fe520080-4b31-4787-9f13-5f9c1b4fe814",
+  "webhook": "https://app.sync2dine.io/webhooks/vapi",
+  "inboundSipHint": "sip:+442037453233@bf62dc42-6b14-4e73-a113-20cb996136e3.sip.vapi.ai"
+}

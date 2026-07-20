@@ -1,21 +1,11 @@
-import { Link } from 'react-router';
 import IntegrationsLogoStrip, { INTEGRATION_MARKS } from './IntegrationsLogoStrip';
-import { BrandLogo } from '../BrandLogo';
+import PublicMarketingLayout from '../PublicMarketingLayout';
 
 /** Public integrations explainer — truthful status, no partnership claims. */
 export default function IntegrationsPublicPage() {
   return (
-    <div className="min-h-dvh bg-s2d-cream" data-testid="integrations-public-page">
-      <header className="border-b border-s2d-teal/10 bg-s2d-teal-deep px-4 py-4 text-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-          <BrandLogo size="md" showWordmark />
-          <Link to="/login" className="min-h-11 rounded-xl bg-white/10 px-4 py-2 text-sm font-bold hover:bg-white/20">
-            Sign in
-          </Link>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-4xl space-y-8 px-4 py-8">
+    <PublicMarketingLayout>
+      <div className="mx-auto max-w-4xl space-y-8 px-4 py-8" data-testid="integrations-public-page">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-s2d-teal">Integrations</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-s2d-teal-deep sm:text-4xl">
@@ -42,7 +32,7 @@ export default function IntegrationsPublicPage() {
         <p className="text-sm text-slate-600">
           Restaurant staff configure receive/send directions under Settings → Connected systems after sign-in.
         </p>
-      </main>
-    </div>
+      </div>
+    </PublicMarketingLayout>
   );
 }

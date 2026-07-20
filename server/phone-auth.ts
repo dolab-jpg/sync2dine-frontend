@@ -159,7 +159,7 @@ export function resolvePhoneCallerIdentity(partyPhone: string, orgId?: string): 
     kind: 'customer',
     route,
     role: 'customer',
-    name: route.name || 'Guest',
+    name: route.name && !/^guest$/i.test(String(route.name)) ? route.name : '',
     phone,
     userId: null,
     pinConfigured: false,

@@ -441,11 +441,11 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
       : `${myLine.label} · Ext ${myLine.sipUsername}`;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr] max-w-3xl">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr] max-w-3xl" dir="ltr">
       {/* Handset */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-lg text-slate-100">
         {/* Display */}
-        <div className="rounded-xl bg-gradient-to-b from-slate-950 to-slate-900 border border-slate-700 px-4 py-5 min-h-[140px] font-mono">
+        <div className="rounded-xl bg-gradient-to-b from-slate-950 to-slate-900 border border-slate-700 px-4 py-5 min-h-[140px] font-mono" dir="ltr">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-400 mb-3">
             <span className="flex items-center gap-1.5">
               <span
@@ -463,9 +463,23 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
             </span>
             <span className="truncate max-w-[50%] text-right">{myLine.did}</span>
           </div>
-          <p className="text-2xl font-semibold tracking-wide text-emerald-300 break-all leading-tight min-h-[2rem]">
-            {screenPrimary}
-          </p>
+          {incoming || inCall ? (
+            <p className="text-2xl font-semibold tracking-wide text-emerald-300 break-all leading-tight min-h-[2rem]">
+              {screenPrimary}
+            </p>
+          ) : (
+            <Input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              dir="ltr"
+              className="h-auto border-0 bg-transparent p-0 text-2xl font-semibold tracking-wide text-emerald-300 shadow-none focus-visible:ring-0 placeholder:text-slate-600"
+              value={dialNumber}
+              onChange={(e) => setDialNumber(e.target.value.replace(/[^\d*#+]/g, '').slice(0, 24))}
+              placeholder="Enter number"
+              aria-label="Number to dial"
+            />
+          )}
           <p className="mt-2 text-xs text-slate-400 truncate">{screenSecondary}</p>
           {incoming && (
             <p className="mt-2 text-xs text-amber-300 flex items-center gap-1 animate-pulse">
@@ -488,8 +502,8 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
           </div>
         )}
 
-        {/* Keypad */}
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        {/* Keypad — force LTR so RTL doc lang cannot mirror 1-2-3 into 3-2-1 */}
+        <div className="mt-4 grid grid-cols-3 gap-2" dir="ltr">
           {KEYPAD.flat().map((key) => (
             <button
               key={key}

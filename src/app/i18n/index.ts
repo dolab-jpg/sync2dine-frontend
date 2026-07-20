@@ -70,11 +70,12 @@ function readStoredLang(): SupportedLang | null {
   return null;
 }
 
-export function applyDocumentLanguage(lang: string): void {
-  const code = normalizeLang(lang);
+export function applyDocumentLanguage(_lang: string): void {
+  // Preferred language drives AI chat / phone speech only.
+  // App chrome stays English LTR — flipping dir=rtl (ar/fa) makes phone fields type backwards.
   if (typeof document === 'undefined') return;
-  document.documentElement.lang = code;
-  document.documentElement.dir = isRtlLang(code) ? 'rtl' : 'ltr';
+  document.documentElement.lang = 'en';
+  document.documentElement.dir = 'ltr';
 }
 
 export async function changeAppLanguage(lang: string): Promise<void> {

@@ -92,7 +92,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
         {
           label: 'Name (console only)',
           value: 'Sync2Dine Mailbox',
-          note: 'Only shown in Google Cloud Console — not shown to end users.',
+          note: 'Label only in Google Cloud Console — any name is fine; it does not affect OAuth or Connect.',
         },
         {
           label: 'Authorized JavaScript origins',
@@ -180,10 +180,33 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     description: 'Payments and finance deposits',
     category: 'payments',
     docsUrl: 'https://stripe.com/docs',
+    setupGuide: {
+      title: 'Stripe Checkout and signed webhooks',
+      intro:
+        'The API key creates Checkout sessions. The webhook signing secret separately proves that payment events genuinely came from Stripe. Sync2Dine stores both encrypted and never exposes them in the browser.',
+      steps: [
+        {
+          label: 'Production webhook endpoint',
+          value: 'https://app.sync2dine.io/api/stripe/webhook',
+          note: 'This endpoint has been created in the connected live Stripe account.',
+        },
+        {
+          label: 'Required events',
+          value: 'checkout.session.completed, customer.subscription.*, invoice.paid, invoice.payment_failed',
+          note: 'These reconcile quote, subscription and invoice status in Sync2Dine.',
+        },
+        {
+          label: 'Webhook signing secret',
+          value: 'Stored securely on the server',
+          note: 'If the endpoint is recreated or rotated, paste the new whsec_… value below and Save.',
+        },
+      ],
+    },
     fields: [
       { key: 'publishableKey', label: 'Publishable Key', type: 'text' },
       { key: 'secretKey', label: 'Secret Key', type: 'password' },
       { key: 'webhookSecret', label: 'Webhook Secret', type: 'password' },
+      { key: 'webhookUrl', label: 'Webhook Endpoint', type: 'readonly', placeholder: 'https://app.sync2dine.io/api/stripe/webhook' },
     ],
   },
   {
@@ -195,12 +218,17 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     setupGuide: {
       title: 'Google Calendar — enable API and connect',
       intro:
-        'Uses a separate OAuth consent (calendar events only — not Gmail). You can reuse the same Google Cloud Web client as Mailbox OAuth. After saving Client ID/Secret (or leaving blank to fall back to Mailbox Google credentials), click Connect with Google on this card — a popup opens for sign-in.',
+        'Uses a separate OAuth consent (calendar events only — not Gmail). Easiest: Download JSON from Google Cloud and use Upload client_secret JSON above, then Save, then Connect. The OAuth client Name in Google Console is label-only — it does not affect connect.',
       steps: [
         {
           label: 'Enable Google Calendar API',
           value: 'https://console.cloud.google.com/apis/library/calendar-json.googleapis.com',
           note: 'In the same Google Cloud project as your OAuth client.',
+        },
+        {
+          label: 'Authorized JavaScript origins',
+          value: 'https://app.sync2dine.io',
+          note: 'Origin only (no path). Same origin as Mailbox OAuth.',
         },
         {
           label: 'Authorized redirect URI (required)',
@@ -219,7 +247,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
         },
       ],
       footer:
-        'Client ID/Secret: paste here or reuse Integrations → Mailbox OAuth Google fields. Then click Connect with Google (popup). Bookings and createCalendarEvent will write to this calendar when connected.',
+        'Upload JSON or paste Client ID/Secret → Save (secret shows masked when stored) → Connect with Google. You can also reuse Integrations → Mailbox OAuth Google fields.',
     },
     fields: [
       { key: 'clientId', label: 'Client ID', type: 'text', placeholder: '….apps.googleusercontent.com' },
@@ -437,6 +465,9 @@ export function getDefaultFieldValues(def: IntegrationDefinition): Record<string
   if (def.id === 'google_calendar') {
     values.calendarId = 'primary';
     values.redirectUri = 'https://app.sync2dine.io/api/calendar/callback';
+  }
+  if (def.id === 'stripe') {
+    values.webhookUrl = 'https://app.sync2dine.io/api/stripe/webhook';
   }
   if (def.id === 'email_smtp') {
     values.host = 'smtp.gmail.com';

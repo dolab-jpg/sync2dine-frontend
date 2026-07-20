@@ -107,9 +107,6 @@ export type SallyOfferTerms = {
 
 /** Authoritative Sync2Dine intro offer — UI store first, then env, then defaults. */
 export function getSallyOfferTerms(): SallyOfferTerms {
-  // #region agent log
-  fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e24409'},body:JSON.stringify({sessionId:'e24409',runId:'pre-deploy',hypothesisId:'E',location:'sally-sales.ts:getSallyOfferTerms',message:'getSallyOfferTerms enter',data:{},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   const stored = getSallyOfferStored();
 
   const envMonthly = Number(process.env.SALLY_INTRO_MONTHLY_GBP);
@@ -131,9 +128,6 @@ export function getSallyOfferTerms(): SallyOfferTerms {
   const starter = SAAS_PACKAGES.judie_starter;
   const launchActive = isLaunchOfferActive(stored);
   const weekly = launchActive ? starter.launchWeeklyGbp : starter.standardWeeklyGbp;
-  // #region agent log
-  fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e24409'},body:JSON.stringify({sessionId:'e24409',runId:'pre-deploy',hypothesisId:'E',location:'sally-sales.ts:getSallyOfferTerms:exit',message:'getSallyOfferTerms ok',data:{launchActive,weekly,starterLaunch:starter?.launchWeeklyGbp,pkgCount:Object.keys(SAAS_PACKAGES||{}).length},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   return {
     monthlyPriceGbp: products.phone_agent.monthlyPriceGbp || monthlyEquivalentFromWeekly(weekly),
@@ -349,8 +343,23 @@ export function isSallySalesCall(
   const m = meta || {};
   const persona = String(opts?.agentPersona || m.agentPersona || '').toLowerCase();
   if (persona === SALLY_PERSONA) return true;
-  if (String(m.aim || '').toLowerCase() === 'sales_outreach') return true;
+  const aim = String(m.aim || '').toLowerCase().trim();
+  if (
+    aim === 'sales_outreach'
+    || aim === 'discovery'
+    || aim === 'demo'
+    || aim === 'demo_invite'
+    || aim === 'quote_followup'
+    || aim === 'contract_chase'
+    || aim === 'onboarding'
+    || aim === 'winback'
+    || aim === 'sales'
+  ) {
+    return true;
+  }
   if (String(m.source || '').toLowerCase() === 'sales_csv_dial') return true;
+  const template = String(opts?.campaignTemplate || m.campaignTemplate || '').toLowerCase();
+  if (template.startsWith('sales_')) return true;
   return false;
 }
 
@@ -779,13 +788,13 @@ export function getSallyPhoneSessionChatTools() {
     ...pickPhoneTools(
       'bookCallback',
       'captureLead',
-      'transferToHuman',
       'captureMessage',
       'classifyCallIntent',
       'sendCustomerMessage',
       'placeOutboundCall',
       'enqueueOutboundCall',
       'scheduleAppointment',
+      'verifyStaffPhonePin',
     ),
     SALLY_CRM_NOTE_TOOL,
     END_CALL_FUNCTION_TOOL,
@@ -1015,9 +1024,13 @@ const SALLY_SALES_OS = [
   '- NEVER sell Sally as the product. The product is Judie and/or Atmosphere.',
   '- British English, warm professional sales tone. Phone: one or two spoken sentences. Chat: concise paragraphs OK.',
   '- Never invent price, terms, CRM facts, hours, or payment links — use getOfferTerms and tools.',
+  '- Never address the person as Guest or Unknown. If you do not know their name, speak normally and ask who you are speaking with when it fits.',
+  '- If contact name hint is present, greet them by that name once. If no hint, do not invent a name.',
+  '- LARGE CONTRACT / enterprise / multi-site signup: do not close alone — arrange a callback. You cannot transfer calls.',
+  '- Sensitive account/billing/internal details: only after verifyStaffPhonePin (4-digit security code). Public offer facts are OK without PIN.',
   '- Before provisionRestaurantClient or sendStripeCheckoutLink: confirmSaleTerms, then signed contract via createSaasContract/sendContract.',
   '- Payment links must be emailed and/or WhatsApp’d via sendStripeCheckoutLink (channel email|whatsapp|both) — do not rely on reading a long URL aloud.',
-  '- Escalate only if stuck or they ask for a human. DNC/opt-out = stop.',
+  '- Escalate only if stuck or they ask for a human (callback — not transfer). DNC/opt-out = stop.',
   '- Voicemail: use leaveVoicemail; if live drop unavailable, schedule email/WhatsApp follow-up — never fake a left message.',
 ].join('\n');
 
@@ -1033,6 +1046,9 @@ export function buildSallyBrainPrompt(input: {
     ? `Current signup draft (confirm with owner — do not invent):\n${JSON.stringify(input.draft, null, 0).slice(0, 2500)}`
     : 'No signup draft yet — call researchRestaurantProfile once they want to sign up or you need public details.';
 
+  const rawName = String(input.contactName || '').trim();
+  const safeName = rawName && !/^(guest|unknown|unknown caller)$/i.test(rawName) ? rawName : '';
+
   const instructions = [
     SALLY_SALES_OS,
     formatOfferFactsBlock(),
@@ -1041,7 +1057,9 @@ export function buildSallyBrainPrompt(input: {
     input.direction === 'outbound'
       ? '- This is an outbound sales call you placed.'
       : '- This is an inbound sales call.',
-    input.contactName ? `- Contact name hint: ${input.contactName}` : '',
+    safeName
+      ? `- Contact name hint: ${safeName} — greet them by name.`
+      : '- Contact name unknown — speak normally; do not say Guest; ask who you are speaking with when it fits.',
     input.companyHint ? `- Company / restaurant hint: ${input.companyHint}` : '',
     `Caller phone: ${input.partyPhone}`,
     input.outboundBrief

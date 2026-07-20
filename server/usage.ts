@@ -86,11 +86,36 @@ function allEvents(): UsageEvent[] {
   return memoryEvents;
 }
 
-function startOfMonth(): number {
-  const d = new Date();
-  d.setDate(1);
-  d.setHours(0, 0, 0, 0);
+/** Monday 00:00 UTC of the current week — Sync2Dine fares reset weekly. */
+export function startOfBillingWeek(now = Date.now()): number {
+  const d = new Date(now);
+  const day = d.getUTCDay(); // 0 Sun .. 6 Sat
+  const daysFromMonday = (day + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - daysFromMonday);
+  d.setUTCHours(0, 0, 0, 0);
   return d.getTime();
+}
+
+export function currentBillingWeekKey(now = Date.now()): string {
+  return new Date(startOfBillingWeek(now)).toISOString().slice(0, 10);
+}
+
+/** Prefer org Stripe period when currentPeriodEnd is set; else UTC week. */
+export function usagePeriodStartMs(orgId?: string | null): number {
+  if (orgId) {
+    try {
+      const org = getOrganizationById(normalizeUsageOrgId(orgId));
+      const end = org?.currentPeriodEnd ? Date.parse(org.currentPeriodEnd) : NaN;
+      if (Number.isFinite(end) && end > Date.now()) {
+        // Assume weekly subscription: period is ~7 days ending at currentPeriodEnd
+        const start = end - 7 * 24 * 60 * 60 * 1000;
+        if (start < Date.now()) return start;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return startOfBillingWeek();
 }
 
 export function estimateCostUsd(
@@ -102,6 +127,14 @@ export function estimateCostUsd(
   const inputCost = (promptTokens / 1_000_000) * pricing.input;
   const outputCost = (completionTokens / 1_000_000) * pricing.output;
   return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000;
+}
+
+/** Infer metering provider from model id (DeepSeek primary vs OpenAI specialist). */
+export function providerFromModel(model: string): UsageProvider {
+  const m = (model || '').toLowerCase();
+  if (m.startsWith('deepseek')) return 'deepseek';
+  if (m.startsWith('eleven') || m.includes('elevenlabs')) return 'elevenlabs';
+  return 'openai';
 }
 
 export function recordUsage(
@@ -125,7 +158,7 @@ export function recordUsage(
     totalTokens,
     costUsd: estimateCostUsd(model, promptTokens, completionTokens),
     createdAt: new Date().toISOString(),
-    provider: 'openai',
+    provider: providerFromModel(model),
     unit: 'tokens',
     quantity: totalTokens,
   };
@@ -168,13 +201,13 @@ export function recordProviderUsage(input: {
 }
 
 export function getProviderEventsThisMonth(orgId: string, provider: UsageProvider): UsageEvent[] {
-  const monthStart = startOfMonth();
+  const periodStart = usagePeriodStartMs(orgId);
   const oid = normalizeUsageOrgId(orgId);
   return allEvents().filter(
     (e) =>
       e.orgId === oid &&
       e.provider === provider &&
-      new Date(e.createdAt).getTime() >= monthStart,
+      new Date(e.createdAt).getTime() >= periodStart,
   );
 }
 
@@ -186,13 +219,13 @@ export function getProviderQuantityThisMonth(orgId: string, provider: UsageProvi
 }
 
 export function getTokensUsedThisMonth(orgId: string): number {
-  const monthStart = startOfMonth();
+  const periodStart = usagePeriodStartMs(orgId);
   const oid = normalizeUsageOrgId(orgId);
   return allEvents()
     .filter(
       (e) =>
         e.orgId === oid &&
-        new Date(e.createdAt).getTime() >= monthStart &&
+        new Date(e.createdAt).getTime() >= periodStart &&
         (!e.provider || e.provider === 'openai' || e.provider === 'deepseek') &&
         (!e.unit || e.unit === 'tokens'),
     )
@@ -200,13 +233,13 @@ export function getTokensUsedThisMonth(orgId: string): number {
 }
 
 export function getTokenCostUsdThisMonth(orgId: string): number {
-  const monthStart = startOfMonth();
+  const periodStart = usagePeriodStartMs(orgId);
   const oid = normalizeUsageOrgId(orgId);
   return allEvents()
     .filter(
       (e) =>
         e.orgId === oid &&
-        new Date(e.createdAt).getTime() >= monthStart &&
+        new Date(e.createdAt).getTime() >= periodStart &&
         (!e.provider || e.provider === 'openai' || e.provider === 'deepseek') &&
         (!e.unit || e.unit === 'tokens'),
     )
@@ -214,10 +247,10 @@ export function getTokenCostUsdThisMonth(orgId: string): number {
 }
 
 export function getUsageSummaryForOrg(orgId: string) {
-  const monthStart = startOfMonth();
+  const periodStart = usagePeriodStartMs(orgId);
   const oid = normalizeUsageOrgId(orgId);
   const events = allEvents().filter(
-    (e) => e.orgId === oid && new Date(e.createdAt).getTime() >= monthStart,
+    (e) => e.orgId === oid && new Date(e.createdAt).getTime() >= periodStart,
   );
   const tokenEvents = events.filter(
     (e) => !e.provider || e.provider === 'openai' || e.provider === 'deepseek',
@@ -226,6 +259,8 @@ export function getUsageSummaryForOrg(orgId: string) {
     tokensUsed: tokenEvents.reduce((s, e) => s + e.totalTokens, 0),
     costUsd: events.reduce((s, e) => s + e.costUsd, 0),
     requestCount: events.length,
+    periodWeek: currentBillingWeekKey(),
+    periodStart: new Date(periodStart).toISOString(),
     byEndpoint: events.reduce<Record<string, number>>((acc, e) => {
       acc[e.endpoint] = (acc[e.endpoint] ?? 0) + Number(e.quantity ?? e.totalTokens ?? 0);
       return acc;
@@ -236,11 +271,11 @@ export function getUsageSummaryForOrg(orgId: string) {
 }
 
 export function getGlobalUsageThisMonth(): number {
-  const monthStart = startOfMonth();
+  const periodStart = startOfBillingWeek();
   return allEvents()
     .filter(
       (e) =>
-        new Date(e.createdAt).getTime() >= monthStart &&
+        new Date(e.createdAt).getTime() >= periodStart &&
         (!e.provider || e.provider === 'openai' || e.provider === 'deepseek'),
     )
     .reduce((sum, e) => sum + e.totalTokens, 0);
@@ -266,7 +301,7 @@ export function getTokenQuotaWarning(orgId: string): string | null {
   if (!org) return null;
   const used = getTokensUsedThisMonth(orgId);
   if (used >= org.monthlyTokenCap) {
-    return `Token allowance exceeded for "${org.name}" (${used.toLocaleString()} / ${org.monthlyTokenCap.toLocaleString()}). Overage will appear on this month's invoice.`;
+    return `Token allowance exceeded for "${org.name}" (${used.toLocaleString()} / ${org.monthlyTokenCap.toLocaleString()}). Overage will appear on this week's invoice.`;
   }
   if (used >= org.monthlyTokenCap * 0.8) {
     return `Token allowance at ${Math.round((used / org.monthlyTokenCap) * 100)}% for "${org.name}".`;

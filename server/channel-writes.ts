@@ -532,7 +532,7 @@ export async function executeChannelWrite(
   if (mailboxTools.has(action)) {
     const { executeMailboxTool } = await import('./mailbox-routes');
     const { getRequestOrgId } = await import('./data-store');
-    const orgId = getRequestOrgId();
+    const orgId = firstString(input.orgId) || getRequestOrgId();
     const userId = String(body.staffContext?.userId ?? 'default-user');
     const output = await executeMailboxTool(action, input, orgId, userId);
     const ok = !output.error;

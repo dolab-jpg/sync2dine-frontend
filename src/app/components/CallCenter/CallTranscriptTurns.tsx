@@ -22,7 +22,7 @@ function turnClass(role: string | undefined): string {
 /** Shared transcript renderer — speech + distinct Agent action (system/tool) rows. */
 export default function CallTranscriptTurns({
   turns,
-  agentLabel = 'Lizzie',
+  agentLabel = 'Judie',
   className = '',
   maxHeightClass = 'max-h-[240px]',
 }: Props) {

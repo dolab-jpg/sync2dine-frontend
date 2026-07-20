@@ -32,10 +32,19 @@ function orgHeaders(): HeadersInit {
 }
 
 export async function fetchCyrusThreads(): Promise<ServerThread[]> {
-  const res = await fetch('/api/cyrus/threads', { headers: orgHeaders() });
+  const headers = orgHeaders();
+  const orgId = (headers as Record<string, string>)['X-Org-Id'] || 'default';
+  const res = await fetch('/api/cyrus/threads', { headers });
+  // #region agent log
+  fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2cad37'},body:JSON.stringify({sessionId:'2cad37',runId:'pre-fix',hypothesisId:'H1',location:'cyrusThreadApi.ts:fetchCyrusThreads',message:'threads request',data:{orgId,ok:res.ok,status:res.status},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!res.ok) throw new Error('Failed to load Cyrus threads');
   const data = await res.json() as { threads?: ServerThread[] };
-  return data.threads ?? [];
+  const threads = data.threads ?? [];
+  // #region agent log
+  fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2cad37'},body:JSON.stringify({sessionId:'2cad37',runId:'pre-fix',hypothesisId:'H1',location:'cyrusThreadApi.ts:fetchCyrusThreads:response',message:'threads response',data:{orgId,count:threads.length,sampleOrgIds:threads.slice(0,5).map(t=>t.orgId),samplePhones:threads.slice(0,5).map(t=>t.phone?.slice(-4))},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  return threads;
 }
 
 export async function fetchCyrusThread(sessionId: string): Promise<ServerThread | null> {

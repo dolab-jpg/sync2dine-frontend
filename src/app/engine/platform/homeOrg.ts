@@ -10,8 +10,15 @@ export const BDIDDIES_HOME_ORG_LEGACY_ID = 'sync2dine';
  * Real Supabase org id for Sync2Dine / home tenant.
  * Prefer VITE_HOME_ORG_ID when set; fall back to the seeded demo org uuid.
  */
-/** Demo Kitchen — live menu / meal deals. Platform shell org is separate. */
-const FALLBACK_HOME_ORG_UUID = 'c2887ddb-0cba-4df1-9086-e7399c92d159';
+/**
+ * Sync2Dine platform (sales) org — NOT the Demo Kitchen tenant.
+ * Demo Kitchen restaurant staff attach to c2887ddb-…; mistaking that for home
+ * put Maya on the sales shell instead of the kitchen tablet.
+ */
+const FALLBACK_HOME_ORG_UUID = '4fc49703-d1b0-4ac7-892d-9c32d31e9661';
+
+/** Demo Kitchen tenant (menu / meal deals / Maya). */
+export const DEMO_KITCHEN_ORG_ID = 'c2887ddb-0cba-4df1-9086-e7399c92d159';
 
 export function isOrgUuid(id: string | null | undefined): id is string {
   return Boolean(id && ORG_UUID_RE.test(id.trim()));

@@ -1,12 +1,14 @@
 /**
  * Per-language ElevenLabs voices for Cynthia phone (Vapi).
- * English / UK always uses Lizzie from env — never remapped by this module.
+ * English / UK always uses Judie from env — never remapped by this module.
  */
 import { type SupportedLang, normalizeLang } from './language-packs';
 import { getVapiVoiceConfig } from './vapi-client';
 
-/** Lizzie — Cockney Character (dev fallback only when env unset). */
-export const LIZZIE_VOICE_ID = 'EQx6HGDYjkDpcli6vorJ';
+/** Judie — Cockney Character (dev fallback only when env unset). */
+export const JUDIE_VOICE_ID = 'EQx6HGDYjkDpcli6vorJ';
+/** @deprecated Use JUDIE_VOICE_ID — same ElevenLabs id, legacy name. */
+export const LIZZIE_VOICE_ID = JUDIE_VOICE_ID;
 
 /**
  * Default female funny/sassy voices for non-English. Env overrides:
@@ -40,7 +42,7 @@ function parseVoiceMapEnv(): Partial<Record<SupportedLang, string>> {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const out: Partial<Record<SupportedLang, string>> = {};
     for (const [key, value] of Object.entries(parsed)) {
-      if (key === 'en') continue; // never override Lizzie via JSON map
+      if (key === 'en') continue; // never override Judie via JSON map
       const lang = normalizeLang(key);
       if (lang === 'en') continue;
       const id = String(value || '').trim();
@@ -53,7 +55,7 @@ function parseVoiceMapEnv(): Partial<Record<SupportedLang, string>> {
   }
 }
 
-/** Resolve ElevenLabs voice id for a spoken call language. English always = Lizzie env. */
+/** Resolve ElevenLabs voice id for a spoken call language. English always = Judie env. */
 export function voiceIdForLang(lang: SupportedLang | string | null | undefined): string {
   const normalized = normalizeLang(lang);
   const englishId = process.env.VAPI_ELEVENLABS_VOICE_ID?.trim()

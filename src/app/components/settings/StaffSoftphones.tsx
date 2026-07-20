@@ -159,7 +159,15 @@ export function StaffSoftphones() {
           </div>
           <div>
             <Label>DID</Label>
-            <Input value={form.did} onChange={(e) => setForm((f) => ({ ...f, did: e.target.value }))} placeholder="02037453233" />
+            <Input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              dir="ltr"
+              value={form.did}
+              onChange={(e) => setForm((f) => ({ ...f, did: e.target.value }))}
+              placeholder="02037453233"
+            />
           </div>
           <div>
             <Label>SIP Username</Label>

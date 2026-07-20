@@ -56,16 +56,6 @@ import CallRegister from './components/CallCenter/CallRegister';
 import AppShell from './components/AppShell';
 import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
 import SallyOfferSettings from './components/platform/SallyOfferSettings';
-import PricingPage from './components/PricingPage';
-import StartCheckoutFlow from './components/StartCheckoutFlow';
-import JudieLandingPage from './components/JudieLandingPage';
-import AtmosphereLandingPage from './components/AtmosphereLandingPage';
-import TermsPage from './components/legal/TermsPage';
-import FairUseAndFaresPage from './components/legal/FairUseAndFaresPage';
-import PrivacyPage from './components/legal/PrivacyPage';
-import AcceptableUsePage from './components/legal/AcceptableUsePage';
-import CookiesPage from './components/legal/CookiesPage';
-import CancellationRefundsPage from './components/legal/CancellationRefundsPage';
 import QuotesList from './components/QuotesList';
 import SaasQuoteBuilder from './components/SaasQuoteBuilder';
 import MenuPreview from './components/platform/MenuPreview';
@@ -77,7 +67,6 @@ import RestaurantLive from './components/restaurant/RestaurantLive';
 import MenuManager from './components/restaurant/MenuManager';
 import RestaurantSettings from './components/restaurant/RestaurantSettings';
 import BookingsBoard from './components/restaurant/BookingsBoard';
-import IntegrationsPublicPage from './components/restaurant/IntegrationsPublicPage';
 import type { AllergenCode, DietaryCode } from './engine/restaurant/allergens';
 import { getExperience } from './engine/platform/experience';
 import {
@@ -1268,43 +1257,38 @@ export default function App() {
     );
   }
 
+  // App host = product only. Marketing/pricing/legal live on https://sync2dine.io
+  const RedirectToSite = ({ path = '/' }: { path?: string }) => {
+    if (typeof window !== 'undefined') {
+      window.location.replace(`https://sync2dine.io${path}`);
+    }
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f6efe0] px-6 text-center">
+        <p className="text-lg font-semibold text-[#0f3d3e]">Taking you to Sync2Dine…</p>
+      </div>
+    );
+  };
+
   if (!isLoggedIn) {
-    const RedirectToMarketing = ({ path = '/' }: { path?: string }) => {
-      if (typeof window !== 'undefined') {
-        window.location.replace(`https://sync2dine.io${path}`);
-      }
-      return (
-        <div className="flex min-h-screen items-center justify-center bg-[#f6efe0] px-6 text-center">
-          <p className="text-lg font-semibold text-[#0f3d3e]">
-            Taking you to Sync2Dine…
-          </p>
-        </div>
-      );
-    };
     return (
       <BrowserRouter>
         <OnlineStatusBanner />
         <Routes>
           <Route path="/cursor-paste" element={<CursorPastePage />} />
           <Route path="/front" element={<FrontKiosk />} />
-          <Route path="/integrations" element={<IntegrationsPublicPage />} />
-          {/* Public marketing lives on sync2dine.io; app host is login-gated during live testing */}
+          {/* Auth only — no marketing chrome on the app host */}
           <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/pricing" element={<RedirectToMarketing path="/pricing/" />} />
-          <Route path="/start" element={<RedirectToMarketing path="/inquiry/" />} />
-          <Route path="/judie" element={<RedirectToMarketing path="/ai-phone-ordering/" />} />
-          <Route path="/atmosphere" element={<RedirectToMarketing path="/" />} />
-          <Route path="/legal/terms" element={<TermsPage />} />
-          <Route path="/legal/fair-use-and-fares" element={<FairUseAndFaresPage />} />
-          <Route path="/legal/privacy" element={<PrivacyPage />} />
-          <Route path="/legal/acceptable-use" element={<AcceptableUsePage />} />
-          <Route path="/legal/cookies" element={<CookiesPage />} />
-          <Route path="/legal/cancellation-refunds" element={<CancellationRefundsPage />} />
           <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/invite/:token" element={<InviteAcceptPage />} />
+          <Route path="/pricing" element={<RedirectToSite path="/pricing/" />} />
+          <Route path="/start" element={<RedirectToSite path="/inquiry/" />} />
+          <Route path="/judie" element={<RedirectToSite path="/ai-phone-ordering/" />} />
+          <Route path="/atmosphere" element={<RedirectToSite path="/" />} />
+          <Route path="/integrations" element={<RedirectToSite path="/" />} />
+          <Route path="/legal/*" element={<RedirectToSite path="/terms/" />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
         <Toaster />
@@ -1327,16 +1311,12 @@ export default function App() {
           <Routes>
             {/* Public diner kiosk (also reachable logged-in for staff preview) */}
             <Route path="/front" element={<FrontKiosk />} />
-            <Route path="/pricing" element={<PricingPage />} />
-            <Route path="/start" element={<StartCheckoutFlow />} />
-            <Route path="/judie" element={<JudieLandingPage />} />
-            <Route path="/atmosphere" element={<AtmosphereLandingPage />} />
-            <Route path="/legal/terms" element={<TermsPage />} />
-            <Route path="/legal/fair-use-and-fares" element={<FairUseAndFaresPage />} />
-            <Route path="/legal/privacy" element={<PrivacyPage />} />
-            <Route path="/legal/acceptable-use" element={<AcceptableUsePage />} />
-            <Route path="/legal/cookies" element={<CookiesPage />} />
-            <Route path="/legal/cancellation-refunds" element={<CancellationRefundsPage />} />
+            {/* Marketing URLs belong on sync2dine.io — never serve them from the app product */}
+            <Route path="/pricing" element={<RedirectToSite path="/pricing/" />} />
+            <Route path="/start" element={<RedirectToSite path="/inquiry/" />} />
+            <Route path="/judie" element={<RedirectToSite path="/ai-phone-ordering/" />} />
+            <Route path="/atmosphere" element={<RedirectToSite path="/" />} />
+            <Route path="/legal/*" element={<RedirectToSite path="/terms/" />} />
             <Route
               element={(
                 <RestaurantShell>
@@ -1376,7 +1356,10 @@ export default function App() {
               />
               <Route path="/team" element={<Navigate to="/settings" replace />} />
               <Route path="/settings" element={<RestaurantSettings />} />
-              <Route path="/integrations" element={<IntegrationsPublicPage />} />
+              <Route
+                path="/integrations"
+                element={<ProtectedRoute element={<IntegrationsHub />} allowedRoles={['super_admin', 'manager']} user={user} />}
+              />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/profile/password" element={<ChangePasswordPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
@@ -1392,16 +1375,11 @@ export default function App() {
       <AIAssistantProvider>
       <BrowserRouter>
             <Routes>
-              <Route path="/pricing" element={<PricingPage />} />
-              <Route path="/start" element={<StartCheckoutFlow />} />
-              <Route path="/judie" element={<JudieLandingPage />} />
-              <Route path="/atmosphere" element={<AtmosphereLandingPage />} />
-              <Route path="/legal/terms" element={<TermsPage />} />
-              <Route path="/legal/fair-use-and-fares" element={<FairUseAndFaresPage />} />
-              <Route path="/legal/privacy" element={<PrivacyPage />} />
-              <Route path="/legal/acceptable-use" element={<AcceptableUsePage />} />
-              <Route path="/legal/cookies" element={<CookiesPage />} />
-              <Route path="/legal/cancellation-refunds" element={<CancellationRefundsPage />} />
+              <Route path="/pricing" element={<RedirectToSite path="/pricing/" />} />
+              <Route path="/start" element={<RedirectToSite path="/inquiry/" />} />
+              <Route path="/judie" element={<RedirectToSite path="/ai-phone-ordering/" />} />
+              <Route path="/atmosphere" element={<RedirectToSite path="/" />} />
+              <Route path="/legal/*" element={<RedirectToSite path="/terms/" />} />
               <Route path="/front" element={<FrontKiosk />} />
               <Route
                 element={(

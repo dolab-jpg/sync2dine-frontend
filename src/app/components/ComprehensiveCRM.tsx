@@ -55,18 +55,6 @@ function toLead(c: Customer): Lead | null {
   };
 }
 
-function inferTradeFromTags(tags: string[]): import('../config/types').TradeId {
-  const map: Record<string, import('../config/types').TradeId> = {
-    kitchen: 'kitchen', wetroom: 'bathroom', microcement: 'bathroom', rewire: 'electrical',
-    loft: 'loft', roofing: 'roofing', extension: 'extensions',
-  };
-  for (const tag of tags) {
-    const t = map[tag.toLowerCase()];
-    if (t) return t;
-  }
-  return 'bathroom';
-}
-
 const EMPTY_LEAD_FORM = {
   name: '',
   phone: '',
@@ -185,9 +173,8 @@ export default function ComprehensiveCRM() {
 
   const handleStartQuote = () => {
     if (!selectedLead) return;
-    const trade = selectedLead.tradeId ?? inferTradeFromTags(selectedLead.tags);
     updateCustomer(selectedLead.id, { lastContact: new Date().toISOString() });
-    navigate(`/quote/${trade}/${selectedLead.id}`);
+    navigate(`/quote/saas/${selectedLead.id}`);
     setSelectedLead(null);
   };
 

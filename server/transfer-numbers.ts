@@ -86,7 +86,11 @@ export function buildWarmTransferPlan(opts?: {
       maxDurationSeconds: 90,
       model: {
         provider: 'openai',
-        model: process.env.VAPI_LLM_MODEL?.trim() || 'gpt-4o',
+        // Vapi transferAssistant rejects legacy gpt-4o; use a currently allowed OpenAI model.
+        model: process.env.VAPI_TRANSFER_LLM_MODEL?.trim()
+          || (process.env.VAPI_LLM_MODEL?.trim() && !/^gpt-4o/.test(process.env.VAPI_LLM_MODEL.trim())
+            ? process.env.VAPI_LLM_MODEL.trim()
+            : 'gpt-4.1'),
         messages: [
           {
             role: 'system',

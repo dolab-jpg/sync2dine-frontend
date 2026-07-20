@@ -1,0 +1,16 @@
+{
+  "updatedAt": "2026-07-17T20:38:26.673Z",
+  "open": [
+    {
+      "id": "phi-mrpeh8q8-t6osean",
+      "severity": "tool_fail",
+      "status": "open",
+      "error": "test tool boom",
+      "toolName": "placeOrder",
+      "callId": "call-test-1",
+      "lastSeenAt": "2026-07-17T20:38:26.672Z",
+      "count": 1,
+      "auditPath": "/ai-audit?tab=phone_errors&id=phi-mrpeh8q8-t6osean"
+    }
+  ]
+}

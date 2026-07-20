@@ -364,7 +364,7 @@ function ensureCallFromVapi(message: Record<string, unknown>): Record<string, un
   const lineDid = lineDidForDirection(direction, call, String(process.env.SOHO66_FROM_NUMBER || ''));
 
   let customerId: string | null = null;
-  let contactName = identity.kind !== 'customer' ? identity.name : 'Guest';
+  let contactName = identity.kind !== 'customer' ? (identity.name || '') : '';
   if (identity.kind === 'customer' && partyPhone) {
     const guest = ensureGuestCustomerForCall(partyPhone, callId);
     customerId = guest.customerId;
@@ -373,9 +373,11 @@ function ensureCallFromVapi(message: Record<string, unknown>): Record<string, un
     const resolved = resolveContactByPhone(partyPhone);
     customerId = resolved.customerId;
     contactName = identity.kind !== 'customer'
-      ? identity.name
-      : (resolved.customerName || resolved.contactName);
+      ? (identity.name || '')
+      : (resolved.customerName || resolved.contactName || '');
   }
+  // Never inject placeholder names into call records / prompts
+  if (/^guest$/i.test(contactName.trim())) contactName = '';
 
   return saveCall({
     id: callId,
@@ -637,6 +639,8 @@ function finalizeVapiCall(
     || (afterMeta.customerId != null ? String(afterMeta.customerId) : null)
     || (after?.customerId != null ? String(after.customerId) : null);
 
+  const finalRecordingUrl = recordingUrl || (after?.recordingUrl as string | undefined);
+
   if (customerId) {
     const settings = getAgentSettings();
     const noteHint = settings.postCallNotePrompt
@@ -647,7 +651,6 @@ function finalizeVapiCall(
       transferredTo ? `Transferred to: ${transferredTo}` : '',
       afterMeta.brief ? `Staff brief was: ${String(afterMeta.brief).slice(0, 200)}` : '',
     ].filter(Boolean);
-    const finalRecordingUrl = recordingUrl || (after?.recordingUrl as string | undefined);
     appendCustomerCallActivity({
       customerId,
       callId,
@@ -662,6 +665,52 @@ function finalizeVapiCall(
       recordingUrl: finalRecordingUrl,
     });
     stampCustomerLastRecording(customerId, finalRecordingUrl, callId);
+  }
+
+  // Sally Sync2Dine: always upsert CRM card with call details (recording + summary)
+  try {
+    void Promise.all([
+      import('./sally-sales'),
+      import('./phone-tools'),
+      import('./contact-display-name'),
+    ]).then(([sally, phoneTools, display]) => {
+      if (!sally.isSallySalesCall(afterMeta)) return;
+      const rawName = String(after?.contactName || afterMeta.contactName || resolved.customerName || '');
+      const name = display.speechContactName(rawName);
+      const restaurant = String(afterMeta.company || afterMeta.restaurant || '').trim();
+      const notes = [
+        'Sally Sync2Dine call',
+        fallbackSummary.slice(0, 500),
+        disposition ? `Outcome: ${disposition}` : '',
+        finalRecordingUrl ? `Recording: ${finalRecordingUrl}` : '',
+        restaurant ? `Restaurant: ${restaurant}` : '',
+      ].filter(Boolean).join(' | ');
+      phoneTools.captureOrUpdateLead(
+        {
+          name: name || undefined,
+          phone: partyPhone,
+          notes,
+          scope: restaurant || undefined,
+        },
+        { callId, fallbackPhone: partyPhone },
+      );
+      const again = resolveContactByPhone(partyPhone);
+      if (again.customerId && finalRecordingUrl) {
+        stampCustomerLastRecording(again.customerId, finalRecordingUrl, callId);
+        appendCustomerCallActivity({
+          customerId: again.customerId,
+          callId,
+          summary: `Sally call: ${fallbackSummary.slice(0, 280)}`,
+          outcome: disposition || endedReason || 'sally_call',
+          disposition,
+          type: 'call',
+          recordingUrl: finalRecordingUrl,
+          detail: notes.slice(0, 800),
+        });
+      }
+    }).catch((err) => console.warn('[vapi] Sally CRM card upsert failed', err));
+  } catch (err) {
+    console.warn('[vapi] Sally CRM card upsert error', err);
   }
 }
 
@@ -678,7 +727,7 @@ function buildTransientAssistant(message: Record<string, unknown>) {
     : callMeta.aim != null
       ? String(callMeta.aim)
       : undefined;
-  const { assistant, agentPersona } = buildVapiAssistantForParty({
+  const { assistant, agentPersona } = await buildVapiAssistantForParty({
     partyPhone,
     direction,
     campaignTemplate: call.campaignTemplate ? String(call.campaignTemplate) : undefined,
@@ -1342,7 +1391,7 @@ export async function handleVapiWebSession(
     },
   });
 
-  const { assistant, identity, verified } = buildVapiAssistantForParty({
+  const { assistant, identity, verified } = await buildVapiAssistantForParty({
     partyPhone: toE164Uk(partyPhone),
     direction: 'inbound',
     callId,

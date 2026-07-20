@@ -1,7 +1,7 @@
 /**
  * Shared builders for Vapi assistant payloads (outbound + assistant-request).
  */
-import { DEFAULT_ORG_ID, getCallById } from './data-store';
+import { DEFAULT_ORG_ID, getCallById, setRequestOrgId } from './data-store';
 import {
   buildPhoneBrainPrompt,
   getPhoneSessionChatTools,
@@ -23,9 +23,29 @@ import {
   isSallySalesCall,
   SALLY_PERSONA,
 } from './sally-sales';
+import {
+  AGENT_PERSONA as JUDIE_PERSONA,
+  buildJudieRestaurantPrompt,
+  getJudiePhoneSessionChatTools,
+  isJudieRestaurantCall,
+  resolveJudieRestaurantOrgId,
+} from './judie-restaurant';
 import type { RestaurantProfileDraft } from './restaurant-research';
+import { buildVapiModelBlock } from './vapi-llm-model';
 
-export function buildVapiAssistantForParty(opts: {
+/** Never greet as Guest / Unknown — empty means ask for the name. */
+export function spokenFirstName(...candidates: Array<string | undefined | null>): string {
+  for (const c of candidates) {
+    const first = String(c || '').trim().split(/\s+/)[0];
+    if (!first) continue;
+    const lower = first.toLowerCase();
+    if (lower === 'guest' || lower === 'unknown' || lower === 'caller' || lower === 'there') continue;
+    return first;
+  }
+  return '';
+}
+
+export async function buildVapiAssistantForParty(opts: {
   partyPhone: string;
   direction: 'inbound' | 'outbound';
   campaignTemplate?: string;
@@ -62,10 +82,22 @@ export function buildVapiAssistantForParty(opts: {
     campaignTemplate: opts.campaignTemplate,
     agentPersona: opts.agentPersona || String(callMeta.agentPersona || ''),
   });
+  const lineDid = String(callMeta.lineDid || callMeta.to || '');
+  const judieOrgId = resolveJudieRestaurantOrgId({ callMetadata: callMeta, lineDid });
+  const judie = !sally && isJudieRestaurantCall(callMeta, {
+    agentPersona: opts.agentPersona || String(callMeta.agentPersona || ''),
+    orgId: judieOrgId || undefined,
+    lineDid,
+  });
 
   const webhookBase = getVapiWebhookBaseUrl();
   const toolServer = `${webhookBase}/webhooks/vapi`;
-  const firstName = (opts.contactName || identity.name || String(callMeta.company || '')).split(/\s+/)[0];
+  const firstName = spokenFirstName(
+    opts.contactName,
+    callMeta.customerName != null ? String(callMeta.customerName) : undefined,
+    callMeta.company != null ? String(callMeta.company) : undefined,
+    identity.name,
+  );
 
   let instructions: string;
   let language: string;
@@ -89,11 +121,40 @@ export function buildVapiAssistantForParty(opts: {
     language = sallyPrompt.language;
     assistantName = 'Sally Sync2Dine';
     if (opts.direction === 'outbound') {
-      firstMessage = `Hi${firstName ? ` ${firstName}` : ''}, it's Sally from Sync2Dine — have you got a quick moment?`;
+      firstMessage = firstName
+        ? `Hi ${firstName}, it's Sally from Sync2Dine — have you got a quick moment?`
+        : `Hi, it's Sally from Sync2Dine — who am I speaking with?`;
     } else {
-      firstMessage = `Hi${firstName ? ` ${firstName}` : ''}, Sally from Sync2Dine here — how can I help?`;
+      firstMessage = firstName
+        ? `Hi ${firstName}, Sally from Sync2Dine here — how can I help?`
+        : `Hi, Sally from Sync2Dine here — who am I speaking with?`;
     }
     functionTools = getSallyPhoneSessionChatTools()
+      .filter((tool) => tool.function.name !== 'endCall')
+      .map((tool) => ({
+        type: 'function',
+        function: tool.function,
+        async: false,
+        server: { url: toolServer },
+      }));
+  } else if (judie && judieOrgId) {
+    setRequestOrgId(judieOrgId);
+    const judiePrompt = buildJudieRestaurantPrompt(judieOrgId, {
+      partyPhone: opts.partyPhone,
+      direction: opts.direction,
+      outboundBrief,
+      contactName: opts.contactName || resolvePhoneCallerIdentity(opts.partyPhone, judieOrgId).name,
+      languageOverride,
+    });
+    instructions = judiePrompt.instructions;
+    language = judiePrompt.language;
+    assistantName = 'Judie';
+    if (opts.direction === 'outbound') {
+      firstMessage = `Hi${firstName ? ` ${firstName}` : ''}, it's Judie — have you got a moment about your order?`;
+    } else {
+      firstMessage = `Hi${firstName ? ` ${firstName}` : ''}, Judie here — how can I help?`;
+    }
+    functionTools = getJudiePhoneSessionChatTools()
       .filter((tool) => tool.function.name !== 'endCall')
       .map((tool) => ({
         type: 'function',
@@ -122,9 +183,13 @@ export function buildVapiAssistantForParty(opts: {
         ? `Hi ${firstName || 'there'}, Cynthia here — you're unlocked, what do you need?`
         : `Hi ${firstName || 'there'}, Cynthia here — when you can, say your four-digit security code and I'll unlock your tools.`;
     } else if (opts.direction === 'outbound') {
-      firstMessage = `Hi${firstName ? ` ${firstName}` : ''}, it's Cynthia from Builder Diddies — how are you getting on?`;
+      firstMessage = firstName
+        ? `Hi ${firstName}, it's Cynthia from Builder Diddies — how are you getting on?`
+        : `Hi, it's Cynthia from Builder Diddies — who am I speaking with?`;
     } else {
-      firstMessage = `Hi${firstName ? ` ${firstName}` : ''}, Cynthia from Builder Diddies here — how can I help?`;
+      firstMessage = firstName
+        ? `Hi ${firstName}, Cynthia from Builder Diddies here — how can I help?`
+        : `Hi, Cynthia from Builder Diddies here — how can I help?`;
     }
     assistantName = identity.kind === 'customer' ? 'Cynthia Builder Diddies' : `Cynthia (${identity.role})`;
 
@@ -158,16 +223,16 @@ export function buildVapiAssistantForParty(opts: {
     });
   }
 
+  const model = await buildVapiModelBlock({
+    orgId: DEFAULT_ORG_ID,
+    instructions,
+    tools: [...nativeTools, ...functionTools],
+  });
+
   const assistant: Record<string, unknown> = {
     name: assistantName,
     firstMessage,
-    model: {
-      provider: 'openai',
-      model: process.env.VAPI_LLM_MODEL?.trim() || 'gpt-4o',
-      temperature: 0.7,
-      messages: [{ role: 'system', content: instructions }],
-      tools: [...nativeTools, ...functionTools],
-    },
+    model,
     voice: getVapiVoiceConfigForLang(language),
     transcriber: {
       provider: 'deepgram',
@@ -200,6 +265,6 @@ export function buildVapiAssistantForParty(opts: {
     assistant,
     identity,
     verified,
-    agentPersona: sally ? SALLY_PERSONA : undefined,
+    agentPersona: sally ? SALLY_PERSONA : judie ? JUDIE_PERSONA : undefined,
   };
 }

@@ -66,14 +66,22 @@ export default function CyrusConversations() {
     setLoading(true);
     try {
       const server = await fetchCyrusThreads();
-      const merged = mergeThreads(server, getAllConversationThreads());
+      const local = getAllConversationThreads();
+      const merged = mergeThreads(server, local);
+      // #region agent log
+      fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2cad37'},body:JSON.stringify({sessionId:'2cad37',runId:'pre-fix',hypothesisId:'H2',location:'CyrusConversations.tsx:reload',message:'threads merge',data:{serverCount:server.length,localCount:local.length,mergedCount:merged.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setThreads(merged);
       setSelectedId((prev) => {
         if (prev && merged.some((t) => t.sessionId === prev || t.phone === prev)) return prev;
         return merged[0]?.sessionId ?? null;
       });
-    } catch {
-      const merged = mergeThreads([], getAllConversationThreads());
+    } catch (err) {
+      const local = getAllConversationThreads();
+      const merged = mergeThreads([], local);
+      // #region agent log
+      fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2cad37'},body:JSON.stringify({sessionId:'2cad37',runId:'pre-fix',hypothesisId:'H5',location:'CyrusConversations.tsx:reload:catch',message:'threads fetch failed',data:{localCount:local.length,mergedCount:merged.length,err:err instanceof Error ? err.message : String(err)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setThreads(merged);
     } finally {
       setLoading(false);
@@ -112,6 +120,7 @@ export default function CyrusConversations() {
   const { customers, updateCustomer, user } = context;
   const userRole = user.role;
   const cyrusName = integrationService.getConfig('whatsapp').cyrusDisplayName || 'Cynthia';
+  const brainProvider = integrationService.getConfig('openai').provider === 'deepseek' ? 'DeepSeek' : 'OpenAI';
 
   const selectedThread = threads.find((t) => t.sessionId === selectedId || t.phone === selectedId);
   const selectedCustomer = selectedThread
@@ -178,7 +187,7 @@ export default function CyrusConversations() {
         void speak(data.reply, voiceMode);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Cynthia failed — check OpenAI in Integrations');
+      toast.error(err instanceof Error ? err.message : 'Cynthia failed — check Company AI Brain in Integrations');
       void checkOpenAIConnection({ role: userRole }).then(setOpenaiState);
     } finally {
       setSending(false);
@@ -206,7 +215,7 @@ export default function CyrusConversations() {
             {cyrusName} Conversations
           </h1>
           <p className="text-gray-600 mt-1">
-            Live inbox — website and portal — powered by OpenAI via Cynthia
+            Live inbox — website and portal — powered by {brainProvider} via {cyrusName}
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>

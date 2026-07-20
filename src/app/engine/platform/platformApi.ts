@@ -26,6 +26,26 @@ export interface PlatformOrganization {
   phoneLandlineMinutes?: number;
   monthlyPriceGbp: number;
   planLabel: string;
+  planBadge?: string;
+  includedAiMinutes?: number;
+  aiOverageGbpPerMinute?: number;
+  usageAllowance?: {
+    orgId: string;
+    plan: string;
+    periodMonth: string;
+    buckets: Array<{
+      metric: string;
+      label: string;
+      used: number;
+      included: number;
+      unit: string;
+      pct: number;
+      level: string;
+    }>;
+    highestLevel: string;
+    warnings: string[];
+    aiHardCapped: boolean;
+  };
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   subscriptionStatus?: string;
@@ -76,30 +96,46 @@ function supabaseFunctionsBase(): string | null {
   return `${url.replace(/\/$/, '')}/functions/v1/platform-orgs`;
 }
 
-/** Edge uses '' | /stats | /:id ; Node uses /api/platform/... */
+function buildPlatformHeaders(init?: RequestInit): Headers {
+  const headers = new Headers(init?.headers);
+  if (!headers.has('Content-Type') && init?.body) {
+    headers.set('Content-Type', 'application/json');
+  }
+  return headers;
+}
+
+/**
+ * Edge uses '' | /stats | /:id ; Node uses /api/platform/...
+ * Prefer Edge when healthy; always fall back to Node companion on missing
+ * function (404), gateway errors, network failures, or non-OK responses.
+ */
 async function callPlatform<T>(
   edgePath: string,
   nodePath: string,
   init?: RequestInit,
 ): Promise<T> {
   const edgeBase = supabaseFunctionsBase();
-  const headers = new Headers(init?.headers);
-  if (!headers.has('Content-Type') && init?.body) {
-    headers.set('Content-Type', 'application/json');
-  }
 
   if (edgeBase) {
-    const token = await getSupabaseAccessToken();
-    const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-    if (token) headers.set('Authorization', `Bearer ${token}`);
-    if (anon) headers.set('apikey', anon);
-    const edgeRes = await fetch(`${edgeBase}${edgePath}`, { ...init, headers });
-    if (edgeRes.status !== 404 && edgeRes.status !== 502 && edgeRes.status !== 503) {
-      return parseJson<T>(edgeRes);
+    try {
+      const edgeHeaders = buildPlatformHeaders(init);
+      const token = await getSupabaseAccessToken();
+      const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (token) edgeHeaders.set('Authorization', `Bearer ${token}`);
+      if (anon) edgeHeaders.set('apikey', anon);
+      const edgeRes = await fetch(`${edgeBase}${edgePath}`, { ...init, headers: edgeHeaders });
+      if (edgeRes.ok) {
+        return parseJson<T>(edgeRes);
+      }
+      // Missing Edge deploy / gateway blip → Node. Other 4xx still fall through
+      // so a broken Edge never blanks Platform Clients.
+    } catch {
+      // Network / CORS — use Node
     }
   }
 
-  return parseJson<T>(await fetch(nodePath, { ...init, headers }));
+  const nodeHeaders = buildPlatformHeaders(init);
+  return parseJson<T>(await fetch(nodePath, { ...init, headers: nodeHeaders }));
 }
 
 export async function fetchPlatformStats(): Promise<PlatformStats> {
@@ -119,11 +155,11 @@ export async function fetchPlatformStats(): Promise<PlatformStats> {
 }
 
 export async function fetchOrganizations(): Promise<PlatformOrganization[]> {
-  const data = await callPlatform<{ organizations: PlatformOrganization[] }>(
+  const data = await callPlatform<{ organizations?: PlatformOrganization[] }>(
     '',
     '/api/platform/organizations',
   );
-  return data.organizations;
+  return Array.isArray(data.organizations) ? data.organizations : [];
 }
 
 export async function createOrganization(input: {
@@ -184,18 +220,60 @@ export async function createStripeCheckout(orgId: string): Promise<string> {
   return data.url;
 }
 
+export type SallyOfferProductPrice = {
+  monthlyPriceGbp: number;
+  setupFeeGbp: number;
+  weeklyPriceGbp?: number;
+  standardWeeklyGbp?: number;
+  annualPrepayGbp?: number;
+};
+
+export type SallyPackageSnapshot = {
+  packageId: string;
+  name: string;
+  standardWeeklyGbp: number;
+  launchWeeklyGbp: number;
+  weeklyGbp: number;
+  annualPrepayGbp: number;
+  launchActive: boolean;
+  offerEndsAt?: string | null;
+  fareScheduleVersion?: string;
+  weeklyAiMinutes: number;
+  weeklyOutboundMinutes: number;
+  aiOverageGbpPerMinute: number;
+  inboundOnly: boolean;
+  includesAtmosphere: boolean;
+  fareSummary: string;
+};
+
 export type SallyOfferTerms = {
   monthlyPriceGbp: number;
   setupFeeGbp: number;
+  weeklyPriceGbp?: number;
+  standardWeeklyGbp?: number;
+  annualPrepayGbp?: number;
   billing: string;
   minimumTerm: string;
   cancelPolicy: string;
   demoPhone: string;
   demoVideoUrl: string;
   salesPdfUrl: string;
+  offerEndsAt?: string | null;
+  launchActive?: boolean;
+  fareScheduleVersion?: string;
+  patentRefs?: string;
+  founderName?: string;
+  authorityBlurb?: string;
+  products: {
+    phone_agent: SallyOfferProductPrice;
+    audio_management: SallyOfferProductPrice;
+  };
+  packages?: SallyPackageSnapshot[];
 };
 
-export type SallyOfferStored = Partial<Omit<SallyOfferTerms, 'billing'>> & {
+export type SallyOfferStored = Partial<
+  Omit<SallyOfferTerms, 'billing' | 'packages' | 'launchActive'>
+> & {
   updatedAt?: string;
   updatedBy?: string;
 };

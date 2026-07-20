@@ -116,6 +116,8 @@ export function IntegrationCard({ definition, instance, userName, userId, orgId,
         if (inst.lastTestError && inst.status === 'connected') toast.warning(inst.lastTestError);
       } else if (hasCredentials && definition.id === 'email_oauth') {
         toast.success('Mailbox OAuth saved — Enabled on, Mock off. Staff: Communications → Mailbox → Connect');
+      } else if (hasCredentials && definition.id === 'google_calendar') {
+        toast.success('Google Calendar credentials saved — Client Secret is masked on purpose. Scroll down and click Connect with Google.');
       } else if (hasCredentials) {
         toast.success(`${definition.name} settings saved — live mode enabled`);
       } else {
@@ -197,12 +199,28 @@ export function IntegrationCard({ definition, instance, userName, userId, orgId,
 
           {definition.id === 'email_oauth' && (
             <GoogleOAuthJsonUpload
+              redirectUriHint={PRODUCTION_MAILBOX_REDIRECT_URI}
               onParsed={(parsed) => {
                 setLocalValues((prev) => ({
                   ...prev,
                   googleClientId: parsed.clientId,
                   googleClientSecret: parsed.clientSecret,
                   redirectUri: PRODUCTION_MAILBOX_REDIRECT_URI,
+                }));
+              }}
+            />
+          )}
+
+          {definition.id === 'google_calendar' && (
+            <GoogleOAuthJsonUpload
+              redirectUriHint={PRODUCTION_CALENDAR_REDIRECT_URI}
+              onParsed={(parsed) => {
+                setLocalValues((prev) => ({
+                  ...prev,
+                  clientId: parsed.clientId,
+                  clientSecret: parsed.clientSecret,
+                  redirectUri: PRODUCTION_CALENDAR_REDIRECT_URI,
+                  calendarId: prev.calendarId || 'primary',
                 }));
               }}
             />
@@ -224,22 +242,6 @@ export function IntegrationCard({ definition, instance, userName, userId, orgId,
               <Button asChild size="sm" className="bg-emerald-700 hover:bg-emerald-800">
                 <Link to="/communications?tab=mailbox">Open Communications → Mailbox</Link>
               </Button>
-            </div>
-          )}
-
-          {definition.id === 'google_calendar' && (
-            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 space-y-3">
-              <p className="text-sm font-semibold text-emerald-950">Connect Google Calendar</p>
-              <p className="text-xs text-emerald-900/85 leading-relaxed">
-                Save Client ID/Secret below (or reuse Mailbox OAuth Google credentials), then sign in with the popup.
-                This is separate from Gmail mailbox connect.
-              </p>
-              <CalendarConnectPanel
-                userId={resolvedUserId}
-                orgId={resolvedOrgId}
-                compact
-                onConnectionChange={onUpdate}
-              />
             </div>
           )}
 
@@ -339,6 +341,22 @@ export function IntegrationCard({ definition, instance, userName, userId, orgId,
               </Button>
             )}
           </div>
+
+          {definition.id === 'google_calendar' && (
+            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 space-y-3">
+              <p className="text-sm font-semibold text-emerald-950">Connect Google Calendar</p>
+              <p className="text-xs text-emerald-900/85 leading-relaxed">
+                Upload or paste Client ID/Secret above, click <strong>Save</strong> first (secret shows as masked when stored),
+                then sign in with the popup. This is separate from Gmail mailbox connect.
+              </p>
+              <CalendarConnectPanel
+                userId={resolvedUserId}
+                orgId={resolvedOrgId}
+                compact
+                onConnectionChange={onUpdate}
+              />
+            </div>
+          )}
 
           {instance.lastTestedAt && (
             <p className="text-xs text-gray-500">

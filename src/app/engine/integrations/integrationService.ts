@@ -309,12 +309,13 @@ export const integrationService = {
     }
 
     // Persist to Supabase (encrypted secrets server-side)
+    const payloadValues: Record<string, string> = {};
+    for (const [k, v] of Object.entries(values)) {
+      if (isSecretIntegrationField(k) && isPlaceholderSecret(v)) continue;
+      payloadValues[k] = v;
+    }
+
     try {
-      const payloadValues: Record<string, string> = {};
-      for (const [k, v] of Object.entries(values)) {
-        if (isSecretIntegrationField(k) && isPlaceholderSecret(v)) continue;
-        payloadValues[k] = v;
-      }
       const saved = await putOrgIntegration(id, {
         values: payloadValues,
         enabled: loadIntegrationsStore().integrations[id].enabled,
@@ -345,8 +346,49 @@ export const integrationService = {
       saveIntegrationsStore(store);
       notify();
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const orgRouteMissing = /not found/i.test(msg);
+      // Live API may lag behind SPA: org integrations PUT 404s while /api/integrations/test still saves disk secrets.
+      if (
+        orgRouteMissing
+        && (id === 'google_calendar' || id === 'email_oauth')
+        && Object.keys(payloadValues).length > 0
+      ) {
+        const res = await fetch('/api/integrations/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ integrationId: id, values: payloadValues }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          success?: boolean;
+          message?: string;
+          status?: IntegrationStatus;
+          error?: string;
+        };
+        if (!res.ok || data.success === false) {
+          throw new Error(data.error || data.message || msg);
+        }
+        const store = loadIntegrationsStore();
+        const nextValues = { ...store.integrations[id].values, ...payloadValues };
+        for (const [k, v] of Object.entries(payloadValues)) {
+          if (isSecretIntegrationField(k) && v?.trim()) {
+            nextValues[k] = `••••${v.slice(-4)}`;
+          }
+        }
+        store.integrations[id] = {
+          ...store.integrations[id],
+          enabled: true,
+          mockMode: false,
+          status: (data.status as IntegrationStatus) || 'connected',
+          values: nextValues,
+          lastTestError: undefined,
+        };
+        saveIntegrationsStore(store);
+        notify();
+      } else if (id !== 'openai') {
+        throw err;
+      }
       // Fall through to OpenAI-specific path below if put failed for openai
-      if (id !== 'openai') throw err;
     }
 
     if (id === 'openai' && integrationService.hasCredentials(id, values)) {

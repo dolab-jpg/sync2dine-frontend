@@ -519,11 +519,11 @@ export async function initWWebClient(options?: InitWWebOptions): Promise<void> {
       agentLog('H2', 'whatsapp-web-client.ts:qr', 'qr received', { qrLen: qr?.length ?? 0 });
       // #endregion
       console.log('WhatsApp QR code received — scan from admin panel or terminal:');
-      try {
-        import('qrcode-terminal').then((m) => m.default.generate(qr, { small: true }));
-      } catch {
-        console.log('QR:', qr);
-      }
+      void import('qrcode-terminal')
+        .then((m) => m.default.generate(qr, { small: true }))
+        .catch(() => {
+          console.log('QR (terminal render unavailable):', String(qr).slice(0, 48) + '…');
+        });
     });
 
     client.on('authenticated', () => {

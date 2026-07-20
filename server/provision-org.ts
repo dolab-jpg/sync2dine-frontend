@@ -167,7 +167,7 @@ export async function provisionOrganizationInSupabase(input: ProvisionOrgInput) 
       enabled: true,
       mock_mode: false,
       status: 'connected',
-      values: {
+      values_encrypted: {
         companyName: name,
         website: '',
         email: contactEmail,
@@ -199,7 +199,7 @@ export async function provisionOrganizationInSupabase(input: ProvisionOrgInput) 
 
 export function mapSupabaseOrgToApi(row: Record<string, unknown>) {
   const plan = String(row.plan ?? 'starter');
-  const planPrice: Record<string, number> = { starter: 99, pro: 199, enterprise: 499 };
+  const planPrice: Record<string, number> = { starter: 199, pro: 399, enterprise: 699 };
   const planLabel: Record<string, string> = {
     starter: 'Starter',
     pro: 'Pro',
@@ -219,7 +219,7 @@ export function mapSupabaseOrgToApi(row: Record<string, unknown>) {
       : '',
     monthlyTokenCap: Number(row.monthly_token_cap ?? 500000),
     tokensUsedThisMonth: 0,
-    monthlyPriceGbp: planPrice[plan] ?? 99,
+    monthlyPriceGbp: planPrice[plan] ?? 199,
     planLabel: planLabel[plan] ?? plan,
     stripeCustomerId: row.stripe_customer_id ? String(row.stripe_customer_id) : undefined,
     stripeSubscriptionId: row.stripe_subscription_id

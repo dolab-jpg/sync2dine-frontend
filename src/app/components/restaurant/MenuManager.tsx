@@ -20,7 +20,7 @@ import {
 /**
  * Restaurant food menu manager (Super Master C12).
  * Same Supabase `products` rows that the phone/kiosk agent reads via getMenu —
- * editing here changes what Lizzie offers on the next call.
+ * editing here changes what Judie offers on the next call.
  */
 
 const FOOD_CATEGORIES = [
@@ -220,7 +220,7 @@ export default function MenuManager() {
         ...payload,
         ...(form.category !== 'specials' || !deal ? { deal: undefined } : {}),
       } as Partial<Product>);
-      toast.success('Dish updated — Lizzie will offer the new details on the next call');
+      toast.success('Dish updated — Judie will offer the new details on the next call');
     } else {
       addProduct(payload as Omit<Product, 'id' | 'sellPrice'>);
       toast.success(deal ? 'Meal deal added to the menu' : 'Dish added to the menu');
@@ -249,7 +249,7 @@ export default function MenuManager() {
         <div>
           <h1 className="text-2xl font-extrabold text-s2d-teal-deep sm:text-3xl">Menu</h1>
           <p className="mt-1 text-sm text-s2d-teal-deep/70">
-            What Lizzie offers on calls and the kiosk — changes go live on the next call
+            What Judie offers on calls and the kiosk — changes go live on the next call
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -309,7 +309,7 @@ export default function MenuManager() {
             <p className="mb-4 text-s2d-teal-deep/60">
               {searchTerm || filterCategory !== 'all'
                 ? 'No dishes match your filters'
-                : 'No dishes yet — add your menu so Lizzie can take orders'}
+                : 'No dishes yet — add your menu so Judie can take orders'}
             </p>
             {!searchTerm && filterCategory === 'all' && (
               <Button onClick={openAdd} className="min-h-12 bg-s2d-teal-deep font-bold text-s2d-cream hover:bg-s2d-teal">
@@ -451,7 +451,7 @@ export default function MenuManager() {
               </div>
             </div>
             <div>
-              <Label htmlFor="dish-description">Description (optional — Lizzie can read it out)</Label>
+              <Label htmlFor="dish-description">Description (optional — Judie can read it out)</Label>
               <Textarea
                 id="dish-description"
                 value={form.description}
@@ -466,7 +466,7 @@ export default function MenuManager() {
                   Meal deal choices (comma-separated dish names from your menu)
                 </p>
                 <p className="text-xs text-amber-900/80">
-                  Lizzie will ask for one of each per deal when the customer orders 2× or 3×.
+                  Judie will ask for one of each per deal when the customer orders 2× or 3×.
                 </p>
                 <div>
                   <Label htmlFor="deal-mains">Mains</Label>

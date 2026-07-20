@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useContext, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useContext, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
@@ -13,8 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import {
   Phone, PhoneIncoming, PhoneOutgoing, Clock, MessageSquare,
-  RefreshCw, Play, Send, AlertCircle, Voicemail, Mic, Search,
-  ChevronDown, ChevronUp, User, ExternalLink, Power, Volume2, Plus, Trash2, Radio,
+  RefreshCw, Play, Send, AlertCircle, Voicemail, Search,
+  ChevronDown, ChevronUp, User, ExternalLink, Power, Plus, Trash2, Radio,
   PhoneForwarded, ShieldCheck, Globe, UserPlus, Pause, Square,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -173,12 +173,6 @@ export interface PhoneLine {
   purpose?: 'staff' | 'aria';
 }
 
-interface VoiceOption {
-  id: string;
-  name: string;
-  provider: string;
-}
-
 interface ContactLookupResult {
   found: boolean;
   name?: string;
@@ -223,6 +217,34 @@ const CAMPAIGN_TEMPLATES = [
   { value: 'customer_reorder', label: 'Reorder Reminder' },
   { value: 'lapse_winback', label: 'Lapse Win-back' },
 ];
+
+const SALES_CAMPAIGN_TEMPLATES = [
+  { value: 'sales_discovery', label: 'Sales · Discovery' },
+  { value: 'sales_demo_invite', label: 'Sales · Demo invite' },
+  { value: 'sales_quote_followup', label: 'Sales · Quote follow-up' },
+  { value: 'sales_contract_chase', label: 'Sales · Contract chase' },
+  { value: 'sales_onboarding', label: 'Sales · Onboarding' },
+  { value: 'sales_winback', label: 'Sales · Win-back' },
+];
+
+const SALES_AIM_OPTIONS = [
+  { value: 'discovery', label: 'Discovery / cold open' },
+  { value: 'demo', label: 'Book a demo' },
+  { value: 'quote_followup', label: 'Quote follow-up' },
+  { value: 'contract_chase', label: 'Contract / signature chase' },
+  { value: 'onboarding', label: 'Onboarding help' },
+  { value: 'winback', label: 'Win-back' },
+];
+
+const AIM_BRIEF: Record<string, string> = {
+  discovery: 'Open a Sync2Dine sales conversation: discover phone/order pain, pitch Judie and/or Atmosphere, aim for a demo.',
+  demo: 'Invite them to a short Sync2Dine demo of Judie (AI phone) and Atmosphere. Book a time.',
+  quote_followup: 'Follow up on a Sync2Dine quote already sent. Clarify packages, handle objections, move to contract.',
+  contract_chase: 'Chase signature on the Sync2Dine contract. Answer commercial questions; do not invent prices.',
+  onboarding: 'Help a signed restaurant get Judie live: menu, hours, first test call.',
+  winback: 'Re-open a previous Sync2Dine conversation — check if timing is better now.',
+  sales_outreach: 'Platform sales outreach for Sync2Dine — Judie + Atmosphere. Discovery then demo.',
+};
 
 function formatPhone(phone?: string | null): string {
   if (!phone) return 'Withheld / not provided';
@@ -284,13 +306,6 @@ export default function CallCenter() {
   const [loading, setLoading] = useState(false);
   const [togglingAgent, setTogglingAgent] = useState(false);
 
-  const [voices, setVoices] = useState<VoiceOption[]>([]);
-  const [activeVoiceId, setActiveVoiceId] = useState<string | null>(null);
-  const [voiceFallbackNote, setVoiceFallbackNote] = useState<string | null>(null);
-  const [voiceUploadName, setVoiceUploadName] = useState('');
-  const [voiceUploadFile, setVoiceUploadFile] = useState<File | null>(null);
-  const [uploadingVoice, setUploadingVoice] = useState(false);
-
   const [lookupPhone, setLookupPhone] = useState('');
   const [lookupResult, setLookupResult] = useState<ContactLookupResult | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -305,11 +320,14 @@ export default function CallCenter() {
     const aim = searchParams.get('aim');
     if (aim === 'callback') return 'lead_callback';
     if (aim === 'quote_chase') return 'quote_chase';
+    if (aim === 'discovery' || aim === 'sales_outreach') return 'sales_discovery';
+    if (aim === 'demo') return 'sales_demo_invite';
     return 'quote_chase';
   });
   const [outboundAim, setOutboundAim] = useState(() => searchParams.get('aim') || 'other');
   const [outboundCustomerId] = useState(() => searchParams.get('customerId') || '');
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [outboundCustomerName, setOutboundCustomerName] = useState(() => searchParams.get('name') || '');
+  const [outboundBrief, setOutboundBrief] = useState(() => searchParams.get('brief') || '');
 
   const [phoneLines, setPhoneLines] = useState<PhoneLine[]>([]);
   const [bridgeUrl, setBridgeUrl] = useState('');
@@ -340,8 +358,21 @@ export default function CallCenter() {
   const [queueSettingsSaving, setQueueSettingsSaving] = useState(false);
 
   const app = useContext(AppContext);
-  /** Platform sales shell uses Sally; restaurant tenants keep Lizzie (food orders). */
-  const agentLabel = getExperience(app?.user?.role ?? 'staff') === 'sales' ? 'Sally' : 'Lizzie';
+  /** Platform sales shell uses Sally; restaurant tenants use Judie (food orders). */
+  const experience = getExperience(app?.user?.role ?? 'staff');
+  const agentLabel = experience === 'sales' ? 'Sally' : experience === 'restaurant' ? 'Judie' : 'Cynthia';
+  const outboundTemplates = experience === 'sales' ? SALES_CAMPAIGN_TEMPLATES : CAMPAIGN_TEMPLATES;
+  const allTemplates = [...CAMPAIGN_TEMPLATES, ...SALES_CAMPAIGN_TEMPLATES];
+
+  useEffect(() => {
+    if (experience !== 'sales') return;
+    if (!outboundTemplate.startsWith('sales_')) {
+      setOutboundTemplate('sales_discovery');
+    }
+    if (!outboundAim || outboundAim === 'other' || outboundAim === 'jus') {
+      setOutboundAim('discovery');
+    }
+  }, [experience]); // eslint-disable-line react-hooks/exhaustive-deps — one-time sales defaults
   const isSalesShell = agentLabel === 'Sally';
   const [leadFormCallId, setLeadFormCallId] = useState<string | null>(null);
   const [leadFormName, setLeadFormName] = useState('');
@@ -349,38 +380,11 @@ export default function CallCenter() {
   const [leadFormNotes, setLeadFormNotes] = useState('');
   const [creatingLead, setCreatingLead] = useState(false);
 
-  const playLizzieAudio = useCallback(async (text: string) => {
-    if (!text.trim()) return;
-    try {
-      const res = await fetch('/api/agent/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          voiceId: activeVoiceId ?? undefined,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error ?? 'TTS failed');
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = audioRef.current ?? new Audio();
-      audio.src = url;
-      audioRef.current = audio;
-      await audio.play();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not play Lizzie voice');
-    }
-  }, [activeVoiceId]);
-
   const fetchSettings = useCallback(async () => {
     try {
       const res = await fetch('/api/agent/settings');
       const data = await res.json();
       setIsActive(data.isActive !== false);
-      setActiveVoiceId(data.activeVoiceId ?? null);
       if (data.leadCallbackPolicy === 'outbound_first' || data.leadCallbackPolicy === 'inbound_only' || data.leadCallbackPolicy === 'alert_only') {
         setLeadCallbackPolicy(data.leadCallbackPolicy);
       }
@@ -405,6 +409,9 @@ export default function CallCenter() {
     try {
       const res = await fetch('/api/agent/status');
       const data = await res.json();
+      // #region agent log
+      fetch('http://127.0.0.1:7610/ingest/e809fe57-584f-4b4e-8cfb-f3dee6b9facf',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'52f921'},body:JSON.stringify({sessionId:'52f921',runId:'inbound-vm',hypothesisId:'A',location:'CallCenter.tsx:fetchStatus',message:'agent status poll',data:{isActive:data.isActive!==false,canAcceptInboundAi:data?.capacity?.canAcceptInboundAi??null,totalActive:data?.capacity?.totalActive??null,todayTotalCalls:data?.todayStats?.totalCalls??null,linesRegistered:data?.linesSummary?.registered??null,linesTotal:data?.linesSummary?.total??null,activeCall:Boolean(data?.activeCall)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setAgentStatus(data);
       setIsActive(data.isActive !== false);
     } catch {
@@ -416,6 +423,9 @@ export default function CallCenter() {
     try {
       const res = await fetch('/api/calls?limit=20');
       const data = await res.json();
+      // #region agent log
+      fetch('http://127.0.0.1:7610/ingest/e809fe57-584f-4b4e-8cfb-f3dee6b9facf',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'52f921'},body:JSON.stringify({sessionId:'52f921',runId:'inbound-vm',hypothesisId:'D',location:'CallCenter.tsx:fetchCalls',message:'recent calls poll',data:{ok:res.ok,count:Array.isArray(data?.calls)?data.calls.length:0,latestDir:data?.calls?.[0]?.direction||null,latestStatus:data?.calls?.[0]?.status||null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setCalls(data.calls ?? []);
       setOutboundQueue(data.outboundQueue ?? []);
     } catch {
@@ -447,18 +457,6 @@ export default function CallCenter() {
     }
   }, [fetchCalls]);
 
-  const fetchVoices = useCallback(async () => {
-    try {
-      const res = await fetch('/api/agent/voices');
-      const data = await res.json();
-      setVoices(data.voices ?? []);
-      setActiveVoiceId(data.activeVoiceId ?? null);
-      setVoiceFallbackNote(data.fallback ? (data.message ?? 'Using OpenAI TTS fallback') : null);
-    } catch {
-      setVoiceFallbackNote('Could not load voices');
-    }
-  }, []);
-
   const fetchLines = useCallback(async () => {
     try {
       const res = await fetch('/api/agent/lines');
@@ -482,9 +480,9 @@ export default function CallCenter() {
 
   const refreshAll = useCallback(async () => {
     setLoading(true);
-    await Promise.all([fetchSettings(), fetchStatus(), fetchCalls(), fetchVoices(), fetchLines(), fetchTransferNumbers()]);
+    await Promise.all([fetchSettings(), fetchStatus(), fetchCalls(), fetchLines(), fetchTransferNumbers()]);
     setLoading(false);
-  }, [fetchSettings, fetchStatus, fetchCalls, fetchVoices, fetchLines, fetchTransferNumbers]);
+  }, [fetchSettings, fetchStatus, fetchCalls, fetchLines, fetchTransferNumbers]);
 
   useEffect(() => { refreshAll(); }, [refreshAll]);
 
@@ -528,45 +526,6 @@ export default function CallCenter() {
     }
   }
 
-  async function selectVoice(voiceId: string) {
-    try {
-      const res = await fetch('/api/agent/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ activeVoiceId: voiceId }),
-      });
-      const data = await res.json();
-      setActiveVoiceId(data.activeVoiceId ?? voiceId);
-      toast.success('Active voice updated');
-    } catch {
-      toast.error('Failed to set active voice');
-    }
-  }
-
-  async function uploadVoice() {
-    if (!voiceUploadName.trim() || !voiceUploadFile) {
-      toast.error('Enter a name and select a WAV file');
-      return;
-    }
-    setUploadingVoice(true);
-    try {
-      const form = new FormData();
-      form.append('name', voiceUploadName.trim());
-      form.append('file', voiceUploadFile);
-      const res = await fetch('/api/agent/voices', { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Upload failed');
-      toast.success('Voice uploaded to Chatterbox (legacy — does not change live phone TTS)');
-      setVoiceUploadName('');
-      setVoiceUploadFile(null);
-      fetchVoices();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Upload failed');
-    } finally {
-      setUploadingVoice(false);
-    }
-  }
-
   async function runContactLookup() {
     if (!lookupPhone.trim()) return;
     setLookupLoading(true);
@@ -596,7 +555,6 @@ export default function CallCenter() {
       setTestCallId(data.callId);
       const agentLine = data.speak;
       setTestTranscript([{ role: 'agent', content: agentLine }]);
-      if (agentLine) void playLizzieAudio(agentLine);
       fetchCalls();
       fetchStatus();
     } catch {
@@ -622,7 +580,6 @@ export default function CallCenter() {
       setTestCallId(data.callId);
       const agentLine = data.speak;
       setTestTranscript(prev => [...prev, { role: 'agent', content: agentLine }]);
-      if (agentLine) void playLizzieAudio(agentLine);
       fetchCalls();
       fetchStatus();
     } catch {
@@ -728,7 +685,7 @@ export default function CallCenter() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to save');
       setTransferNumbers(data.transferNumbers ?? transferNumbers);
-      toast.success('Transfer numbers saved — Lizzie will use these for live handoffs');
+      toast.success(`Transfer numbers saved — ${agentLabel} will use these for live handoffs`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save transfer numbers');
     } finally {
@@ -793,6 +750,12 @@ export default function CallCenter() {
       toast.error('Enter a phone number');
       return;
     }
+    const aim = (outboundAim || '').trim() || (experience === 'sales' ? 'discovery' : 'other');
+    const brief =
+      (outboundBrief || '').trim()
+      || AIM_BRIEF[aim]
+      || (aim !== 'other' ? aim : undefined);
+    const contactName = outboundCustomerName.trim();
     try {
       const res = await fetch('/api/calls/outbound', {
         method: 'POST',
@@ -801,16 +764,21 @@ export default function CallCenter() {
           to: outboundTo,
           template: outboundTemplate,
           context: {
-            aim: outboundAim,
-            brief: outboundAim,
+            aim,
+            brief: brief || aim,
             customerId: outboundCustomerId || undefined,
+            customerName: contactName || undefined,
+            name: contactName || undefined,
             source: 'call_centre',
+            agentPersona: experience === 'sales' || outboundTemplate.startsWith('sales_')
+              ? 'sally'
+              : undefined,
           },
         }),
       });
       const data = await res.json();
       if (data.success) {
-        toast.success('Outbound call queued');
+        toast.success(experience === 'sales' ? 'Sally outbound queued' : 'Outbound call queued');
         setOutboundTo('');
         fetchCalls();
       } else {
@@ -952,7 +920,7 @@ export default function CallCenter() {
                 <p className="font-semibold text-slate-900">AI Agent Master Switch</p>
                 <p className="text-sm text-slate-600">
                   {isActive
-                    ? (isSalesShell ? 'Sally can place outbound sales calls' : 'Lizzie is answering inbound calls')
+                    ? (isSalesShell ? 'Sally can place outbound sales calls' : `${agentLabel} is answering inbound calls`)
                     : `${agentLabel} is paused — calls will not be answered`}
                 </p>
               </div>
@@ -1315,113 +1283,62 @@ export default function CallCenter() {
             </CardContent>
           </Card>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            {/* Section 4: Voice settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Mic className="w-5 h-5" />
-                  Voice Settings
-                </CardTitle>
-                {voiceFallbackNote && (
-                  <CardDescription className="text-amber-700">{voiceFallbackNote}</CardDescription>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-2">
-                  {voices.map(v => (
-                    <button
-                      key={v.id}
-                      type="button"
-                      onClick={() => selectVoice(v.id)}
-                      className={`p-3 rounded-lg border text-left text-sm transition-colors ${
-                        activeVoiceId === v.id ? 'border-amber-500 bg-amber-50 ring-1 ring-amber-400' : 'hover:bg-slate-50'
-                      }`}
-                    >
-                      <p className="font-medium">{v.name}</p>
-                      <p className="text-xs text-slate-400 capitalize">{v.provider}</p>
-                    </button>
-                  ))}
-                </div>
-                <div className="border-t pt-4 space-y-3">
-                  <p className="text-sm font-medium text-slate-700">Live phone voice</p>
-                  <p className="text-xs text-slate-500">
-                    Real calls use <strong>Vapi + ElevenLabs</strong> (female Cockney). Configure
-                    <code className="mx-1">VAPI_ELEVENLABS_VOICE_ID</code> on the API host — see docs/VOICE_SETUP.md.
-                    Chatterbox WAV upload below is legacy / mock only and does not change live phone TTS.
-                  </p>
-                  <p className="text-sm font-medium text-slate-700 pt-2">Legacy: upload cloned voice (WAV)</p>
-                  <Input
-                    placeholder="Voice name"
-                    value={voiceUploadName}
-                    onChange={e => setVoiceUploadName(e.target.value)}
-                  />
-                  <Input
-                    type="file"
-                    accept=".wav,audio/wav"
-                    onChange={e => setVoiceUploadFile(e.target.files?.[0] ?? null)}
-                  />
-                  <Button onClick={uploadVoice} disabled={uploadingVoice} variant="outline" className="w-full">
-                    {uploadingVoice ? 'Uploading…' : 'Upload to Chatterbox (legacy)'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Section 5: Contact lookup test */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Search className="w-5 h-5" />
-                  Contact Lookup Test
-                </CardTitle>
-                <CardDescription>Verify CRM connection before go-live</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="447700900123"
-                    value={lookupPhone}
-                    onChange={e => setLookupPhone(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && runContactLookup()}
-                  />
-                  <Button onClick={runContactLookup} disabled={lookupLoading}>
-                    <Search className="w-4 h-4" />
-                  </Button>
-                </div>
-                {lookupResult && (
-                  lookupResult.found ? (
-                    <div className="p-4 rounded-lg border bg-white space-y-2">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-slate-400" />
-                        <span className="font-semibold">{lookupResult.name}</span>
-                        <Badge variant="secondary">{lookupResult.status}</Badge>
-                      </div>
-                      {lookupResult.accountValue != null && (
-                        <p className="text-sm text-slate-600">Account value: £{lookupResult.accountValue.toLocaleString('en-GB')}</p>
-                      )}
-                      {lookupResult.lastInteraction && (
-                        <p className="text-sm text-slate-600">Last interaction: {formatTime(lookupResult.lastInteraction)}</p>
-                      )}
-                      {lookupResult.customerId && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(`/crm?customerId=${lookupResult.customerId}`)}
-                        >
-                          Open in CRM
-                        </Button>
-                      )}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Search className="w-5 h-5" />
+                Contact Lookup Test
+              </CardTitle>
+              <CardDescription>Verify CRM connection before go-live</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  dir="ltr"
+                  placeholder="447700900123"
+                  value={lookupPhone}
+                  onChange={e => setLookupPhone(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && runContactLookup()}
+                />
+                <Button onClick={runContactLookup} disabled={lookupLoading}>
+                  <Search className="w-4 h-4" />
+                </Button>
+              </div>
+              {lookupResult && (
+                lookupResult.found ? (
+                  <div className="p-4 rounded-lg border bg-white space-y-2">
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-slate-400" />
+                      <span className="font-semibold">{lookupResult.name}</span>
+                      <Badge variant="secondary">{lookupResult.status}</Badge>
                     </div>
-                  ) : (
-                    <p className="text-sm text-slate-600 p-4 rounded-lg border bg-slate-50">
-                      {lookupResult.message ?? 'Lizzie will create a new contact when this number calls.'}
-                    </p>
-                  )
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                    {lookupResult.accountValue != null && (
+                      <p className="text-sm text-slate-600">Account value: £{lookupResult.accountValue.toLocaleString('en-GB')}</p>
+                    )}
+                    {lookupResult.lastInteraction && (
+                      <p className="text-sm text-slate-600">Last interaction: {formatTime(lookupResult.lastInteraction)}</p>
+                    )}
+                    {lookupResult.customerId && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate(`/crm?customerId=${lookupResult.customerId}`)}
+                      >
+                        Open in CRM
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-600 p-4 rounded-lg border bg-slate-50">
+                    {lookupResult.message ?? `${agentLabel} will create a new contact when this number calls.`}
+                  </p>
+                )
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="lines" className="mt-4 space-y-4">
@@ -1434,7 +1351,7 @@ export default function CallCenter() {
               <CardDescription>
                 {isSalesShell
                   ? 'Where Sally puts callers through for a human. Sales should be your softphone DID (e.g. 02037732809) so warm transfers ring your extension.'
-                  : 'Where Lizzie puts calls through when she or the caller asks for a human. Leave blank to only take a message for that department.'}
+                  : `Where ${agentLabel} puts calls through when she or the caller asks for a human. Leave blank to only take a message for that department.`}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1443,6 +1360,10 @@ export default function CallCenter() {
                   <div key={dept.key}>
                     <Label>{dept.label}</Label>
                     <Input
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      dir="ltr"
                       value={transferNumbers[dept.key] ?? ''}
                       onChange={(e) => setTransferNumbers((prev) => ({ ...prev, [dept.key]: e.target.value }))}
                       placeholder={dept.placeholder}
@@ -1463,7 +1384,7 @@ export default function CallCenter() {
                 Call Queue & AI dial settings
               </CardTitle>
               <CardDescription>
-                Controls CRM “Call this person” defaults, lead callback policy, and how Lizzie notes outcomes after dials.
+                Controls CRM “Call this person” defaults, lead callback policy, and how {agentLabel} notes outcomes after dials.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1489,7 +1410,7 @@ export default function CallCenter() {
                   className="mt-1 min-h-[80px]"
                   value={defaultOutboundBrief}
                   onChange={(e) => setDefaultOutboundBrief(e.target.value)}
-                  placeholder="What Lizzie should cover by default…"
+                  placeholder={`What ${agentLabel} should cover by default…`}
                 />
               </div>
               <div>
@@ -1498,7 +1419,7 @@ export default function CallCenter() {
                   className="mt-1 min-h-[60px]"
                   value={postCallNotePrompt}
                   onChange={(e) => setPostCallNotePrompt(e.target.value)}
-                  placeholder="What Lizzie must capture after every call…"
+                  placeholder={`What ${agentLabel} must capture after every call…`}
                 />
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
@@ -1615,7 +1536,7 @@ export default function CallCenter() {
                     Soho66 Phone Lines
                   </CardTitle>
                   <CardDescription>
-                    Lizzie AI lines use purpose "aria" (compat) and answer via Vapi + Soho66. Staff softphones use Calls → Soft Phone.
+                    {agentLabel} AI lines use purpose "aria" (compat) and answer via Vapi + Soho66. Staff softphones use Calls → Soft Phone.
                   </CardDescription>
                 </div>
                 <Button onClick={registerAllLines} disabled={registeringLines || phoneLines.length === 0}>
@@ -1634,7 +1555,7 @@ export default function CallCenter() {
                     <p className="font-medium text-slate-900">{line.label}</p>
                     <p className="text-sm text-slate-600">{line.sipUsername}@{line.sipDomain} · {formatPhone(line.did)}</p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {(line.purpose ?? 'staff') === 'aria' ? 'Lizzie AI' : 'Staff softphone'}
+                      {(line.purpose ?? 'staff') === 'aria' ? `${agentLabel} AI` : 'Staff softphone'}
                       {line.assignedUserId ? ` · user ${line.assignedUserId}` : ''}
                     </p>
                     {line.lastError && <p className="text-xs text-red-600 mt-1">{line.lastError}</p>}
@@ -1667,7 +1588,15 @@ export default function CallCenter() {
                 </div>
                 <div>
                   <Label>DID (phone number)</Label>
-                  <Input value={lineForm.did} onChange={e => setLineForm(f => ({ ...f, did: e.target.value }))} placeholder="+442012345678" />
+                  <Input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    dir="ltr"
+                    value={lineForm.did}
+                    onChange={e => setLineForm(f => ({ ...f, did: e.target.value }))}
+                    placeholder="+442012345678"
+                  />
                 </div>
                 <div>
                   <Label>SIP Username</Label>
@@ -1689,7 +1618,7 @@ export default function CallCenter() {
                     onChange={e => setLineForm(f => ({ ...f, purpose: e.target.value as 'staff' | 'aria' }))}
                   >
                     <option value="staff">Staff softphone</option>
-                    <option value="aria">Lizzie AI (Vapi)</option>
+                    <option value="aria">{agentLabel} AI (Vapi)</option>
                   </select>
                 </div>
                 <div>
@@ -1745,7 +1674,15 @@ export default function CallCenter() {
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <Label>Caller Number</Label>
-                  <Input value={testFrom} onChange={e => setTestFrom(e.target.value)} placeholder="447700900123" />
+                  <Input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    dir="ltr"
+                    value={testFrom}
+                    onChange={e => setTestFrom(e.target.value)}
+                    placeholder="447700900123"
+                  />
                 </div>
                 <div className="flex items-end">
                   <Button onClick={startTestCall} disabled={testRunning} className="w-full">
@@ -1757,28 +1694,13 @@ export default function CallCenter() {
               {testTranscript.length > 0 && (
                 <div className="border rounded-lg p-4 space-y-3 max-h-[300px] overflow-y-auto bg-slate-50">
                   {testTranscript.map((turn, i) => (
-                    <div key={i} className={`p-2 rounded text-sm flex gap-2 ${turn.role === 'agent' ? 'bg-amber-100' : 'bg-white border'}`}>
-                      <div className="flex-1">
-                        <span className="font-medium text-xs text-slate-500">{turn.role === 'agent' ? 'Lizzie:' : 'You:'}</span>{' '}
-                        {turn.content}
-                      </div>
-                      {turn.role === 'agent' && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="shrink-0 h-7 w-7 p-0"
-                          onClick={() => playLizzieAudio(turn.content)}
-                          title="Play Lizzie voice"
-                        >
-                          <Volume2 className="w-4 h-4" />
-                        </Button>
-                      )}
+                    <div key={i} className={`p-2 rounded text-sm ${turn.role === 'agent' ? 'bg-amber-100' : 'bg-white border'}`}>
+                      <span className="font-medium text-xs text-slate-500">{turn.role === 'agent' ? `${agentLabel}:` : 'You:'}</span>{' '}
+                      {turn.content}
                     </div>
                   ))}
                 </div>
               )}
-              <audio ref={audioRef} className="hidden" />
               {testCallId && (
                 <div className="flex gap-2">
                   <Input
@@ -1806,29 +1728,80 @@ export default function CallCenter() {
               <CardContent className="space-y-4">
                 <div>
                   <Label>To Number</Label>
-                  <Input value={outboundTo} onChange={e => setOutboundTo(e.target.value)} placeholder="+447700900123" />
+                  <Input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    dir="ltr"
+                    value={outboundTo}
+                    onChange={e => setOutboundTo(e.target.value)}
+                    placeholder="+447700900123"
+                  />
                 </div>
                 <div>
                   <Label>Campaign Template</Label>
                   <Select value={outboundTemplate} onValueChange={setOutboundTemplate}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {CAMPAIGN_TEMPLATES.map(t => (
+                      {outboundTemplates.map(t => (
                         <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Call aim</Label>
+                  <Label>Contact name (optional)</Label>
                   <Input
-                    value={outboundAim}
-                    onChange={(e) => setOutboundAim(e.target.value)}
-                    placeholder="discovery, callback, trial_followup…"
+                    value={outboundCustomerName}
+                    onChange={(e) => setOutboundCustomerName(e.target.value)}
+                    placeholder="Restaurant owner name — never leave blank as Guest"
                   />
+                </div>
+                <div>
+                  <Label>Call aim</Label>
+                  {experience === 'sales' ? (
+                    <Select
+                      value={SALES_AIM_OPTIONS.some((a) => a.value === outboundAim) ? outboundAim : 'discovery'}
+                      onValueChange={(v) => {
+                        setOutboundAim(v);
+                        if (!outboundBrief.trim() && AIM_BRIEF[v]) setOutboundBrief(AIM_BRIEF[v]);
+                        const templateForAim: Record<string, string> = {
+                          discovery: 'sales_discovery',
+                          demo: 'sales_demo_invite',
+                          quote_followup: 'sales_quote_followup',
+                          contract_chase: 'sales_contract_chase',
+                          onboarding: 'sales_onboarding',
+                          winback: 'sales_winback',
+                        };
+                        if (templateForAim[v]) setOutboundTemplate(templateForAim[v]);
+                      }}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {SALES_AIM_OPTIONS.map((a) => (
+                          <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={outboundAim}
+                      onChange={(e) => setOutboundAim(e.target.value)}
+                      placeholder="callback, quote_chase…"
+                    />
+                  )}
                   {outboundCustomerId && (
                     <p className="text-xs text-slate-500 mt-1">Linked CRM lead: {outboundCustomerId}</p>
                   )}
+                </div>
+                <div>
+                  <Label>Brief for {agentLabel}</Label>
+                  <Textarea
+                    value={outboundBrief}
+                    onChange={(e) => setOutboundBrief(e.target.value)}
+                    placeholder={AIM_BRIEF[outboundAim] || 'What should the agent achieve on this call?'}
+                    rows={3}
+                  />
                 </div>
                 <Button onClick={queueOutbound} className="w-full">
                   <PhoneOutgoing className="w-4 h-4 mr-2" />
@@ -1849,7 +1822,7 @@ export default function CallCenter() {
                       <Badge variant={job.status === 'failed' ? 'destructive' : 'secondary'}>{job.status}</Badge>
                     </div>
                     <p className="text-xs text-slate-500 mt-1">
-                      {CAMPAIGN_TEMPLATES.find(t => t.value === job.template)?.label ?? job.template}
+                      {allTemplates.find(t => t.value === job.template)?.label ?? job.template}
                       {' · '}{formatTime(job.createdAt)}
                     </p>
                   </div>

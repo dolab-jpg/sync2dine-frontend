@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { decryptSecret, encryptSecret } from './crypto';
 import { BDIDDIES_HOME_ORG_ID, BDIDDIES_HOME_ORG_LEGACY_ID, BDIDDIES_COMPANY, getHomeOrgId } from './home-org';
 import { setCompanySettings } from './conversation-store';
+import { SAAS_PACKAGES, monthlyEquivalentFromWeekly } from './saas-packages';
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), 'data');
 const ORGS_FILE = join(DATA_DIR, 'organizations.json');
@@ -11,14 +12,74 @@ const ORGS_FILE = join(DATA_DIR, 'organizations.json');
 export type OrgStatus = 'trial' | 'active' | 'past_due' | 'suspended' | 'cancelled';
 export type OrgPlan = 'starter' | 'pro' | 'enterprise';
 
-export const PLAN_CONFIG: Record<
-  OrgPlan,
-  { label: string; monthlyPriceGbp: number; monthlyTokenCap: number }
-> = {
-  starter: { label: 'Starter', monthlyPriceGbp: 99, monthlyTokenCap: 500_000 },
-  pro: { label: 'Pro', monthlyPriceGbp: 199, monthlyTokenCap: 2_000_000 },
-  enterprise: { label: 'Enterprise', monthlyPriceGbp: 499, monthlyTokenCap: 10_000_000 },
+export type PlanConfig = {
+  label: string;
+  badge?: string;
+  /** Monthly equivalent of launch weekly (legacy UI / Stripe price_data fallbacks). */
+  monthlyPriceGbp: number;
+  weeklyPriceGbp: number;
+  standardWeeklyGbp: number;
+  annualPrepayGbp: number;
+  /** Weekly included Judie AI minutes. */
+  includedAiMinutes: number;
+  aiOverageGbpPerMinute: number;
+  /** Weekly token cap (field name kept for org store compatibility). */
+  monthlyTokenCap: number;
+  includedOutboundMinutes: number;
+  hardStopMultiplier: number;
+  packageId: string;
 };
+
+const _starter = SAAS_PACKAGES.judie_starter;
+const _pro = SAAS_PACKAGES.judie_pro;
+const _enterprise = SAAS_PACKAGES.judie_enterprise;
+
+export const PLAN_CONFIG: Record<OrgPlan, PlanConfig> = {
+  starter: {
+    label: 'Judie Starter',
+    badge: 'Most Popular',
+    monthlyPriceGbp: monthlyEquivalentFromWeekly(_starter.launchWeeklyGbp),
+    weeklyPriceGbp: _starter.launchWeeklyGbp,
+    standardWeeklyGbp: _starter.standardWeeklyGbp,
+    annualPrepayGbp: _starter.annualPrepayGbp,
+    includedAiMinutes: _starter.weeklyAiMinutes,
+    aiOverageGbpPerMinute: _starter.aiOverageGbpPerMinute,
+    monthlyTokenCap: _starter.weeklyTokenCap,
+    includedOutboundMinutes: _starter.weeklyOutboundMinutes,
+    hardStopMultiplier: 2,
+    packageId: 'judie_starter',
+  },
+  pro: {
+    label: 'Judie Pro',
+    monthlyPriceGbp: monthlyEquivalentFromWeekly(_pro.launchWeeklyGbp),
+    weeklyPriceGbp: _pro.launchWeeklyGbp,
+    standardWeeklyGbp: _pro.standardWeeklyGbp,
+    annualPrepayGbp: _pro.annualPrepayGbp,
+    includedAiMinutes: _pro.weeklyAiMinutes,
+    aiOverageGbpPerMinute: _pro.aiOverageGbpPerMinute,
+    monthlyTokenCap: _pro.weeklyTokenCap,
+    includedOutboundMinutes: _pro.weeklyOutboundMinutes,
+    hardStopMultiplier: 2,
+    packageId: 'judie_pro',
+  },
+  enterprise: {
+    label: 'Judie Enterprise',
+    monthlyPriceGbp: monthlyEquivalentFromWeekly(_enterprise.launchWeeklyGbp),
+    weeklyPriceGbp: _enterprise.launchWeeklyGbp,
+    standardWeeklyGbp: _enterprise.standardWeeklyGbp,
+    annualPrepayGbp: _enterprise.annualPrepayGbp,
+    includedAiMinutes: _enterprise.weeklyAiMinutes,
+    aiOverageGbpPerMinute: _enterprise.aiOverageGbpPerMinute,
+    monthlyTokenCap: _enterprise.weeklyTokenCap,
+    includedOutboundMinutes: _enterprise.weeklyOutboundMinutes,
+    hardStopMultiplier: 2,
+    packageId: 'judie_enterprise',
+  },
+};
+
+/** Token overage: tracked USD cost × FX × markup → GBP. */
+export const TOKEN_OVERAGE_FX = 0.79;
+export const TOKEN_OVERAGE_MARKUP = 2.0;
 
 export type AIBrainProvider = 'openai' | 'deepseek';
 
