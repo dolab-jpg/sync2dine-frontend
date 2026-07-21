@@ -124,7 +124,12 @@ export default function CallContextChip({
           View call
         </Button>
       ) : null}
-      <CallRecordingPlayer url={recordingUrl} compact />
+      <CallRecordingPlayer
+        callId={callId}
+        recordingUrl={recordingUrl}
+        playbackPath={callId ? `/api/calls/${encodeURIComponent(callId)}/recording` : undefined}
+        compact
+      />
     </div>
   );
 }

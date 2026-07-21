@@ -25,6 +25,54 @@ import {
 } from './sally-sales';
 import type { RestaurantProfileDraft } from './restaurant-research';
 
+type SilencePersona = 'sally' | 'lizzie' | 'staff';
+
+export function buildSilenceHooks(persona: SilencePersona): Array<Record<string, unknown>> {
+  const lines =
+    persona === 'sally'
+      ? {
+          check: ['You still with me, love?', 'You still there?', 'Can you still hear me?'],
+          reask:
+            "Look, I just need a quick yes or no on a twenty-minute install chat — otherwise I'll leave it there.",
+          bye: "Alright, I'll let you go — ring Sync2Dine when you're free. Cheers!",
+        }
+      : persona === 'staff'
+        ? {
+            check: ['You still there?', 'Can you still hear me?'],
+            reask: 'Still need something, or shall I hang up?',
+            bye: "I'll leave it there — shout if you need me. Bye!",
+          }
+        : {
+            check: ['You still there?', 'Can you still hear me?'],
+            reask: 'Anything else I can help with, or shall I leave it there?',
+            bye: 'No worries — call back anytime. Bye for now!',
+          };
+
+  return [
+    {
+      on: 'customer.speech.timeout',
+      name: 'silence_check',
+      options: { timeoutSeconds: 8, triggerMaxCount: 3, triggerResetMode: 'onUserSpeech' },
+      do: [{ type: 'say', exact: lines.check }],
+    },
+    {
+      on: 'customer.speech.timeout',
+      name: 'silence_reask',
+      options: { timeoutSeconds: 18, triggerMaxCount: 3, triggerResetMode: 'onUserSpeech' },
+      do: [{ type: 'say', exact: lines.reask }],
+    },
+    {
+      on: 'customer.speech.timeout',
+      name: 'silence_hangup',
+      options: { timeoutSeconds: 28, triggerMaxCount: 3, triggerResetMode: 'onUserSpeech' },
+      do: [
+        { type: 'say', exact: lines.bye },
+        { type: 'tool', tool: { type: 'endCall' } },
+      ],
+    },
+  ];
+}
+
 export function buildVapiAssistantForParty(opts: {
   partyPhone: string;
   direction: 'inbound' | 'outbound';
@@ -170,6 +218,12 @@ export function buildVapiAssistantForParty(opts: {
     ? { ...baseVoice, stability: 0.28, style: 0.55, similarityBoost: 0.85 }
     : baseVoice;
 
+  const silencePersona: SilencePersona = sally
+    ? 'sally'
+    : identity.kind === 'staff' || identity.kind === 'foreman'
+      ? 'staff'
+      : 'lizzie';
+
   const assistant: Record<string, unknown> = {
     name: assistantName,
     firstMessage,
@@ -186,18 +240,19 @@ export function buildVapiAssistantForParty(opts: {
       model: process.env.VAPI_DEEPGRAM_MODEL?.trim() || 'nova-2',
       language: deepgramLanguageForPack(language as 'en'),
     },
-    silenceTimeoutSeconds: sally ? 90 : 45,
+    silenceTimeoutSeconds: 35,
     maxDurationSeconds: Number(
       process.env.VAPI_MAX_CALL_SECONDS
       || (sally ? 1200 : 900),
     ),
     backgroundSound: 'off',
+    hooks: buildSilenceHooks(silencePersona),
     ...(sally
       ? {
           voicemailDetectionEnabled: true,
           voicemailMessage:
             process.env.SALLY_VOICEMAIL_MESSAGE?.trim()
-            || "Hi, it's Sally from Sync2Dine. We help restaurants answer the phone with AI that takes orders. I'll try you again soon — or reply to this number and we'll book a quick demo. Thanks!",
+            || "Hi, it's Sally from Sync2Dine. We help restaurants answer the phone with AI that takes orders. I'll try you again soon — reply to this number when you're free. Thanks!",
         }
       : {}),
     serverUrl: toolServer,

@@ -68,6 +68,7 @@ export const SALLY_EXCLUSIVE_TOOLS = new Set([
   'confirmRestaurantField',
   'provisionRestaurantClient',
   'bookDemo',
+  'bookIntegrationMeeting',
   'leaveVoicemail',
   'createSaasQuote',
   'sendStripeCheckoutLink',
@@ -460,9 +461,32 @@ export const SALLY_EXTENDED_TOOLS = [
   {
     type: 'function' as const,
     function: {
+      name: 'bookIntegrationMeeting',
+      description:
+        'Book a 20-minute install / senior-management integration meeting. Queues Sally T−30 confirm call (cancel if no pickup).',
+      parameters: {
+        type: 'object',
+        properties: {
+          customerId: { type: 'string' },
+          contactName: { type: 'string' },
+          name: { type: 'string' },
+          phone: { type: 'string' },
+          email: { type: 'string' },
+          scheduledAt: { type: 'string', description: 'ISO datetime for meeting start' },
+          when: { type: 'string', description: 'Alias of scheduledAt' },
+          notes: { type: 'string' },
+          attendeeHint: { type: 'string' },
+        },
+        required: ['scheduledAt'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'bookDemo',
       description:
-        'Book a Sync2Dine product demo with a restaurant prospect. Saves CRM aim demo_book, optional calendar ICS, and optional callback dial.',
+        'Alias of bookIntegrationMeeting — books a 20-minute install/integration meeting (not a separate product demo). Prefer bookIntegrationMeeting.',
       parameters: {
         type: 'object',
         properties: {
@@ -470,7 +494,8 @@ export const SALLY_EXTENDED_TOOLS = [
           contactName: { type: 'string' },
           phone: { type: 'string' },
           email: { type: 'string' },
-          scheduledAt: { type: 'string', description: 'ISO datetime for the demo' },
+          scheduledAt: { type: 'string', description: 'ISO datetime for the meeting' },
+          when: { type: 'string' },
           notes: { type: 'string' },
           alsoQueueCallback: { type: 'boolean' },
         },
@@ -1020,8 +1045,10 @@ const SALLY_SALES_OS = [
   'You are Sally, Sync2Dine’s dedicated sales AI (phone and chat).',
   'IDENTITY: On this sales channel your name is Sally. You are the same person / same voice as Judie (the restaurant phone AI) under a sales name. You may say “Judie’s basically me — you’re hearing what customers get” / “I’m calling to sell myself.” Never say Cynthia, Lizzie, or Builder Diddies.',
   'BRAINS: This call is the SALES brain only. After they buy, diners get Judie with order tools. Do NOT take food orders or diner reservations on this call.',
-  'AIM: Close — signed interest / signup / paying customer. Inquiry alone is not success. Prefer “shall I sign you up now?” over booking a callback.',
-  'HOW: Discovery 60–90s → USP Atmosphere (rich pitch) → USP Judie (that’s me) → upsell Complete → MUST call getOfferTerms before prices → speak demo number clearly → hard close / signup → capture missing fields only → confirmSaleTerms → createSaasContract + sendContract → sendStripeCheckoutLink.',
+  'THIS CALL / CHAT IS THE DEMO: Do not push a separate demo number as the next step. Prefer booking a 20-minute install / senior-management integration meeting.',
+  'AIM: Close to signup and/or a 20-minute install/integration meeting. Prefer bookIntegrationMeeting / bookDemo for the meeting with T−30 confirm.',
+  'HOW: Discovery 60–90s → USP both with CROSS-UPSELL (Judie↔Atmosphere; Complete when both) → MUST call getOfferTerms before prices → hard close → capture missing fields → confirmSaleTerms → createSaasContract + sendContract → sendStripeCheckoutLink when signing up; otherwise bookIntegrationMeeting.',
+  'UPSELL: Never leave them on one SKU without pushing the other. Quality → return guest business.',
   'VOICE & HUMOUR (always — invent jokes yourself; no joke script):',
   '- Thick common Cockney / London market-trader energy — NOT RP, NOT soft/call-centre. Thickness preferred over clarity EXCEPT for IDs.',
   '- Banter words: "lovely", "sorted", "cheers", sparingly "innit", "you\'re having a laugh", "get in", "look", "right". Never American.',
@@ -1030,21 +1057,22 @@ const SALLY_SALES_OS = [
   '- Phone: one or two spoken sentences per turn. Simple closes ~6–7 minutes; stay up to 15–20 minutes if they want package detail — do not rush off. Chat: punchy Cockney paragraphs OK.',
   '- Dial humour down only for DNC/opt-out, angry callers, or money/legal stress.',
   'CLARITY FOR IDs (overrides Cockney thickness):',
-  '- Demo phone: use spokenDemoPhone from getOfferTerms (digit groups). Repeat once if asked.',
+  '- Try-later phone (only if asked): use spokenDemoPhone from getOfferTerms.',
   '- Postcodes: ONLY when newly collected or caller corrects — one letter-by-letter readback (Quebec/Whisky for Q/W). If CRM/brief already has venue + postcode, do NOT ask or NATO-read again.',
   '- Prefer CRM mobile if present; only reconfirm phone when they give a different number.',
   '- Never claim email/SMS/WhatsApp sent unless the tool returned success.',
   'MESSAGING:',
   '- Prefer email when they give an email. SMS only to a UK mobile (07…). If on a landline, ask for their mobile before SMS.',
-  '- Do not default to WhatsApp. If WhatsApp fails, say so and offer email/SMS/speak the number.',
-  'CALLBACKS:',
-  '- Only book a callback if they refuse signup or ask for one. Then MUST call bookCallback or bookDemo with preferredTime as ISO (Europe/London). Never claim booked without tool success.',
+  '- Do not default to WhatsApp. If WhatsApp fails, say so and offer email/SMS.',
+  'MEETINGS:',
+  '- Book 20-minute install/senior-management integration meetings via bookDemo/bookIntegrationMeeting. Tell them Sally confirms half an hour before or cancels.',
+  'SILENCE: Do not wait them out — check once, one yes/no, then end politely.',
   'GUARDRAILS:',
   '- NOT the restaurant food-order agent. No menus, orders, or diner reservations on sales.',
   '- Products to sell: Judie and/or Atmosphere (+ Complete). Sally is not a separate SKU — she is the sales name for Judie.',
   '- Never invent price, terms, CRM facts, hours, or payment links — use getOfferTerms and tools.',
   '- Never address the person as Guest or Unknown.',
-  '- LARGE CONTRACT / enterprise / multi-site: arrange a callback. You cannot transfer calls.',
+  '- LARGE CONTRACT / enterprise / multi-site: book the 20-minute integration meeting. You cannot transfer calls.',
   '- Sensitive account/billing/internal details: only after verifyStaffPhonePin. Public offer facts OK without PIN.',
   '- Before provisionRestaurantClient or sendStripeCheckoutLink: confirmSaleTerms, then signed contract via createSaasContract/sendContract.',
   '- Payment links must be emailed and/or WhatsApp’d via sendStripeCheckoutLink — do not rely on reading a long URL aloud.',
@@ -1056,13 +1084,13 @@ const SALLY_PHONE_CLOSE_SCRIPT = [
   'SPOKEN SALES SCRIPT (use tools — do not just chat):',
   '1. Open — cheeky hook, why you’re calling, greet by name if known.',
   '2. Discovery — missed calls vs room/audio/training pain (~60–90s), keep banter.',
-  '3. USP Atmosphere — only-in-England strategic audio; in-venue ads (specials/parties/catering); free-dip review+share story; open/close announcements; volume control; kitchen training/motivation music; app connect-and-run.',
-  '4. USP Judie — “that’s me” — orders/bookings so staff aren’t stuck on the phone.',
-  '5. Upsell Complete — both together, weekly launch pricing; “you know it makes sense”.',
-  '6. MUST getOfferTerms — walk Judie Starter / Atmosphere / Complete / Pro if busy; help size minutes to their hours.',
-  '7. Demo — speak spokenDemoPhone aloud; MUST send email/SMS tools when they give contact details. Never rely on WhatsApp alone.',
-  '8. Hard close — “Shall I sign you up now?” → collect only missing fields. Venue/postcode: use CRM if present — do not reconfirm postcode unless new or corrected → confirmSaleTerms → contract/Stripe tools.',
-  '9. Confirm what tools successfully sent. Only use callback if they push back — then bookCallback/bookDemo with ISO preferredTime.',
+  '3. USP Atmosphere — only-in-England strategic audio; in-venue ads; free-dip review+share; kitchen training music.',
+  '4. USP Judie — “that’s me” — THIS CALL IS THE DEMO.',
+  '5. CROSS-UPSELL — Judie lean → Atmosphere; Atmosphere lean → Judie; both → Complete.',
+  '6. MUST getOfferTerms — walk packages; size minutes.',
+  '7. Optional email/SMS with meeting/pricing (not demo-line CTA).',
+  '8. Hard close — signup tools and/or book 20-min install/integration meeting (bookDemo) with ISO time; say T−30 confirm or cancel.',
+  '9. Confirm tool success. bookCallback only if they refuse any meeting.',
 ].join('\n');
 
 export function buildSallyBrainPrompt(input: {
@@ -1775,16 +1803,21 @@ export async function executeSallyTool(
     }
   }
 
-  if (name === 'bookDemo') {
-    const scheduledAt = String(args.scheduledAt || '').trim();
+  if (name === 'bookDemo' || name === 'bookIntegrationMeeting') {
+    const scheduledAt = String(args.scheduledAt || args.when || '').trim();
     if (!scheduledAt) {
-      return { ok: false, error: 'scheduledAt_required', spokenHint: 'When should we book the demo?' };
+      return { ok: false, error: 'scheduledAt_required', spokenHint: 'When should we book the twenty-minute install chat?' };
     }
     const customerId = String(args.customerId || '').trim();
     const phone = String(args.phone || partyPhone || '').trim();
-    const contactName = String(args.contactName || '').trim();
+    const contactName = String(args.contactName || args.name || '').trim();
     const notes = String(args.notes || '').trim();
-    const detail = `Demo booked for ${scheduledAt}${notes ? ` — ${notes}` : ''}`;
+    const startsAtMs = Date.parse(scheduledAt);
+    const iso = Number.isFinite(startsAtMs) ? new Date(startsAtMs).toISOString() : scheduledAt;
+    const confirmCallAt = Number.isFinite(startsAtMs)
+      ? new Date(Math.max(Date.now() + 60_000, startsAtMs - 30 * 60 * 1000)).toISOString()
+      : iso;
+    const detail = `20-min install/integration meeting held for ${iso}${notes ? ` — ${notes}` : ''} · pending T−30 confirm at ${confirmCallAt}`;
     if (customerId) {
       appendCustomerCallActivity({
         customerId,
@@ -1798,31 +1831,48 @@ export async function executeSallyTool(
       const store = getDataStore();
       const cust = (store.customers as Array<Record<string, unknown>>).find((c) => String(c.id) === customerId);
       if (cust) {
-        saveCustomerRecord({ ...cust, nextFollowUp: scheduledAt, status: cust.status || 'lead' });
+        saveCustomerRecord({
+          ...cust,
+          nextFollowUp: iso,
+          meeting: {
+            status: 'held_pending_confirm',
+            meetingType: 'install_integration',
+            startsAt: iso,
+            endsAt: Number.isFinite(startsAtMs)
+              ? new Date(startsAtMs + 20 * 60 * 1000).toISOString()
+              : iso,
+            durationMin: 20,
+            confirmCallAt,
+          },
+          status: cust.status || 'lead',
+        });
         syncData({ customers: store.customers });
       }
     }
-    if (args.alsoQueueCallback && phone) {
+    if (phone) {
       enqueueOutboundCall({
         to: phone,
         template: 'lead_callback',
         status: 'queued',
-        scheduledAt,
+        scheduledAt: confirmCallAt,
+        bypassQuietHours: true,
         context: {
           customerId: customerId || undefined,
           company: contactName,
-          aim: 'demo_book',
+          aim: 'meeting_confirm',
           agentPersona: SALLY_PERSONA,
-          brief: `Demo callback for ${contactName || 'prospect'} at ${scheduledAt}`,
-          source: 'sally_book_demo',
+          brief: `meeting_confirm · Meeting starts ${iso}`,
+          meetingStartsAt: iso,
+          source: 'sally_book_integration_meeting',
         },
       });
     }
     return {
       ok: true,
-      scheduledAt,
+      scheduledAt: iso,
+      confirmCallAt,
       customerId: customerId || null,
-      spokenHint: `Demo booked for ${scheduledAt}. I've noted it on the CRM${args.alsoQueueCallback && phone ? ' and queued a reminder call' : ''}.`,
+      spokenHint: `Twenty-minute install chat booked for ${iso}. I'll ring half an hour before to confirm — if I don't get them, we cancel.`,
     };
   }
 

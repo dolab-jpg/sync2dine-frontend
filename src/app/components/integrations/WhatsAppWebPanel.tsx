@@ -42,8 +42,11 @@ interface WWebStatus {
   } | null;
   error?: string;
   browserLoginActive?: boolean;
+  canSend?: boolean;
   debug?: {
     hasClient?: boolean;
+    canSend?: boolean;
+    sessionBrowserSkippedReinit?: boolean;
     hasPupPage?: boolean;
     ageSinceAuthMs?: number | null;
     lastLoadingPercent?: number | null;
@@ -127,7 +130,7 @@ export function WhatsAppWebPanel() {
       setApiReachable(true);
       setWwebStatus(data);
       // #region agent log
-      fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bddce0'},body:JSON.stringify({sessionId:'bddce0',runId:'pre-fix',hypothesisId:data.status==='authenticated'?'H1':data.status==='ready'?'H1':'H4',location:'WhatsAppWebPanel.tsx:fetchStatus',message:'wweb status poll',data:{status:data.status,hasPhone:Boolean(data.info?.phone),hasClient:data.debug?.hasClient??null,hasPupPage:data.debug?.hasPupPage??null,ageSinceAuthMs:data.debug?.ageSinceAuthMs??null,lastLoadingPercent:data.debug?.lastLoadingPercent??null,lastLoadingMessage:data.debug?.lastLoadingMessage??null,usesExecutablePath:data.debug?.usesExecutablePath??null,usesWebVersionCache:data.debug?.usesWebVersionCache??null,puppeteerArgs:data.debug?.puppeteerArgs??null},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7610/ingest/e809fe57-584f-4b4e-8cfb-f3dee6b9facf',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d0f60a'},body:JSON.stringify({sessionId:'d0f60a',runId:'post-fix',hypothesisId:'D',location:'WhatsAppWebPanel.tsx:fetchStatus',message:'wweb status poll',data:{status:data.status,canSend:(data as {canSend?:boolean}).canSend??null,hasPhone:Boolean(data.info?.phone),hasClient:data.debug?.hasClient??null,sessionBrowserSkippedReinit:data.debug?.sessionBrowserSkippedReinit??null},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       if (data.error) setLastError(data.error);
       else if (data.status === 'ready' || data.status === 'qr_pending') setLastError(null);
@@ -413,7 +416,9 @@ export function WhatsAppWebPanel() {
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-bold text-lg">WhatsApp Web</h3>
               <Badge className={statusColor[wwebStatus.status] ?? statusColor.disconnected}>
-                {statusLabel[wwebStatus.status] ?? wwebStatus.status}
+                {wwebStatus.status === 'ready' && wwebStatus.canSend === false
+                  ? 'Connected (not sendable)'
+                  : statusLabel[wwebStatus.status] ?? wwebStatus.status}
               </Badge>
             </div>
             <p className="text-sm text-gray-600">

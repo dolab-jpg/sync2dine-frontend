@@ -240,6 +240,7 @@ export default function AppShell({ children }: AppShellProps) {
         ? [
             { to: '/platform/clients', icon: Building2, label: t('nav.platformClients') },
             { to: '/platform/sally-offer', icon: BadgePoundSterling, label: 'Sally offer' },
+            { to: '/platform/sales-brain', icon: Sparkles, label: 'Sales Brain' },
             { to: '/orders', icon: ClipboardList, label: 'Orders' },
           ]
         : []),
