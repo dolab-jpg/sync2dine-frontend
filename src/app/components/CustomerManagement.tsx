@@ -296,7 +296,7 @@ export default function CustomerManagement() {
                 <div>
                   <Label htmlFor="specialName">Named special (phone)</Label>
                   <p className="text-xs text-amber-900/70 mb-1">
-                    Lizzie asks for this by name — e.g. “Family Friday” or “VIP ten percent”.
+                    Judie asks for this by name — e.g. “Family Friday” or “VIP ten percent”.
                   </p>
                   <Input
                     id="specialName"
@@ -306,7 +306,7 @@ export default function CustomerManagement() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="specialDealNote">Deal note for Lizzie</Label>
+                  <Label htmlFor="specialDealNote">Deal note for Judie</Label>
                   <p className="text-xs text-amber-900/70 mb-1">
                     Exact deal she must apply when they use that special. Include “10% off” for an automatic discount.
                   </p>

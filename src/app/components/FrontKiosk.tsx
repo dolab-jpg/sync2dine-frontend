@@ -60,7 +60,7 @@ export default function FrontKiosk() {
               >
                 <img
                   src="/lizzie-avatar.png"
-                  alt="Lizzie, your Sync2Dine host"
+                  alt="Judie, your Sync2Dine host"
                   className="h-full w-full rounded-full object-cover"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
@@ -70,7 +70,7 @@ export default function FrontKiosk() {
                   </span>
                 )}
               </div>
-              <p className="mt-4 text-4xl font-black tracking-tight text-s2d-teal-deep sm:text-5xl">Lizzie</p>
+              <p className="mt-4 text-4xl font-black tracking-tight text-s2d-teal-deep sm:text-5xl">Judie</p>
               <p className="mt-1 max-w-xs text-center text-lg text-slate-700">
                 {active ? 'Listening for your order' : 'Tap to speak to the Sync2Dine avatar'}
               </p>
@@ -90,7 +90,7 @@ export default function FrontKiosk() {
                 </Button>
                 {voice.error && <p className="text-center text-sm font-medium text-red-700">{voice.error}</p>}
                 <p className="text-center text-base text-slate-700">
-                  Lizzie can take your order, switch language, and give you an order number. Pay at the desk when called.
+                  Judie can take your order, switch language, and give you an order number. Pay at the desk when called.
                 </p>
               </div>
 
@@ -101,11 +101,11 @@ export default function FrontKiosk() {
                 </div>
                 <div className="space-y-2 text-sm text-slate-800">
                   {lines.length === 0 ? (
-                    <p>Speak when you are ready. Lizzie will repeat the order before sending it to the kitchen.</p>
+                    <p>Speak when you are ready. Judie will repeat the order before sending it to the kitchen.</p>
                   ) : (
                     lines.map((line, idx) => (
                       <p key={`${line.role}-${idx}`}>
-                        <span className="font-semibold">{line.role === 'assistant' ? 'Lizzie' : 'You'}:</span> {line.text}
+                        <span className="font-semibold">{line.role === 'assistant' ? 'Judie' : 'You'}:</span> {line.text}
                       </p>
                     ))
                   )}

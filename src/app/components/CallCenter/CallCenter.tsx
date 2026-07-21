@@ -340,8 +340,8 @@ export default function CallCenter() {
   const [queueSettingsSaving, setQueueSettingsSaving] = useState(false);
 
   const app = useContext(AppContext);
-  /** Platform sales shell uses Sally; restaurant tenants keep Lizzie (food orders). */
-  const agentLabel = getExperience(app?.user?.role ?? 'staff') === 'sales' ? 'Sally' : 'Lizzie';
+  /** Platform sales shell uses Sally; restaurant tenants keep Judie (food orders). */
+  const agentLabel = getExperience(app?.user?.role ?? 'staff') === 'sales' ? 'Sally' : 'Judie';
   const isSalesShell = agentLabel === 'Sally';
   const [leadFormCallId, setLeadFormCallId] = useState<string | null>(null);
   const [leadFormName, setLeadFormName] = useState('');
@@ -349,7 +349,7 @@ export default function CallCenter() {
   const [leadFormNotes, setLeadFormNotes] = useState('');
   const [creatingLead, setCreatingLead] = useState(false);
 
-  const playLizzieAudio = useCallback(async (text: string) => {
+  const playJudieAudio = useCallback(async (text: string) => {
     if (!text.trim()) return;
     try {
       const res = await fetch('/api/agent/tts', {
@@ -371,7 +371,7 @@ export default function CallCenter() {
       audioRef.current = audio;
       await audio.play();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not play Lizzie voice');
+      toast.error(err instanceof Error ? err.message : 'Could not play Judie voice');
     }
   }, [activeVoiceId]);
 
@@ -596,7 +596,7 @@ export default function CallCenter() {
       setTestCallId(data.callId);
       const agentLine = data.speak;
       setTestTranscript([{ role: 'agent', content: agentLine }]);
-      if (agentLine) void playLizzieAudio(agentLine);
+      if (agentLine) void playJudieAudio(agentLine);
       fetchCalls();
       fetchStatus();
     } catch {
@@ -622,7 +622,7 @@ export default function CallCenter() {
       setTestCallId(data.callId);
       const agentLine = data.speak;
       setTestTranscript(prev => [...prev, { role: 'agent', content: agentLine }]);
-      if (agentLine) void playLizzieAudio(agentLine);
+      if (agentLine) void playJudieAudio(agentLine);
       fetchCalls();
       fetchStatus();
     } catch {
@@ -728,7 +728,7 @@ export default function CallCenter() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to save');
       setTransferNumbers(data.transferNumbers ?? transferNumbers);
-      toast.success('Transfer numbers saved — Lizzie will use these for live handoffs');
+      toast.success('Transfer numbers saved — Judie will use these for live handoffs');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save transfer numbers');
     } finally {
@@ -952,7 +952,7 @@ export default function CallCenter() {
                 <p className="font-semibold text-slate-900">AI Agent Master Switch</p>
                 <p className="text-sm text-slate-600">
                   {isActive
-                    ? (isSalesShell ? 'Sally can place outbound sales calls' : 'Lizzie is answering inbound calls')
+                    ? (isSalesShell ? 'Sally can place outbound sales calls' : 'Judie is answering inbound calls')
                     : `${agentLabel} is paused — calls will not be answered`}
                 </p>
               </div>
@@ -1415,7 +1415,7 @@ export default function CallCenter() {
                     </div>
                   ) : (
                     <p className="text-sm text-slate-600 p-4 rounded-lg border bg-slate-50">
-                      {lookupResult.message ?? 'Lizzie will create a new contact when this number calls.'}
+                      {lookupResult.message ?? 'Judie will create a new contact when this number calls.'}
                     </p>
                   )
                 )}
@@ -1434,7 +1434,7 @@ export default function CallCenter() {
               <CardDescription>
                 {isSalesShell
                   ? 'Where Sally puts callers through for a human. Sales should be your softphone DID (e.g. 02037732809) so warm transfers ring your extension.'
-                  : 'Where Lizzie puts calls through when she or the caller asks for a human. Leave blank to only take a message for that department.'}
+                  : 'Where Judie puts calls through when she or the caller asks for a human. Leave blank to only take a message for that department.'}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1463,7 +1463,7 @@ export default function CallCenter() {
                 Call Queue & AI dial settings
               </CardTitle>
               <CardDescription>
-                Controls CRM “Call this person” defaults, lead callback policy, and how Lizzie notes outcomes after dials.
+                Controls CRM “Call this person” defaults, lead callback policy, and how Judie notes outcomes after dials.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1489,7 +1489,7 @@ export default function CallCenter() {
                   className="mt-1 min-h-[80px]"
                   value={defaultOutboundBrief}
                   onChange={(e) => setDefaultOutboundBrief(e.target.value)}
-                  placeholder="What Lizzie should cover by default…"
+                  placeholder="What Judie should cover by default…"
                 />
               </div>
               <div>
@@ -1498,7 +1498,7 @@ export default function CallCenter() {
                   className="mt-1 min-h-[60px]"
                   value={postCallNotePrompt}
                   onChange={(e) => setPostCallNotePrompt(e.target.value)}
-                  placeholder="What Lizzie must capture after every call…"
+                  placeholder="What Judie must capture after every call…"
                 />
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
@@ -1615,7 +1615,7 @@ export default function CallCenter() {
                     Soho66 Phone Lines
                   </CardTitle>
                   <CardDescription>
-                    Lizzie AI lines use purpose "aria" (compat) and answer via Vapi + Soho66. Staff softphones use Calls → Soft Phone.
+                    Judie AI lines use purpose "aria" (compat) and answer via Vapi + Soho66. Staff softphones use Calls → Soft Phone.
                   </CardDescription>
                 </div>
                 <Button onClick={registerAllLines} disabled={registeringLines || phoneLines.length === 0}>
@@ -1634,7 +1634,7 @@ export default function CallCenter() {
                     <p className="font-medium text-slate-900">{line.label}</p>
                     <p className="text-sm text-slate-600">{line.sipUsername}@{line.sipDomain} · {formatPhone(line.did)}</p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {(line.purpose ?? 'staff') === 'aria' ? 'Lizzie AI' : 'Staff softphone'}
+                      {(line.purpose ?? 'staff') === 'aria' ? 'Judie AI' : 'Staff softphone'}
                       {line.assignedUserId ? ` · user ${line.assignedUserId}` : ''}
                     </p>
                     {line.lastError && <p className="text-xs text-red-600 mt-1">{line.lastError}</p>}
@@ -1689,7 +1689,7 @@ export default function CallCenter() {
                     onChange={e => setLineForm(f => ({ ...f, purpose: e.target.value as 'staff' | 'aria' }))}
                   >
                     <option value="staff">Staff softphone</option>
-                    <option value="aria">Lizzie AI (Vapi)</option>
+                    <option value="aria">Judie AI (Vapi)</option>
                   </select>
                 </div>
                 <div>
@@ -1759,7 +1759,7 @@ export default function CallCenter() {
                   {testTranscript.map((turn, i) => (
                     <div key={i} className={`p-2 rounded text-sm flex gap-2 ${turn.role === 'agent' ? 'bg-amber-100' : 'bg-white border'}`}>
                       <div className="flex-1">
-                        <span className="font-medium text-xs text-slate-500">{turn.role === 'agent' ? 'Lizzie:' : 'You:'}</span>{' '}
+                        <span className="font-medium text-xs text-slate-500">{turn.role === 'agent' ? 'Judie:' : 'You:'}</span>{' '}
                         {turn.content}
                       </div>
                       {turn.role === 'agent' && (
@@ -1768,8 +1768,8 @@ export default function CallCenter() {
                           size="sm"
                           variant="ghost"
                           className="shrink-0 h-7 w-7 p-0"
-                          onClick={() => playLizzieAudio(turn.content)}
-                          title="Play Lizzie voice"
+                          onClick={() => playJudieAudio(turn.content)}
+                          title="Play Judie voice"
                         >
                           <Volume2 className="w-4 h-4" />
                         </Button>
