@@ -55,6 +55,7 @@ import CallCenter from './components/CallCenter/CallCenter';
 import CallRegister from './components/CallCenter/CallRegister';
 import AppShell from './components/AppShell';
 import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
+import PlatformPhoneLines from './components/platform/PlatformPhoneLines';
 import SallyOfferSettings from './components/platform/SallyOfferSettings';
 import PricingPage from './components/PricingPage';
 import StartCheckoutFlow from './components/StartCheckoutFlow';
@@ -1529,6 +1530,16 @@ export default function App() {
                 element={
                   <ProtectedRoute
                     element={<SallyOfferSettings />}
+                    allowedRoles={['platform_owner']}
+                    user={user}
+                  />
+                }
+              />
+              <Route
+                path="/platform/phone-lines"
+                element={
+                  <ProtectedRoute
+                    element={<PlatformPhoneLines />}
                     allowedRoles={['platform_owner']}
                     user={user}
                   />

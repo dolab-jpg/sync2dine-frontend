@@ -34,6 +34,8 @@ export interface PlatformOrganization {
   createdAt: string;
   updatedAt: string;
   notes?: string;
+  /** Primary Judie inbound DID for this restaurant */
+  phoneDid?: string;
 }
 
 export interface PlatformStats {
@@ -227,6 +229,97 @@ export async function saveSallyOffer(patch: Partial<SallyOfferTerms>): Promise<{
       method: 'PUT',
       headers,
       body: JSON.stringify(patch),
+    }),
+  );
+}
+
+export type PlatformPhoneLinePurpose = 'staff' | 'aria';
+export type PlatformPhoneLineConnectionType = 'soho66' | 'sip' | 'twilio' | 'other';
+
+export interface PlatformPhoneLine {
+  id: string;
+  orgId: string;
+  orgName?: string;
+  label: string;
+  sipUsername: string;
+  sipPassword: string;
+  sipDomain: string;
+  did: string;
+  enabled: boolean;
+  status: 'disconnected' | 'registering' | 'registered' | 'error';
+  lastError?: string;
+  purpose?: PlatformPhoneLinePurpose;
+  connectionType?: PlatformPhoneLineConnectionType;
+  assignedUserId?: string;
+  updatedAt?: string;
+}
+
+export async function fetchPlatformPhoneLines(): Promise<PlatformPhoneLine[]> {
+  const headers = await platformAuthHeaders();
+  const data = await parseJson<{ lines: PlatformPhoneLine[] }>(
+    await fetch('/api/platform/phone-lines', { headers }),
+  );
+  return data.lines ?? [];
+}
+
+export async function createPlatformPhoneLine(input: {
+  orgId: string;
+  label: string;
+  sipUsername: string;
+  sipPassword: string;
+  sipDomain?: string;
+  did: string;
+  purpose?: PlatformPhoneLinePurpose;
+  connectionType?: PlatformPhoneLineConnectionType;
+  enabled?: boolean;
+  assignedUserId?: string;
+}): Promise<PlatformPhoneLine> {
+  const headers = await platformAuthHeaders();
+  const data = await parseJson<{ line: PlatformPhoneLine }>(
+    await fetch('/api/platform/phone-lines', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(input),
+    }),
+  );
+  return data.line;
+}
+
+export async function updatePlatformPhoneLine(
+  lineId: string,
+  patch: Partial<PlatformPhoneLine> & { orgId: string; sipPassword?: string },
+): Promise<PlatformPhoneLine> {
+  const headers = await platformAuthHeaders();
+  const data = await parseJson<{ line: PlatformPhoneLine }>(
+    await fetch(`/api/platform/phone-lines/${encodeURIComponent(lineId)}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(patch),
+    }),
+  );
+  return data.line;
+}
+
+export async function deletePlatformPhoneLine(lineId: string, orgId: string): Promise<void> {
+  const headers = await platformAuthHeaders();
+  await parseJson(
+    await fetch(
+      `/api/platform/phone-lines/${encodeURIComponent(lineId)}?orgId=${encodeURIComponent(orgId)}`,
+      { method: 'DELETE', headers },
+    ),
+  );
+}
+
+export async function testPlatformPhoneLine(
+  lineId: string,
+  orgId: string,
+): Promise<{ ok: boolean; message: string }> {
+  const headers = await platformAuthHeaders();
+  return parseJson(
+    await fetch(`/api/platform/phone-lines/${encodeURIComponent(lineId)}/test`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ orgId }),
     }),
   );
 }
