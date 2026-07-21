@@ -56,6 +56,8 @@ import CallRegister from './components/CallCenter/CallRegister';
 import AppShell from './components/AppShell';
 import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
 import SallyOfferSettings from './components/platform/SallyOfferSettings';
+import SallyKnowledgePanel from './components/platform/SallyKnowledgePanel';
+import SalesBrainPanel from './components/platform/SalesBrainPanel';
 import PricingPage from './components/PricingPage';
 import StartCheckoutFlow from './components/StartCheckoutFlow';
 import JudieLandingPage from './components/JudieLandingPage';
@@ -1523,6 +1525,26 @@ export default function App() {
                 element={
                   <ProtectedRoute
                     element={<SallyOfferSettings />}
+                    allowedRoles={['platform_owner']}
+                    user={user}
+                  />
+                }
+              />
+              <Route
+                path="/platform/sally-knowledge"
+                element={
+                  <ProtectedRoute
+                    element={<SallyKnowledgePanel />}
+                    allowedRoles={['platform_owner']}
+                    user={user}
+                  />
+                }
+              />
+              <Route
+                path="/platform/sales-brain"
+                element={
+                  <ProtectedRoute
+                    element={<SalesBrainPanel />}
                     allowedRoles={['platform_owner']}
                     user={user}
                   />

@@ -1,0 +1,23 @@
+---
+description: Full-spec ship only — no half-live features; push after debug
+alwaysApply: true
+---
+
+# Full specs, then push (Sync2Dine)
+
+## Never half-ship
+
+- Do **not** mark a plan item done when only schema, stubs, or inject-without-admin exist.
+- For knowledge / brains / Sales Brain: Supabase **read+write**, API, UI (if specified), and live verification are required before “done”.
+- Do not advertise LIVE / ready / canSend when the underlying client or cloud store cannot perform the action.
+
+## Push order (after debug)
+
+1. Fix and verify on **https://app.sync2dine.io** (and Supabase cloud rows where relevant).
+2. Then push **all three**: GitHub `origin/master` (frontend + backend as needed) ? Supabase migrations if any ? VPS API sync/restart + SPA deploy when UI changed.
+3. Do **not** push “for later” incomplete slices as if they completed the plan.
+
+## Brains
+
+- Phone packages are `sally` | `judie` under `server/brains/`. No shared Studio master knowledge for Sally.
+- Staff/platform tools live **on Sally** (PIN), not a third phone brain.
