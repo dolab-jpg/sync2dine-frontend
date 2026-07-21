@@ -43,7 +43,9 @@ export default function RestaurantSettings() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/agent/settings');
+        const res = await fetch('/api/agent/settings', {
+          headers: orgId ? { 'x-org-id': orgId } : {},
+        });
         const data = await res.json() as {
           isActive?: boolean;
           aboutUs?: string;
@@ -68,7 +70,7 @@ export default function RestaurantSettings() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [orgId]);
 
   function addPrefix(raw: string) {
     const next = normalizePrefix(raw);
@@ -91,7 +93,10 @@ export default function RestaurantSettings() {
     try {
       const res = await fetch('/api/agent/settings', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(orgId ? { 'x-org-id': orgId } : {}),
+        },
         body: JSON.stringify({ isActive: checked }),
       });
       const data = await res.json();
@@ -111,7 +116,10 @@ export default function RestaurantSettings() {
         : deliveryPrefixes;
       const res = await fetch('/api/agent/settings', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(orgId ? { 'x-org-id': orgId } : {}),
+        },
         body: JSON.stringify({
           aboutUs,
           sayToday,

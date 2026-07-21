@@ -803,8 +803,31 @@ export default function App() {
           const remote = migrateQuotes(remoteQuotes as Quote[]);
           setQuotes((prev) => (prev.length ? unionById(remote, prev) : remote));
         }
-        if (remoteProducts.length) setProducts(migrateProducts(remoteProducts as Product[]));
-        else if (!CLOUD_MODE && remoteProducts.length === 0) setProducts((prev) => (prev.length ? prev : allTradeProducts));
+        if (remoteProducts.length) {
+          setProducts(migrateProducts(remoteProducts as Product[]));
+        } else {
+          // Browser RLS can return [] while the shared menu API (service role) has dishes.
+          try {
+            const { getActiveOrgId: activeOrg } = await import('./engine/platform/orgContext');
+            const orgHeader = activeOrg();
+            const menuRes = await fetch('/api/menu', {
+              headers: orgHeader ? { 'x-org-id': orgHeader } : {},
+            });
+            if (menuRes.ok) {
+              const menuData = (await menuRes.json()) as { items?: Product[] };
+              const items = Array.isArray(menuData.items) ? menuData.items : [];
+              if (items.length) {
+                setProducts(migrateProducts(items as Product[]));
+              } else if (!CLOUD_MODE) {
+                setProducts((prev) => (prev.length ? prev : allTradeProducts));
+              }
+            } else if (!CLOUD_MODE) {
+              setProducts((prev) => (prev.length ? prev : allTradeProducts));
+            }
+          } catch {
+            if (!CLOUD_MODE) setProducts((prev) => (prev.length ? prev : allTradeProducts));
+          }
+        }
         if (remoteRules.length) setPricingRules(migratePricingRules(remoteRules as PricingRule[]));
         else if (!CLOUD_MODE) setPricingRules((prev) => (prev.length ? prev : tradePricingRules));
       } catch {

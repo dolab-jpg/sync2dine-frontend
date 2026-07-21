@@ -1,4 +1,4 @@
-import { useContext, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import { AppContext, Product } from '../../App';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -16,11 +16,13 @@ import {
   isAllergenIncomplete,
   normalizeAllergenFields,
 } from '../../engine/restaurant/allergens';
+import { getActiveOrgId } from '../../engine/platform/orgContext';
 
 /**
  * Restaurant food menu manager (Super Master C12).
  * Same Supabase `products` rows that the phone/kiosk agent reads via getMenu —
  * editing here changes what Judie offers on the next call.
+ * Also hydrates from GET /api/menu when AppContext products are empty (RLS gap).
  */
 
 const FOOD_CATEGORIES = [
@@ -112,28 +114,51 @@ export default function MenuManager() {
   const [matrixOpen, setMatrixOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FoodForm>(EMPTY_FORM);
-  if (!context) return null;
+  const [apiMenu, setApiMenu] = useState<Product[]>([]);
+  const products = context?.products ?? [];
+  const addProduct = context?.addProduct;
+  const updateProduct = context?.updateProduct;
+  const deleteProduct = context?.deleteProduct;
 
-  const { products, addProduct, updateProduct, deleteProduct } = context;
+  useEffect(() => {
+    let cancelled = false;
+    const orgId = getActiveOrgId();
+    void (async () => {
+      try {
+        const res = await fetch('/api/menu', {
+          headers: orgId ? { 'x-org-id': orgId } : {},
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { items?: Product[] };
+        const items = Array.isArray(data.items) ? data.items : [];
+        if (!cancelled) setApiMenu(items);
+      } catch {
+        /* keep AppContext products */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const foodItems = useMemo(
-    () =>
-      products
+    () => {
+      const source = products.filter(isFoodItem).length ? products : apiMenu;
+      return source
         .filter(isFoodItem)
         .sort(
           (a, b) =>
             CATEGORY_ORDER.indexOf(String(a.category)) - CATEGORY_ORDER.indexOf(String(b.category)) ||
             String(a.name).localeCompare(String(b.name)),
-        ),
-    [products],
+        );
+    },
+    [products, apiMenu],
   );
 
-  const filtered = foodItems.filter((p) => {
+  const filtered = useMemo(() => foodItems.filter((p) => {
     const matchesSearch = String(p.name ?? '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategory === 'all' || p.category === filterCategory;
     const matchesAllergen = !missingAllergensOnly || isAllergenIncomplete(p);
     return matchesSearch && matchesCategory && matchesAllergen;
-  });
+  }), [foodItems, searchTerm, filterCategory, missingAllergensOnly]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, Product[]>();
@@ -147,6 +172,8 @@ export default function MenuManager() {
       items: map.get(c) ?? [],
     }));
   }, [filtered]);
+
+  if (!context || !addProduct || !updateProduct || !deleteProduct) return null;
 
   const openAdd = () => {
     setEditingId(null);
