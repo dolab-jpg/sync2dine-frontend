@@ -561,6 +561,7 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
   const [tabState, setTab] = useState<BoardTab>('kitchen');
   const tab = tabProp ?? tabState;
   const [orders, setOrders] = useState<FoodOrder[]>([]);
+  const [ordersLoaded, setOrdersLoaded] = useState(false);
   const [nowTick, setNowTick] = useState(0);
   const [audioOk, setAudioOk] = useState(() => isKitchenAudioUnlocked());
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -616,6 +617,7 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
         });
         if (!res.ok) {
           pollMs = Math.min(20_000, pollMs + 2_000);
+          if (!cancelled) setOrdersLoaded(true);
           return;
         }
         pollMs = 8_000;
@@ -639,6 +641,8 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
         setOrders(next);
       } catch {
         pollMs = Math.min(20_000, pollMs + 2_000);
+      } finally {
+        if (!cancelled) setOrdersLoaded(true);
       }
     }
 
@@ -838,7 +842,12 @@ export default function RestaurantOrders({ tab: tabProp, showTabs = true, embedd
           </button>
         )}
 
-        {boardOrders.length === 0 && (
+        {!ordersLoaded && (
+          <div className="rounded-[1.5rem] border border-dashed border-s2d-teal/30 bg-white/70 p-10 text-center">
+            <p className="text-xl font-bold text-s2d-teal-deep">Loading orders…</p>
+          </div>
+        )}
+        {ordersLoaded && boardOrders.length === 0 && (
           <div className="rounded-[1.5rem] border border-dashed border-s2d-teal/30 bg-white/70 p-10 text-center">
             <p className="text-xl font-bold text-s2d-teal-deep">No orders on this board right now</p>
             <p className="mt-1 text-s2d-teal-soft">New phone and kiosk orders appear here with a kitchen alert.</p>
