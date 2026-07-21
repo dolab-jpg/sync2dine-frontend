@@ -18,7 +18,7 @@ import IntegrationsLogoStrip from './IntegrationsLogoStrip';
 
 /**
  * Restaurant settings (Super Master B2): phone agent on/off, About us,
- * Say today, and delivery postcode prefixes for Lizzie.
+ * Say today, and delivery postcode prefixes for Judie.
  */
 
 function normalizePrefix(raw: string): string {
@@ -180,7 +180,7 @@ export default function RestaurantSettings() {
               <PhoneCall className="mt-1 h-6 w-6 text-s2d-teal" />
               <div>
                 <h2 className="text-xl font-bold text-s2d-teal-deep">Phone agent</h2>
-                <p className="text-sm text-slate-600">When on, Lizzie answers your calls and takes orders.</p>
+                <p className="text-sm text-slate-600">When on, Judie answers your calls and takes orders.</p>
               </div>
             </div>
             <Switch checked={isActive} onCheckedChange={(c) => void toggleActive(c)} disabled={loading} />
