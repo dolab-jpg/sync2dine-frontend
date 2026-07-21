@@ -80,7 +80,10 @@ export default function RestaurantTill() {
       if (!cancelled) setMenuLoading(false);
     });
     return () => { cancelled = true; };
-  }, [orgId, products]);
+    // products intentionally omitted — AppContext often replaces the array each render
+    // and would restart this fetch forever (stuck on "Loading menu…").
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- products is fallback-only
+  }, [orgId]);
 
   const total = useMemo(
     () => Math.round(lines.reduce((s, l) => s + l.price * l.qty, 0) * 100) / 100,
