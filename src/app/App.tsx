@@ -77,6 +77,7 @@ import RestaurantShell from './components/restaurant/RestaurantShell';
 import RestaurantAccounts from './components/restaurant/RestaurantAccounts';
 import RestaurantLive from './components/restaurant/RestaurantLive';
 import MenuManager from './components/restaurant/MenuManager';
+import RestaurantTill from './components/restaurant/RestaurantTill';
 import RestaurantSettings from './components/restaurant/RestaurantSettings';
 import BookingsBoard from './components/restaurant/BookingsBoard';
 import IntegrationsPublicPage from './components/restaurant/IntegrationsPublicPage';
@@ -1349,7 +1350,10 @@ export default function App() {
               <Route path="/" element={<RestaurantLive />} />
               <Route path="/orders" element={<Navigate to="/orders/kitchen" replace />} />
               <Route path="/orders/kitchen" element={<RestaurantOrders tab="kitchen" showTabs={false} />} />
-              <Route path="/orders/till" element={<Navigate to="/orders/kitchen" replace />} />
+              <Route
+                path="/orders/till"
+                element={<ProtectedRoute element={<RestaurantTill />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
               <Route path="/orders/delivery" element={<RestaurantOrders tab="delivery" showTabs={false} />} />
               <Route
                 path="/bookings"

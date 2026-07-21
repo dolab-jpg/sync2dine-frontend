@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router';
 import { useContext, useEffect, useState, type ReactNode } from 'react';
 import {
   ChefHat, LogOut, Radio, Settings as SettingsIcon, Truck, UtensilsCrossed, Users,
-  Phone, Wallet, PanelLeftClose, PanelLeftOpen, CalendarDays, ClipboardList,
+  Phone, Wallet, PanelLeftClose, PanelLeftOpen, CalendarDays, ClipboardList, ShoppingBag,
 } from 'lucide-react';
 import { AppContext } from '../../App';
 import { BrandLogo } from '../BrandLogo';
@@ -30,6 +30,7 @@ const SIDEBAR_KEY = 's2d.restaurant.sidebarCollapsed';
 const TABS: TabDef[] = [
   { to: '/', icon: Radio, label: 'Live', end: true },
   { to: '/orders/kitchen', icon: ChefHat, label: 'Kitchen', end: false, badge: 'kitchen' },
+  { to: '/orders/till', icon: ShoppingBag, label: 'Till', end: false },
   { to: '/orders/delivery', icon: Truck, label: 'Delivery', end: false, badge: 'delivery' },
   { to: '/bookings', icon: CalendarDays, label: 'Bookings', end: false, badge: 'bookings' },
   { to: '/menu', icon: UtensilsCrossed, label: 'Menu', end: false },

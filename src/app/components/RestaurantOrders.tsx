@@ -391,17 +391,31 @@ function SecondaryActions({
         Call them
       </Button>
       {order.status !== 'completed' && order.status !== 'cancelled' && (
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-12 rounded-xl text-sm font-bold"
-          onClick={(e) => {
-            e.stopPropagation();
-            void patchOrder(order.id, { status: 'completed' });
-          }}
-        >
-          Complete
-        </Button>
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-12 rounded-xl text-sm font-bold"
+            onClick={(e) => {
+              e.stopPropagation();
+              void patchOrder(order.id, { status: 'completed' });
+            }}
+          >
+            Complete
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-12 rounded-xl text-sm font-bold text-red-700 border-red-200 hover:bg-red-50"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!window.confirm(`Cancel order #${order.number ?? order.id}?`)) return;
+              void patchOrder(order.id, { status: 'cancelled' });
+            }}
+          >
+            Cancel
+          </Button>
+        </>
       )}
       {onOpenMore && (
         <Button type="button" variant="ghost" className="min-h-12 sm:col-span-2" onClick={onOpenMore}>

@@ -11,6 +11,7 @@ type SquareConfig = {
   provider?: string;
   enabled?: boolean;
   direction?: string;
+  posPush?: 'manual_only' | 'on_place' | 'off';
   squareLocationId?: string;
   squareConnectionStatus?: 'not_connected' | 'connected' | 'token_expired';
   hasSquareToken?: boolean;
@@ -99,7 +100,12 @@ export default function SquareConnectPanel() {
       const cfgData = await cfgRes.json() as { config?: SquareConfig | null };
       const cfg = cfgData.config ?? {};
       setConfig(cfg);
-      setAutoPush(cfg.enabled === true && (cfg.direction === 'outbound' || cfg.direction === 'both'));
+      setAutoPush(
+        cfg.posPush === 'on_place'
+        || (cfg.posPush == null
+          && cfg.enabled === true
+          && (cfg.direction === 'outbound' || cfg.direction === 'both')),
+      );
       // #region agent log
       fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b4e46'},body:JSON.stringify({sessionId:'6b4e46',runId:'debug-square',hypothesisId:'B',location:'SquareConnectPanel.tsx:config-parsed',message:'square config fields present',data:{provider:cfg.provider??null,hasSquareToken:!!cfg.hasSquareToken,connectionStatus:cfg.squareConnectionStatus??null,locationId:cfg.squareLocationId??null,enabled:!!cfg.enabled,direction:cfg.direction??null,hasMenuCompleteness:!!cfg.menuCompleteness},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
@@ -162,6 +168,8 @@ export default function SquareConnectPanel() {
           provider: 'square',
           direction: 'outbound',
           enabled: autoPush,
+          // OrderService reads posPush: on_place pushes after place; manual_only = staff retry only
+          posPush: autoPush ? 'on_place' : 'manual_only',
           ...patch,
         }),
       });
@@ -480,6 +488,7 @@ export default function SquareConnectPanel() {
             provider: 'square',
             direction: 'outbound',
             enabled: autoPush,
+            posPush: autoPush ? 'on_place' : 'manual_only',
             defaultPickupName: config.defaultPickupName,
             defaultPickupPhone: config.defaultPickupPhone,
             fulfillmentAddressLine1: config.fulfillmentAddressLine1,
