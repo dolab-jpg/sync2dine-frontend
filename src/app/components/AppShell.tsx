@@ -239,7 +239,8 @@ export default function AppShell({ children }: AppShellProps) {
       ...(user.role === 'platform_owner'
         ? [
             { to: '/platform/clients', icon: Building2, label: t('nav.platformClients') },
-            { to: '/platform/sally-offer', icon: BadgePoundSterling, label: 'Sally offer' },
+            { to: '/platform/phone-lines', icon: Phone, label: 'Phone lines' },
+            { to: '/platform/sally-offer', icon: BadgePoundSterling, label: 'Sally' },
             { to: '/orders', icon: ClipboardList, label: 'Orders' },
           ]
         : []),

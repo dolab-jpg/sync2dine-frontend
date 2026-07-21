@@ -46,6 +46,13 @@ type FoodForm = {
   dealMains: string;
   dealSides: string;
   dealDrinks: string;
+  /**
+   * Upgrade options Judie can offer — one group per line:
+   * crust: Classic Crust|0, Stuffed Crust|2.5
+   * side*: Coleslaw|0, Baked Beans|0
+   * (* = required)
+   */
+  optionsText: string;
   dietary: DietaryFactsValue;
 };
 
@@ -67,6 +74,7 @@ const EMPTY_FORM: FoodForm = {
   dealMains: '',
   dealSides: '',
   dealDrinks: '',
+  optionsText: '',
   dietary: EMPTY_DIETARY,
 };
 
@@ -88,6 +96,54 @@ function buildDealFromForm(form: FoodForm): Product['deal'] | null {
   if (sides.length) roles.push({ role: 'side', qtyPerDeal: 1, choices: sides });
   if (drinks.length) roles.push({ role: 'drink', qtyPerDeal: 1, choices: drinks });
   return roles.length ? { roles } : null;
+}
+
+function optionsToText(options: Product['options'] | undefined): string {
+  if (!options?.length) return '';
+  return options
+    .map((g) => {
+      const role = g.required ? `${g.role}*` : g.role;
+      const choices = g.choices
+        .map((c) => `${c.name}|${Number(c.priceDelta ?? 0)}`)
+        .join(', ');
+      return `${role}: ${choices}`;
+    })
+    .join('\n');
+}
+
+function buildOptionsFromForm(form: FoodForm): Product['options'] | undefined {
+  const lines = form.optionsText
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (!lines.length) return undefined;
+  const groups: NonNullable<Product['options']> = [];
+  for (const line of lines) {
+    const colon = line.indexOf(':');
+    if (colon < 1) continue;
+    let role = line.slice(0, colon).trim().toLowerCase();
+    const required = role.endsWith('*');
+    if (required) role = role.slice(0, -1).trim();
+    if (!role) continue;
+    const choices = line
+      .slice(colon + 1)
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const [namePart, deltaPart] = part.split('|').map((s) => s.trim());
+        const name = namePart || '';
+        const priceDelta = Number(deltaPart ?? 0);
+        return {
+          name,
+          priceDelta: Number.isFinite(priceDelta) ? priceDelta : 0,
+        };
+      })
+      .filter((c) => c.name);
+    if (!choices.length) continue;
+    groups.push({ role, required, choices });
+  }
+  return groups.length ? groups : undefined;
 }
 
 function itemPrice(p: Product): number {
@@ -157,6 +213,7 @@ export default function MenuManager() {
   const openEdit = (p: Product) => {
     const rec = p as Record<string, unknown>;
     const deal = (p.deal ?? rec.deal) as Product['deal'] | undefined;
+    const options = (p.options ?? rec.options) as Product['options'] | undefined;
     const roleChoices = (role: string) =>
       deal?.roles?.find((r) => r.role === role)?.choices?.join(', ') ?? '';
     const allergens = normalizeAllergenFields({
@@ -178,6 +235,7 @@ export default function MenuManager() {
       dealMains: roleChoices('main'),
       dealSides: roleChoices('side'),
       dealDrinks: roleChoices('drink'),
+      optionsText: optionsToText(options),
       dietary: {
         allergensContains: allergens.allergensContains,
         allergensMayContain: allergens.allergensMayContain,
@@ -197,6 +255,7 @@ export default function MenuManager() {
       return;
     }
     const deal = buildDealFromForm(form);
+    const options = buildOptionsFromForm(form);
     const payload = {
       name: form.name.trim(),
       image: form.image.trim(),
@@ -209,6 +268,7 @@ export default function MenuManager() {
       description: form.description.trim(),
       available: form.available,
       deal: deal ?? undefined,
+      options: options ?? undefined,
       allergensContains: form.dietary.allergensContains,
       allergensMayContain: form.dietary.allergensMayContain,
       dietary: form.dietary.dietary,
@@ -219,8 +279,9 @@ export default function MenuManager() {
       updateProduct(editingId, {
         ...payload,
         ...(form.category !== 'specials' || !deal ? { deal: undefined } : {}),
+        ...(!options ? { options: undefined } : {}),
       } as Partial<Product>);
-      toast.success('Dish updated — Lizzie will offer the new details on the next call');
+      toast.success('Dish updated — Judie will offer the new details on the next call');
     } else {
       addProduct(payload as Omit<Product, 'id' | 'sellPrice'>);
       toast.success(deal ? 'Meal deal added to the menu' : 'Dish added to the menu');
@@ -451,7 +512,7 @@ export default function MenuManager() {
               </div>
             </div>
             <div>
-              <Label htmlFor="dish-description">Description (optional — Lizzie can read it out)</Label>
+              <Label htmlFor="dish-description">Description (optional — Judie can read it out)</Label>
               <Textarea
                 id="dish-description"
                 value={form.description}
@@ -460,13 +521,30 @@ export default function MenuManager() {
                 rows={2}
               />
             </div>
+            {form.category !== 'specials' && (
+              <div className="space-y-2 rounded-xl border border-s2d-teal/20 bg-s2d-cream/40 p-3">
+                <p className="text-sm font-bold text-s2d-teal-deep">Upgrade options (Judie upsells)</p>
+                <p className="text-xs text-slate-600">
+                  One group per line: <code>crust: Classic Crust|0, Stuffed Crust|2.5</code>. Use{' '}
+                  <code>side*</code> for a required choice (e.g. coleslaw vs beans).
+                </p>
+                <Textarea
+                  id="dish-options"
+                  value={form.optionsText}
+                  onChange={(e) => setForm({ ...form, optionsText: e.target.value })}
+                  placeholder={'crust: Classic Crust|0, Stuffed Crust|2.5\nside*: Coleslaw|0, Baked Beans|0'}
+                  rows={3}
+                  className="bg-white font-mono text-sm"
+                />
+              </div>
+            )}
             {form.category === 'specials' && (
               <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/80 p-3">
                 <p className="text-sm font-bold text-amber-950">
                   Meal deal choices (comma-separated dish names from your menu)
                 </p>
                 <p className="text-xs text-amber-900/80">
-                  Lizzie will ask for one of each per deal when the customer orders 2× or 3×.
+                  Judie will ask for one of each per deal when the customer orders 2× or 3×.
                 </p>
                 <div>
                   <Label htmlFor="deal-mains">Mains</Label>

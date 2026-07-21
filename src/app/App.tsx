@@ -55,6 +55,7 @@ import CallCenter from './components/CallCenter/CallCenter';
 import CallRegister from './components/CallCenter/CallRegister';
 import AppShell from './components/AppShell';
 import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
+import PlatformPhoneLines from './components/platform/PlatformPhoneLines';
 import SallyOfferSettings from './components/platform/SallyOfferSettings';
 import PricingPage from './components/PricingPage';
 import StartCheckoutFlow from './components/StartCheckoutFlow';
@@ -206,6 +207,12 @@ export interface Product {
   deal?: {
     roles: Array<{ role: string; qtyPerDeal: number; choices: string[] }>;
   };
+  /** Optional upgrades Judie can offer (stuffed crust, package sides, dips). */
+  options?: Array<{
+    role: string;
+    required?: boolean;
+    choices: Array<{ name: string; priceDelta: number }>;
+  }>;
   /** UK 14 allergen / dietary facts (stored on products.data) */
   allergensContains?: AllergenCode[];
   allergensMayContain?: AllergenCode[];
@@ -1523,6 +1530,16 @@ export default function App() {
                 element={
                   <ProtectedRoute
                     element={<SallyOfferSettings />}
+                    allowedRoles={['platform_owner']}
+                    user={user}
+                  />
+                }
+              />
+              <Route
+                path="/platform/phone-lines"
+                element={
+                  <ProtectedRoute
+                    element={<PlatformPhoneLines />}
                     allowedRoles={['platform_owner']}
                     user={user}
                   />

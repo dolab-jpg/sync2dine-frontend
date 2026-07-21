@@ -66,7 +66,8 @@ export default function SalesDashboard() {
     ...(user.role === 'platform_owner'
       ? [
           { label: 'Platform clients', icon: Building2, onClick: () => navigate('/platform/clients') },
-          { label: 'Sally offer', icon: TrendingUp, onClick: () => navigate('/platform/sally-offer') },
+          { label: 'Phone lines', icon: Phone, onClick: () => navigate('/platform/phone-lines') },
+          { label: 'Sally', icon: TrendingUp, onClick: () => navigate('/platform/sally-offer') },
         ]
       : []),
   ];
