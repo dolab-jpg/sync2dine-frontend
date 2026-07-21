@@ -31,6 +31,7 @@ import {
 } from '../../engine/platform/platformApi';
 import { setActiveOrgId, buildPublicKioskUrl } from '../../engine/platform/orgContext';
 import { useNavigate } from 'react-router';
+import OrgJudiePhoneCredentials from './OrgJudiePhoneCredentials';
 
 type ClientTab = 'all' | OrgStatus;
 
@@ -405,6 +406,11 @@ export default function PlatformClientsCRM() {
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Badge variant="outline">{client.planLabel}</Badge>
+                          {client.phoneDid ? (
+                            <Badge variant="secondary">Judie {client.phoneDid}</Badge>
+                          ) : (
+                            <Badge variant="outline">No Judie number</Badge>
+                          )}
                           {client.subscriptionStatus && (
                             <Badge variant="outline" className="bg-violet-50">{client.subscriptionStatus}</Badge>
                           )}
@@ -472,6 +478,16 @@ export default function PlatformClientsCRM() {
                 {selected.notes && (
                   <div><Label className="font-bold">Notes</Label><p className="bg-gray-50 p-3 rounded-lg">{selected.notes}</p></div>
                 )}
+                <OrgJudiePhoneCredentials
+                  orgId={selected.id}
+                  orgName={selected.name}
+                  onSaved={(line) => {
+                    setSelected((prev) => (prev ? { ...prev, phoneDid: line.did } : prev));
+                    setClients((prev) =>
+                      prev.map((c) => (c.id === selected.id ? { ...c, phoneDid: line.did } : c)),
+                    );
+                  }}
+                />
                 <div className="flex flex-wrap gap-2 pt-2">
                   <Button className="flex-1 min-w-[120px]" onClick={() => handleActAs(selected)}>Act as client</Button>
                   <Button variant="outline" className="flex-1 min-w-[120px]" onClick={() => { setSelected(null); navigate(`/platform/clients/${selected.id}/menu`); }}>

@@ -176,8 +176,8 @@ export default function PlatformPhoneLines() {
           Phone lines
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Give each restaurant its own number. Store SIP username, password, and connection details
-          per line — Judie inbound DIDs sync onto the client record automatically.
+          Overview of all lines. Prefer Platform clients → open a restaurant for Judie SIP credentials,
+          and Sally offer for the platform sales line.
         </p>
       </div>
 
@@ -232,7 +232,8 @@ export default function PlatformPhoneLines() {
                 setForm((f) => ({ ...f, purpose: e.target.value as PlatformPhoneLinePurpose }))
               }
             >
-              <option value="aria">Judie (AI diner line)</option>
+              <option value="aria">Judie (restaurant diner)</option>
+              <option value="sally">Sally (platform sales)</option>
               <option value="staff">Staff softphone</option>
             </select>
           </div>
@@ -332,7 +333,9 @@ export default function PlatformPhoneLines() {
               <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold text-s2d-teal-deep">{line.label}</p>
-                  <Badge variant="secondary">{line.purpose === 'staff' ? 'Staff' : 'Judie'}</Badge>
+                  <Badge variant="secondary">
+                    {line.purpose === 'staff' ? 'Staff' : line.purpose === 'sally' ? 'Sally' : 'Judie'}
+                  </Badge>
                   <Badge variant="outline">{line.connectionType ?? 'soho66'}</Badge>
                   <Badge variant={line.enabled ? 'default' : 'secondary'}>
                     {line.enabled ? line.status : 'disabled'}

@@ -233,7 +233,7 @@ export async function saveSallyOffer(patch: Partial<SallyOfferTerms>): Promise<{
   );
 }
 
-export type PlatformPhoneLinePurpose = 'staff' | 'aria';
+export type PlatformPhoneLinePurpose = 'staff' | 'aria' | 'sally';
 export type PlatformPhoneLineConnectionType = 'soho66' | 'sip' | 'twilio' | 'other';
 
 export interface PlatformPhoneLine {
@@ -322,6 +322,69 @@ export async function testPlatformPhoneLine(
       body: JSON.stringify({ orgId }),
     }),
   );
+}
+
+/** Platform-owner Sally sales DID + SIP (home org). */
+export async function fetchSallyPhoneLine(): Promise<PlatformPhoneLine | null> {
+  const headers = await platformAuthHeaders();
+  const data = await parseJson<{ line: PlatformPhoneLine | null }>(
+    await fetch('/api/platform/sally-phone-line', { headers }),
+  );
+  return data.line ?? null;
+}
+
+export async function saveSallyPhoneLine(input: {
+  label?: string;
+  sipUsername: string;
+  sipPassword?: string;
+  sipDomain?: string;
+  did: string;
+  enabled?: boolean;
+  connectionType?: PlatformPhoneLineConnectionType;
+}): Promise<PlatformPhoneLine> {
+  const headers = await platformAuthHeaders();
+  const data = await parseJson<{ line: PlatformPhoneLine }>(
+    await fetch('/api/platform/sally-phone-line', {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(input),
+    }),
+  );
+  return data.line;
+}
+
+/** Restaurant Judie diner line for one client org. */
+export async function fetchJudiePhoneLine(orgId: string): Promise<PlatformPhoneLine | null> {
+  const headers = await platformAuthHeaders();
+  const data = await parseJson<{ line: PlatformPhoneLine | null }>(
+    await fetch(`/api/platform/organizations/${encodeURIComponent(orgId)}/judie-phone-line`, {
+      headers,
+    }),
+  );
+  return data.line ?? null;
+}
+
+export async function saveJudiePhoneLine(
+  orgId: string,
+  input: {
+    label?: string;
+    sipUsername: string;
+    sipPassword?: string;
+    sipDomain?: string;
+    did: string;
+    enabled?: boolean;
+    connectionType?: PlatformPhoneLineConnectionType;
+  },
+): Promise<PlatformPhoneLine> {
+  const headers = await platformAuthHeaders();
+  const data = await parseJson<{ line: PlatformPhoneLine }>(
+    await fetch(`/api/platform/organizations/${encodeURIComponent(orgId)}/judie-phone-line`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(input),
+    }),
+  );
+  return data.line;
 }
 
 export function tokenUsageColor(used: number, cap: number): string {
