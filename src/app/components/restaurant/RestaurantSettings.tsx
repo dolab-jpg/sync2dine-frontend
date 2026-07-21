@@ -223,7 +223,7 @@ export default function RestaurantSettings() {
             <div className="flex-1">
               <h2 className="text-xl font-bold text-s2d-teal-deep">Say today</h2>
               <p className="mb-2 text-sm text-slate-600">
-                A daily line the agent mentions on calls — today's special, closing early, etc.
+                Tonight&apos;s spoken offer for Judie on phone calls — today&apos;s special, deal, or closing early.
               </p>
               <Textarea
                 value={sayToday}
@@ -244,7 +244,7 @@ export default function RestaurantSettings() {
               <div>
                 <h2 className="text-xl font-bold text-s2d-teal-deep">Delivery areas</h2>
                 <p className="mb-2 text-sm text-slate-600">
-                  Postcode beginnings Lizzie accepts for delivery (e.g. B1, B11, CV1). Longer matches win — B11 before B1.
+                  Postcode beginnings Judie accepts for delivery (e.g. B1, B11, CV1). Longer matches win — B11 before B1.
                 </p>
                 <div className="flex min-h-12 flex-wrap items-center gap-2 rounded-xl border border-s2d-teal/20 bg-s2d-cream/40 px-3 py-2">
                   {deliveryPrefixes.map((prefix) => (
