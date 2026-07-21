@@ -54,11 +54,17 @@ export default function SallyKnowledgePanel() {
       const s = await sRes.json();
       const src = await srcRes.json();
       const c = await cRes.json();
+      // #region agent log
+      fetch('http://127.0.0.1:7610/ingest/e809fe57-584f-4b4e-8cfb-f3dee6b9facf',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d0f60a'},body:JSON.stringify({sessionId:'d0f60a',runId:'live-debug',hypothesisId:'C',location:'SallyKnowledgePanel.tsx:load',message:'panel load',data:{statusHttp:sRes.status,sourcesHttp:srcRes.status,chunksHttp:cRes.status,ok:Boolean(s?.ok),sources:s?.sources??null,pending:s?.pending??null,approved:s?.approved??null,chunkRows:Array.isArray(c?.chunks)?c.chunks.length:0},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       if (!sRes.ok) throw new Error(s.error || `Status ${sRes.status}`);
       setStatus(s);
       setSources(Array.isArray(src.sources) ? src.sources : []);
       setChunks(Array.isArray(c.chunks) ? c.chunks : []);
     } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7610/ingest/e809fe57-584f-4b4e-8cfb-f3dee6b9facf',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d0f60a'},body:JSON.stringify({sessionId:'d0f60a',runId:'live-debug',hypothesisId:'C',location:'SallyKnowledgePanel.tsx:load',message:'panel load failed',data:{error:err instanceof Error?err.message:String(err)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       toast.error(err instanceof Error ? err.message : 'Failed to load Sally knowledge');
     } finally {
       setLoading(false);
