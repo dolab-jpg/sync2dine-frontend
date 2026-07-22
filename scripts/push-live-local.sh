@@ -1,8 +1,12 @@
 #!/bin/bash
-# Run this on YOUR machine (the one with SSH host `vps`) — not a cloud agent.
-# Deploys SPA + API to app.sync2dine.io, then prints live probes.
+# LOCAL ONLY — run on your PC (the machine where `ssh vps` already works).
+# Deploys SPA + API to app.sync2dine.io and prints live probes.
 #
-# From sync2dine-frontend:
+# Usage (repos side by side):
+#   cd sync2dine-frontend
+#   git checkout master && git pull
+#   cd ../sync2dine-backend && git checkout master && git pull
+#   cd ../sync2dine-frontend
 #   bash scripts/push-live-local.sh
 #
 # Optional:
@@ -16,7 +20,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BE_REPO="${BE_REPO:-$ROOT/../sync2dine-backend}"
 BE_DIR="${BE_DIR:-/var/www/vhosts/sync2dine.io/sync2dine-backend}"
 
-if [ ! -d "$BE_REPO/.git" ] && [ ! -f "$BE_REPO/package.json" ]; then
+if [ ! -f "$BE_REPO/package.json" ]; then
   echo "ERROR: backend repo not found at $BE_REPO"
   echo "Clone sync2dine-backend next to sync2dine-frontend, or set BE_REPO=..."
   exit 1
@@ -47,7 +51,6 @@ if [ "${SKIP_API:-0}" != "1" ]; then
 set -euo pipefail
 BE="$BE_DIR"
 cd "\$BE"
-# Keep Sally prompts aligned with frontend master when available
 curl -fsSL "https://raw.githubusercontent.com/dolab-jpg/sync2dine-frontend/master/server/sally-sales.ts" \
   -o server/sally-sales.ts || true
 curl -fsSL "https://raw.githubusercontent.com/dolab-jpg/sync2dine-frontend/master/server/orchestrator-prompt.ts" \
@@ -77,4 +80,4 @@ head -c 160 /tmp/live-orders.json 2>/dev/null; echo
 curl -sS -o /tmp/live-ops.json -w 'ops=%{http_code}\n' https://app.sync2dine.io/api/ops/alerts || true
 head -c 160 /tmp/live-ops.json 2>/dev/null; echo
 curl -sS https://app.sync2dine.io/ | grep -oE 'assets/index-[^"]+\.js' | head -1 || true
-echo "DONE — ran from local SSH host $VPS_SSH (no cloud agent)"
+echo "DONE — local deploy via $VPS_SSH"
