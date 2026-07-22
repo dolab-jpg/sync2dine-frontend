@@ -6,6 +6,9 @@ on:
       - master
   workflow_dispatch:
 
+env:
+  SYNC2DINE_DOCROOT: /var/www/vhosts/sync2dine.io/app.sync2dine.io
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,17 +32,29 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    if: ${{ vars.SYNC2DINE_DOCROOT != '' }}
     steps:
+      - name: Check VPS secrets present
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          echo "host_len=${#VPS_HOST} user_len=${#VPS_USER} key_len=${#VPS_SSH_KEY}"
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
+            echo "::error::Missing VPS_HOST / VPS_USER / VPS_SSH_KEY GitHub secrets — cannot SSH to live SPA"
+            exit 1
+          fi
+
       - uses: actions/download-artifact@v4
         with:
           name: sync2dine-spa
           path: dist
+
       - uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           source: dist/*
-          target: ${{ vars.SYNC2DINE_DOCROOT }}
+          target: ${{ env.SYNC2DINE_DOCROOT }}
           strip_components: 1
