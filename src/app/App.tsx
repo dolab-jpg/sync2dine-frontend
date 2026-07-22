@@ -209,6 +209,12 @@ export interface Product {
   deal?: {
     roles: Array<{ role: string; qtyPerDeal: number; choices: string[] }>;
   };
+  /** Upgrade option groups Judie can offer (e.g. crust, side) */
+  options?: Array<{
+    role: string;
+    required?: boolean;
+    choices: Array<{ name: string; priceDelta?: number }>;
+  }>;
   /** UK 14 allergen / dietary facts (stored on products.data) */
   allergensContains?: AllergenCode[];
   allergensMayContain?: AllergenCode[];
