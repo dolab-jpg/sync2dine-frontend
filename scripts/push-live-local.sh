@@ -42,33 +42,41 @@ fi
 
 if [ "${SKIP_API:-0}" != "1" ]; then
   echo "== Sync backend =="
-  rsync -az --delete \
-    --exclude node_modules --exclude .git --exclude server/data --exclude .env \
-    "$BE_REPO/" "$VPS_SSH:$BE_DIR/"
+  # Do NOT curl frontend server/sally-sales.ts onto the VPS — that tree imports
+  # saas-products/saas-contracts that are not always present and will 502 the API.
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -az --delete \
+      --exclude node_modules --exclude .git --exclude server/data --exclude .env \
+      "$BE_REPO/" "$VPS_SSH:$BE_DIR/"
+  else
+    echo "rsync not found — using tar/scp fallback"
+    TAR=/tmp/sync2dine-backend-sync.tar.gz
+    (
+      cd "$BE_REPO"
+      tar -czf "$TAR" \
+        --exclude=node_modules \
+        --exclude=.git \
+        --exclude=server/data \
+        --exclude=.env \
+        .
+    )
+    scp "$TAR" "$VPS_SSH:/tmp/sync2dine-backend-sync.tar.gz"
+    ssh "$VPS_SSH" "mkdir -p '$BE_DIR' && tar -xzf /tmp/sync2dine-backend-sync.tar.gz -C '$BE_DIR'"
+  fi
 
   echo "== Restart API =="
   ssh "$VPS_SSH" bash -s <<REMOTE
 set -euo pipefail
+export PATH="/opt/plesk/node/24/bin:\$PATH"
 BE="$BE_DIR"
 cd "\$BE"
-curl -fsSL "https://raw.githubusercontent.com/dolab-jpg/sync2dine-frontend/master/server/sally-sales.ts" \
-  -o server/sally-sales.ts || true
-curl -fsSL "https://raw.githubusercontent.com/dolab-jpg/sync2dine-frontend/master/server/orchestrator-prompt.ts" \
-  -o server/orchestrator-prompt.ts || true
 npm ci --omit=dev
-if command -v pm2 >/dev/null 2>&1; then
-  pm2 restart sync2dine-backend || pm2 start "npm run start" --name sync2dine-backend
-else
-  pkill -f 'sync2dine.io/sync2dine-backend.*server/index.ts' || true
-  sleep 2
-  nohup /opt/plesk/node/24/bin/node \
-    --require ./node_modules/tsx/dist/preflight.cjs \
-    --import file://\$BE/node_modules/tsx/dist/loader.mjs \
-    --env-file=.env server/index.ts \
-    >/tmp/sync2dine-api.log 2>&1 &
-  sleep 6
-fi
-pgrep -af 'sync2dine-backend.*server/index.ts' | head -3 || true
+pkill -f 'sync2dine.io/sync2dine-backend.*server/index.ts' || true
+pkill -f 'sync2dine.io/sync2dine-backend/node_modules/tsx' || true
+sleep 2
+nohup npm run start >/tmp/sync2dine-api.log 2>&1 &
+sleep 8
+pgrep -af 'sync2dine.io/sync2dine-backend' | head -5 || true
 curl -sS --max-time 10 https://app.sync2dine.io/health || true
 echo
 REMOTE
