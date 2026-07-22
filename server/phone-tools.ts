@@ -1661,9 +1661,8 @@ export async function executePhoneTool(
         ...(row.role ? { role: row.role } : {}),
       };
     });
-    const totalBeforeSpecial = Number.isFinite(Number(input.total)) && Number(input.total) > 0
-      ? Number(input.total)
-      : pricedTotal;
+    // Catalog/deal pricing wins — never trust client/AI total (same as backend order-service).
+    const totalBeforeSpecial = pricedTotal;
     const phone = firstString(input.customerPhone, callerPhone) ?? '';
     let customerId = firstString(input.customerId, body.customerContext?.customerId);
     if (!customerId && phone) {

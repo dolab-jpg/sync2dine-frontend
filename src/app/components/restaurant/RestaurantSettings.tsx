@@ -34,6 +34,10 @@ export default function RestaurantSettings() {
   const [sayToday, setSayToday] = useState('');
   const [deliveryPrefixes, setDeliveryPrefixes] = useState<string[]>([]);
   const [deliveryNotes, setDeliveryNotes] = useState('');
+  const [minOrderGbp, setMinOrderGbp] = useState('0');
+  const [deliveryFeeGbp, setDeliveryFeeGbp] = useState('0');
+  const [freeDeliveryOverGbp, setFreeDeliveryOverGbp] = useState('0');
+  const [orderingEnabled, setOrderingEnabled] = useState(true);
   const [prefixDraft, setPrefixDraft] = useState('');
   const [matrixOpen, setMatrixOpen] = useState(false);
   const orgId = getActiveOrgId();
@@ -52,6 +56,10 @@ export default function RestaurantSettings() {
           sayToday?: string;
           deliveryPostcodePrefixes?: string[];
           deliveryNotes?: string;
+          minOrderGbp?: number;
+          deliveryFeeGbp?: number;
+          freeDeliveryOverGbp?: number;
+          orderingEnabled?: boolean;
         };
         if (cancelled) return;
         setIsActive(data.isActive !== false);
@@ -63,6 +71,10 @@ export default function RestaurantSettings() {
             : [],
         );
         setDeliveryNotes(data.deliveryNotes ?? '');
+        setMinOrderGbp(String(data.minOrderGbp ?? 0));
+        setDeliveryFeeGbp(String(data.deliveryFeeGbp ?? 0));
+        setFreeDeliveryOverGbp(String(data.freeDeliveryOverGbp ?? 0));
+        setOrderingEnabled(data.orderingEnabled !== false);
       } catch {
         toast.error('Could not load settings — API offline?');
       } finally {
@@ -107,6 +119,26 @@ export default function RestaurantSettings() {
     }
   }
 
+  async function toggleOrdering(checked: boolean) {
+    setOrderingEnabled(checked);
+    try {
+      const res = await fetch('/api/agent/settings', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(orgId ? { 'x-org-id': orgId } : {}),
+        },
+        body: JSON.stringify({ orderingEnabled: checked }),
+      });
+      const data = await res.json() as { orderingEnabled?: boolean };
+      setOrderingEnabled(data.orderingEnabled !== false);
+      toast.success(checked ? 'Ordering open on all channels' : 'Ordering suspended — Till, phone, and kiosk blocked');
+    } catch {
+      toast.error('Could not update ordering');
+      setOrderingEnabled(!checked);
+    }
+  }
+
   async function save() {
     setSaving(true);
     try {
@@ -125,15 +157,27 @@ export default function RestaurantSettings() {
           sayToday,
           deliveryPostcodePrefixes: prefixes,
           deliveryNotes,
+          minOrderGbp: Number(minOrderGbp) || 0,
+          deliveryFeeGbp: Number(deliveryFeeGbp) || 0,
+          freeDeliveryOverGbp: Number(freeDeliveryOverGbp) || 0,
+          orderingEnabled,
         }),
       });
       if (!res.ok) throw new Error(String(res.status));
-      const data = await res.json() as { deliveryPostcodePrefixes?: string[] };
+      const data = await res.json() as {
+        deliveryPostcodePrefixes?: string[];
+        minOrderGbp?: number;
+        deliveryFeeGbp?: number;
+        freeDeliveryOverGbp?: number;
+      };
       if (Array.isArray(data.deliveryPostcodePrefixes)) {
         setDeliveryPrefixes(data.deliveryPostcodePrefixes.map((p) => normalizePrefix(String(p))).filter(Boolean));
       }
+      if (data.minOrderGbp != null) setMinOrderGbp(String(data.minOrderGbp));
+      if (data.deliveryFeeGbp != null) setDeliveryFeeGbp(String(data.deliveryFeeGbp));
+      if (data.freeDeliveryOverGbp != null) setFreeDeliveryOverGbp(String(data.freeDeliveryOverGbp));
       setPrefixDraft('');
-      toast.success('Saved — the phone agent will use this on the next call');
+      toast.success('Saved — Till and phone will enforce these rules');
     } catch {
       toast.error('Save failed');
     } finally {
@@ -182,7 +226,7 @@ export default function RestaurantSettings() {
           </div>
         </div>
 
-        <div className="rounded-[1.5rem] border border-s2d-teal/15 bg-white p-5 shadow-sm">
+        <div className="rounded-[1.5rem] border border-s2d-teal/15 bg-white p-5 shadow-sm space-y-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <PhoneCall className="mt-1 h-6 w-6 text-s2d-teal" />
@@ -192,6 +236,15 @@ export default function RestaurantSettings() {
               </div>
             </div>
             <Switch checked={isActive} onCheckedChange={(c) => void toggleActive(c)} disabled={loading} />
+          </div>
+          <div className="flex items-center justify-between gap-4 border-t border-s2d-teal/10 pt-4">
+            <div>
+              <h3 className="text-lg font-bold text-s2d-teal-deep">Accept new orders</h3>
+              <p className="text-sm text-slate-600">
+                Off = suspend Till, phone, kiosk, and inbound. Phone answering can stay on separately.
+              </p>
+            </div>
+            <Switch checked={orderingEnabled} onCheckedChange={(c) => void toggleOrdering(c)} disabled={loading} />
           </div>
         </div>
 
@@ -284,13 +337,57 @@ export default function RestaurantSettings() {
                 </div>
               </div>
               <div>
-                <p className="mb-1 text-sm font-semibold text-s2d-teal-deep">Delivery notes</p>
+                <p className="mb-2 text-sm font-semibold text-s2d-teal-deep">Delivery criteria (enforced)</p>
+                <p className="mb-2 text-xs text-slate-500">
+                  Numbers the Till and phone engine use — not just spoken notes.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="block text-sm">
+                    <span className="font-semibold text-s2d-teal-deep">Minimum order (£)</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.50"
+                      value={minOrderGbp}
+                      onChange={(e) => setMinOrderGbp(e.target.value)}
+                      disabled={loading}
+                      className="mt-1 min-h-12 rounded-xl"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    <span className="font-semibold text-s2d-teal-deep">Delivery fee (£)</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.50"
+                      value={deliveryFeeGbp}
+                      onChange={(e) => setDeliveryFeeGbp(e.target.value)}
+                      disabled={loading}
+                      className="mt-1 min-h-12 rounded-xl"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    <span className="font-semibold text-s2d-teal-deep">Free delivery over (£)</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.50"
+                      value={freeDeliveryOverGbp}
+                      onChange={(e) => setFreeDeliveryOverGbp(e.target.value)}
+                      disabled={loading}
+                      className="mt-1 min-h-12 rounded-xl"
+                    />
+                  </label>
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-semibold text-s2d-teal-deep">Extra delivery notes (spoken)</p>
                 <Textarea
                   value={deliveryNotes}
                   onChange={(e) => setDeliveryNotes(e.target.value)}
                   rows={2}
                   disabled={loading}
-                  placeholder="£2.50 delivery · £15 minimum · Free delivery over £30"
+                  placeholder="Optional — e.g. leave at door, cash preferred after 10pm"
                   className="rounded-xl text-base"
                 />
               </div>

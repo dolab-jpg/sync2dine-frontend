@@ -94,7 +94,6 @@ export default function SquareConnectPanel() {
     try {
       const cfgRes = await fetch('/api/connectors/config', { headers: orgHeaders() });
       // #region agent log
-      fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b4e46'},body:JSON.stringify({sessionId:'6b4e46',runId:'debug-square',hypothesisId:'A',location:'SquareConnectPanel.tsx:load-config',message:'connectors config response',data:{status:cfgRes.status,ok:cfgRes.ok,host:window.location.host,path:window.location.pathname},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       if (!cfgRes.ok) throw new Error(String(cfgRes.status));
       const cfgData = await cfgRes.json() as { config?: SquareConfig | null };
@@ -107,7 +106,6 @@ export default function SquareConnectPanel() {
           && (cfg.direction === 'outbound' || cfg.direction === 'both')),
       );
       // #region agent log
-      fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b4e46'},body:JSON.stringify({sessionId:'6b4e46',runId:'debug-square',hypothesisId:'B',location:'SquareConnectPanel.tsx:config-parsed',message:'square config fields present',data:{provider:cfg.provider??null,hasSquareToken:!!cfg.hasSquareToken,connectionStatus:cfg.squareConnectionStatus??null,locationId:cfg.squareLocationId??null,enabled:!!cfg.enabled,direction:cfg.direction??null,hasMenuCompleteness:!!cfg.menuCompleteness},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
 
       if (cfg.hasSquareToken || cfg.squareConnectionStatus === 'connected') {
@@ -116,7 +114,6 @@ export default function SquareConnectPanel() {
           fetch('/api/connectors/menu/mapping', { headers: orgHeaders() }),
         ]);
         // #region agent log
-        fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b4e46'},body:JSON.stringify({sessionId:'6b4e46',runId:'debug-square',hypothesisId:'C',location:'SquareConnectPanel.tsx:locations-mapping',message:'square locations/mapping responses',data:{locStatus:locRes.status,mapStatus:mapRes.status},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
         if (locRes.ok) {
           const locData = await locRes.json() as { locations?: SquareLocation[] };
@@ -137,7 +134,6 @@ export default function SquareConnectPanel() {
       }
     } catch (err) {
       // #region agent log
-      fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b4e46'},body:JSON.stringify({sessionId:'6b4e46',runId:'debug-square',hypothesisId:'A',location:'SquareConnectPanel.tsx:load-error',message:'square panel load failed',data:{error:err instanceof Error?err.message:String(err)},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       toast.error('Could not load Square connector config');
     } finally {
@@ -187,7 +183,6 @@ export default function SquareConnectPanel() {
 
   function connectOAuth() {
     // #region agent log
-    fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b4e46'},body:JSON.stringify({sessionId:'6b4e46',runId:'debug-square',hypothesisId:'D',location:'SquareConnectPanel.tsx:oauth-start',message:'user starting Square OAuth',data:{href:'/api/connectors/square/oauth/start',host:window.location.host},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     window.location.href = '/api/connectors/square/oauth/start';
   }

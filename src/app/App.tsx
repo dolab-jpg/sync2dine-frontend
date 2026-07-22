@@ -1372,12 +1372,18 @@ export default function App() {
             >
               <Route path="/" element={<RestaurantLive />} />
               <Route path="/orders" element={<Navigate to="/orders/kitchen" replace />} />
-              <Route path="/orders/kitchen" element={<RestaurantOrders tab="kitchen" showTabs={false} />} />
+              <Route
+                path="/orders/kitchen"
+                element={<ProtectedRoute element={<RestaurantOrders tab="kitchen" showTabs={false} />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
               <Route
                 path="/orders/till"
                 element={<ProtectedRoute element={<RestaurantTill />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
               />
-              <Route path="/orders/delivery" element={<RestaurantOrders tab="delivery" showTabs={false} />} />
+              <Route
+                path="/orders/delivery"
+                element={<ProtectedRoute element={<RestaurantOrders tab="delivery" showTabs={false} />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+              />
               <Route
                 path="/bookings"
                 element={<ProtectedRoute element={<BookingsBoard />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
@@ -1404,7 +1410,10 @@ export default function App() {
                 element={<ProtectedRoute element={<RestaurantAccounts />} allowedRoles={['super_admin', 'manager']} user={user} />}
               />
               <Route path="/team" element={<Navigate to="/settings" replace />} />
-              <Route path="/settings" element={<RestaurantSettings />} />
+              <Route
+                path="/settings"
+                element={<ProtectedRoute element={<RestaurantSettings />} allowedRoles={['super_admin', 'manager']} user={user} />}
+              />
               <Route path="/integrations" element={<IntegrationsPublicPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/profile/password" element={<ChangePasswordPage />} />

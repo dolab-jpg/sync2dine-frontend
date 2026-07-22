@@ -206,6 +206,27 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
       return false;
     }
   });
+  const [opsAlerts, setOpsAlerts] = useState<Array<{ id: string; title: string; message: string; severity: string }>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAlerts() {
+      try {
+        const res = await fetch('/api/ops/alerts');
+        if (!res.ok) return;
+        const data = await res.json() as { alerts?: Array<{ id: string; title: string; message: string; severity: string }> };
+        if (!cancelled) setOpsAlerts(Array.isArray(data.alerts) ? data.alerts : []);
+      } catch {
+        /* ignore */
+      }
+    }
+    void loadAlerts();
+    const timer = window.setInterval(() => void loadAlerts(), 20_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   if (!context) return null;
   const { user, logout } = context;
@@ -224,9 +245,37 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
     });
   }
 
+  async function ackAlert(id: string) {
+    try {
+      await fetch(`/api/ops/alerts/${encodeURIComponent(id)}/ack`, { method: 'POST' });
+      setOpsAlerts((prev) => prev.filter((a) => a.id !== id));
+    } catch {
+      /* ignore */
+    }
+  }
+
   return (
     <div className="native-shell flex min-h-dvh flex-col bg-s2d-cream lg:flex-row">
       <OnlineStatusBanner />
+      {opsAlerts.length > 0 && (
+        <div className="w-full shrink-0 space-y-2 bg-red-700 px-3 py-2 text-white lg:order-first">
+          {opsAlerts.slice(0, 3).map((alert) => (
+            <div key={alert.id} className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-black uppercase tracking-wide">{alert.title}</p>
+                <p className="text-sm text-red-50">{alert.message}</p>
+              </div>
+              <button
+                type="button"
+                className="shrink-0 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-bold hover:bg-white/25"
+                onClick={() => void ackAlert(alert.id)}
+              >
+                Acknowledge
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <aside
         className={`hidden shrink-0 flex-col bg-gradient-to-b from-s2d-teal-deep via-s2d-teal to-s2d-teal-ink transition-[width] duration-200 ease-out lg:flex ${

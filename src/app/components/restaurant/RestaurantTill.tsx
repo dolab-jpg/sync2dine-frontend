@@ -37,6 +37,15 @@ export default function RestaurantTill() {
   const [submitting, setSubmitting] = useState(false);
   const [customerQuery, setCustomerQuery] = useState('');
 
+  // Stable fingerprint so sold-out / price edits in MenuManager refresh the till without fetch loops.
+  const productFingerprint = useMemo(
+    () => (products ?? [])
+      .map((p) => `${p.id}:${p.available !== false ? 1 : 0}:${p.price}`)
+      .sort()
+      .join('|'),
+    [products],
+  );
+
   useEffect(() => {
     let cancelled = false;
     async function loadMenu() {
@@ -60,9 +69,11 @@ export default function RestaurantTill() {
             })));
             return;
           }
+        } else if (!cancelled) {
+          toast.message('Menu API unavailable ? using local catalog');
         }
       } catch {
-        /* fall through */
+        if (!cancelled) toast.message('Menu API unavailable ? using local catalog');
       }
       // Fallback: AppContext products (same Supabase catalog MenuManager edits)
       if (!cancelled) {
@@ -82,10 +93,7 @@ export default function RestaurantTill() {
       if (!cancelled) setMenuLoading(false);
     });
     return () => { cancelled = true; };
-    // products intentionally omitted  AppContext often replaces the array each render
-    // and would restart this fetch forever (stuck on "Loading menu").
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- products is fallback-only
-  }, [orgId]);
+  }, [orgId, productFingerprint, products]);
 
   const total = useMemo(
     () => Math.round(lines.reduce((s, l) => s + l.price * l.qty, 0) * 100) / 100,

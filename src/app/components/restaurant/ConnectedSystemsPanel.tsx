@@ -130,7 +130,6 @@ export default function ConnectedSystemsPanel() {
 
   useEffect(() => {
     // #region agent log
-    fetch('http://127.0.0.1:7756/ingest/45011e36-ac12-4dbc-b7c1-e1827334fcf5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6b4e46'},body:JSON.stringify({sessionId:'6b4e46',runId:'debug-square',hypothesisId:'E',location:'ConnectedSystemsPanel.tsx:provider',message:'connected systems provider state',data:{provider:config.provider,apiMissing,loading,host:typeof window!=='undefined'?window.location.host:null},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
   }, [config.provider, apiMissing, loading]);
 
