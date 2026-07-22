@@ -271,9 +271,9 @@ export async function testPlatformPhoneLine(
 /** Platform-owner Sally sales DID + SIP (home org). */
 export async function fetchSallyPhoneLine(): Promise<PlatformPhoneLine | null> {
   const headers = await platformAuthHeaders();
-  const data = await parseJson<{ line: PlatformPhoneLine | null }>(
-    await fetch('/api/platform/sally-phone-line', { headers }),
-  );
+  const res = await fetch('/api/platform/sally-phone-line', { headers });
+  if (res.status === 404) return null;
+  const data = await parseJson<{ line: PlatformPhoneLine | null }>(res);
   return data.line ?? null;
 }
 
@@ -300,11 +300,11 @@ export async function saveSallyPhoneLine(input: {
 /** Restaurant Judie diner line for one client org. */
 export async function fetchJudiePhoneLine(orgId: string): Promise<PlatformPhoneLine | null> {
   const headers = await platformAuthHeaders();
-  const data = await parseJson<{ line: PlatformPhoneLine | null }>(
-    await fetch(`/api/platform/organizations/${encodeURIComponent(orgId)}/judie-phone-line`, {
-      headers,
-    }),
-  );
+  const res = await fetch(`/api/platform/organizations/${encodeURIComponent(orgId)}/judie-phone-line`, {
+    headers,
+  });
+  if (res.status === 404) return null;
+  const data = await parseJson<{ line: PlatformPhoneLine | null }>(res);
   return data.line ?? null;
 }
 
