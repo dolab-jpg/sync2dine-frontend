@@ -13,7 +13,7 @@ type CartLine = { name: string; qty: number; price: number };
 type MenuItem = { id: string; name: string; price: number; available?: boolean; category?: string };
 
 /**
- * Staff till MVP ó creates orders via shared POST /api/orders (OrderService).
+ * Staff till MVP ù creates orders via shared POST /api/orders (OrderService).
  * Menu lines load from GET /api/menu (fallback: AppContext products).
  */
 export default function RestaurantTill() {
@@ -30,6 +30,8 @@ export default function RestaurantTill() {
   const [notes, setNotes] = useState('');
   const [allergyConfirmed, setAllergyConfirmed] = useState(false);
   const [customerAllergies, setCustomerAllergies] = useState('');
+  /** Pay at the door ù unpaid until staff mark Paid on the board. */
+  const [payAtDoor, setPayAtDoor] = useState<'cash' | 'card'>('cash');
   const [lines, setLines] = useState<CartLine[]>([]);
   const [pickId, setPickId] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -80,8 +82,8 @@ export default function RestaurantTill() {
       if (!cancelled) setMenuLoading(false);
     });
     return () => { cancelled = true; };
-    // products intentionally omitted ó AppContext often replaces the array each render
-    // and would restart this fetch forever (stuck on "Loading menuÖ").
+    // products intentionally omitted ù AppContext often replaces the array each render
+    // and would restart this fetch forever (stuck on "Loading menuù").
     // eslint-disable-next-line react-hooks/exhaustive-deps -- products is fallback-only
   }, [orgId]);
 
@@ -144,6 +146,7 @@ export default function RestaurantTill() {
           notes,
           customerAllergies,
           allergyConfirmed: true,
+          paymentStatus: payAtDoor,
           channel: 'staff',
           source: 'sync2dine',
         }),
@@ -160,7 +163,7 @@ export default function RestaurantTill() {
       }
       toast.success(
         data.spokenHint
-          || `Order ${data.order?.orderNumber ?? ''} placed ó on the kitchen board.`,
+          || `Order ${data.order?.orderNumber ?? ''} placed ù on the kitchen board.`,
       );
       setLines([]);
       setNotes('');
@@ -179,7 +182,7 @@ export default function RestaurantTill() {
         <ShoppingBag className="h-7 w-7 text-emerald-800" />
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900">Till</h1>
-          <p className="text-sm text-stone-600">Staff order ó same rules as phone (delivery area, allergies, pricing).</p>
+          <p className="text-sm text-stone-600">Staff order ù same rules as phone (delivery area, allergies, pricing).</p>
         </div>
       </header>
 
@@ -267,7 +270,7 @@ export default function RestaurantTill() {
       <section className="space-y-3 rounded-2xl border border-stone-200 bg-white p-4">
         <h2 className="text-sm font-bold uppercase tracking-wide text-stone-500">Items</h2>
         {menuLoading ? (
-          <p className="text-sm text-stone-500">Loading menuÖ</p>
+          <p className="text-sm text-stone-500">Loading menuù</p>
         ) : menuItems.length === 0 ? (
           <p className="text-sm text-amber-800">No menu items available. Add dishes under Menu first.</p>
         ) : null}
@@ -277,10 +280,10 @@ export default function RestaurantTill() {
             value={pickId}
             onChange={(e) => setPickId(e.target.value)}
           >
-            <option value="">Select menu itemÖ</option>
+            <option value="">Select menu itemù</option>
             {menuItems.map((p) => (
               <option key={String(p.id)} value={String(p.id)}>
-                {p.name} ó £{Number(p.price).toFixed(2)}
+                {p.name} ù ù{Number(p.price).toFixed(2)}
               </option>
             ))}
           </select>
@@ -297,7 +300,7 @@ export default function RestaurantTill() {
               <li key={l.name} className="flex items-center gap-2 px-3 py-2">
                 <div className="flex-1">
                   <div className="font-medium">{l.name}</div>
-                  <div className="text-xs text-stone-500">£{l.price.toFixed(2)} each</div>
+                  <div className="text-xs text-stone-500">ù{l.price.toFixed(2)} each</div>
                 </div>
                 <Input
                   type="number"
@@ -321,7 +324,30 @@ export default function RestaurantTill() {
             ))}
           </ul>
         )}
-        <div className="text-right text-lg font-bold">Total £{total.toFixed(2)}</div>
+        <div className="text-right text-lg font-bold">Total ù{total.toFixed(2)}</div>
+      </section>
+
+      <section className="space-y-3 rounded-2xl border border-stone-200 bg-white p-4">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-stone-500">Pay at the door</h2>
+        <p className="text-sm text-stone-600">Customer pays when they collect or when delivery arrives.</p>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={payAtDoor === 'cash' ? 'default' : 'outline'}
+            className="min-h-11 flex-1"
+            onClick={() => setPayAtDoor('cash')}
+          >
+            Cash
+          </Button>
+          <Button
+            type="button"
+            variant={payAtDoor === 'card' ? 'default' : 'outline'}
+            className="min-h-11 flex-1"
+            onClick={() => setPayAtDoor('card')}
+          >
+            Card
+          </Button>
+        </div>
       </section>
 
       <section className="space-y-3 rounded-2xl border border-stone-200 bg-white p-4">
@@ -346,7 +372,7 @@ export default function RestaurantTill() {
             checked={allergyConfirmed}
             onChange={(e) => setAllergyConfirmed(e.target.checked)}
           />
-          <span>Allergy check done ó safe to place this order</span>
+          <span>Allergy check done ù safe to place this order</span>
         </label>
       </section>
 
@@ -356,7 +382,7 @@ export default function RestaurantTill() {
         disabled={submitting || menuLoading}
         onClick={() => void submit()}
       >
-        {submitting ? 'PlacingÖ' : 'Place order'}
+        {submitting ? 'Placingù' : 'Place order'}
       </Button>
     </div>
   );

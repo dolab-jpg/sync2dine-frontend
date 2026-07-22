@@ -90,7 +90,7 @@ export default function FrontKiosk() {
                 </Button>
                 {voice.error && <p className="text-center text-sm font-medium text-red-700">{voice.error}</p>}
                 <p className="text-center text-base text-slate-700">
-                  Judie can take your order, switch language, and give you an order number. Pay at the desk when called.
+                  Judie can take your order, ask cash or card, and give you an order number. Pay at the desk when called.
                 </p>
               </div>
 
