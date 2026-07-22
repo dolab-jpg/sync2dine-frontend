@@ -1,0 +1,198 @@
+{
+  "base": "https://app.sync2dine.io",
+  "email": "maya@demo.sync2dine.io",
+  "pass": 10,
+  "fail": 17,
+  "results": [
+    {
+      "id": "01-login-maya",
+      "ok": true,
+      "detail": "https://app.sync2dine.io/",
+      "screenshot": "",
+      "url": "https://app.sync2dine.io/"
+    },
+    {
+      "id": "02-nav-has-live",
+      "ok": false,
+      "detail": "Dashboard\nCRM\nCustomers\nCommunications\nSally\nCall Centre\nCall Register\nIntegrations\nAccounts\nSales\nTeam\nRecruitment\nAI A",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "02-nav-has-kitchen",
+      "ok": false,
+      "detail": "Dashboard\nCRM\nCustomers\nCommunications\nSally\nCall Centre\nCall Register\nIntegrations\nAccounts\nSales\nTeam\nRecruitment\nAI A",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "02-nav-has-delivery",
+      "ok": false,
+      "detail": "Dashboard\nCRM\nCustomers\nCommunications\nSally\nCall Centre\nCall Register\nIntegrations\nAccounts\nSales\nTeam\nRecruitment\nAI A",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "02-nav-has-menu",
+      "ok": false,
+      "detail": "Dashboard\nCRM\nCustomers\nCommunications\nSally\nCall Centre\nCall Register\nIntegrations\nAccounts\nSales\nTeam\nRecruitment\nAI A",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "02-nav-has-customers",
+      "ok": true,
+      "detail": "Dashboard\nCRM\nCustomers\nCommunications\nSally\nCall Centre\nCall Register\nIntegrations\nAccounts\nSales\nTeam\nRecruitment\nAI A",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "02-nav-has-settings",
+      "ok": true,
+      "detail": "Dashboard\nCRM\nCustomers\nCommunications\nSally\nCall Centre\nCall Register\nIntegrations\nAccounts\nSales\nTeam\nRecruitment\nAI A",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "02-nav-team-absent",
+      "ok": false,
+      "detail": "baseline may FAIL if Team still present",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "02-nav-has-calls",
+      "ok": false,
+      "detail": "baseline may FAIL until Calls ships",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "02-nav-has-accounts",
+      "ok": true,
+      "detail": "baseline may FAIL until Accounts ships",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "03-nav-live",
+      "ok": false,
+      "detail": "Error: Nav link not found: Live",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "04-nav-kitchen",
+      "ok": false,
+      "detail": "Error: Nav link not found: Kitchen",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "05-nav-delivery",
+      "ok": false,
+      "detail": "Error: Nav link not found: Delivery",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "06-nav-menu",
+      "ok": false,
+      "detail": "Error: Nav link not found: Menu",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "07-nav-customers",
+      "ok": true,
+      "detail": "https://app.sync2dine.io/customers",
+      "screenshot": "",
+      "url": "https://app.sync2dine.io/customers"
+    },
+    {
+      "id": "08-nav-settings",
+      "ok": true,
+      "detail": "https://app.sync2dine.io/settings",
+      "screenshot": "",
+      "url": "https://app.sync2dine.io/settings"
+    },
+    {
+      "id": "09-nav-calls",
+      "ok": false,
+      "detail": "Nav link not found: Calls",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "10-nav-accounts",
+      "ok": true,
+      "detail": "https://app.sync2dine.io/accounts",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "11-live-interactions",
+      "ok": false,
+      "detail": "Error: Nav link not found: Live",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "15-customers-no-create-quote",
+      "ok": false,
+      "detail": "baseline may FAIL",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "16-customer-detail-opens",
+      "ok": false,
+      "detail": "baseline may FAIL",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "17-menu",
+      "ok": false,
+      "detail": "Error: Nav link not found: Menu",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "18-settings-integrations",
+      "ok": true,
+      "detail": "baseline may FAIL",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "18b-settings-no-team-link",
+      "ok": true,
+      "detail": "baseline may FAIL",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "19-sidebar-collapse",
+      "ok": true,
+      "detail": "toggle clicked",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "20-team-gone",
+      "ok": false,
+      "detail": "https://app.sync2dine.io/team",
+      "screenshot": "",
+      "url": ""
+    },
+    {
+      "id": "21-tablet-bottom-nav",
+      "ok": false,
+      "detail": "",
+      "screenshot": "",
+      "url": ""
+    }
+  ],
+  "at": "2026-07-21T23:42:38.104Z"
+}
