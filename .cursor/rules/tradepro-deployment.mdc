@@ -1,18 +1,20 @@
 ---
-description: TradePro repos, git push, and Supabase deploy — read this first; do not search the whole machine
+description: Sync2Dine repos, git push, and Supabase deploy — read this first; do not search the whole machine
 alwaysApply: true
 ---
 
-# TradePro deployment and auth (persistent)
+# Sync2Dine deployment and auth (persistent)
 
 ## Repos and paths
 
 | Role | Local path | GitHub remote | Branch |
 |------|------------|---------------|--------|
-| Frontend (this workspace) | `c:\Users\dolab\Downloads\Bathroom Sales Estimation Platform` | `https://github.com/dolab-jpg/tradepro-frontend.git` | `master` |
-| Backend (Supabase + Node) | `c:\Users\dolab\Downloads\tradepro-backend` | `https://github.com/dolab-jpg/tradepro-backend.git` | `master` |
+| Frontend (this workspace) | `c:\Users\dolab\Downloads\sync2dine-frontend` | `https://github.com/dolab-jpg/sync2dine-frontend.git` | `master` |
+| Backend (Supabase + Node) | `c:\Users\dolab\Downloads\sync2dine-backend` | `https://github.com/dolab-jpg/sync2dine-backend.git` | `master` |
 
 GitHub account: **dolab-jpg**. Both remotes are already configured on this machine.
+
+Live app: **https://app.sync2dine.io**. Deploy: `bash scripts/push-live-local.sh` (SPA from FE; API from sibling backend). Do **not** SCP `server-legacy/` onto the VPS.
 
 ## Git — already connected
 
@@ -20,11 +22,11 @@ Do **not** search the computer for git credentials. Use normal git commands:
 
 ```powershell
 # Frontend
-cd "c:\Users\dolab\Downloads\Bathroom Sales Estimation Platform"
+cd "c:\Users\dolab\Downloads\sync2dine-frontend"
 git push origin master
 
 # Backend
-cd "c:\Users\dolab\Downloads\tradepro-backend"
+cd "c:\Users\dolab\Downloads\sync2dine-backend"
 git push origin master
 ```
 
@@ -32,7 +34,6 @@ Auth is stored in **Windows Credential Manager** (Git Credential Manager):
 
 - Target: `git:https://github.com`
 - User: `dolab-jpg`
-- Also: repo-specific targets for `tradepro-frontend` and `tradepro-backend`
 
 If push fails in a non-interactive shell, use `git credential-manager get` with protocol=https host=github.com — do not embed tokens in commits or rules.
 
@@ -103,10 +104,10 @@ Get token: Supabase Dashboard → Account → Access Tokens, or run `npx supabas
 From backend repo:
 
 ```powershell
-cd "c:\Users\dolab\Downloads\tradepro-backend"
+cd "c:\Users\dolab\Downloads\sync2dine-backend"
 # Load token if deploy.env exists
-if (Test-Path "..\\Bathroom Sales Estimation Platform\\.cursor\\local\\deploy.env") {
-  Get-Content "..\\Bathroom Sales Estimation Platform\\.cursor\\local\\deploy.env" | ForEach-Object {
+if (Test-Path "..\sync2dine-frontend\.cursor\local\deploy.env") {
+  Get-Content "..\sync2dine-frontend\.cursor\local\deploy.env" | ForEach-Object {
     if ($_ -match '^([^#=]+)=(.*)$') { Set-Item -Path "env:$($matches[1].Trim())" -Value $matches[2].Trim() }
   }
 }
@@ -114,11 +115,12 @@ npx supabase link --project-ref $env:SUPABASE_PROJECT_REF
 npm run supabase:push
 ```
 
-Backend migrations: `tradepro-backend/supabase/migrations/`
-Local config name: `project_id = "tradepro"` in `supabase/config.toml` (link uses cloud project ref, not this string).
+Backend migrations: `sync2dine-backend/supabase/migrations/`
+Local config name in `supabase/config.toml` may still say `tradepro` — link uses the cloud project ref, not that string.
 
 ## What not to do
 
 - Do not scan `%USERPROFILE%`, Downloads, or agent transcripts for repo URLs or tokens
 - Do not commit `.cursor/local/deploy.env`, `.env.local`, or access tokens
 - Do not create new GitHub repos unless the user asks — use the two remotes above
+- Do not treat `server-legacy/` as the live API (that is `../sync2dine-backend`)

@@ -1,28 +1,28 @@
 ---
-description: Live-first — test and verify on app.b-diddies.com, not localhost
+description: Live-first — test and verify on app.sync2dine.io, not localhost
 alwaysApply: true
 ---
 
-# Live-first production (Builder Diddies)
+# Live-first production (Sync2Dine)
 
 ## Source of truth
 
 | Surface | URL / host |
 |---|---|
-| App + API | **https://app.b-diddies.com** (same-origin `/api`, `/webhooks`) |
+| App + API | **https://app.sync2dine.io** (same-origin `/api`, `/webhooks`) |
 | Data | **Supabase cloud** (not browser `localStorage`, not VPS `server/data/*.json` as primary) |
-| Git ship | `origin/master` on `tradepro-frontend` + `tradepro-backend` |
+| Git ship | `origin/master` on `sync2dine-frontend` + `sync2dine-backend` |
 
 Local `localhost:5174` / `:3001` is **dev-only**. Do not use it for product verification, Cynthia LIVE cycles, self-heal, or “is it working?” checks unless the user explicitly asks for a local repro.
 
 ## Agent behaviour
 
-1. **Browser / E2E:** open `https://app.b-diddies.com` (staff login). Prefer Cynthia LIVE gold sparkle on that host.
-2. **API probes:** `https://app.b-diddies.com/api/...` and `/health` — not `127.0.0.1:3001`.
+1. **Browser / E2E:** open `https://app.sync2dine.io` (staff login). Prefer Cynthia LIVE gold sparkle on that host.
+2. **API probes:** `https://app.sync2dine.io/api/...` and `/health` — not `127.0.0.1:3001`.
 3. **Persistence:** CRM/quotes/code-fix jobs → Supabase. Treat local JSON / localStorage as cache or offline fallback only.
-4. **Ship path (when user wants live):** commit → push `origin/master` (both repos as needed) → build SPA with `.env.production.local` → `scripts/deploy-spa.sh` via SSH `vps` → sync/restart **tradepro-backend** / `tradepro-api` on VPS. Pushing GitHub alone does not refresh the site.
-5. **Never** deploy SPA into marketing `httpdocs/`. Docroot is `…/app.b-diddies.com/`.
-6. Do not run legacy `deploy-vps.sh` for routine UI deploys (rewires API to `tradepro-app`).
+4. **Ship path (when user wants live):** commit → push `origin/master` (both repos as needed) → `bash scripts/push-live-local.sh` (SPA from this repo; API rsync/tar from sibling `../sync2dine-backend`). Pushing GitHub alone does not refresh the site.
+5. **Never** deploy SPA into marketing `httpdocs/`. Docroot is `…/app.sync2dine.io/`.
+6. Do not run legacy `deploy-vps.sh` (rewires API to `tradepro-app` / Builder Diddies paths).
 
 ## Self-heal
 

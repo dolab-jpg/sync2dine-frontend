@@ -1,14 +1,14 @@
-# Builder Diddies — Bathroom Sales Estimation Platform (Frontend)
+# Sync2Dine frontend
 
-React/Vite frontend for the Builder Diddies multi-trade construction estimation platform.
+React/Vite SPA for Sync2Dine (AI phone + restaurant ordering platform).
 
-**AI / agent navigation:** start at [AGENTS.md](AGENTS.md), then [docs/APPLICATION_MASTER.md](docs/APPLICATION_MASTER.md) §24 Feature Location Atlas.
+**AI / agent navigation:** start at [AGENTS.md](AGENTS.md), then [docs/APPLICATION_MASTER.md](docs/APPLICATION_MASTER.md) §24 Feature Location Atlas. Post-restructure review: [docs/POST_RESTRUCTURE_AUDIT.md](docs/POST_RESTRUCTURE_AUDIT.md).
 
-**Full inventory / audit (SPA · backend · Flutter mobile · GitHub · VPS · Supabase):** [docs/APPLICATION_MASTER.md](docs/APPLICATION_MASTER.md) — single living SoT (Flutter = §27).
+Live product: **https://app.sync2dine.io**.
 
 ## Backend
 
-Data, auth, and storage live in the separate **[sync2dine-backend](../sync2dine-backend)** repo (Supabase + Node companion for AI/webhooks; GitHub may still say `tradepro-backend`). Do **not** edit this frontend’s legacy `server/` folder.
+Data, auth, telephony, and AI live in the sibling **[sync2dine-backend](../sync2dine-backend)** repo (Supabase + Node). Do **not** edit this frontend’s `server-legacy/` folder — it is a quarantined historical Node tree, not the live API.
 
 ## Setup
 
@@ -38,19 +38,12 @@ npm run sync:types
 ## Development
 
 - Frontend: `npm run dev` (port 5174)
-- Backend companion: `cd ../tradepro-backend && npm run dev` (port 3001)
-- Local Supabase: `cd ../tradepro-backend && npm run supabase:start`
+- Backend: `npm run dev` in `../sync2dine-backend` (port 3001)
 
-## Production SPA deploy
+## Deploy
 
-Publish static `dist/` to **`app.b-diddies.com`** only (not marketing `httpdocs/`):
-
-```powershell
-npm run build
-tar -czf tradepro-deploy.tar.gz dist
-scp tradepro-deploy.tar.gz vps:/tmp/tradepro-deploy.tar.gz
-scp scripts/deploy-spa.sh vps:/tmp/deploy-spa.sh
-ssh vps "sudo bash /tmp/deploy-spa.sh"
+```bash
+bash scripts/push-live-local.sh
 ```
 
-See [docs/APPLICATION_MASTER.md](docs/APPLICATION_MASTER.md) §11.
+SPA → VPS `app.sync2dine.io`; API synced from `../sync2dine-backend`. Do not run `deploy-vps.sh` or Sally overwrite scripts.

@@ -7,5 +7,9 @@ dist/
 server/data/*.json
 server/data/synced-data-*.json
 server/data/.wwebjs_auth/
+# Quarantined FE Node twin — never commit WhatsApp session / local JSON dumps
+server-legacy/data/**
+!server-legacy/data/building-control/
+!server-legacy/data/building-control/**
 *.log
 .DS_Store
