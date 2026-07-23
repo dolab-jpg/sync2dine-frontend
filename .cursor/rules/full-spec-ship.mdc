@@ -19,5 +19,5 @@ alwaysApply: true
 
 ## Brains
 
-- Phone packages are `sally` | `judie` under `server/brains/`. No shared Studio master knowledge for Sally.
+- Phone packages are `sally` | `judie` | `cynthia` under `server/brains/`. No shared Studio master knowledge for Sally.
 - Staff/platform tools live **on Sally** (PIN), not a third phone brain.

@@ -233,7 +233,7 @@ export async function saveSallyOffer(patch: Partial<SallyOfferTerms>): Promise<{
   );
 }
 
-export type PlatformPhoneLinePurpose = 'staff' | 'aria' | 'sally';
+export type PlatformPhoneLinePurpose = 'staff' | 'aria' | 'sally' | 'cynthia';
 export type PlatformPhoneLineConnectionType = 'soho66' | 'sip' | 'twilio' | 'other';
 
 export interface PlatformPhoneLine {
