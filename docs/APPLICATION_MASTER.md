@@ -1333,11 +1333,11 @@ Former MISSING/THIN prose gaps are filled in **§§27–28**. Keep §23/§24/§2
 
 | Root | Meaning |
 |------|---------|
-| `FE` | `Bathroom Sales Estimation Platform/` |
+| `FE` | `sync2dine-frontend/` (GitHub may still say `tradepro-frontend`) |
 | `FE/src` | `FE/src/app/` unless noted |
-| `BE` | `tradepro-backend/` |
+| `BE` | `sync2dine-backend/` (GitHub may still say `tradepro-backend`) |
 | `BE/server` | Canonical production API (VPS `tradepro-api`) |
-| `LEGACY FE/server` | Do not treat as SoT |
+| `LEGACY FE/server` | Do not treat as SoT — edit `BE/server` only |
 
 Each feature row: **UI → Components → Engine → API file(s) → Data**.
 

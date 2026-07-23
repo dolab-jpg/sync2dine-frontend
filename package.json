@@ -9,7 +9,7 @@
     "test:responsive": "playwright test",
     "test:responsive:ui": "playwright test --ui",
     "test:bridge": "vitest run",
-    "sync:types": "node -e \"const fs=require('fs');const p='../tradepro-backend/shared/database.types.ts';if(fs.existsSync(p)){fs.mkdirSync('src/lib/supabase',{recursive:true});fs.copyFileSync(p,'src/lib/supabase/types.ts');console.log('Types synced');}else{console.warn('Run gen:types in tradepro-backend first');}\""
+    "sync:types": "node -e \"const fs=require('fs');const candidates=['../sync2dine-backend/shared/database.types.ts','../tradepro-backend/shared/database.types.ts'];const p=candidates.find(fs.existsSync);if(p){fs.mkdirSync('src/lib/supabase',{recursive:true});fs.copyFileSync(p,'src/lib/supabase/types.ts');console.log('Types synced from',p);}else{console.warn('Run gen:types in sync2dine-backend first');}\""
   },
   "dependencies": {
     "@azure/msal-node": "^5.4.0",

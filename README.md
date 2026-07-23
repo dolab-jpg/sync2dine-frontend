@@ -2,11 +2,13 @@
 
 React/Vite frontend for the Builder Diddies multi-trade construction estimation platform.
 
+**AI / agent navigation:** start at [AGENTS.md](AGENTS.md), then [docs/APPLICATION_MASTER.md](docs/APPLICATION_MASTER.md) §24 Feature Location Atlas.
+
 **Full inventory / audit (SPA · backend · Flutter mobile · GitHub · VPS · Supabase):** [docs/APPLICATION_MASTER.md](docs/APPLICATION_MASTER.md) — single living SoT (Flutter = §27).
 
 ## Backend
 
-Data, auth, and storage live in the separate **[tradepro-backend](../tradepro-backend)** repo (Supabase + Node companion for AI/webhooks).
+Data, auth, and storage live in the separate **[sync2dine-backend](../sync2dine-backend)** repo (Supabase + Node companion for AI/webhooks; GitHub may still say `tradepro-backend`). Do **not** edit this frontend’s legacy `server/` folder.
 
 ## Setup
 
