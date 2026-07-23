@@ -10,7 +10,7 @@ import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client'
 import { AuthLayout } from '../AuthLayout';
 import { AuthFormError } from '../components/AuthFormError';
 import { PasswordField } from '../components/PasswordField';
-import { SEED_ACCOUNTS } from '../components/SeedAccountsPanel';
+import { SEED_ACCOUNTS, SEED_PASSWORD, SeedAccountsPanel } from '../components/SeedAccountsPanel';
 import { homePathForRole, isStaffLoginRole, resolveUsername } from '../lib/authApi';
 import IntegrationsLogoStrip from '../../components/restaurant/IntegrationsLogoStrip';
 
@@ -280,7 +280,15 @@ export default function LoginPage({ onLogin }: LoginProps) {
         </CardContent>
       </Card>
 
-      {/* Demo seed accounts hidden while live testing — staff use real credentials */}
+      <SeedAccountsPanel
+        defaultOpen
+        onFill={(account) => {
+          setIdentifier(account.email);
+          setPassword(SEED_PASSWORD);
+          setError('');
+        }}
+      />
+
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-4">
         <IntegrationsLogoStrip compact />
       </div>
