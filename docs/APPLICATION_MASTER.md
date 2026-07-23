@@ -1,35 +1,52 @@
-# Builder Diddies — Application Master Audit
+# Sync2Dine — Application Master (navigation)
 
-**Audit date:** 2026-07-16 (afternoon UK)  
-**Method:** Code walk → live probes → then cross-check existing docs (never the reverse).  
-**Purpose:** Single place to open before searching the codebase. Update markers when shipping.
+**Primary product:** Sync2Dine (AI phone + restaurant ordering / Atmosphere).  
+**Live app + API:** **https://app.sync2dine.io**  
+**Repos:** `sync2dine-frontend` + `sync2dine-backend` (`origin/master`).  
+**Last orientation update:** 2026-07-23.
+
+This file is a **map**, not a second copy of every technical doc. Prefer linked SoT files for deep detail. Older Builder Diddies / construction notes below §1 are **historical** — do not use them as the live Sync2Dine host, remotes, or deploy path.
 
 ---
 
-## Brand (display vs legacy infra)
+## Start here (agents)
+
+| Need | Open |
+|------|------|
+| FE layout / traps | [`AGENTS.md`](../AGENTS.md) |
+| BE mounts / domains | [`../sync2dine-backend/AGENTS.md`](../../sync2dine-backend/AGENTS.md), [`server/README.md`](../../sync2dine-backend/server/README.md) |
+| Phone personalities (Judie / Sally sales / Sally staff) | [`../sync2dine-backend/docs/PHONE_ARCHITECTURE.md`](../../sync2dine-backend/docs/PHONE_ARCHITECTURE.md) |
+| Sally shared BI + channel adapters | [`../sync2dine-backend/docs/SALLY_ARCHITECTURE.md`](../../sync2dine-backend/docs/SALLY_ARCHITECTURE.md) |
+| Post-restructure audit | [`POST_RESTRUCTURE_AUDIT.md`](./POST_RESTRUCTURE_AUDIT.md) |
+| Deploy SoT | `bash scripts/push-live-local.sh` (SPA from FE; API from sibling backend on VPS port **3011**) |
+| Tests | BE: `npm test` · FE: `npm run build` |
+| Known legacy | FE `server-legacy/` **removed from git** (restore note: [`archive/SERVER_LEGACY_REMOVAL.md`](./archive/SERVER_LEGACY_REMOVAL.md)); BE `server/_quarantine/` |
+
+### Live brand / host (Sync2Dine)
 
 | Item | Value |
 |------|--------|
-| Display name | **Builder Diddies** |
-| Marketing site | **https://b-diddies.com** (`info@b-diddies.com`) |
-| App / API | **https://app.b-diddies.com** |
+| Display name | **Sync2Dine** |
+| Marketing | **https://sync2dine.io** |
+| App / API | **https://app.sync2dine.io** |
+| Frontend remote | `https://github.com/dolab-jpg/sync2dine-frontend.git` |
+| Backend remote | `https://github.com/dolab-jpg/sync2dine-backend.git` |
 
 **Rules for AI and product copy**
 
-1. Never present the product as TradePro to customers, staff UI, emails, voice, or WhatsApp.
-2. Cynthia works for Builder Diddies; never call herself TradePro AI.
-3. Names like `tradepro-frontend`, `tradepro-backend`, `tradepro-api`, `/etc/tradepro-api.env`, `TradeProNative`, and `tradepro_*` storage keys are **legacy infra / codenames only** — use them in ops docs and code identifiers, not as the display brand.
+1. Sync2Dine is the live product. Do not verify or deploy to `app.b-diddies.com` unless the user explicitly asks for Builder Diddies.
+2. Sally sells Sync2Dine (Judie / Atmosphere / Complete). Judie takes diner orders. Staff web AI is Cynthia — not Sally Web.
+3. Names like `tradepro-*` / Builder Diddies may appear in old infra or historical sections — **legacy only**.
 
 ---
 
 ## How to use this document
 
-1. Start here for “what exists / where / is it live?”
-2. **§§1–15** = infrastructure layers + maps. **§§16–22** = deep-dives (voice, tools, WhatsApp, setup books).
-3. **§§23–25 (Part C)** = coverage matrix + Feature Location Atlas + API catalogue.
-4. **§§27–28 (Part D)** = Flutter / mobile + how-it-works for former gaps (additive).
-5. Status markers are authoritative for this audit date; re-probe VPS/Supabase after major deploys.
-6. When you add a feature: update §23 matrix, §24 atlas row, and §25 API line in the same session.
+1. Use the table above for current Sync2Dine orientation.
+2. **§§1–15** (below) mix historical Builder Diddies ops with later Sync2Dine ship notes — prefer linked SoT docs when they conflict.
+3. **§§23–25 (Part C)** = coverage matrix + Feature Location Atlas + API catalogue (update when adding features).
+4. **§§27–28 (Part D)** = Flutter / mobile.
+5. When you add a feature: update §23 matrix, §24 atlas row, and §25 API line in the same session.
 
 ### Status markers
 

@@ -1,0 +1,2 @@
+﻿# Agents must not treat this tree as the live API (SoT is ../sync2dine-backend).
+server-legacy/
