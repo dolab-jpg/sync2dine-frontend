@@ -4,7 +4,7 @@ import {
   preferredRecordingUrl,
   enrichCallListRow,
   lineDidForDirection,
-} from '../server/call-recording-artifacts.ts';
+} from '../../sync2dine-backend/server/call-recording-artifacts.ts';
 
 assert.deepEqual(
   extractRecordingUrls({

@@ -1,74 +1,21 @@
-name: Deploy Sally API prompts
+name: Deploy Sally API prompts (DISABLED)
 
-# Ships server-side Sally voice/humour to the live Sync2Dine API (port 3011).
-# SPA deploy is separate — this only SCPs prompt files + restarts the Node API.
+# DISABLED — frontend must not SCP prompt files onto the live backend.
+# Sally SoT is sync2dine-backend (server/sally-sales.ts + server/phone/sally-sales-phone.ts).
+# Deploy via: bash scripts/push-live-local.sh (from FE, syncs sibling backend).
 
 on:
-  push:
-    branches:
-      - master
-    paths:
-      - 'server/sally-sales.ts'
-      - 'server/orchestrator-prompt.ts'
-      - '.github/workflows/deploy-sally-api.yml'
   workflow_dispatch:
+    inputs:
+      acknowledge:
+        description: 'Type DISABLED — this workflow no longer deploys'
+        required: true
 
 jobs:
-  deploy-sally-api:
+  refuse:
     runs-on: ubuntu-latest
     steps:
-      - name: Check VPS secrets present
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      - name: Refuse FE→BE Sally overwrite
         run: |
-          echo "host_len=${#VPS_HOST} user_len=${#VPS_USER} key_len=${#VPS_SSH_KEY}"
-          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
-            echo "::error::Add GitHub secrets VPS_HOST, VPS_USER, VPS_SSH_KEY on sync2dine-frontend (and backend), then re-run this workflow. Or run scripts/deploy-sally-cockney.sh from a machine with SSH host vps."
-            exit 1
-          fi
-
-      - uses: actions/checkout@v4
-
-      - name: Upload Sally prompt files to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: server/sally-sales.ts,server/orchestrator-prompt.ts
-          target: /var/www/vhosts/sync2dine.io/sync2dine-backend/server/
-          strip_components: 1
-
-      - name: Restart Sync2Dine API
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            set -e
-            BE=/var/www/vhosts/sync2dine.io/sync2dine-backend
-            cd "$BE"
-            grep -n "VOICE & HUMOUR" server/sally-sales.ts | head -5 || {
-              echo "ERROR: Cockney VOICE & HUMOUR block missing from sally-sales.ts on VPS"
-              exit 1
-            }
-            pkill -f 'sync2dine.io/sync2dine-backend.*server/index.ts' || true
-            sleep 2
-            nohup /opt/plesk/node/24/bin/node \
-              --require ./node_modules/tsx/dist/preflight.cjs \
-              --import file:///var/www/vhosts/sync2dine.io/sync2dine-backend/node_modules/tsx/dist/loader.mjs \
-              --env-file=.env server/index.ts \
-              >/tmp/sync2dine-api.log 2>&1 &
-            sleep 6
-            pgrep -af 'sync2dine.io/sync2dine-backend.*server/index.ts' | head -3
-            curl -sS --max-time 10 https://app.sync2dine.io/health
-            echo
-            curl -sS --max-time 60 -X POST https://app.sync2dine.io/api/sally/web \
-              -H 'Content-Type: application/json' \
-              -H 'Origin: https://sync2dine.io' \
-              -d '{"sessionId":"web_cockney_ci","text":"Who are you then?","page":"/"}' | head -c 900
-            echo
-Mon Jul 20 09:09:16 PM UTC 2026
+          echo "::error::deploy-sally-api is disabled. Edit Sally prompts in sync2dine-backend and deploy with push-live-local.sh (API sync from sibling backend). Do not SCP frontend server/ files onto the VPS."
+          exit 1

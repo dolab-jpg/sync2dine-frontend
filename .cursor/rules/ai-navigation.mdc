@@ -9,8 +9,10 @@ Before feature or bug work in this repo:
 
 1. Read root **`AGENTS.md`**.
 2. Open **`docs/APPLICATION_MASTER.md` §24** (Feature Location Atlas) and jump to the matching UI / engine / API row.
-3. **Do not edit `server/` in this frontend repo** — it is legacy. Canonical API is the sibling **`sync2dine-backend`** (may appear as `tradepro-backend` on GitHub).
+3. **Do not edit `server-legacy/`** — it is not the API. Canonical API is sibling **`sync2dine-backend`**.
 4. Prefer domain folders under `src/app/components/`, `engine/`, `config/` over inventing parallel trees.
 5. Route catalogue: **`src/app/routeMap.ts`** and trees in **`src/app/routes.tsx`**.
-6. Brain aliases: Cynthia = staff UI; Sally = phone staff/sales; Judie = diner phone; Cyrus = legacy widget alias.
-7. Persistence SoT is Supabase cloud / live app — not FE localStorage and not backend `server/data/*.json` as primary.
+6. Domain types: **`src/app/domainTypes.ts`** (re-exported from `App.tsx` for compat).
+7. Brain aliases: Cynthia = staff UI; Sally = phone staff/sales; Judie = diner phone; Cyrus = legacy widget alias.
+8. Live deploy SoT: **`bash scripts/push-live-local.sh`**. Never SCP frontend files onto the VPS backend.
+9. Persistence SoT is Supabase cloud / live app — not FE localStorage and not backend `server/data/*.json` as primary.

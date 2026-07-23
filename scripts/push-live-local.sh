@@ -42,7 +42,7 @@ fi
 
 if [ "${SKIP_API:-0}" != "1" ]; then
   echo "== Sync backend =="
-  # Do NOT curl frontend server/sally-sales.ts onto the VPS — that tree imports
+  # Do NOT curl frontend server-legacy/sally-sales.ts onto the VPS — that tree is
   # saas-products/saas-contracts that are not always present and will 502 the API.
   if command -v rsync >/dev/null 2>&1; then
     rsync -az --delete \
