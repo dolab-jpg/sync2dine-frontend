@@ -1,52 +1,72 @@
-# AGENTS.md ó Sync2Dine frontend
+# AGENTS.md ù Sync2Dine frontend
 
-Start here before feature work. This map keeps agents out of the wrong trees.
+Start here before feature work.
 
-## Always open first
+## Always open first (cold path)
 
-1. **[docs/APPLICATION_MASTER.md](docs/APPLICATION_MASTER.md)** ó Sync2Dine orientation at the top; ß24 Feature Location Atlas for paths.
-2. This file for traps and aliases.
-3. Phone runtime SoT (backend): [`../sync2dine-backend/docs/PHONE_ARCHITECTURE.md`](../sync2dine-backend/docs/PHONE_ARCHITECTURE.md).
-4. Sally architecture: [`../sync2dine-backend/docs/SALLY_ARCHITECTURE.md`](../sync2dine-backend/docs/SALLY_ARCHITECTURE.md).
-5. Post-restructure audit: [`docs/POST_RESTRUCTURE_AUDIT.md`](docs/POST_RESTRUCTURE_AUDIT.md).
-6. Live product: **https://app.sync2dine.io** (SPA/API via `bash scripts/push-live-local.sh`).
+1. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+2. [`docs/CAPABILITY_INVENTORY.md`](docs/CAPABILITY_INVENTORY.md)
+3. Backend [`docs/AI_REGISTRY.md`](../sync2dine-backend/docs/AI_REGISTRY.md)
+4. Backend [`docs/TOOL_REGISTRY.md`](../sync2dine-backend/docs/TOOL_REGISTRY.md)
+5. Backend [`docs/WORKERS.md`](../sync2dine-backend/docs/WORKERS.md)
+6. Backend [`docs/ROUTE_MAP.md`](../sync2dine-backend/docs/ROUTE_MAP.md)
+7. [`docs/DEPLOYMENT_MAP.md`](docs/DEPLOYMENT_MAP.md)
+8. [`docs/CHANGE_IMPACT.md`](docs/CHANGE_IMPACT.md)
+9. Phone/Sally detail: [`../sync2dine-backend/docs/PHONE_ARCHITECTURE.md`](../sync2dine-backend/docs/PHONE_ARCHITECTURE.md), [`SALLY_ARCHITECTURE.md`](../sync2dine-backend/docs/SALLY_ARCHITECTURE.md)
+10. Atlas UI paths: [`docs/APPLICATION_MASTER.md`](docs/APPLICATION_MASTER.md) ù24ùù25
+11. Skills: [`.cursor/skills/`](.cursor/skills/) (`sync2dine-navigate`, phone, orders, runtime-tool, ship-live, diagnose-prod)
+12. Knowledge report: [`docs/ENGINEERING_KNOWLEDGE_REPORT.md`](docs/ENGINEERING_KNOWLEDGE_REPORT.md)
+13. Full engineering audit: [`docs/ENGINEERING_AUDIT_REPORT.md`](docs/ENGINEERING_AUDIT_REPORT.md) ∑ [`docs/ARCHITECTURE_DIAGRAMS.md`](docs/ARCHITECTURE_DIAGRAMS.md)
+
+Historical: `docs/archive/*` ó **do not follow** as live SoT.
 
 ## Repo layout
 
 | Path | Role |
 |------|------|
-| `src/app/App.tsx` | Auth bootstrap + experience gate; mounts route trees |
-| `src/app/routes.tsx` | Route trees; re-exports `ROUTE_MAP` |
-| `src/app/routeMap.ts` | Declarative path catalogue (`ROUTE_MAP` definition) |
-| `src/app/domainTypes.ts` | Shared domain interfaces ó prefer importing here, not only via `App.tsx` |
-| `src/app/components/` | Screens / UI |
-| `src/app/engine/` | Domain logic, stores, API clients |
-| `src/app/config/` | Registries (trades, integrations, AI) |
-| `src/app/auth/` | Login / signup / profile |
-| `src/lib/supabase/` | Browser Supabase client + types |
-| `public/` | Embed widgets |
-| ~~`server-legacy/`~~ | Removed from git ó see [`docs/archive/SERVER_LEGACY_REMOVAL.md`](docs/archive/SERVER_LEGACY_REMOVAL.md) |
+| `src/app/App.tsx` | Auth + experience gate |
+| `src/app/routes.tsx` / `routeMap.ts` | Routes |
+| `src/app/domainTypes.ts` | Prefer for types (not only App) |
+| `src/app/components/` | UI |
+| `src/app/engine/` | Domain logic / API clients |
+| `server-legacy/` | **Not in git** ù never restore |
 
 ## Sibling backend
 
-Canonical Node API + Supabase: **`../sync2dine-backend`**. Never SCP frontend files onto the VPS backend.
+Canonical API: **`../sync2dine-backend`**.
 
-Live deploy: `bash scripts/push-live-local.sh` (SPA from this repo; API from sibling backend on VPS **:3011**).
+## Ports
 
-## Experience modes
+| Env | Host |
+|-----|------|
+| Live | https://app.sync2dine.io (API **:3011**) |
+| Local API | often `:3001` ù not product SoT |
+| Local SPA | `:5174` |
 
-- Construction vs restaurant: `src/app/engine/platform/experience.ts`, branched in `App.tsx`.
-- Org context: `src/app/engine/platform/orgContext.ts`.
+## Deploy
 
-## Brain / persona aliases
+| Goal | Command | API? |
+|------|---------|------|
+| SPA+API live | `bash scripts/push-live-local.sh` | Yes |
+| SPA CI | push `origin/master` | No |
+| Never | `deploy-vps.sh`, `deploy-nginx.sh` | ù |
+
+## Verify
+
+```bash
+curl -sS https://app.sync2dine.io/health
+npm run check:agent-maps
+```
+
+## Personas
 
 | Name | Role |
 |------|------|
-| **Cynthia** | Staff AI UI ó web; not Sally Web |
-| **Sally** | Phone sales + staff PIN; marketing web chat |
-| **Judie** | Diner phone ordering |
-| **Cyrus** | Legacy widget alias ó prefer Cynthia |
+| Cynthia | Staff web AI |
+| Sally | Phone sales + staff PIN; marketing web |
+| Judie | Diner phone |
+| Cyrus | Legacy widget alias |
 
 ## When adding a feature
 
-Update APPLICATION_MASTER ß23 matrix, ß24 atlas row, and ß25 API line in the same session.
+Update CAPABILITY, APPLICATION_MASTER ù24/ù25 if UI/API, CHANGE_IMPACT if shared, BE registries if AI/tools/routes/workers. Run `check:agent-maps`. Backend: `npm run extract:registries` when tools/workers/routes change.

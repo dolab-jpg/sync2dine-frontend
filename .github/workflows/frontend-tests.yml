@@ -20,6 +20,7 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci
+      - run: npm run build
       - run: npx playwright install chromium
       - run: npm run test:bridge
       # No backend runs in CI: the Vite dev server proxies /api/* and /webhooks/*
