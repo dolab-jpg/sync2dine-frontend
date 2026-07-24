@@ -6,7 +6,15 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { Checkbox } from './ui/checkbox';
@@ -26,6 +34,12 @@ import { getActiveOrgId } from '../engine/platform/orgContext';
 import { BDIDDIES_HOME_ORG_ID } from '../engine/platform/homeOrg';
 import { SALES_TEMPLATES, getSalesTemplate } from '../engine/messaging/salesTemplates';
 import { buildSalesEmailHtmlPreview } from '../engine/messaging/salesEmailHtml';
+import {
+  getPackage,
+  primaryPackages,
+  scalePackages,
+  type SaasPackageId,
+} from '../engine/saas/saasPackages';
 
 type ScheduledJob = {
   id: string;
@@ -56,8 +70,11 @@ export default function CommunicationsHub() {
   const [replyDraft, setReplyDraft] = useState<{ to: string; subject: string; body: string } | null>(null);
   const [aiNotes, setAiNotes] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [lastAppliedNotes, setLastAppliedNotes] = useState<string | null>(null);
   const [scheduleAt, setScheduleAt] = useState('');
   const [scheduled, setScheduled] = useState<ScheduledJob[]>([]);
+  const [packageId, setPackageId] = useState<SaasPackageId>('judie_starter');
   const defaultTpl = getSalesTemplate(templateFromUrl || '') ?? SALES_TEMPLATES[0];
   const [form, setForm] = useState({
     customerId: customerFromUrl || '',
@@ -66,6 +83,9 @@ export default function CommunicationsHub() {
     body: defaultTpl.body,
     restaurantName: '',
   });
+  const selectedPackage = getPackage(packageId);
+  /** Placeholder key stays MONTHLY_PRICE; value is launch weekly fare (billing is weekly). */
+  const weeklyPrice = String(selectedPackage.launchWeeklyGbp);
 
   useEffect(() => {
     if (tabFromUrl === 'leads' || tabFromUrl === 'mailbox' || tabFromUrl === 'inbox' || tabFromUrl === 'compose') {
@@ -129,6 +149,7 @@ export default function CommunicationsHub() {
     COMPANY_NAME: 'Sync2Dine',
     COMPANY_PHONE: '020 3745 3233',
     COMPANY_EMAIL: 'info@sync2dine.io',
+    MONTHLY_PRICE: weeklyPrice,
   };
   const previewSubject = renderTemplate(form.subject, previewVars);
   const previewBody = renderTemplate(form.body, previewVars);
@@ -150,8 +171,23 @@ export default function CommunicationsHub() {
   };
 
   const handleWriteWithAi = async () => {
+    const notes = aiNotes.trim();
+    if (!notes) {
+      const msg = 'Add AI instructions first — tell Sally what to write.';
+      setAiError(msg);
+      toast.error(msg);
+      return;
+    }
+
     setAiBusy(true);
+    setAiError(null);
     try {
+      const openaiConfig = integrationService.getConfig('openai');
+      const deepseekRaw = openaiConfig.deepseekApiKey?.trim();
+      const deepseekApiKey = deepseekRaw && integrationService.isLiveOpenAIApiKey(deepseekRaw)
+        ? deepseekRaw
+        : undefined;
+
       const res = await fetch('/api/ai/compose-email', {
         method: 'POST',
         headers: {
@@ -161,16 +197,22 @@ export default function CommunicationsHub() {
         body: JSON.stringify({
           orgId: mailboxOrgId,
           templateId: form.templateId,
+          packageId,
           customerName: selectedCustomer?.name,
           restaurantName: form.restaurantName || selectedCustomer?.name,
-          notes: aiNotes || `Write a polished ${form.templateId} email for Sync2Dine sales.`,
+          notes,
           rewrite: form.body,
           apiKey: integrationService.getLiveOpenAIApiKey() || undefined,
+          deepseekApiKey,
+          provider: openaiConfig.provider || 'openai',
+          model: openaiConfig.staffModel || undefined,
         }),
       });
       const data = await res.json() as { subject?: string; body?: string; error?: string };
       if (!res.ok) {
-        toast.error(data.error || 'AI compose failed');
+        const msg = data.error || 'AI compose failed';
+        setAiError(msg);
+        toast.error(msg);
         return;
       }
       setForm((prev) => ({
@@ -178,9 +220,13 @@ export default function CommunicationsHub() {
         subject: data.subject || prev.subject,
         body: data.body || prev.body,
       }));
+      setLastAppliedNotes(notes);
+      setAiError(null);
       toast.success('Draft written — edit if needed, then send or schedule');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'AI compose failed');
+      const msg = err instanceof Error ? err.message : 'AI compose failed';
+      setAiError(msg);
+      toast.error(msg);
     } finally {
       setAiBusy(false);
     }
@@ -197,6 +243,7 @@ export default function CommunicationsHub() {
       CUSTOMER_NAME: customer.name,
       USER_NAME: user.name,
       RESTAURANT_NAME: form.restaurantName || customer.name,
+      MONTHLY_PRICE: weeklyPrice,
     };
 
     const channels: MessageChannel[] = [];
@@ -225,6 +272,15 @@ export default function CommunicationsHub() {
     setLogs(messagingHub.getLogs());
     if (result.success) {
       toast.success(`Message sent via ${result.channels.join(' + ')}`);
+      const tpl = getSalesTemplate(form.templateId);
+      setAiNotes('');
+      setForm((prev) => ({
+        ...prev,
+        restaurantName: '',
+        subject: tpl?.subject ?? '',
+        body: tpl?.body ?? '',
+      }));
+      setActiveTab('logs');
     } else {
       toast.error(result.errors.join('; ') || 'Send failed');
     }
@@ -244,6 +300,7 @@ export default function CommunicationsHub() {
       CUSTOMER_NAME: customer.name,
       USER_NAME: user.name,
       RESTAURANT_NAME: form.restaurantName || customer.name,
+      MONTHLY_PRICE: weeklyPrice,
     };
     const channels: Array<'email' | 'whatsapp'> = [];
     if (sendEmail) channels.push('email');
@@ -388,13 +445,53 @@ export default function CommunicationsHub() {
                 </div>
 
                 <div>
+                  <Label>Price package</Label>
+                  <Select value={packageId} onValueChange={(v) => setPackageId(v as SaasPackageId)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>Primary packages</SelectLabel>
+                        {primaryPackages().map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                            {p.badge ? ` · ${p.badge}` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectLabel>Scale packages</SelectLabel>
+                        {scalePackages().map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Introductory £{weeklyPrice}/week (launch)
+                  </p>
+                </div>
+
+                <div>
                   <Label>AI instructions (what Sally should write)</Label>
                   <Textarea
                     rows={2}
                     value={aiNotes}
-                    onChange={(e) => setAiNotes(e.target.value)}
+                    onChange={(e) => {
+                      setAiNotes(e.target.value);
+                      if (aiError) setAiError(null);
+                    }}
                     placeholder="e.g. Mention they asked about delivery areas and offer a demo tomorrow afternoon"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Instructions apply after you click Write with AI — they do not update the draft by themselves.
+                  </p>
+                  {aiNotes.trim() && lastAppliedNotes !== null && aiNotes.trim() !== lastAppliedNotes && (
+                    <p className="text-xs text-amber-700 mt-1">Draft not updated yet — click Write with AI.</p>
+                  )}
                   <Button
                     type="button"
                     variant="outline"
@@ -405,6 +502,9 @@ export default function CommunicationsHub() {
                     <Sparkles className="w-4 h-4 mr-2" />
                     {aiBusy ? 'Writing…' : 'Write with AI'}
                   </Button>
+                  {aiError && (
+                    <p className="text-xs text-destructive mt-2" role="alert">{aiError}</p>
+                  )}
                 </div>
 
                 <div>
@@ -416,18 +516,23 @@ export default function CommunicationsHub() {
                   <Textarea rows={8} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-2">
                   <Button onClick={() => void handleSend()} className="w-full">
                     <Send className="w-4 h-4 mr-2" /> Send now
                   </Button>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <Input
                       type="datetime-local"
                       value={scheduleAt}
                       onChange={(e) => setScheduleAt(e.target.value)}
-                      className="flex-1"
+                      className="w-full min-w-0 flex-1 text-base"
                     />
-                    <Button type="button" variant="secondary" onClick={() => void handleSchedule()}>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="shrink-0 w-full sm:w-auto"
+                      onClick={() => void handleSchedule()}
+                    >
                       <Clock className="w-4 h-4 mr-1" /> Later
                     </Button>
                   </div>

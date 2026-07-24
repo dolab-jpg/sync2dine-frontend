@@ -31,7 +31,7 @@ I'm Sally from Sync2Dine. We help restaurants take takeaway orders and table boo
 
 I'd love to show you a quick demo of how it works for a place like yours.
 
-Introductory pricing is £{MONTHLY_PRICE}/month. Happy to send a short video or arrange a call — what works best?
+Introductory pricing is £{MONTHLY_PRICE}/week. Happy to send a short video or arrange a call — what works best?
 
 Best regards,
 {USER_NAME}
@@ -82,7 +82,7 @@ Sync2Dine`,
 
 Here's the Sync2Dine intro offer for {RESTAURANT_NAME}:
 
-• Monthly: £{MONTHLY_PRICE}
+• Weekly: £{MONTHLY_PRICE}
 • Setup: £{SETUP_FEE}
 
 Happy to walk through anything on a quick call.
@@ -100,7 +100,7 @@ Sync2Dine
     subject: 'Just checking in — Sync2Dine for {RESTAURANT_NAME}',
     body: `Hi {CUSTOMER_NAME},
 
-I wanted to follow up on the Sync2Dine pricing we shared (£{MONTHLY_PRICE}/month). Happy to answer any questions.
+I wanted to follow up on the Sync2Dine pricing we shared (£{MONTHLY_PRICE}/week). Happy to answer any questions.
 
 Would a quick call this week work?
 

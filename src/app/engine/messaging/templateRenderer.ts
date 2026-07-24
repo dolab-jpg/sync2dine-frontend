@@ -68,7 +68,7 @@ export function renderTemplate(template: string, variables: TemplateVariables): 
     COMPANY_WEBSITE: company.website || 'https://sync2dine.io',
     COMPANY_REGISTRATION: company.companyRegistrationNumber || '',
     COMPANY_VAT: company.vatNumber || '',
-    MONTHLY_PRICE: '350',
+    MONTHLY_PRICE: '139',
     SETUP_FEE: '0',
     DEMO_PHONE: '',
     RESTAURANT_NAME: variables.RESTAURANT_NAME || 'your restaurant',
