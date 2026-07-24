@@ -148,7 +148,7 @@ export function StaffSoftphones() {
       <CardHeader>
         <CardTitle>Staff Softphones (Soho66)</CardTitle>
         <CardDescription>
-          Assign one SIP extension per person. Each staff member registers their own softphone under Calls → Soft Phone.
+          Assign one SIP extension per person. Each staff member opens Calls → Soft Phone for download links and SIP credentials (Groundwire / VOIS — outside Sync2Dine; one device per line).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">

@@ -1693,7 +1693,7 @@ export default function CallCenter() {
                   Soho66 phone lines
                 </h2>
                 <p className="text-sm text-s2d-ink-muted mt-1">
-                  Judie AI lines use purpose &quot;aria&quot; (compat) and answer via Vapi + Soho66. Staff softphones use Soft phone.
+                  Judie AI lines use purpose &quot;aria&quot; (compat) and answer via Vapi + Soho66. Staff softphones use Soft phone for credentials and Groundwire/VOIS links (external).
                 </p>
               </div>
               <Button onClick={registerAllLines} disabled={registeringLines || phoneLines.length === 0} variant="outline" className="border-s2d-teal/20">
@@ -1802,8 +1802,8 @@ export default function CallCenter() {
               <h2 className="text-base font-bold text-s2d-teal-deep">Soft phone</h2>
               <p className="text-sm text-s2d-ink-muted mt-1">
                 {isSalesShell
-                  ? 'Your Soho66 sales extension — keypad for outbound, answer inbound, and point Sally Sales handoffs at this DID.'
-                  : 'Registers your assigned Soho66 extension. Use the keypad to dial; incoming calls ring until you answer or reject.'}
+                  ? 'Copy your Soho66 SIP login into Groundwire or VOIS (outside Sync2Dine). Point Sally Sales handoffs at this DID so transfers ring that app.'
+                  : 'Phone answering stays outside Sync2Dine. Download Groundwire or VOIS, paste your SIP credentials, and use only one device per line.'}
               </p>
             </div>
             <SoftPhonePanel salesMode={isSalesShell} />

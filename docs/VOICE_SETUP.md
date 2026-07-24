@@ -1,12 +1,20 @@
-# Cynthia phone setup (Vapi + ElevenLabs)
+# Phone voice setup notes (HISTORICAL)
 
-> **Inventory SoT:** [APPLICATION_MASTER.md](./APPLICATION_MASTER.md) §16. Sibling deep-dive: `tradepro-backend/docs/VAPI_SIP.md`.
+> **HISTORICAL — do not use as Sync2Dine personality or host SoT.**
+>
+> Live phone architecture: [`../sync2dine-backend/docs/PHONE_ARCHITECTURE.md`](../../sync2dine-backend/docs/PHONE_ARCHITECTURE.md)  
+> (Judie diner + Sally sales/staff — **not** “Cynthia phone brain”.)  
+> Live app: **https://app.sync2dine.io** · Deploy: `bash scripts/push-live-local.sh`  
+> Legacy aliases: [`../sync2dine-backend/docs/LEGACY_ALIASES.md`](../../sync2dine-backend/docs/LEGACY_ALIASES.md)
+>
+> Hosts below (`app.b-diddies.com`, `tradepro-api`) are archaeology only.
 
-**Production phone voice path (the one that has worked on live calls):**
+**Historical production phone voice path (Builder Diddies era):**
 
 ```text
-Caller ↔ Soho66 SIP ↔ Vapi (media) ↔ ElevenLabs (female Cockney) ↔ POST /webhooks/vapi ↔ Cynthia phone-brain
+Caller ↔ Soho66 SIP ↔ Vapi (media) ↔ ElevenLabs ↔ POST /webhooks/vapi ↔ phone brain
 ```
+(Today: Judie or Sally via `brains/*` + `phone/vapi-routes.ts` on app.sync2dine.io.)
 
 - Provider: `VOICE_PROVIDER=vapi` (required)
 - Spoken voice: **ElevenLabs** via Vapi (`provider: '11labs'`) — female British / Cockney (**Lizzie** voice id `EQx6HGDYjkDpcli6vorJ` when configured on the API host). **English stays Lizzie (do not change without listening to a replacement first).** Optional later: Settings `activeVoiceId` may point at another ElevenLabs id, but English production default remains Lizzie. Non-English calls use a per-language female funny/sassy map in `server/phone-voices.ts` (Aerisita/Aleksandra/Klava/Kira/Zicai/Laura/Veronica). She always says her name is **Lizzie** on Sync2Dine takeaway (never the ElevenLabs label). Mid-call switch: tool `setCallLanguage` (persist + best-effort voice PATCH).
@@ -136,8 +144,9 @@ If the voice sounds like generic OpenAI TTS or the old mock pipeline, stop — f
 ## 4. Softphones (humans only)
 
 - Staff lines: `purpose: 'staff'`
-- Soft Phone tab: `/calls?tab=softphone`
-- Soho66 public WSS is often unavailable; prefer desk phone / VOIS for humans
+- Soft Phone tab: `/calls?tab=softphone` — **setup only** (copy SIP creds + Groundwire/VOIS download links). Sync2Dine does **not** REGISTER or answer SIP.
+- One REGISTER per SIP username — use Groundwire or VOIS (or a desk phone), not multiple clients on the same line
+- Sally warm transfer: Sales DID rings that external softphone, not the Sync2Dine tab
 
 ---
 

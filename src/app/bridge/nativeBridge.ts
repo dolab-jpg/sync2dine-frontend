@@ -97,7 +97,7 @@ export async function registerDeviceTokenIfNative(userId?: string, orgId?: strin
   }
 }
 
-/** Ask Flutter shell to navigate to Soft Phone (also used for incoming-call wake). */
+/** Ask Flutter shell to navigate to Soft Phone setup (credentials + external app links). */
 export async function openNativeSoftPhone(): Promise<void> {
   if (!isNativeBridgeAvailable()) {
     if (typeof window !== 'undefined') {

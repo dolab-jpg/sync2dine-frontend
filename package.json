@@ -9,7 +9,8 @@
     "test:responsive": "playwright test",
     "test:responsive:ui": "playwright test --ui",
     "test:bridge": "vitest run",
-    "sync:types": "node -e \"const fs=require('fs');const candidates=['../sync2dine-backend/shared/database.types.ts','../tradepro-backend/shared/database.types.ts'];const p=candidates.find(fs.existsSync);if(p){fs.mkdirSync('src/lib/supabase',{recursive:true});fs.copyFileSync(p,'src/lib/supabase/types.ts');console.log('Types synced from',p);}else{console.warn('Run gen:types in sync2dine-backend first');}\""
+    "sync:types": "node -e \"const fs=require('fs');const candidates=['../sync2dine-backend/shared/database.types.ts','../tradepro-backend/shared/database.types.ts'];const p=candidates.find(fs.existsSync);if(p){fs.mkdirSync('src/lib/supabase',{recursive:true});fs.copyFileSync(p,'src/lib/supabase/types.ts');console.log('Types synced from',p);}else{console.warn('Run gen:types in sync2dine-backend first');}\"",
+    "check:agent-maps": "node scripts/check-agent-maps.mjs"
   },
   "dependencies": {
     "@azure/msal-node": "^5.4.0",
@@ -60,7 +61,6 @@
     "imapflow": "^1.4.7",
     "input-otp": "1.4.2",
     "jsonwebtoken": "^9.0.3",
-    "jssip": "^3.13.8",
     "lucide-react": "0.487.0",
     "mailparser": "^3.9.14",
     "motion": "12.23.24",
