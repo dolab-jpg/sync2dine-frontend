@@ -19,7 +19,8 @@ import {
 import type { UnifiedProject } from '../engine/project/types';
 
 function formatGBP(value: number): string {
-  return `£${value.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const n = Number.isFinite(value) ? value : 0;
+  return `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export default function CostingDashboard() {
@@ -131,7 +132,7 @@ export default function CostingDashboard() {
             <CardContent className="pt-6">
               <Sparkles className="w-8 h-8 mb-2 opacity-90" />
               <p className="text-sm opacity-90">Margin</p>
-              <p className="text-3xl font-bold">{portfolio.marginPct.toFixed(1)}%</p>
+              <p className="text-3xl font-bold">{Number.isFinite(portfolio.marginPct) ? portfolio.marginPct.toFixed(1) : '0.0'}%</p>
             </CardContent>
           </Card>
         </div>
@@ -244,7 +245,7 @@ export default function CostingDashboard() {
                             <td className={`py-3 pr-4 font-bold ${summary.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                               {formatGBP(summary.grossProfit)}
                             </td>
-                            <td className="py-3 pr-4">{summary.marginPct.toFixed(1)}%</td>
+                            <td className="py-3 pr-4">{Number.isFinite(summary.marginPct) ? summary.marginPct.toFixed(1) : '0.0'}%</td>
                             <td className="py-3">
                               <Button
                                 size="sm"

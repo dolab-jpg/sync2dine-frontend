@@ -131,9 +131,18 @@ export interface WhatsAppGroup {
 export interface BuilderPayment {
   id: string;
   description: string;
+  /** Canonical cost amount. Legacy rows may only have totalEarned / agreedAmount. */
   amount: number;
   status: 'pending' | 'approved' | 'paid';
   date: string;
+  /** Legacy Builder UI fields — normalized onto `amount` at project load. */
+  totalEarned?: number;
+  agreedAmount?: number;
+  paymentType?: string;
+  builderId?: string;
+  builderName?: string;
+  dayRate?: number;
+  daysWorked?: number;
 }
 
 export interface DesignItem {

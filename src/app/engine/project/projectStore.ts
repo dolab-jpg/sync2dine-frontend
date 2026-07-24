@@ -2,9 +2,10 @@ import { testProjects } from '../../data/testData';
 import { readLocalJson, writeLocalJson, useCloudPersistence } from '../data/cloudPersist';
 import { loadContacts } from '../contacts/contactStore';
 import { loadBuilders } from '../builder/builderStore';
-import type { UnifiedProject, PortalToken, WhatsAppSession, PaymentStage, AssignedContractor } from './types';
+import type { UnifiedProject, PortalToken, WhatsAppSession, PaymentStage, AssignedContractor, BuilderPayment } from './types';
 import { getPlaybook } from '../../config/trades/playbooks';
 import { seedSnagsFromChecklist } from './completionService';
+import { resolveBuilderPaymentAmount } from '../costing/profitCalculator';
 
 const PROJECTS_KEY = 'unifiedProjects';
 const PORTAL_TOKENS_KEY = 'portalTokens';
@@ -56,6 +57,43 @@ function normalizeAssignedContractors(value: unknown): AssignedContractor[] {
       } as AssignedContractor;
     })
     .filter((item): item is AssignedContractor => Boolean(item));
+}
+
+function normalizeBuilderPayments(value: unknown): BuilderPayment[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry, index) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const item = entry as Record<string, unknown>;
+      const amount = resolveBuilderPaymentAmount({
+        amount: item.amount,
+        totalEarned: item.totalEarned,
+        agreedAmount: item.agreedAmount,
+      });
+      const status =
+        item.status === 'pending' || item.status === 'approved' || item.status === 'paid'
+          ? item.status
+          : 'pending';
+      const fallbackId = `BP${String(index + 1).padStart(3, '0')}`;
+      const description =
+        typeof item.description === 'string' && item.description.trim()
+          ? item.description
+          : typeof item.builderName === 'string' && item.builderName.trim()
+            ? `Builder: ${item.builderName}`
+            : 'Builder payment';
+      return {
+        ...item,
+        id: typeof item.id === 'string' && item.id.trim() ? item.id : fallbackId,
+        description,
+        amount,
+        status,
+        date:
+          typeof item.date === 'string' && item.date.trim()
+            ? item.date
+            : new Date().toISOString().slice(0, 10),
+      } as BuilderPayment;
+    })
+    .filter((item): item is BuilderPayment => Boolean(item));
 }
 
 function seedDemoAssignedContractors(
@@ -136,6 +174,7 @@ function migrateProject(p: Record<string, unknown>): UnifiedProject {
     changeOrders: base.changeOrders ?? [],
     costEntries: base.costEntries ?? [],
     timesheets: base.timesheets ?? [],
+    builderPayments: normalizeBuilderPayments(base.builderPayments),
     assignedContractors: normalizedContractors,
     messages: (base.messages ?? []).map(m => {
       const raw = m as { body?: string; message?: string; channel?: string };
@@ -211,13 +250,14 @@ export function initProjectsRealtime(): () => void {
 }
 
 export function saveProjects(projects: UnifiedProject[]): void {
-  supabaseProjectsCache = projects;
+  const normalized = projects.map((p) => migrateProject(p as unknown as Record<string, unknown>));
+  supabaseProjectsCache = normalized;
   if (!useCloudPersistence()) {
-    writeLocalJson(PROJECTS_KEY, projects);
+    writeLocalJson(PROJECTS_KEY, normalized);
   }
   notifyProjectsListeners();
   void import('../data/supabaseStore').then(({ isSupabaseConfigured, saveAllProjectsToSupabase }) => {
-    if (isSupabaseConfigured()) return saveAllProjectsToSupabase(projects);
+    if (isSupabaseConfigured()) return saveAllProjectsToSupabase(normalized);
   }).catch(() => {});
 }
 
@@ -229,7 +269,7 @@ export function updateProject(id: string, updates: Partial<UnifiedProject>): Uni
   const projects = loadProjects();
   const idx = projects.findIndex(p => p.id === id);
   if (idx < 0) return undefined;
-  projects[idx] = { ...projects[idx], ...updates };
+  projects[idx] = migrateProject({ ...projects[idx], ...updates } as unknown as Record<string, unknown>);
   saveProjects(projects);
   return projects[idx];
 }

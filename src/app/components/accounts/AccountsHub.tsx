@@ -52,7 +52,13 @@ import { integrationService } from '../../engine/integrations/integrationService
 type TabId = 'overview' | 'bank' | 'income' | 'outgoings' | 'job-costing' | 'receipts';
 
 function formatGBP(value: number): string {
-  return `£${value.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const n = Number.isFinite(value) ? value : 0;
+  return `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatMarginPct(value: number): string {
+  const n = Number.isFinite(value) ? value : 0;
+  return `${n.toFixed(1)}%`;
 }
 
 const CHART_COLORS = ['#059669', '#dc2626', '#2563eb', '#d97706', '#7c3aed', '#0891b2'];
@@ -157,10 +163,11 @@ export default function AccountsHub() {
   const handleConnect = async () => {
     const result = await initiateBankConnect();
     if (result.authUrl) {
-      toast.message(result.message, { description: result.authUrl });
-    } else {
-      toast.success(result.message);
+      toast.message(result.message || 'Redirecting to your bank…');
+      window.location.assign(result.authUrl);
+      return;
     }
+    toast.success(result.message);
     await handleSync();
   };
 
@@ -474,7 +481,7 @@ export default function AccountsHub() {
                       <td className={`py-3 pr-4 font-semibold ${row.grossProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                         {formatGBP(row.grossProfit)}
                       </td>
-                      <td className="py-3">{row.marginPct.toFixed(1)}%</td>
+                      <td className="py-3">{formatMarginPct(row.marginPct)}</td>
                     </tr>
                   ))}
                 </tbody>
