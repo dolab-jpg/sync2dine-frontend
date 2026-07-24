@@ -22,6 +22,7 @@ import {
   fetchPlatformStats,
   formatTokens,
   PLAN_LABELS,
+  syncOrganizationsFromCrm,
   tokenUsageColor,
   updateOrganization,
   type OrgPlan,
@@ -85,7 +86,27 @@ export default function PlatformClientsCRM() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [orgs, s] = await Promise.all([fetchOrganizations(), fetchPlatformStats()]);
+      // Always light-sync: provision any home-org won CRM sales missing a tenant org
+      let orgs: PlatformOrganization[] = [];
+      let s: PlatformStats | null = null;
+      try {
+        const synced = await syncOrganizationsFromCrm();
+        orgs = synced.organizations;
+        if (synced.created > 0) {
+          toast.success(
+            synced.created === 1
+              ? '1 won CRM sale synced as a Platform Client'
+              : `${synced.created} won CRM sales synced as Platform Clients`,
+          );
+        }
+      } catch {
+        orgs = await fetchOrganizations();
+      }
+      try {
+        s = await fetchPlatformStats();
+      } catch {
+        // stats non-fatal
+      }
       setClients(orgs);
       setStats(s);
     } catch (err) {
@@ -216,7 +237,7 @@ export default function PlatformClientsCRM() {
                 <h1 className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-violet-300 to-indigo-200 bg-clip-text text-transparent">
                   Platform Clients
                 </h1>
-                <p className="text-indigo-100 mt-1 text-sm sm:text-lg">Manage companies you sell Builder Diddies to</p>
+                <p className="text-indigo-100 mt-1 text-sm sm:text-lg">Manage Sync2Dine restaurant clients from won CRM sales</p>
               </div>
             </div>
 
@@ -370,7 +391,11 @@ export default function PlatformClientsCRM() {
           <Card className="shadow-lg rounded-2xl">
             <CardContent className="text-center py-12">
               <Building2 className="w-14 h-14 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-600 font-medium">No clients match your filters</p>
+              <p className="text-gray-600 font-medium">
+                {clients.length === 0
+                  ? 'No clients yet — won CRM sales appear here after provision'
+                  : 'No clients match your filters'}
+              </p>
             </CardContent>
           </Card>
         ) : (

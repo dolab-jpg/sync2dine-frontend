@@ -90,18 +90,27 @@ async function callPlatform<T>(
     headers.set('Content-Type', 'application/json');
   }
 
-  if (edgeBase) {
-    const token = await getSupabaseAccessToken();
-    const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-    if (token) headers.set('Authorization', `Bearer ${token}`);
-    if (anon) headers.set('apikey', anon);
-    const edgeRes = await fetch(`${edgeBase}${edgePath}`, { ...init, headers });
-    if (edgeRes.status !== 404 && edgeRes.status !== 502 && edgeRes.status !== 503) {
-      return parseJson<T>(edgeRes);
+  // Prefer same-origin Node API. Edge `platform-orgs` may be undeployed; a CORS/network
+  // failure on that fetch used to abort before fallback and left Platform Clients empty.
+  const token = await getSupabaseAccessToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  try {
+    return await parseJson<T>(await fetch(nodePath, { ...init, headers }));
+  } catch (nodeErr) {
+    if (!edgeBase) throw nodeErr;
+    try {
+      const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (anon) headers.set('apikey', anon);
+      const edgeRes = await fetch(`${edgeBase}${edgePath}`, { ...init, headers });
+      if (edgeRes.status === 404 || edgeRes.status === 502 || edgeRes.status === 503) {
+        throw nodeErr;
+      }
+      return await parseJson<T>(edgeRes);
+    } catch {
+      throw nodeErr;
     }
   }
-
-  return parseJson<T>(await fetch(nodePath, { ...init, headers }));
 }
 
 export async function fetchPlatformStats(): Promise<PlatformStats> {
@@ -126,6 +135,36 @@ export async function fetchOrganizations(): Promise<PlatformOrganization[]> {
     '/api/platform/organizations',
   );
   return data.organizations;
+}
+
+/** Backfill: provision Platform Clients from home-org CRM won sales. */
+export async function syncOrganizationsFromCrm(): Promise<{
+  created: number;
+  skipped: number;
+  errors: Array<{ customerId: string; error: string }>;
+  organizations: PlatformOrganization[];
+}> {
+  // Node-only — Edge function does not implement sync-from-crm.
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  const token = await getSupabaseAccessToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const data = await parseJson<{
+    created: number;
+    skipped: number;
+    errors: Array<{ customerId: string; error: string }>;
+    organizations: PlatformOrganization[];
+  }>(
+    await fetch('/api/platform/organizations/sync-from-crm', {
+      method: 'POST',
+      headers,
+    }),
+  );
+  return {
+    created: data.created ?? 0,
+    skipped: data.skipped ?? 0,
+    errors: data.errors ?? [],
+    organizations: data.organizations ?? [],
+  };
 }
 
 export async function createOrganization(input: {
