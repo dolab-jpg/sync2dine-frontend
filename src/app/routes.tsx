@@ -55,6 +55,8 @@ import RestaurantTill from './components/restaurant/RestaurantTill';
 import RestaurantSettings from './components/restaurant/RestaurantSettings';
 import BookingsBoard from './components/restaurant/BookingsBoard';
 import IntegrationsPublicPage from './components/restaurant/IntegrationsPublicPage';
+import BuilderProjectManagement from './components/BuilderProjectManagement';
+import NotificationsPage from './components/NotificationsPage';
 import { OnlineStatusBanner } from './components/OnlineStatusBanner';
 import { Toaster } from './components/ui/sonner';
 import {
@@ -85,8 +87,8 @@ function RedirectToMarketing({ path = '/' }: { path?: string }) {
     window.location.replace(`https://sync2dine.io${path}`);
   }
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6efe0] px-6 text-center">
-      <p className="text-lg font-semibold text-[#0f3d3e]">
+    <div className="flex min-h-screen items-center justify-center bg-s2d-cream px-6 text-center">
+      <p className="text-lg font-semibold text-s2d-teal">
         Taking you to Sync2Dine...
       </p>
     </div>
@@ -252,6 +254,18 @@ export function ConstructionExperienceRoutes({
           <Route
             path="/customers"
             element={<ProtectedRoute element={<CustomerManagement />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+          />
+          <Route
+            path="/projects"
+            element={<ProtectedRoute element={<BuilderProjectManagement />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+          />
+          <Route
+            path="/projects/:projectId"
+            element={<ProtectedRoute element={<BuilderProjectManagement />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+          />
+          <Route
+            path="/notifications"
+            element={<ProtectedRoute element={<NotificationsPage />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
           />
           <Route
             path="/orders"

@@ -147,7 +147,7 @@ export async function sendBuilderMessage(
     'builder_brief_sent',
     `Brief sent to ${builder?.name ?? project.assignedBuilder}`,
     project.projectName,
-    { projectId: project.id, route: '/projects' }
+    { projectId: project.id, route: `/projects/${project.id}?tab=messages` }
   );
   return sentSuccess;
 }
@@ -224,7 +224,7 @@ export async function sendContractorMessage(
     'builder_brief_sent',
     `Contractor brief logged for ${contractor.name}`,
     project.projectName,
-    { projectId: project.id, route: '/projects' }
+    { projectId: project.id, route: `/projects/${project.id}?tab=messages` }
   );
 
   return outboundChannels.length === 0 ? true : sentSuccess;
@@ -260,7 +260,7 @@ export function logBuilderReply(projectId: string, body: string, fromPhone: stri
     'builder_reply_received',
     `Reply from ${builder?.name ?? 'builder'}`,
     body.slice(0, 80),
-    { projectId: project.id, route: '/projects' }
+    { projectId: project.id, route: `/projects/${project.id}?tab=messages` }
   );
   return true;
 }
@@ -337,7 +337,7 @@ export function requestSitePhotos(projectId: string, body: string): boolean {
     'photo_requested',
     'Site photos requested',
     requestBody.slice(0, 80),
-    { projectId: project.id, route: '/projects' }
+    { projectId: project.id, route: `/projects/${project.id}?tab=messages` }
   );
   return true;
 }
@@ -418,7 +418,7 @@ export async function notifyCustomerChangeOrder(
     'customer_action_required',
     'Change order sent for approval',
     `${project.projectName}: ${order.title}`,
-    { projectId: project.id, route: '/portal', changeOrderId: order.id }
+    { projectId: project.id, route: `/projects/${project.id}?tab=messages`, changeOrderId: order.id }
   );
 
   return sent.success;

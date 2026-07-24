@@ -181,7 +181,7 @@ Data column: Supabase is primary unless marked cache/fallback.
 | Role redirect | post-login | `auth/lib/redirectByRole.ts` | — | — | — |
 | App shell / nav | `*` authed | `AppShell.tsx` | i18n `shell` | — | localStorage nav expand (UX only) |
 | Org picker | header | `platform/OrgActingAsPicker.tsx` | `orgContext.ts`, `homeOrg.ts`, `platformApi.ts` | `/api/platform/*` | `organizations` |
-| Notifications | shell bell | `NotificationSystem.tsx` | `notifications/notificationStore.ts`, `notify.ts` | lead inbox poll `/api/leads/inbox` | local + lead inbox |
+| Notifications | shell bell + `/notifications` | `NotificationSystem.tsx`, `NotificationsPage.tsx` | `notifications/notificationStore.ts`, `notify.ts`, `resolveNotificationRoute.ts` | lead inbox poll `/api/leads/inbox` | local + lead inbox |
 | Online banner | shell | `OnlineStatusBanner.tsx` | — | — | — |
 | AI overlay | docked | `AI/AIAssistantOverlay.tsx`, `AIChatPanel.tsx` | `aiChatService.ts`, `staffAiService.ts`, `AIAssistantContext` | `/api/ai/staff`, `/orchestrate`, `/api/cynthia/*` | conversation stores |
 | Activity panel | shell | `AI/CynthiaActivityPanel.tsx` | `ai/agentActivity.ts` | `/api/agent-activity` | `agent_activity_events` |

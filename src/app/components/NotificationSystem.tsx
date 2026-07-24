@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import {
   AlertCircle,
@@ -19,12 +19,14 @@ import {
   type NotificationType,
   type ProjectNotification,
 } from '../engine/notifications/notificationStore';
+import { resolveNotificationRoute } from '../engine/notifications/resolveNotificationRoute';
 
 interface NotificationSystemProps {
   onNewLead?: () => void;
 }
 
 const DEV_NOTIFICATION_FLAG = 'tradepro_enable_dev_notifications';
+const DROPDOWN_LIMIT = 8;
 
 export default function NotificationSystem({ onNewLead }: NotificationSystemProps) {
   const navigate = useNavigate();
@@ -106,6 +108,7 @@ export default function NotificationSystem({ onNewLead }: NotificationSystemProp
   }, [showPanel, closePanel]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
+  const recentNotifications = notifications.slice(0, DROPDOWN_LIMIT);
 
   const markAllAsRead = () => {
     notifications
@@ -113,19 +116,15 @@ export default function NotificationSystem({ onNewLead }: NotificationSystemProp
       .forEach((notification) => markRead(notification.id));
   };
 
-  const resolveNotificationRoute = (notification: ProjectNotification): string => {
-    const data = notification.data ?? {};
-    if (typeof data.route === 'string' && data.route.trim()) return data.route;
-    if (typeof data.projectId === 'string' && data.projectId.trim()) {
-      return `/projects/${encodeURIComponent(data.projectId)}`;
-    }
-    return '/projects';
-  };
-
   const handleNotificationClick = (notification: ProjectNotification) => {
     markRead(notification.id);
     navigate(resolveNotificationRoute(notification));
     closePanel();
+  };
+
+  const openAllNotifications = () => {
+    closePanel();
+    navigate('/notifications');
   };
 
   const getNotificationIcon = (type: NotificationType) => {
@@ -227,7 +226,7 @@ export default function NotificationSystem({ onNewLead }: NotificationSystemProp
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {notifications.map(notification => (
+                  {recentNotifications.map(notification => (
                     <div
                       key={notification.id}
                       className={`p-3 rounded-xl ${getNotificationColor(notification.type)} ${
@@ -255,6 +254,18 @@ export default function NotificationSystem({ onNewLead }: NotificationSystemProp
                 </div>
               )}
             </div>
+
+            {notifications.length > 0 && (
+              <div className="shrink-0 border-t border-gray-100 p-2">
+                <button
+                  type="button"
+                  onClick={openAllNotifications}
+                  className="w-full rounded-xl px-3 py-2.5 text-sm font-medium text-blue-600 hover:bg-blue-50 min-h-10 touch-manipulation"
+                >
+                  See all{notifications.length > DROPDOWN_LIMIT ? ` (${notifications.length})` : ''}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
