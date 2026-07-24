@@ -156,6 +156,16 @@ export const integrationService = {
       }
       return Boolean(values.apiKey?.trim());
     }
+    // Price Research: DeepSeek live web / LLM-only use Company AI Brain — no search key required.
+    if (id === 'price_research') {
+      const researchProvider = values.provider || 'deepseek_web';
+      if (researchProvider === 'tavily' || researchProvider === 'serper') {
+        return Boolean(values.apiKey?.trim());
+      }
+      // deepseek_web | llm_only | legacy openai_web → configured when Company AI Brain has a key
+      const brain = getIntegrationValues('openai');
+      return integrationService.hasCredentials('openai', brain);
+    }
     const credentialFields = def.fields.filter(
       (f) => f.required === true || (f.type === 'password' && (f.key === 'apiKey' || f.required)),
     );
@@ -419,6 +429,15 @@ export const integrationService = {
     if (integrationService.isMockMode(id) && inst.enabled && id !== 'openai') return 'mock';
     if (id === 'openai' && integrationService.isMasterMockMode() && inst.status !== 'connected') {
       return 'mock';
+    }
+    // Price Research (DeepSeek live web / LLM-only): show connected when Company AI Brain is ready.
+    if (id === 'price_research' && inst.status !== 'error') {
+      const values = { ...inst.values };
+      if (values.provider === 'openai_web') values.provider = 'llm_only';
+      if (!values.provider) values.provider = 'deepseek_web';
+      if (integrationService.hasCredentials('price_research', values)) {
+        return 'connected';
+      }
     }
     return inst.status;
   },

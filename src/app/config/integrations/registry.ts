@@ -358,14 +358,15 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     name: 'Price Research (Web)',
     description: 'Live local price lookup for AI job pricing — checks current market/online rates',
     category: 'ai',
-    docsUrl: 'https://tavily.com/',
+    docsUrl: 'https://api-docs.deepseek.com/',
     fields: [
       { key: 'provider', label: 'Provider', type: 'select', options: [
-        { value: 'openai_web', label: 'OpenAI Web Search' },
+        { value: 'deepseek_web', label: 'DeepSeek live web (Company AI Brain)' },
+        { value: 'llm_only', label: 'LLM knowledge only (Company AI Brain)' },
         { value: 'tavily', label: 'Tavily' },
         { value: 'serper', label: 'Serper (Google)' },
       ]},
-      { key: 'apiKey', label: 'API Key', type: 'password', placeholder: 'Search provider key (not needed for OpenAI Web)' },
+      { key: 'apiKey', label: 'Search API Key', type: 'password', placeholder: 'Tavily/Serper only — not needed for DeepSeek or LLM-only' },
       { key: 'region', label: 'Region', type: 'text', placeholder: 'UK' },
     ],
   },
@@ -468,7 +469,7 @@ export function getDefaultFieldValues(def: IntegrationDefinition): Record<string
     values.redirectUri = 'http://localhost:5173/integrations';
   }
   if (def.id === 'price_research') {
-    values.provider = 'openai_web';
+    values.provider = 'deepseek_web';
     values.region = 'UK';
   }
   return values;

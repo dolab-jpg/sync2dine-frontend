@@ -26,13 +26,16 @@ export function pickHigherEnd(line: { low: number; typical: number; high: number
 }
 
 /**
- * Call the live price-research backend powered by the company OpenAI brain.
- * Throws when OpenAI is not connected (no silent mock).
+ * Call the live price-research backend powered by Company AI Brain (DeepSeek or OpenAI).
+ * Throws when no brain key is connected (no silent mock).
  */
 export async function researchPrices(req: PriceResearchRequest): Promise<PricingResearch> {
   const cfg = integrationService.getConfig('price_research');
   const openai = integrationService.getConfig('openai');
   const region = cfg.region || 'UK';
+
+  let provider = cfg.provider || 'deepseek_web';
+  if (provider === 'openai_web') provider = 'llm_only';
 
   const res = await fetch('/api/ai/price-research', {
     method: 'POST',
@@ -42,7 +45,7 @@ export async function researchPrices(req: PriceResearchRequest): Promise<Pricing
       tradeName: req.tradeName,
       postcode: req.postcode,
       region,
-      provider: cfg.provider || 'openai_web',
+      provider,
       searchApiKey: cfg.apiKey || undefined,
       apiKey: integrationService.getLiveOpenAIApiKey(),
       deepseekApiKey: openai.deepseekApiKey || undefined,
