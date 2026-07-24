@@ -22,9 +22,10 @@ export function ComposerAttachMenu({
 }: ComposerAttachMenuProps) {
   const [open, setOpen] = useState(false);
 
-  const runAndClose = (fn: () => void) => {
+  /** Run the action first (keeps file-picker user-gesture), then close popover next frame. */
+  const runThenClose = (fn: () => void) => {
     fn();
-    setOpen(false);
+    requestAnimationFrame(() => setOpen(false));
   };
 
   return (
@@ -49,7 +50,7 @@ export function ComposerAttachMenu({
           <button
             type="button"
             className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-slate-700 hover:bg-slate-100 text-left"
-            onClick={() => runAndClose(onUpload)}
+            onClick={() => runThenClose(onUpload)}
           >
             <Upload className="w-4 h-4 text-slate-500 shrink-0" />
             Upload photo
@@ -57,7 +58,7 @@ export function ComposerAttachMenu({
           <button
             type="button"
             className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-slate-700 hover:bg-slate-100 text-left"
-            onClick={() => runAndClose(onCamera)}
+            onClick={() => runThenClose(onCamera)}
           >
             <Camera className="w-4 h-4 text-slate-500 shrink-0" />
             Take photo
@@ -71,7 +72,7 @@ export function ComposerAttachMenu({
                   ? 'bg-indigo-50 text-indigo-800 hover:bg-indigo-100'
                   : 'text-slate-700 hover:bg-slate-100',
               )}
-              onClick={() => runAndClose(onToggleHandsFree)}
+              onClick={() => runThenClose(onToggleHandsFree)}
             >
               {handsFreeActive ? (
                 <Square className="w-4 h-4 shrink-0" />

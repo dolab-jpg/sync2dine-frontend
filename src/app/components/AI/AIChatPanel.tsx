@@ -1111,10 +1111,10 @@ export function AIChatPanel() {
           onSend={() => handleSend()}
           loading={loading}
           disabled={!isChatConnected}
+          canSend={isChatConnected && !loading && (Boolean(input.trim()) || photos.length > 0)}
           placeholder={isChatConnected ? rolePrompt : 'Connect OpenAI in Settings to chat'}
           leading={
             <ComposerAttachMenu
-              disabled={!isChatConnected}
               onUpload={() => photoCaptureRef.current?.openUpload()}
               onCamera={() => photoCaptureRef.current?.openCamera()}
               handsFreeSupported={voice.isSupported}

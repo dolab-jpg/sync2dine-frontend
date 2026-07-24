@@ -13,7 +13,7 @@ interface VoiceInputButtonProps {
 
 /**
  * Mic control: native hold-to-record (+ Whisper) in the Flutter shell,
- * Web Speech API elsewhere.
+ * click-to-toggle Web Speech API elsewhere.
  */
 export function VoiceInputButton({ onTranscript, compact = false }: VoiceInputButtonProps) {
   const {
@@ -55,6 +55,7 @@ export function VoiceInputButton({ onTranscript, compact = false }: VoiceInputBu
           if (isListening) void stopListening();
         }}
         title="Hold to speak"
+        aria-label="Hold to speak"
       >
         {isTranscribing ? (
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -73,11 +74,13 @@ export function VoiceInputButton({ onTranscript, compact = false }: VoiceInputBu
       size="icon"
       variant={isListening ? 'destructive' : compact ? 'ghost' : 'outline'}
       className={`${sizeClass} touch-manipulation`}
-      onMouseDown={() => void startListening()}
-      onMouseUp={() => void stopListening()}
-      onTouchStart={() => void startListening()}
-      onTouchEnd={() => void stopListening()}
-      title="Hold to speak"
+      onClick={() => {
+        if (isListening) void stopListening();
+        else void startListening();
+      }}
+      title={isListening ? 'Stop listening' : 'Tap to speak'}
+      aria-label={isListening ? 'Stop listening' : 'Tap to speak'}
+      aria-pressed={isListening}
     >
       {isListening ? <MicOff className="w-4 h-4 animate-pulse" /> : <Mic className="w-4 h-4" />}
     </Button>
