@@ -22,7 +22,7 @@ const OFFER_FAIL_COOLDOWN_MS = 5 * 60_000;
 /**
  * Listens for app errors and offers Yes/No fix in the existing CRM AI chat.
  * Surgical fixes auto-start when selfHealAutoStart is enabled.
- * Auth + ops/infra (502/503/quota) never open Cursor offers — they stay quiet.
+ * Auth + ops/infra (502/503/quota) never open Trae offers — they stay quiet.
  */
 export function SelfHealErrorBridge() {
   const app = useContext(AppContext);
@@ -142,14 +142,11 @@ export function SelfHealErrorBridge() {
             return;
           }
 
-          let cursorNote = '';
+          let handoffNote = '';
           try {
             const status = await listCodeFixJobs();
             if (status.health && !status.health.live) {
-              cursorNote = `\n\n⚠️ Self-heal is **not LIVE**: ${status.health.reason}`;
-            } else if (!status.cursorConfigured) {
-              cursorNote =
-                '\n\n⚠️ **CURSOR_API_KEY** is not configured yet — jobs are logged in **AI Audit → Code fixes**, but Cursor cannot open a PR until the key is added.';
+              handoffNote = `\n\n⚠️ Self-heal is **not LIVE**: ${status.health.reason}`;
             }
           } catch {
             // ignore
@@ -176,11 +173,11 @@ export function SelfHealErrorBridge() {
             addMessage({
               role: 'assistant',
               content:
-                `${schemaIntro}**Auto-fixing** \`${result.job.errorCode || 'error'}\` on **${result.job.route || 'this page'}**.\n\n` +
+                `${schemaIntro}**Queued for Trae** \`${result.job.errorCode || 'error'}\` on **${result.job.route || 'this page'}**.\n\n` +
                 `${result.job.description}\n\n` +
-                (result.message || 'Logged — in the fix queue.') +
-                '\n\nI\'ll notify you when a GitHub PR is ready. Until then use **Open Code fixes**. When the PR link arrives, this chat gets **Open PR** + **Approve & merge** (merge opens GitHub if server token is not set).' +
-                cursorNote,
+                (result.message || 'Logged in AI Audit → Code fixes.') +
+                '\n\nOpen **Code fixes**, copy the Trae prompt, then **Attach PR URL** when the PR is ready. This chat gets **Open PR** + **Approve & merge** after that.' +
+                handoffNote,
               fixJobId: result.job.id,
               statusAction: {
                 label: 'Open Code fixes',
@@ -202,10 +199,10 @@ export function SelfHealErrorBridge() {
             content:
               schemaIntro +
               (job.scope === 'needs_cursor_approval'
-                ? 'This may need a wider change — if you say **Yes**, I\'ll prepare it for **your approval in Cursor** before any redesign.\n\n'
-                : 'I can attempt a **surgical fix** (smallest patch — not a full redesign).\n\n') +
+                ? 'This may need a wider change — if you say **Yes**, I\'ll queue it for **your approval in Trae / AI Audit** before any redesign.\n\n'
+                : 'I can queue a **surgical fix** for Trae (smallest patch — not a full redesign).\n\n') +
               '**Would you like me to fix this?**' +
-              cursorNote,
+              handoffNote,
             fixOffer: {
               jobId: job.id,
               errorCode: job.errorCode,
@@ -230,7 +227,7 @@ export function SelfHealErrorBridge() {
           addMessage({
             role: 'assistant',
             content:
-              'Self-heal couldn’t log that error right now (temporary). The failure is **not** being sent to Cursor. Try again in a few minutes, or open **AI Audit → Code fixes**.',
+              'Self-heal couldn’t log that error right now (temporary). The failure is **not** queued for Trae yet. Try again in a few minutes, or open **AI Audit → Code fixes**.',
           });
         } finally {
           busyRef.current = false;

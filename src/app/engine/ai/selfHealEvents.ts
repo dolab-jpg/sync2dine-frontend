@@ -11,7 +11,7 @@ export interface SelfHealErrorDetail {
   status?: number;
   /** Session/auth failure — Bridge must not offer or auto-start code fixes */
   authError?: boolean;
-  /** Ops/infra (502/quota/gateway) — never offer Cursor; keep chat quiet */
+  /** Ops/infra (502/quota/gateway) — never offer Trae; keep chat quiet */
   opsError?: boolean;
   kind?: SelfHealErrorKind;
   /** Parsed OpenAI tool name when Invalid schema for function 'X' */
@@ -31,7 +31,7 @@ const UNAUTHORIZED_RE = /unauthorized/i;
 const OPS_STATUS = new Set([429, 502, 503, 504]);
 
 const OPS_BODY_RE =
-  /no credit|usage limit|billing|quota|insufficient_quota|rate.?limit|openai key rejected|econnreset|econnrefused|etimedout|gateway|bad gateway|service unavailable|upstream|temporarily unavailable|cloudflare|proxy error|CURSOR_API_KEY not configured/i;
+  /no credit|usage limit|billing|quota|insufficient_quota|rate.?limit|openai key rejected|econnreset|econnrefused|etimedout|gateway|bad gateway|service unavailable|upstream|temporarily unavailable|cloudflare|proxy error/i;
 
 /** Paths that should never trigger self-heal (code-fix loop, health probes). */
 function isSelfHealExcludedUrl(url: string): boolean {
@@ -58,7 +58,7 @@ export function isAuthSelfHealError(
 
 /**
  * Ops/infra failures are not application bugs — self-heal must not open chat,
- * offer Yes/No, or launch Cursor Cloud Agents.
+ * offer Yes/No, or queue Trae handoff jobs.
  */
 export function isOpsSelfHealError(
   detail: Pick<SelfHealErrorDetail, 'opsError' | 'status' | 'errorCode' | 'description' | 'kind'>,

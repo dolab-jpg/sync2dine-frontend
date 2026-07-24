@@ -11,10 +11,12 @@ import {
   mergeCodeFixBatch,
   getCodeFixHealth,
   statusLabel,
+  traePromptFromJob,
   type CodeFixJob,
   type CodeFixHealth,
 } from '../../engine/ai/codeFixService';
-import { AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Copy, ExternalLink, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 
 function HealthBadge({ health }: { health: CodeFixHealth | null }) {
   if (!health) {
@@ -74,6 +76,7 @@ export function CodeFixesAudit() {
   const [merging, setMerging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mergeNote, setMergeNote] = useState<string | null>(null);
+  const [prUrlDraft, setPrUrlDraft] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -107,6 +110,11 @@ export function CodeFixesAudit() {
 
   const selected = jobs.find((j) => j.id === selectedId) ?? null;
   const openPrJobs = jobs.filter((j) => j.status === 'pr_open' && j.prUrl);
+  const selectedTraePrompt = selected ? traePromptFromJob(selected) : null;
+
+  useEffect(() => {
+    setPrUrlDraft(selected?.prUrl ?? '');
+  }, [selected?.id, selected?.prUrl]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -170,7 +178,7 @@ export function CodeFixesAudit() {
         <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
           <div className="flex items-center gap-2 font-medium mb-1">
             <AlertTriangle className="w-4 h-4" />
-            Alerts ({alerts.length}) — failed, stuck, needs Cursor OK, or PRs awaiting merge
+            Alerts ({alerts.length}) — failed, stuck, needs Trae OK, or PRs awaiting merge
           </div>
           <ul className="space-y-1 text-xs">
             {alerts.slice(0, 8).map((a) => (
@@ -200,10 +208,10 @@ export function CodeFixesAudit() {
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="queued">Queued</SelectItem>
+            <SelectItem value="queued">Queued for Trae</SelectItem>
             <SelectItem value="running">Running</SelectItem>
             <SelectItem value="offered">Offered (Yes/No)</SelectItem>
-            <SelectItem value="awaiting_cursor_approval">Needs Cursor OK</SelectItem>
+            <SelectItem value="awaiting_cursor_approval">Needs Trae OK</SelectItem>
             <SelectItem value="pr_open">PR open</SelectItem>
             <SelectItem value="failed">Failed</SelectItem>
             <SelectItem value="merged">Merged</SelectItem>
@@ -301,7 +309,23 @@ export function CodeFixesAudit() {
                         void retryCodeFix(selected.id, { cursorApproved: true }).then(() => refresh())
                       }
                     >
-                      Approve & run surgical
+                      Approve & queue for Trae
+                    </Button>
+                  )}
+                  {selectedTraePrompt && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(selectedTraePrompt).then(
+                          () => toast.success('Trae prompt copied'),
+                          () => toast.error('Could not copy prompt'),
+                        );
+                      }}
+                    >
+                      <Copy className="w-3.5 h-3.5 mr-1" />
+                      Copy Trae prompt
                     </Button>
                   )}
                   {selected.status === 'pr_open' && (
@@ -341,17 +365,47 @@ export function CodeFixesAudit() {
                       href={selected.cursorAgentUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-amber-800 underline"
+                      className="inline-flex items-center gap-1 text-xs text-slate-600 underline"
                     >
-                      Open Cursor agent <ExternalLink className="w-3 h-3" />
+                      Legacy agent link <ExternalLink className="w-3 h-3" />
                     </a>
                   )}
                 </div>
+                {['queued', 'awaiting_cursor_approval', 'failed', 'running'].includes(selected.status) && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <p className="text-xs font-medium text-slate-700">Attach PR from Trae</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Input
+                        placeholder="https://github.com/.../pull/123"
+                        value={prUrlDraft}
+                        onChange={(e) => setPrUrlDraft(e.target.value)}
+                        className="flex-1 min-w-[220px]"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!prUrlDraft.trim()}
+                        onClick={() =>
+                          void updateCodeFixStatus(selected.id, 'pr_open', prUrlDraft.trim())
+                            .then(() => {
+                              toast.success('PR attached');
+                              return refresh();
+                            })
+                            .catch((err) =>
+                              toast.error(err instanceof Error ? err.message : String(err)),
+                            )
+                        }
+                      >
+                        Attach PR URL
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                   <dt className="text-slate-500">Status</dt>
                   <dd>{statusLabel(selected.status)}</dd>
                   <dt className="text-slate-500">Scope</dt>
-                  <dd>{selected.scope}</dd>
+                  <dd>{selected.scope === 'needs_cursor_approval' ? 'needs Trae approval' : selected.scope}</dd>
                   <dt className="text-slate-500">Requester</dt>
                   <dd>{selected.requesterName} ({selected.requesterRole})</dd>
                   <dt className="text-slate-500">Route</dt>
@@ -367,6 +421,14 @@ export function CodeFixesAudit() {
                   <p className="text-xs text-slate-500 mb-1">Description</p>
                   <p className="whitespace-pre-wrap">{selected.description}</p>
                 </div>
+                {selectedTraePrompt && (
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Trae prompt</p>
+                    <pre className="whitespace-pre-wrap text-xs rounded-lg border bg-slate-50 p-2 max-h-48 overflow-y-auto">
+                      {selectedTraePrompt}
+                    </pre>
+                  </div>
+                )}
                 {selected.lastError && (
                   <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-900 whitespace-pre-wrap">
                     {selected.lastError}

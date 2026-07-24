@@ -70,7 +70,7 @@ export const DEFAULT_AI_STUDIO: AIStudioConfig = {
   starterQuestionsEnabled: false,
   conversationLoggingEnabled: true,
   conversationRetentionDays: 365,
-  // Off by default — auto-start spawns Cursor Cloud Agents on every surgical error
+  // Off by default — auto-start queues Trae handoff jobs on every surgical error
   // and floods Cynthia LIVE while staff work. Enable in AI Studio when wanted.
   selfHealAutoStart: false,
   auditRoles: ['super_admin', 'manager'],

@@ -165,7 +165,7 @@ export function PhoneErrorsAudit({ initialId }: { initialId?: string | null }) {
     }
     if (action === 'enqueue') {
       const ok = window.confirm(
-        `Enqueue up to ${Math.min(ids.length, 5)} Cursor code-fix jobs? Auto-start stays off for phone — this explicitly queues them.`,
+        `Enqueue up to ${Math.min(ids.length, 5)} Trae code-fix jobs? Auto-start stays off for phone — this explicitly queues them.`,
       );
       if (!ok) return;
     }

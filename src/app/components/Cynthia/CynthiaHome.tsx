@@ -636,7 +636,7 @@ export default function CynthiaHome() {
 
         {fixJobs.length > 0 && (
           <div className="mx-1 rounded-2xl bg-slate-900 text-white p-3 text-xs space-y-1">
-            <p className="font-semibold flex items-center gap-1"><Wrench className="h-3.5 w-3.5" /> Cursor code fixes</p>
+            <p className="font-semibold flex items-center gap-1"><Wrench className="h-3.5 w-3.5" /> Trae code fixes</p>
             {fixJobs.map((entry) => (
               <div key={entry.id} className="flex justify-between gap-2 items-center">
                 <span>

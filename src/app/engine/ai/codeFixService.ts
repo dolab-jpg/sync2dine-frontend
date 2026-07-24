@@ -208,13 +208,18 @@ export function statusLabel(status: CodeFixStatus): string {
     case 'offered': return 'Awaiting Yes/No';
     case 'asking': return 'Needs details';
     case 'dismissed': return 'Dismissed';
-    case 'queued': return 'Queued';
+    case 'queued': return 'Queued for Trae';
     case 'running': return 'Running';
-    case 'awaiting_cursor_approval': return 'Needs Cursor approval';
+    case 'awaiting_cursor_approval': return 'Needs Trae approval';
     case 'pr_open': return 'PR open — approve merge';
     case 'merged': return 'Merged';
     case 'failed': return 'Failed';
     case 'cancelled': return 'Cancelled';
     default: return status;
   }
+}
+
+export function traePromptFromJob(job: CodeFixJob): string | null {
+  const prompt = job.metadata?.traePrompt;
+  return typeof prompt === 'string' && prompt.trim() ? prompt : null;
 }

@@ -427,22 +427,27 @@ export function AIChatPanel() {
       addMessage({
         role: 'assistant',
         content:
-          (result.message || 'Logged — starting a surgical fix.') +
+          (result.message || 'Logged for Trae in AI Audit → Code fixes.') +
           queueNote +
           (result.needsCursorApproval
-            ? '\n\nThis needs your approval in Cursor before a large change runs.'
-            : '\n\nI\'ll notify you when a GitHub PR link is ready. Track anytime via **Open Code fixes**. Then use **Open PR** / **Approve & merge** here (GitHub merge page if auto-merge is not configured).'),
+            ? '\n\nThis needs your approval in Trae / AI Audit before a large change runs.'
+            : '\n\nOpen **Code fixes**, copy the Trae prompt, fix in Trae, then **Attach PR URL**. After that use **Open PR** / **Approve & merge** here.'),
         fixJobId: result.job.id,
         statusAction: {
           label: 'Open Code fixes',
           href: '/ai-audit?tab=code_fixes',
         },
       });
-      if (result.job.cursorAgentUrl) {
+      if (typeof result.job.metadata?.traePrompt === 'string' && result.job.metadata.traePrompt) {
         addMessage({
           role: 'assistant',
-          content: `Cursor agent: ${result.job.cursorAgentUrl}`,
+          content:
+            `**Trae prompt** (also in AI Audit → Code fixes):\n\n\`\`\`\n${result.job.metadata.traePrompt}\n\`\`\``,
           fixJobId: result.job.id,
+          statusAction: {
+            label: 'Open Code fixes',
+            href: '/ai-audit?tab=code_fixes',
+          },
         });
       }
     } catch (err) {
@@ -552,9 +557,8 @@ export function AIChatPanel() {
               addMessage({
                 role: 'assistant',
                 content:
-                  `Cursor is still preparing the PR for \`${job.errorCode || 'error'}\`.\n` +
-                  (job.cursorAgentUrl ? `Agent: ${job.cursorAgentUrl}\n` : '') +
-                  `No GitHub URL yet — keep **AI Audit → Code fixes** open; I’ll add **Open PR** here when it appears.`,
+                  `Waiting for a GitHub PR URL for \`${job.errorCode || 'error'}\`.\n` +
+                  `Open **AI Audit → Code fixes**, attach the PR from Trae, then I’ll add **Open PR** here.`,
                 fixJobId: job.id,
                 statusAction: {
                   label: 'Open Code fixes',
@@ -567,7 +571,6 @@ export function AIChatPanel() {
                 content:
                   `**PR ready** for \`${job.errorCode || 'error'}\`.\n` +
                   `${job.prUrl}\n` +
-                  (job.cursorAgentUrl ? `Agent: ${job.cursorAgentUrl}\n` : '') +
                   `Use **Open PR** to review, or **Approve & merge** (opens GitHub if auto-merge isn’t configured).`,
                 fixJobId: job.id,
                 mergeAction: {
@@ -587,11 +590,29 @@ export function AIChatPanel() {
             addMessage({
               role: 'assistant',
               content:
-                `This needs **your approval in Cursor** before I implement a wider change.\n` +
-                (job.cursorAgentUrl ? `Open: ${job.cursorAgentUrl}` : 'Open Cursor Agents dashboard.'),
+                `This needs **your approval in Trae / AI Audit** before a wider change.\n` +
+                `Open **Code fixes**, review the Trae prompt, then **Approve & run surgical** if you want a small fix.`,
               fixJobId: job.id,
+              statusAction: {
+                label: 'Open Code fixes',
+                href: '/ai-audit?tab=code_fixes',
+              },
             });
             untrackFixJob(jobId);
+          } else if (job.status === 'queued') {
+            if (already === statusKey) continue;
+            announcedFixStatusRef.current[jobId] = statusKey;
+            addMessage({
+              role: 'assistant',
+              content:
+                `**Queued for Trae** — \`${job.errorCode || 'error'}\` is waiting in **AI Audit → Code fixes**.\n` +
+                `Copy the Trae prompt there, open a PR, then Attach PR URL.`,
+              fixJobId: job.id,
+              statusAction: {
+                label: 'Open Code fixes',
+                href: '/ai-audit?tab=code_fixes',
+              },
+            });
           } else if (terminal.includes(job.status)) {
             announcedFixStatusRef.current[jobId] = statusKey;
             untrackFixJob(jobId);
