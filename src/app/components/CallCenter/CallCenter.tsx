@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useContext, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -12,8 +11,8 @@ import { Switch } from '../ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import {
-  Phone, PhoneIncoming, PhoneOutgoing, Clock, MessageSquare,
-  RefreshCw, Play, Send, AlertCircle, Voicemail, Mic, Search,
+  Phone, PhoneIncoming, PhoneOutgoing,
+  RefreshCw, Play, Send, Voicemail, Mic, Search,
   ChevronDown, ChevronUp, User, ExternalLink, Power, Volume2, Plus, Trash2, Radio,
   PhoneForwarded, ShieldCheck, Globe, UserPlus, Pause, Square,
 } from 'lucide-react';
@@ -247,15 +246,20 @@ function callLineDid(call: CallRecord): string {
     || '';
 }
 
-function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString('en-GB', {
-      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
+function formatTime(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-GB', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
 }
+
+function callWhen(call: Pick<CallRecord, 'startedAt' | 'endedAt'>): string {
+  return formatTime(call.startedAt || call.endedAt);
+}
+
+const cardShell = 'rounded-2xl border border-s2d-teal/15 bg-white shadow-sm';
 
 function formatDuration(sec?: number): string {
   if (sec == null) return '—';
@@ -283,6 +287,7 @@ export default function CallCenter() {
   const [refreshingCallId, setRefreshingCallId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [togglingAgent, setTogglingAgent] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [activeVoiceId, setActiveVoiceId] = useState<string | null>(null);
@@ -869,8 +874,8 @@ export default function CallCenter() {
   function renderLeadForm(call: Pick<CallRecord, 'id' | 'from'>) {
     if (leadFormCallId !== call.id) return null;
     return (
-      <div className="p-3 rounded-lg border bg-white space-y-3">
-        <p className="text-sm font-medium text-slate-700">New lead — phone pre-filled from caller ID</p>
+      <div className="p-3 rounded-xl border border-s2d-teal/15 bg-s2d-cream/40 space-y-3">
+        <p className="text-sm font-medium text-s2d-teal-deep">New lead — phone pre-filled from caller ID</p>
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
             <Label>Phone (from caller ID)</Label>
@@ -921,213 +926,280 @@ export default function CallCenter() {
   const activeCalls = agentStatus?.activeCalls ?? (agentStatus?.activeCall ? [agentStatus.activeCall] : []);
   const linesSummary = agentStatus?.linesSummary;
   const stats = agentStatus?.todayStats;
+  const capacity = agentStatus?.capacity;
+
+  function renderActiveCallCards() {
+    if (activeCalls.length === 0) {
+      return (
+        <p className="text-sm text-s2d-ink-muted py-2">No active calls right now</p>
+      );
+    }
+    return (
+      <div className="space-y-3 max-h-[420px] overflow-y-auto">
+        {activeCalls.map(call => {
+          const matched = calls.find(c => c.id === call.id);
+          const customerId = call.customerId ?? matched?.customerId;
+          return (
+            <div
+              key={call.id}
+              className="p-4 rounded-xl border border-s2d-teal/20 bg-s2d-cream/50 space-y-3"
+            >
+              <div className="flex items-center gap-4">
+                <span className="relative flex h-3 w-3 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-s2d-gold opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-s2d-teal" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-s2d-teal-deep truncate">
+                    On call with {call.contactName && call.contactName !== 'Guest' ? call.contactName : 'Guest — new caller'}
+                  </p>
+                  <p className="text-sm text-s2d-ink-body">
+                    <span className="text-s2d-ink-muted">Caller: </span>
+                    <span className="font-mono font-semibold text-s2d-teal-deep">{formatPhone(call.from)}</span>
+                    {call.lineLabel ? ` · ${call.lineLabel}` : ''}
+                    {call.to ? ` · to ${formatPhone(call.to)}` : ''}
+                    {' · '}{formatDuration(call.elapsedSec ?? undefined)} elapsed
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {matched?.metadata?.phoneAuth && PHONE_AUTH_LABELS[matched.metadata.phoneAuth] && (
+                      <Badge
+                        variant={matched.metadata.phoneAuth === 'verified' ? 'default' : 'secondary'}
+                        className={`text-xs ${matched.metadata.phoneAuth === 'verified' ? 'bg-s2d-teal' : ''}`}
+                      >
+                        PIN {PHONE_AUTH_LABELS[matched.metadata.phoneAuth]}
+                      </Badge>
+                    )}
+                    {(!call.contactName || call.contactName === 'Guest') && (
+                      <Badge variant="outline" className="text-xs border-s2d-teal/20">
+                        Company: {integrationService.getConfig('company').companyName || 'Builder Diddies'}
+                        {integrationService.getConfig('company').website
+                          ? ` · ${integrationService.getConfig('company').website}`
+                          : ''}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <Badge className="shrink-0 bg-s2d-teal-deep text-s2d-cream">{call.status.replace(/_/g, ' ')}</Badge>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <LiveCallSpeakerButton listenUrl={call.listenUrl} />
+                {customerId ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 border-s2d-teal/20"
+                    onClick={() => navigate(`/crm?customerId=${customerId}`)}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Open in CRM
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 border-s2d-teal/20"
+                    onClick={() => openLeadForm({ id: call.id, from: call.from, contactName: call.contactName })}
+                  >
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Create lead
+                  </Button>
+                )}
+              </div>
+              <CallContextChip
+                callId={call.id}
+                customerId={customerId}
+                phone={call.from}
+                contactName={call.contactName}
+                status={call.status}
+                isGuest={call.isGuest || !call.contactName || call.contactName === 'Guest'}
+                listenUrl={call.listenUrl}
+                elapsedSec={call.elapsedSec}
+                compact
+              />
+              {renderLeadForm({ id: call.id, from: call.from })}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="space-y-5 p-4 md:p-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Phone className="w-7 h-7 text-amber-600" />
+          <h1 className="text-2xl font-bold text-s2d-teal-deep flex items-center gap-2 tracking-tight">
+            <Phone className="w-7 h-7 text-s2d-gold" />
             Call Centre — {agentLabel}
           </h1>
-          <p className="text-slate-600 mt-1">
+          <p className="text-s2d-ink-muted mt-1 text-sm">
             {isSalesShell
               ? 'Sally sells Sync2Dine to restaurants (outbound signup) — separate from restaurant order-taking'
-              : 'AI voice agent control dashboard'}
+              : 'Live lines, transcripts, and outbound queue'}
           </p>
         </div>
-        <Button variant="outline" onClick={refreshAll} disabled={loading}>
+        <Button
+          variant="outline"
+          onClick={refreshAll}
+          disabled={loading}
+          className="border-s2d-teal/20 text-s2d-teal-deep hover:bg-s2d-cream"
+        >
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
 
-      {/* Section 1: Master on/off */}
-      <Card className={isActive ? 'border-green-200 bg-green-50/30' : 'border-red-200 bg-red-50/30'}>
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <Power className={`w-6 h-6 ${isActive ? 'text-green-600' : 'text-red-500'}`} />
-              <div>
-                <p className="font-semibold text-slate-900">AI Agent Master Switch</p>
-                <p className="text-sm text-slate-600">
+      {/* Always-visible ops strip */}
+      <div className={`${cardShell} overflow-hidden`}>
+        <div className="flex flex-col gap-3 p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+          <div className="flex flex-wrap items-center gap-3 min-w-0">
+            <div
+              className={`flex items-center gap-2.5 rounded-xl px-3 py-2 ${
+                isActive ? 'bg-s2d-cream' : 'bg-red-50'
+              }`}
+            >
+              <Power className={`w-4 h-4 shrink-0 ${isActive ? 'text-s2d-teal' : 'text-red-500'}`} />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-s2d-teal-deep leading-tight">Agent on / off</p>
+                <p className="text-[11px] text-s2d-ink-muted truncate max-w-[14rem] sm:max-w-none">
                   {isActive
-                    ? (isSalesShell ? 'Sally can place outbound sales calls' : 'Judie is answering inbound calls')
-                    : `${agentLabel} is paused — calls will not be answered`}
+                    ? (isSalesShell ? 'Sally can place outbound sales calls' : 'Judie is answering inbound')
+                    : `${agentLabel} paused — not answering`}
                 </p>
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Badge variant={isActive ? 'default' : 'destructive'} className={isActive ? 'bg-green-600' : ''}>
-                {isActive ? 'Agent answering' : 'Agent paused'}
-              </Badge>
               <Switch
                 checked={isActive}
                 onCheckedChange={toggleAgent}
                 disabled={togglingAgent}
+                className="ml-1"
               />
+              <Badge
+                variant={isActive ? 'default' : 'destructive'}
+                className={`text-[10px] ${isActive ? 'bg-s2d-teal hover:bg-s2d-teal' : ''}`}
+              >
+                {isActive ? 'Answering' : 'Paused'}
+              </Badge>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-xl border border-s2d-teal/10 bg-white px-3 py-2">
+              {activeCalls.length > 0 ? (
+                <>
+                  <span className="relative flex h-2.5 w-2.5 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-s2d-gold opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-s2d-teal" />
+                  </span>
+                  <span className="text-sm font-semibold text-s2d-teal-deep">
+                    On call: {activeCalls.length}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="h-2.5 w-2.5 rounded-full bg-s2d-teal/25 shrink-0" />
+                  <span className="text-sm font-medium text-s2d-ink-muted">Idle</span>
+                </>
+              )}
+              {linesSummary && (
+                <span className="text-[11px] text-s2d-ink-muted hidden sm:inline">
+                  · {linesSummary.registered}/{linesSummary.total} lines · {linesSummary.onCall} on line
+                </span>
+              )}
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Section 2: Live call status */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Live Call Status</CardTitle>
-          <CardDescription>
-            Updates every 5 seconds
-            {linesSummary && (
-              <> · {linesSummary.registered}/{linesSummary.total} lines registered · {linesSummary.onCall} on call</>
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {activeCalls.length > 0 ? (
-            <div className="space-y-3 max-h-[360px] overflow-y-auto">
-              {activeCalls.map(call => {
-                const matched = calls.find(c => c.id === call.id);
-                const customerId = call.customerId ?? matched?.customerId;
-                return (
-                  <div key={call.id} className="p-4 rounded-lg bg-amber-50 border border-amber-200 space-y-3">
-                    <div className="flex items-center gap-4">
-                      <span className="relative flex h-3 w-3 shrink-0">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-900 truncate">
-                          On call with {call.contactName && call.contactName !== 'Guest' ? call.contactName : 'Guest — new caller'}
-                        </p>
-                        <p className="text-sm text-slate-600">
-                          <span className="text-slate-500">Caller: </span>
-                          <span className="font-mono font-semibold text-slate-900">{formatPhone(call.from)}</span>
-                          {call.lineLabel ? ` · ${call.lineLabel}` : ''}
-                          {call.to ? ` · to ${formatPhone(call.to)}` : ''}
-                          {' · '}{formatDuration(call.elapsedSec ?? undefined)} elapsed
-                        </p>
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          {matched?.metadata?.phoneAuth && PHONE_AUTH_LABELS[matched.metadata.phoneAuth] && (
-                            <Badge
-                              variant={matched.metadata.phoneAuth === 'verified' ? 'default' : 'secondary'}
-                              className={`text-xs ${matched.metadata.phoneAuth === 'verified' ? 'bg-green-600' : ''}`}
-                            >
-                              PIN {PHONE_AUTH_LABELS[matched.metadata.phoneAuth]}
-                            </Badge>
-                          )}
-                          {(!call.contactName || call.contactName === 'Guest') && (
-                            <Badge variant="outline" className="text-xs">
-                              Company: {integrationService.getConfig('company').companyName || 'Builder Diddies'}
-                              {integrationService.getConfig('company').website
-                                ? ` · ${integrationService.getConfig('company').website}`
-                                : ''}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <Badge className="shrink-0">{call.status.replace(/_/g, ' ')}</Badge>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      <LiveCallSpeakerButton listenUrl={call.listenUrl} />
-                      {customerId ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="shrink-0"
-                          onClick={() => navigate(`/crm?customerId=${customerId}`)}
-                        >
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          Open in CRM
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="shrink-0"
-                          onClick={() => openLeadForm({ id: call.id, from: call.from, contactName: call.contactName })}
-                        >
-                          <UserPlus className="w-4 h-4 mr-2" />
-                          Create lead
-                        </Button>
-                      )}
-                    </div>
-                    <CallContextChip
-                      callId={call.id}
-                      customerId={customerId}
-                      phone={call.from}
-                      contactName={call.contactName}
-                      status={call.status}
-                      isGuest={call.isGuest || !call.contactName || call.contactName === 'Guest'}
-                      listenUrl={call.listenUrl}
-                      elapsedSec={call.elapsedSec}
-                      compact
-                    />
-                    {renderLeadForm({ id: call.id, from: call.from })}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-slate-500 text-sm py-2">No active calls right now</p>
-          )}
-
-          {agentStatus?.capacity && (
-            <div className="rounded-lg border bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 flex flex-wrap gap-3">
-              <span>
-                Agent slots · In {agentStatus.capacity.inboundActive}/{agentStatus.capacity.maxInbound}
+          {capacity && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="rounded-lg border border-s2d-teal/15 bg-s2d-cream/60 px-2.5 py-1 text-xs font-semibold text-s2d-teal-deep">
+                Inbound {capacity.inboundActive}/{capacity.maxInbound}
               </span>
-              <span>
-                Out {agentStatus.capacity.outboundActive}/{agentStatus.capacity.maxOutbound}
+              <span className="rounded-lg border border-s2d-teal/15 bg-s2d-cream/60 px-2.5 py-1 text-xs font-semibold text-s2d-teal-deep">
+                Outbound {capacity.outboundActive}/{capacity.maxOutbound}
               </span>
-              <span>
-                Total max {agentStatus.capacity.maxTotal}
-                {agentStatus.capacity.overflowArmed
-                  ? ` · Overflow ${agentStatus.capacity.overflowNumber || 'armed'}`
-                  : ''}
+              <span className="rounded-lg border border-s2d-teal/15 bg-s2d-cream/60 px-2.5 py-1 text-xs font-semibold text-s2d-teal-deep">
+                Max {capacity.maxTotal}
               </span>
+              {capacity.overflowArmed && (
+                <span className="rounded-lg border border-s2d-gold/40 bg-s2d-gold-soft/50 px-2.5 py-1 text-xs font-medium text-s2d-teal-deep">
+                  Overflow ready{capacity.overflowNumber ? ` · ${capacity.overflowNumber}` : ''}
+                </span>
+              )}
             </div>
           )}
+        </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-3 rounded-lg border bg-white">
-              <p className="text-2xl font-bold">{stats?.totalCalls ?? 0}</p>
-              <p className="text-xs text-slate-500">Calls today</p>
-            </div>
-            <div className="p-3 rounded-lg border bg-white">
-              <p className="text-2xl font-bold">{formatDuration(stats?.avgDurationSec)}</p>
-              <p className="text-xs text-slate-500">Avg duration</p>
-            </div>
-            <div className="p-3 rounded-lg border bg-white">
-              <p className="text-2xl font-bold">{stats?.aiResolvedPct ?? 0}%</p>
-              <p className="text-xs text-slate-500">Resolved by AI</p>
-            </div>
-            <div className="p-3 rounded-lg border bg-white">
-              <p className="text-2xl font-bold">{stats?.callbacksBooked ?? 0}</p>
-              <p className="text-xs text-slate-500">Callbacks booked</p>
-            </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 border-t border-s2d-teal/10 divide-x divide-s2d-teal/10">
+          <div className="px-3 py-2.5 sm:px-4">
+            <p className="text-xl font-bold text-s2d-teal-deep tabular-nums">{stats?.totalCalls ?? 0}</p>
+            <p className="text-[11px] text-s2d-ink-muted">Calls today</p>
           </div>
-        </CardContent>
-      </Card>
+          <div className="px-3 py-2.5 sm:px-4">
+            <p className="text-xl font-bold text-s2d-teal-deep tabular-nums">{formatDuration(stats?.avgDurationSec)}</p>
+            <p className="text-[11px] text-s2d-ink-muted">Avg duration</p>
+          </div>
+          <div className="px-3 py-2.5 sm:px-4">
+            <p className="text-xl font-bold text-s2d-teal-deep tabular-nums">{stats?.aiResolvedPct ?? 0}%</p>
+            <p className="text-[11px] text-s2d-ink-muted">Resolved by AI</p>
+          </div>
+          <div className="px-3 py-2.5 sm:px-4">
+            <p className="text-xl font-bold text-s2d-teal-deep tabular-nums">{stats?.callbacksBooked ?? 0}</p>
+            <p className="text-[11px] text-s2d-ink-muted">Callbacks booked</p>
+          </div>
+        </div>
+      </div>
 
-      <Tabs defaultValue={initialTab} key={initialTab}>
-        <TabsList>
-          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-          <TabsTrigger value="lines">Phone Lines</TabsTrigger>
-          <TabsTrigger value="test">Test Call (Mock)</TabsTrigger>
-          <TabsTrigger value="softphone">{isSalesShell ? 'Sales Soft Phone' : 'Soft Phone'}</TabsTrigger>
-          <TabsTrigger value="outbound">Outbound Queue</TabsTrigger>
+      <Tabs defaultValue={initialTab} key={initialTab} className="gap-3">
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-s2d-cream/80 p-1 rounded-xl border border-s2d-teal/10">
+          <TabsTrigger
+            value="dashboard"
+            className="rounded-lg data-[state=active]:bg-s2d-teal-deep data-[state=active]:text-s2d-cream data-[state=active]:shadow-none"
+          >
+            Overview
+          </TabsTrigger>
+          <TabsTrigger
+            value="lines"
+            className="rounded-lg data-[state=active]:bg-s2d-teal-deep data-[state=active]:text-s2d-cream data-[state=active]:shadow-none"
+          >
+            Lines
+          </TabsTrigger>
+          <TabsTrigger
+            value="softphone"
+            className="rounded-lg data-[state=active]:bg-s2d-teal-deep data-[state=active]:text-s2d-cream data-[state=active]:shadow-none"
+          >
+            Soft phone
+          </TabsTrigger>
+          <TabsTrigger
+            value="test"
+            className="rounded-lg data-[state=active]:bg-s2d-teal-deep data-[state=active]:text-s2d-cream data-[state=active]:shadow-none"
+          >
+            Test call
+          </TabsTrigger>
+          <TabsTrigger
+            value="outbound"
+            className="rounded-lg data-[state=active]:bg-s2d-teal-deep data-[state=active]:text-s2d-cream data-[state=active]:shadow-none"
+          >
+            Outbound
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="dashboard" className="mt-4 space-y-6">
-          {/* Section 3: Recent calls log */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Recent Calls</CardTitle>
-              <CardDescription>Last 20 calls — click to expand transcript</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
+        <TabsContent value="dashboard" className="mt-1 space-y-4">
+          {activeCalls.length > 0 && (
+            <div className={`${cardShell} p-4 space-y-3`}>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-base font-bold text-s2d-teal-deep">Live now</h2>
+                <span className="text-[11px] text-s2d-ink-muted">Updates every 5 seconds</span>
+              </div>
+              {renderActiveCallCards()}
+            </div>
+          )}
+
+          {/* Recent calls log */}
+          <div className={cardShell}>
+            <div className="px-4 pt-4 pb-2">
+              <h2 className="text-base font-bold text-s2d-teal-deep">Recent calls</h2>
+              <p className="text-sm text-s2d-ink-muted">Last 20 — click to expand transcript</p>
+            </div>
+            <div className="px-3 pb-4 space-y-2">
               {calls.length === 0 && (
-                <p className="text-slate-500 text-sm py-8 text-center">No calls yet — use the Test Call tab to simulate</p>
+                <p className="text-s2d-ink-muted text-sm py-8 text-center">No calls yet — use the Test call tab to simulate</p>
               )}
               {calls.map(call => {
                 const expanded = expandedCallId === call.id;
@@ -1138,28 +1210,28 @@ export default function CallCenter() {
                     ? `/api/calls/${encodeURIComponent(call.id)}/recording`
                     : undefined);
                 return (
-                  <div key={call.id} className="border rounded-lg overflow-hidden">
+                  <div key={call.id} className="border border-s2d-teal/12 rounded-xl overflow-hidden bg-white">
                     <button
                       type="button"
                       onClick={() => setExpandedCallId(expanded ? null : call.id)}
-                      className="w-full text-left p-3 hover:bg-slate-50 transition-colors"
+                      className="w-full text-left p-3 hover:bg-s2d-cream/40 transition-colors"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
                           {call.direction === 'inbound'
-                            ? <PhoneIncoming className="w-4 h-4 text-green-600 shrink-0" />
-                            : <PhoneOutgoing className="w-4 h-4 text-blue-600 shrink-0" />}
-                          <span className="font-medium text-sm truncate">{call.contactName ?? formatPhone(partyPhone)}</span>
-                          <span className="text-xs text-slate-400">{formatPhone(partyPhone)}</span>
+                            ? <PhoneIncoming className="w-4 h-4 text-s2d-teal shrink-0" />
+                            : <PhoneOutgoing className="w-4 h-4 text-s2d-teal-soft shrink-0" />}
+                          <span className="font-semibold text-sm text-s2d-teal-deep truncate">{call.contactName ?? formatPhone(partyPhone)}</span>
+                          <span className="text-xs text-s2d-ink-muted hidden sm:inline">{formatPhone(partyPhone)}</span>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs text-slate-400">{formatTime(call.startedAt)}</span>
-                          <span className="text-xs text-slate-500">{formatDuration(call.durationSec)}</span>
-                          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          <span className="text-xs text-s2d-ink-muted">{callWhen(call)}</span>
+                          <span className="text-xs text-s2d-ink-body font-medium">{formatDuration(call.durationSec)}</span>
+                          {expanded ? <ChevronUp className="w-4 h-4 text-s2d-teal" /> : <ChevronDown className="w-4 h-4 text-s2d-teal" />}
                         </div>
                       </div>
-                      <div className="flex gap-2 mt-2 flex-wrap">
-                        {call.outcome && <Badge variant="outline" className="text-xs">{call.outcome}</Badge>}
+                      <div className="flex gap-1.5 mt-2 flex-wrap">
+                        {call.outcome && <Badge variant="outline" className="text-xs border-s2d-teal/20">{call.outcome}</Badge>}
                         {call.outcome === 'stale_timeout' && (
                           <Badge variant="secondary" className="text-xs">
                             Closed without provider hang-up
@@ -1176,28 +1248,28 @@ export default function CallCenter() {
                         {call.intent && (
                           <Badge variant="secondary" className="text-xs">{INTENT_LABELS[call.intent] ?? call.intent}</Badge>
                         )}
-                        {call.metadata?.callerKind && call.metadata.callerKind !== 'customer' && (
-                          <Badge variant="outline" className="text-xs gap-1">
+                        {expanded && call.metadata?.callerKind && call.metadata.callerKind !== 'customer' && (
+                          <Badge variant="outline" className="text-xs gap-1 border-s2d-teal/20">
                             <ShieldCheck className="w-3 h-3" />
                             {call.metadata.callerRole ?? call.metadata.callerKind}
                           </Badge>
                         )}
-                        {call.metadata?.phoneAuth && PHONE_AUTH_LABELS[call.metadata.phoneAuth] && (
+                        {expanded && call.metadata?.phoneAuth && PHONE_AUTH_LABELS[call.metadata.phoneAuth] && (
                           <Badge
                             variant={call.metadata.phoneAuth === 'verified' ? 'default' : 'destructive'}
-                            className={`text-xs ${call.metadata.phoneAuth === 'verified' ? 'bg-green-600' : ''}`}
+                            className={`text-xs ${call.metadata.phoneAuth === 'verified' ? 'bg-s2d-teal' : ''}`}
                           >
                             {PHONE_AUTH_LABELS[call.metadata.phoneAuth]}
                           </Badge>
                         )}
-                        {call.metadata?.callLanguage && call.metadata.callLanguage !== 'en' && (
-                          <Badge variant="outline" className="text-xs gap-1">
+                        {expanded && call.metadata?.callLanguage && call.metadata.callLanguage !== 'en' && (
+                          <Badge variant="outline" className="text-xs gap-1 border-s2d-teal/20">
                             <Globe className="w-3 h-3" />
                             {call.metadata.callLanguage.toUpperCase()}
                           </Badge>
                         )}
                         {(call.status === 'transferred' || call.transferredTo) && (
-                          <Badge variant="outline" className="text-xs gap-1">
+                          <Badge variant="outline" className="text-xs gap-1 border-s2d-teal/20">
                             <PhoneForwarded className="w-3 h-3" />
                             Transferred{call.transferredTo ? ` · ${call.transferredTo}` : ''}
                           </Badge>
@@ -1205,52 +1277,52 @@ export default function CallCenter() {
                       </div>
                     </button>
                     {expanded && (
-                      <div className="border-t p-3 bg-slate-50 space-y-3">
+                      <div className="border-t border-s2d-teal/10 p-3 bg-s2d-cream/30 space-y-3">
                         <div className="grid gap-2 sm:grid-cols-2">
-                          <div className="flex items-center gap-2 p-2 rounded-md bg-white border">
-                            <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                          <div className="flex items-center gap-2 p-2 rounded-lg bg-white border border-s2d-teal/10">
+                            <Phone className="w-4 h-4 text-s2d-teal/50 shrink-0" />
                             <div className="min-w-0">
-                              <span className="text-xs text-slate-500">
+                              <span className="text-xs text-s2d-ink-muted">
                                 {call.direction === 'outbound' ? 'Called number:' : 'Caller number:'}
                               </span>
-                              <p className="font-mono font-semibold text-sm text-slate-900 truncate">
+                              <p className="font-mono font-semibold text-sm text-s2d-teal-deep truncate">
                                 {formatPhone(partyPhone)}
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 p-2 rounded-md bg-white border">
-                            <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                          <div className="flex items-center gap-2 p-2 rounded-lg bg-white border border-s2d-teal/10">
+                            <Phone className="w-4 h-4 text-s2d-teal/50 shrink-0" />
                             <div className="min-w-0">
-                              <span className="text-xs text-slate-500">Our line (DID):</span>
-                              <p className="font-mono font-semibold text-sm text-slate-900 truncate">
+                              <span className="text-xs text-s2d-ink-muted">Our line (DID):</span>
+                              <p className="font-mono font-semibold text-sm text-s2d-teal-deep truncate">
                                 {formatPhone(lineDid)}
                               </p>
                             </div>
                           </div>
                         </div>
                         {(call.metadata?.vapiSummary || call.metadata?.vapiEndedReason || call.metadata?.disposition) && (
-                          <div className="rounded-md border bg-white p-2 space-y-1 text-xs text-slate-600">
+                          <div className="rounded-lg border border-s2d-teal/10 bg-white p-2 space-y-1 text-xs text-s2d-ink-body">
                             {call.metadata?.vapiSummary && (
-                              <p><span className="font-semibold text-slate-700">Summary:</span> {call.metadata.vapiSummary}</p>
+                              <p><span className="font-semibold text-s2d-teal-deep">Summary:</span> {call.metadata.vapiSummary}</p>
                             )}
                             {call.metadata?.disposition && (
-                              <p><span className="font-semibold text-slate-700">Disposition:</span> {call.metadata.disposition}</p>
+                              <p><span className="font-semibold text-s2d-teal-deep">Disposition:</span> {call.metadata.disposition}</p>
                             )}
                             {call.metadata?.vapiEndedReason && (
-                              <p><span className="font-semibold text-slate-700">Ended reason:</span> {call.metadata.vapiEndedReason}</p>
+                              <p><span className="font-semibold text-s2d-teal-deep">Ended reason:</span> {call.metadata.vapiEndedReason}</p>
                             )}
                             {call.metadata?.vapiCost != null && (
-                              <p><span className="font-semibold text-slate-700">Cost:</span> {String(call.metadata.vapiCost)}</p>
+                              <p><span className="font-semibold text-s2d-teal-deep">Cost:</span> {String(call.metadata.vapiCost)}</p>
                             )}
                           </div>
                         )}
                         {(call.providerCallId || call.metadata?.vapiCallId) && (
-                          <p className="text-[11px] font-mono text-slate-400 break-all">
+                          <p className="text-[11px] font-mono text-s2d-ink-muted break-all">
                             Provider id: {call.providerCallId || call.metadata?.vapiCallId}
                           </p>
                         )}
                         {call.outcome === 'stale_timeout' && (
-                          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2">
+                          <p className="text-xs text-amber-900 bg-s2d-gold-soft/40 border border-s2d-gold/30 rounded-lg p-2">
                             Session was closed without a provider hang-up. Try Refresh from provider to recover recording and transcript if still available upstream.
                           </p>
                         )}
@@ -1272,7 +1344,7 @@ export default function CallCenter() {
                         {Array.isArray(call.transcript) && call.transcript.length > 0 ? (
                           <CallTranscriptTurns turns={call.transcript} agentLabel={agentLabel} />
                         ) : (
-                          <p className="text-xs text-slate-500 rounded-md border border-dashed bg-white p-3">
+                          <p className="text-xs text-s2d-ink-muted rounded-lg border border-dashed border-s2d-teal/20 bg-white p-3">
                             No transcript yet.
                           </p>
                         )}
@@ -1280,6 +1352,7 @@ export default function CallCenter() {
                           <Button
                             size="sm"
                             variant="outline"
+                            className="border-s2d-teal/20"
                             disabled={refreshingCallId === call.id}
                             onClick={() => void refreshCallFromProvider(call.id)}
                           >
@@ -1290,6 +1363,7 @@ export default function CallCenter() {
                             <Button
                               size="sm"
                               variant="outline"
+                              className="border-s2d-teal/20"
                               onClick={() => navigate(`/crm?customerId=${call.customerId}`)}
                             >
                               <ExternalLink className="w-4 h-4 mr-2" />
@@ -1299,6 +1373,7 @@ export default function CallCenter() {
                             <Button
                               size="sm"
                               variant="outline"
+                              className="border-s2d-teal/20"
                               onClick={() => openLeadForm(call)}
                             >
                               <UserPlus className="w-4 h-4 mr-2" />
@@ -1312,161 +1387,166 @@ export default function CallCenter() {
                   </div>
                 );
               })}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            {/* Section 4: Voice settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Mic className="w-5 h-5" />
-                  Voice Settings
-                </CardTitle>
-                {voiceFallbackNote && (
-                  <CardDescription className="text-amber-700">{voiceFallbackNote}</CardDescription>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-2">
-                  {voices.map(v => (
-                    <button
-                      key={v.id}
-                      type="button"
-                      onClick={() => selectVoice(v.id)}
-                      className={`p-3 rounded-lg border text-left text-sm transition-colors ${
-                        activeVoiceId === v.id ? 'border-amber-500 bg-amber-50 ring-1 ring-amber-400' : 'hover:bg-slate-50'
-                      }`}
-                    >
-                      <p className="font-medium">{v.name}</p>
-                      <p className="text-xs text-slate-400 capitalize">{v.provider}</p>
-                    </button>
-                  ))}
-                </div>
-                <div className="border-t pt-4 space-y-3">
-                  <p className="text-sm font-medium text-slate-700">Live phone voice</p>
-                  <p className="text-xs text-slate-500">
-                    Real calls use <strong>Vapi + ElevenLabs</strong> (female Cockney). Configure
-                    <code className="mx-1">VAPI_ELEVENLABS_VOICE_ID</code> on the API host — see docs/VOICE_SETUP.md.
-                    Chatterbox WAV upload below is legacy / mock only and does not change live phone TTS.
-                  </p>
-                  <p className="text-sm font-medium text-slate-700 pt-2">Legacy: upload cloned voice (WAV)</p>
-                  <Input
-                    placeholder="Voice name"
-                    value={voiceUploadName}
-                    onChange={e => setVoiceUploadName(e.target.value)}
-                  />
-                  <Input
-                    type="file"
-                    accept=".wav,audio/wav"
-                    onChange={e => setVoiceUploadFile(e.target.files?.[0] ?? null)}
-                  />
-                  <Button onClick={uploadVoice} disabled={uploadingVoice} variant="outline" className="w-full">
-                    {uploadingVoice ? 'Uploading…' : 'Upload to Chatterbox (legacy)'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Section 5: Contact lookup test */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Search className="w-5 h-5" />
-                  Contact Lookup Test
-                </CardTitle>
-                <CardDescription>Verify CRM connection before go-live</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="447700900123"
-                    value={lookupPhone}
-                    onChange={e => setLookupPhone(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && runContactLookup()}
-                  />
-                  <Button onClick={runContactLookup} disabled={lookupLoading}>
-                    <Search className="w-4 h-4" />
-                  </Button>
-                </div>
-                {lookupResult && (
-                  lookupResult.found ? (
-                    <div className="p-4 rounded-lg border bg-white space-y-2">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-slate-400" />
-                        <span className="font-semibold">{lookupResult.name}</span>
-                        <Badge variant="secondary">{lookupResult.status}</Badge>
-                      </div>
-                      {lookupResult.accountValue != null && (
-                        <p className="text-sm text-slate-600">Account value: £{lookupResult.accountValue.toLocaleString('en-GB')}</p>
-                      )}
-                      {lookupResult.lastInteraction && (
-                        <p className="text-sm text-slate-600">Last interaction: {formatTime(lookupResult.lastInteraction)}</p>
-                      )}
-                      {lookupResult.customerId && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(`/crm?customerId=${lookupResult.customerId}`)}
-                        >
-                          Open in CRM
-                        </Button>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-600 p-4 rounded-lg border bg-slate-50">
-                      {lookupResult.message ?? 'Judie will create a new contact when this number calls.'}
+          <div className={cardShell}>
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen(o => !o)}
+              className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-s2d-cream/30 transition-colors rounded-2xl"
+            >
+              <div>
+                <p className="text-sm font-bold text-s2d-teal-deep">Advanced</p>
+                <p className="text-xs text-s2d-ink-muted">Voice settings and CRM contact lookup</p>
+              </div>
+              {advancedOpen ? <ChevronUp className="w-4 h-4 text-s2d-teal" /> : <ChevronDown className="w-4 h-4 text-s2d-teal" />}
+            </button>
+            {advancedOpen && (
+              <div className="border-t border-s2d-teal/10 px-4 pb-4 pt-3 grid md:grid-cols-2 gap-4">
+                <div className="space-y-4 rounded-xl border border-s2d-teal/10 bg-s2d-cream/30 p-4">
+                  <div className="flex items-center gap-2">
+                    <Mic className="w-4 h-4 text-s2d-teal" />
+                    <h3 className="text-sm font-bold text-s2d-teal-deep">Voice settings</h3>
+                  </div>
+                  {voiceFallbackNote && (
+                    <p className="text-xs text-amber-800">{voiceFallbackNote}</p>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    {voices.map(v => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => selectVoice(v.id)}
+                        className={`p-3 rounded-lg border text-left text-sm transition-colors ${
+                          activeVoiceId === v.id
+                            ? 'border-s2d-gold bg-s2d-gold-soft/40 ring-1 ring-s2d-gold'
+                            : 'border-s2d-teal/10 hover:bg-white'
+                        }`}
+                      >
+                        <p className="font-medium text-s2d-teal-deep">{v.name}</p>
+                        <p className="text-xs text-s2d-ink-muted capitalize">{v.provider}</p>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="border-t border-s2d-teal/10 pt-4 space-y-3">
+                    <p className="text-sm font-medium text-s2d-teal-deep">Live phone voice</p>
+                    <p className="text-xs text-s2d-ink-muted">
+                      Real calls use <strong>Vapi + ElevenLabs</strong> (female Cockney). Configure
+                      <code className="mx-1">VAPI_ELEVENLABS_VOICE_ID</code> on the API host — see docs/VOICE_SETUP.md.
+                      Chatterbox WAV upload below is legacy / mock only and does not change live phone TTS.
                     </p>
-                  )
-                )}
-              </CardContent>
-            </Card>
+                    <p className="text-sm font-medium text-s2d-teal-deep pt-2">Legacy: upload cloned voice (WAV)</p>
+                    <Input
+                      placeholder="Voice name"
+                      value={voiceUploadName}
+                      onChange={e => setVoiceUploadName(e.target.value)}
+                    />
+                    <Input
+                      type="file"
+                      accept=".wav,audio/wav"
+                      onChange={e => setVoiceUploadFile(e.target.files?.[0] ?? null)}
+                    />
+                    <Button onClick={uploadVoice} disabled={uploadingVoice} variant="outline" className="w-full border-s2d-teal/20">
+                      {uploadingVoice ? 'Uploading…' : 'Upload to Chatterbox (legacy)'}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-4 rounded-xl border border-s2d-teal/10 bg-s2d-cream/30 p-4">
+                  <div className="flex items-center gap-2">
+                    <Search className="w-4 h-4 text-s2d-teal" />
+                    <h3 className="text-sm font-bold text-s2d-teal-deep">Contact lookup test</h3>
+                  </div>
+                  <p className="text-xs text-s2d-ink-muted">Verify CRM connection before go-live</p>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="447700900123"
+                      value={lookupPhone}
+                      onChange={e => setLookupPhone(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && runContactLookup()}
+                    />
+                    <Button onClick={runContactLookup} disabled={lookupLoading} className="bg-s2d-teal-deep hover:bg-s2d-teal">
+                      <Search className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {lookupResult && (
+                    lookupResult.found ? (
+                      <div className="p-4 rounded-lg border border-s2d-teal/10 bg-white space-y-2">
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-s2d-ink-muted" />
+                          <span className="font-semibold text-s2d-teal-deep">{lookupResult.name}</span>
+                          <Badge variant="secondary">{lookupResult.status}</Badge>
+                        </div>
+                        {lookupResult.accountValue != null && (
+                          <p className="text-sm text-s2d-ink-body">Account value: £{lookupResult.accountValue.toLocaleString('en-GB')}</p>
+                        )}
+                        {lookupResult.lastInteraction && (
+                          <p className="text-sm text-s2d-ink-body">Last interaction: {formatTime(lookupResult.lastInteraction)}</p>
+                        )}
+                        {lookupResult.customerId && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-s2d-teal/20"
+                            onClick={() => navigate(`/crm?customerId=${lookupResult.customerId}`)}
+                          >
+                            Open in CRM
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-s2d-ink-body p-4 rounded-lg border border-s2d-teal/10 bg-white">
+                        {lookupResult.message ?? 'Judie will create a new contact when this number calls.'}
+                      </p>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </TabsContent>
 
-        <TabsContent value="lines" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <PhoneForwarded className="w-5 h-5" />
-                Call Transfer Destinations
-              </CardTitle>
-              <CardDescription>
+        <TabsContent value="lines" className="mt-1 space-y-4">
+          <div className={`${cardShell} p-4 space-y-4`}>
+            <div>
+              <h2 className="text-base font-bold text-s2d-teal-deep flex items-center gap-2">
+                <PhoneForwarded className="w-5 h-5 text-s2d-teal" />
+                Call transfer destinations
+              </h2>
+              <p className="text-sm text-s2d-ink-muted mt-1">
                 {isSalesShell
-                  ? 'Where Sally puts callers through for a human. Sales should be your softphone DID (e.g. 02037732809) so warm transfers ring your extension.'
+                  ? 'Where Sally puts callers through for a human. Sales should be your softphone DID so warm transfers ring your extension.'
                   : 'Where Judie puts calls through when she or the caller asks for a human. Leave blank to only take a message for that department.'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {TRANSFER_DEPARTMENTS.map((dept) => (
-                  <div key={dept.key}>
-                    <Label>{dept.label}</Label>
-                    <Input
-                      value={transferNumbers[dept.key] ?? ''}
-                      onChange={(e) => setTransferNumbers((prev) => ({ ...prev, [dept.key]: e.target.value }))}
-                      placeholder={dept.placeholder}
-                    />
-                  </div>
-                ))}
-              </div>
-              <Button onClick={saveTransferNumbers} disabled={transferSaving}>
-                {transferSaving ? 'Saving…' : 'Save transfer numbers'}
-              </Button>
-            </CardContent>
-          </Card>
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {TRANSFER_DEPARTMENTS.map((dept) => (
+                <div key={dept.key}>
+                  <Label>{dept.label}</Label>
+                  <Input
+                    value={transferNumbers[dept.key] ?? ''}
+                    onChange={(e) => setTransferNumbers((prev) => ({ ...prev, [dept.key]: e.target.value }))}
+                    placeholder={dept.placeholder}
+                  />
+                </div>
+              ))}
+            </div>
+            <Button onClick={saveTransferNumbers} disabled={transferSaving} className="bg-s2d-teal-deep hover:bg-s2d-teal">
+              {transferSaving ? 'Saving…' : 'Save transfer numbers'}
+            </Button>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Phone className="w-5 h-5" />
-                Call Queue & AI dial settings
-              </CardTitle>
-              <CardDescription>
+          <div className={`${cardShell} p-4 space-y-4`}>
+            <div>
+              <h2 className="text-base font-bold text-s2d-teal-deep flex items-center gap-2">
+                <Phone className="w-5 h-5 text-s2d-teal" />
+                Call queue & AI dial settings
+              </h2>
+              <p className="text-sm text-s2d-ink-muted mt-1">
                 Controls CRM “Call this person” defaults, lead callback policy, and how Judie notes outcomes after dials.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              </p>
+            </div>
               <div>
                 <Label>Lead callback policy</Label>
                 <Select
@@ -1596,70 +1676,70 @@ export default function CallCenter() {
                 </Button>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button onClick={saveCallQueueSettings} disabled={queueSettingsSaving}>
+                <Button onClick={saveCallQueueSettings} disabled={queueSettingsSaving} className="bg-s2d-teal-deep hover:bg-s2d-teal">
                   {queueSettingsSaving ? 'Saving…' : 'Save Call Queue settings'}
                 </Button>
-                <Button variant="outline" onClick={() => navigate('/crm?tab=queue')}>
+                <Button variant="outline" className="border-s2d-teal/20" onClick={() => navigate('/crm?tab=queue')}>
                   Open Call Queue in CRM
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Radio className="w-5 h-5" />
-                    Soho66 Phone Lines
-                  </CardTitle>
-                  <CardDescription>
-                    Judie AI lines use purpose "aria" (compat) and answer via Vapi + Soho66. Staff softphones use Calls → Soft Phone.
-                  </CardDescription>
-                </div>
-                <Button onClick={registerAllLines} disabled={registeringLines || phoneLines.length === 0}>
-                  <RefreshCw className={`w-4 h-4 mr-2 ${registeringLines ? 'animate-spin' : ''}`} />
-                  Register all lines
-                </Button>
+          <div className={`${cardShell} p-4 space-y-4`}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-s2d-teal-deep flex items-center gap-2">
+                  <Radio className="w-5 h-5 text-s2d-teal" />
+                  Soho66 phone lines
+                </h2>
+                <p className="text-sm text-s2d-ink-muted mt-1">
+                  Judie AI lines use purpose &quot;aria&quot; (compat) and answer via Vapi + Soho66. Staff softphones use Soft phone.
+                </p>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              <Button onClick={registerAllLines} disabled={registeringLines || phoneLines.length === 0} variant="outline" className="border-s2d-teal/20">
+                <RefreshCw className={`w-4 h-4 mr-2 ${registeringLines ? 'animate-spin' : ''}`} />
+                Register all lines
+              </Button>
+            </div>
+            <div className="space-y-3">
               {phoneLines.length === 0 && (
-                <p className="text-slate-500 text-sm py-4 text-center">No lines yet — add your Soho66 extensions below</p>
+                <p className="text-s2d-ink-muted text-sm py-4 text-center">No lines yet — add your Soho66 extensions below</p>
               )}
               {phoneLines.map(line => (
-                <div key={line.id} className="p-4 border rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
+                <div key={line.id} className="p-4 border border-s2d-teal/12 rounded-xl flex flex-col sm:flex-row sm:items-center gap-3 bg-s2d-cream/20">
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-900">{line.label}</p>
-                    <p className="text-sm text-slate-600">{line.sipUsername}@{line.sipDomain} · {formatPhone(line.did)}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="font-semibold text-s2d-teal-deep">{line.label}</p>
+                    <p className="text-sm text-s2d-ink-body">{line.sipUsername}@{line.sipDomain} · {formatPhone(line.did)}</p>
+                    <p className="text-xs text-s2d-ink-muted mt-0.5">
                       {(line.purpose ?? 'staff') === 'aria' ? 'Judie AI' : 'Staff softphone'}
                       {line.assignedUserId ? ` · user ${line.assignedUserId}` : ''}
                     </p>
                     {line.lastError && <p className="text-xs text-red-600 mt-1">{line.lastError}</p>}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant={line.status === 'registered' ? 'default' : line.status === 'error' ? 'destructive' : 'secondary'}>
+                    <Badge
+                      variant={line.status === 'registered' ? 'default' : line.status === 'error' ? 'destructive' : 'secondary'}
+                      className={line.status === 'registered' ? 'bg-s2d-teal' : ''}
+                    >
                       {LINE_STATUS_LABELS[line.status] ?? line.status}
                     </Badge>
-                    <Button size="sm" variant="outline" onClick={() => testLine(line.id)}>Test</Button>
-                    <Button size="sm" variant="outline" onClick={() => startEditLine(line)}>Edit</Button>
+                    <Button size="sm" variant="outline" className="border-s2d-teal/20" onClick={() => testLine(line.id)}>Test</Button>
+                    <Button size="sm" variant="outline" className="border-s2d-teal/20" onClick={() => startEditLine(line)}>Edit</Button>
                     <Button size="sm" variant="ghost" onClick={() => deleteLine(line.id)}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
               ))}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{editingLineId ? 'Edit Line' : 'Add Line'}</CardTitle>
-              <CardDescription>SIP login from your Soho66 portal — one extension per line</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <div className={`${cardShell} p-4 space-y-4`}>
+            <div>
+              <h2 className="text-base font-bold text-s2d-teal-deep">{editingLineId ? 'Edit line' : 'Add line'}</h2>
+              <p className="text-sm text-s2d-ink-muted mt-1">SIP login from your Soho66 portal — one extension per line</p>
+            </div>
+            <div className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <Label>Label</Label>
@@ -1684,7 +1764,7 @@ export default function CallCenter() {
                 <div>
                   <Label>Purpose</Label>
                   <select
-                    className="mt-1 w-full border rounded-md h-10 px-3 text-sm"
+                    className="mt-1 w-full border border-s2d-teal/15 rounded-md h-10 px-3 text-sm bg-white"
                     value={lineForm.purpose}
                     onChange={e => setLineForm(f => ({ ...f, purpose: e.target.value as 'staff' | 'aria' }))}
                   >
@@ -1702,64 +1782,62 @@ export default function CallCenter() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button onClick={savePhoneLine} disabled={linesLoading}>
+                <Button onClick={savePhoneLine} disabled={linesLoading} className="bg-s2d-teal-deep hover:bg-s2d-teal">
                   <Plus className="w-4 h-4 mr-2" />
                   {editingLineId ? 'Update line' : 'Add line'}
                 </Button>
                 {editingLineId && (
-                  <Button variant="outline" onClick={() => { setEditingLineId(null); setLineForm({ label: '', sipUsername: '', sipPassword: '', sipDomain: 'sbc.soho66.co.uk', did: '', assignedUserId: '', purpose: 'staff' }); }}>
+                  <Button variant="outline" className="border-s2d-teal/20" onClick={() => { setEditingLineId(null); setLineForm({ label: '', sipUsername: '', sipPassword: '', sipDomain: 'sbc.soho66.co.uk', did: '', assignedUserId: '', purpose: 'staff' }); }}>
                     Cancel
                   </Button>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
 
-        <TabsContent value="softphone" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>{isSalesShell ? 'Sales Soft Phone' : 'Soft Phone'}</CardTitle>
-              <CardDescription>
+        <TabsContent value="softphone" className="mt-1">
+          <div className={`${cardShell} p-4 space-y-4`}>
+            <div>
+              <h2 className="text-base font-bold text-s2d-teal-deep">Soft phone</h2>
+              <p className="text-sm text-s2d-ink-muted mt-1">
                 {isSalesShell
                   ? 'Your Soho66 sales extension — keypad for outbound, answer inbound, and point Sally Sales handoffs at this DID.'
                   : 'Registers your assigned Soho66 extension. Use the keypad to dial; incoming calls ring until you answer or reject.'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <SoftPhonePanel salesMode={isSalesShell} />
-            </CardContent>
-          </Card>
+              </p>
+            </div>
+            <SoftPhonePanel salesMode={isSalesShell} />
+          </div>
         </TabsContent>
 
-        <TabsContent value="test" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Voicemail className="w-5 h-5" />
-                Mock Phone Test
-              </CardTitle>
-              <CardDescription>Simulate inbound calls without a phone line</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+        <TabsContent value="test" className="mt-1">
+          <div className={`${cardShell} p-4 space-y-4`}>
+            <div>
+              <h2 className="text-base font-bold text-s2d-teal-deep flex items-center gap-2">
+                <Voicemail className="w-5 h-5 text-s2d-teal" />
+                Test call
+              </h2>
+              <p className="text-sm text-s2d-ink-muted mt-1">Simulate inbound calls without a phone line</p>
+            </div>
+            <div className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <Label>Caller Number</Label>
+                  <Label>Caller number</Label>
                   <Input value={testFrom} onChange={e => setTestFrom(e.target.value)} placeholder="447700900123" />
                 </div>
                 <div className="flex items-end">
-                  <Button onClick={startTestCall} disabled={testRunning} className="w-full">
+                  <Button onClick={startTestCall} disabled={testRunning} className="w-full bg-s2d-teal-deep hover:bg-s2d-teal">
                     <Play className="w-4 h-4 mr-2" />
-                    {testCallId ? 'New Call' : 'Start Call'}
+                    {testCallId ? 'New call' : 'Start call'}
                   </Button>
                 </div>
               </div>
               {testTranscript.length > 0 && (
-                <div className="border rounded-lg p-4 space-y-3 max-h-[300px] overflow-y-auto bg-slate-50">
+                <div className="border border-s2d-teal/12 rounded-xl p-4 space-y-3 max-h-[300px] overflow-y-auto bg-s2d-cream/40">
                   {testTranscript.map((turn, i) => (
-                    <div key={i} className={`p-2 rounded text-sm flex gap-2 ${turn.role === 'agent' ? 'bg-amber-100' : 'bg-white border'}`}>
+                    <div key={i} className={`p-2 rounded-lg text-sm flex gap-2 ${turn.role === 'agent' ? 'bg-s2d-gold-soft/50' : 'bg-white border border-s2d-teal/10'}`}>
                       <div className="flex-1">
-                        <span className="font-medium text-xs text-slate-500">{turn.role === 'agent' ? 'Judie:' : 'You:'}</span>{' '}
+                        <span className="font-medium text-xs text-s2d-ink-muted">{turn.role === 'agent' ? `${agentLabel}:` : 'You:'}</span>{' '}
                         {turn.content}
                       </div>
                       {turn.role === 'agent' && (
@@ -1769,7 +1847,7 @@ export default function CallCenter() {
                           variant="ghost"
                           className="shrink-0 h-7 w-7 p-0"
                           onClick={() => playJudieAudio(turn.content)}
-                          title="Play Judie voice"
+                          title={`Play ${agentLabel} voice`}
                         >
                           <Volume2 className="w-4 h-4" />
                         </Button>
@@ -1787,77 +1865,75 @@ export default function CallCenter() {
                     placeholder="Type what the caller says..."
                     onKeyDown={e => e.key === 'Enter' && sendTestSpeech()}
                   />
-                  <Button onClick={sendTestSpeech} disabled={testRunning || !testSpeech.trim()}>
+                  <Button onClick={sendTestSpeech} disabled={testRunning || !testSpeech.trim()} className="bg-s2d-teal-deep hover:bg-s2d-teal">
                     <Send className="w-4 h-4" />
                   </Button>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
 
-        <TabsContent value="outbound" className="mt-4">
+        <TabsContent value="outbound" className="mt-1">
           <div className="grid md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Queue Outbound Call</CardTitle>
-                <CardDescription>Queue chase calls (quote follow-up, payment reminder, lead callback) via the connected voice API</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>To Number</Label>
-                  <Input value={outboundTo} onChange={e => setOutboundTo(e.target.value)} placeholder="+447700900123" />
-                </div>
-                <div>
-                  <Label>Campaign Template</Label>
-                  <Select value={outboundTemplate} onValueChange={setOutboundTemplate}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {CAMPAIGN_TEMPLATES.map(t => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Call aim</Label>
-                  <Input
-                    value={outboundAim}
-                    onChange={(e) => setOutboundAim(e.target.value)}
-                    placeholder="discovery, callback, trial_followup…"
-                  />
-                  {outboundCustomerId && (
-                    <p className="text-xs text-slate-500 mt-1">Linked CRM lead: {outboundCustomerId}</p>
-                  )}
-                </div>
-                <Button onClick={queueOutbound} className="w-full">
-                  <PhoneOutgoing className="w-4 h-4 mr-2" />
-                  Queue / Dial Now
-                </Button>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Outbound Queue</CardTitle></CardHeader>
-              <CardContent className="space-y-2 max-h-[400px] overflow-y-auto">
+            <div className={`${cardShell} p-4 space-y-4`}>
+              <div>
+                <h2 className="text-base font-bold text-s2d-teal-deep">Queue outbound call</h2>
+                <p className="text-sm text-s2d-ink-muted mt-1">Chase calls via the connected voice API</p>
+              </div>
+              <div>
+                <Label>To number</Label>
+                <Input value={outboundTo} onChange={e => setOutboundTo(e.target.value)} placeholder="+447700900123" />
+              </div>
+              <div>
+                <Label>Campaign template</Label>
+                <Select value={outboundTemplate} onValueChange={setOutboundTemplate}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {CAMPAIGN_TEMPLATES.map(t => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Call aim</Label>
+                <Input
+                  value={outboundAim}
+                  onChange={(e) => setOutboundAim(e.target.value)}
+                  placeholder="discovery, callback, trial_followup…"
+                />
+                {outboundCustomerId && (
+                  <p className="text-xs text-s2d-ink-muted mt-1">Linked CRM lead: {outboundCustomerId}</p>
+                )}
+              </div>
+              <Button onClick={queueOutbound} className="w-full bg-s2d-teal-deep hover:bg-s2d-teal">
+                <PhoneOutgoing className="w-4 h-4 mr-2" />
+                Queue / dial now
+              </Button>
+            </div>
+            <div className={`${cardShell} p-4 space-y-3`}>
+              <h2 className="text-base font-bold text-s2d-teal-deep">Outbound queue</h2>
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {outboundQueue.length === 0 && (
-                  <p className="text-slate-500 text-sm py-8 text-center">No outbound jobs queued</p>
+                  <p className="text-s2d-ink-muted text-sm py-8 text-center">No outbound jobs queued</p>
                 )}
                 {outboundQueue.map(job => (
-                  <div key={job.id} className="p-3 border rounded-lg">
+                  <div key={job.id} className="p-3 border border-s2d-teal/12 rounded-xl bg-s2d-cream/20">
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-sm">{formatPhone(job.to)}</span>
+                      <span className="font-medium text-sm text-s2d-teal-deep">{formatPhone(job.to)}</span>
                       <Badge variant={job.status === 'failed' ? 'destructive' : 'secondary'}>{job.status}</Badge>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-xs text-s2d-ink-muted mt-1">
                       {CAMPAIGN_TEMPLATES.find(t => t.value === job.template)?.label ?? job.template}
                       {' · '}{formatTime(job.createdAt)}
                     </p>
                   </div>
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
-          <div className="mt-4">
+          <div className="mt-4 space-y-4">
             <LapsedCampaignPanel onQueued={() => void fetchCalls()} />
             <CsvCampaignUploadPanel onQueued={() => void fetchCalls()} />
           </div>

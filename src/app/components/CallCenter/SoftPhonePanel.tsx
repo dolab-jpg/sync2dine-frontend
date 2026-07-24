@@ -17,6 +17,7 @@ import {
 import { toast } from 'sonner';
 import { AppContext } from '../../App';
 import type { PhoneLine } from './CallCenter';
+import { getHomeOrgId } from '../../engine/platform/homeOrg';
 
 type RegStatus = 'disconnected' | 'registering' | 'registered' | 'error';
 
@@ -143,7 +144,9 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
       return;
     }
     try {
-      const res = await fetch('/api/agent/transfer-numbers');
+      // Sally sales handoff numbers live on the home/platform org, not the acting-as client.
+      const headers: HeadersInit = isSales ? { 'X-Org-Id': getHomeOrgId() } : {};
+      const res = await fetch('/api/agent/transfer-numbers', { headers });
       const data = await res.json().catch(() => ({}));
       const sales = String(data.transferNumbers?.sales ?? '').replace(/\D/g, '');
       const did = line.did.replace(/\D/g, '');
@@ -377,9 +380,13 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
     setTransferSaving(true);
     try {
       const salesDid = normalizeUkDid(myLine.did);
+      // Sally reads transfer numbers from home/platform org — not the acting-as client.
       const res = await fetch('/api/agent/transfer-numbers', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(isSales ? { 'X-Org-Id': getHomeOrgId() } : {}),
+        },
         body: JSON.stringify({ sales: salesDid }),
       });
       const data = await res.json().catch(() => ({}));
@@ -402,7 +409,7 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
 
   if (loading) {
     return (
-      <p className="text-sm text-slate-500 flex items-center gap-2">
+      <p className="text-sm text-s2d-ink-muted flex items-center gap-2">
         <Loader2 className="w-4 h-4 animate-spin" /> Loading your softphone…
       </p>
     );
@@ -410,7 +417,7 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
 
   if (!myLine) {
     return (
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-s2d-ink-muted">
         No softphone assigned to you yet. Super Admin can assign a Soho66 extension under Settings → Team →
         Staff Softphones.
       </p>
@@ -443,32 +450,32 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr] max-w-3xl">
       {/* Handset */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-lg text-slate-100">
+      <div className="rounded-2xl border border-s2d-teal-ink/40 bg-gradient-to-b from-s2d-teal-deep to-s2d-teal-ink p-4 shadow-lg text-s2d-cream">
         {/* Display */}
-        <div className="rounded-xl bg-gradient-to-b from-slate-950 to-slate-900 border border-slate-700 px-4 py-5 min-h-[140px] font-mono">
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-400 mb-3">
+        <div className="rounded-xl bg-s2d-teal-ink/80 border border-s2d-teal-soft/40 px-4 py-5 min-h-[140px] font-mono">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-s2d-cream/60 mb-3">
             <span className="flex items-center gap-1.5">
               <span
                 className={`inline-block h-2 w-2 rounded-full ${
                   status === 'registered'
-                    ? 'bg-emerald-400'
+                    ? 'bg-s2d-gold'
                     : status === 'registering'
-                      ? 'bg-amber-400 animate-pulse'
+                      ? 'bg-s2d-gold-soft animate-pulse'
                       : status === 'error'
                         ? 'bg-red-400'
-                        : 'bg-slate-500'
+                        : 'bg-s2d-cream/30'
                 }`}
               />
               {statusLabel}
             </span>
             <span className="truncate max-w-[50%] text-right">{myLine.did}</span>
           </div>
-          <p className="text-2xl font-semibold tracking-wide text-emerald-300 break-all leading-tight min-h-[2rem]">
+          <p className="text-2xl font-semibold tracking-wide text-s2d-gold break-all leading-tight min-h-[2rem]">
             {screenPrimary}
           </p>
-          <p className="mt-2 text-xs text-slate-400 truncate">{screenSecondary}</p>
+          <p className="mt-2 text-xs text-s2d-cream/60 truncate">{screenSecondary}</p>
           {incoming && (
-            <p className="mt-2 text-xs text-amber-300 flex items-center gap-1 animate-pulse">
+            <p className="mt-2 text-xs text-s2d-gold-soft flex items-center gap-1 animate-pulse">
               <PhoneIncoming className="w-3 h-3" /> Ringing
             </p>
           )}
@@ -476,10 +483,10 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
 
         {!isUsablePassword(myLine.sipPassword) && (
           <div className="mt-3">
-            <Label className="text-slate-300 text-xs">SIP password</Label>
+            <Label className="text-s2d-cream/80 text-xs">SIP password</Label>
             <Input
               type="password"
-              className="mt-1 bg-slate-800 border-slate-600 text-white"
+              className="mt-1 bg-s2d-teal-ink/60 border-s2d-teal-soft/40 text-s2d-cream placeholder:text-s2d-cream/40"
               value={passwordOverride}
               onChange={(e) => setPasswordOverride(e.target.value)}
               placeholder="Enter SIP password"
@@ -495,7 +502,7 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
               key={key}
               type="button"
               onClick={() => pressKey(key)}
-              className="h-14 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 text-xl font-medium transition-colors"
+              className="h-14 min-h-14 rounded-xl bg-s2d-teal-soft/40 hover:bg-s2d-teal-soft/70 active:bg-s2d-teal border border-s2d-teal-soft/30 text-xl font-medium text-s2d-cream transition-colors touch-manipulation"
             >
               {key}
             </button>
@@ -507,7 +514,7 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
             type="button"
             variant="outline"
             size="icon"
-            className="bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700"
+            className="bg-s2d-teal-soft/30 border-s2d-teal-soft/40 text-s2d-cream hover:bg-s2d-teal-soft/50 min-h-11 min-w-11"
             onClick={backspace}
             disabled={!dialNumber || inCall}
             aria-label="Backspace"
@@ -516,7 +523,7 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
           </Button>
           {status !== 'registered' ? (
             <Button
-              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white"
+              className="flex-1 min-h-11 bg-s2d-gold hover:bg-s2d-gold-soft text-s2d-teal-deep font-semibold"
               onClick={() => void register()}
               disabled={status === 'registering'}
             >
@@ -529,10 +536,10 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
             </Button>
           ) : incoming ? (
             <>
-              <Button className="flex-1 bg-emerald-600 hover:bg-emerald-500" onClick={answer}>
+              <Button className="flex-1 min-h-11 bg-s2d-gold hover:bg-s2d-gold-soft text-s2d-teal-deep font-semibold" onClick={answer}>
                 Answer
               </Button>
-              <Button className="flex-1" variant="destructive" onClick={reject}>
+              <Button className="flex-1 min-h-11" variant="destructive" onClick={reject}>
                 Reject
               </Button>
             </>
@@ -542,13 +549,13 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
                 type="button"
                 variant="outline"
                 size="icon"
-                className="bg-slate-800 border-slate-600 text-slate-200"
+                className="bg-s2d-teal-soft/30 border-s2d-teal-soft/40 text-s2d-cream min-h-11 min-w-11"
                 onClick={toggleMute}
                 aria-label={muted ? 'Unmute' : 'Mute'}
               >
                 {muted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </Button>
-              <Button className="flex-1" variant="destructive" onClick={hangup}>
+              <Button className="flex-1 min-h-11" variant="destructive" onClick={hangup}>
                 <PhoneOff className="w-4 h-4 mr-2" />
                 End
               </Button>
@@ -556,7 +563,7 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
           ) : (
             <>
               <Button
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white"
+                className="flex-1 min-h-11 bg-s2d-gold hover:bg-s2d-gold-soft text-s2d-teal-deep font-semibold"
                 onClick={call}
                 disabled={!dialNumber}
               >
@@ -565,7 +572,7 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
               </Button>
               <Button
                 variant="outline"
-                className="bg-slate-800 border-slate-600 text-slate-200"
+                className="bg-s2d-teal-soft/30 border-s2d-teal-soft/40 text-s2d-cream hover:bg-s2d-teal-soft/50 min-h-11"
                 onClick={unregister}
               >
                 Disconnect
@@ -577,33 +584,39 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
 
       {/* Side panel */}
       <div className="space-y-4 text-sm">
-        <div className="rounded-lg border bg-white px-4 py-3 space-y-1">
+        <div className="rounded-xl border border-s2d-teal/15 bg-white px-4 py-3 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-semibold text-slate-900">{myLine.label}</p>
-            <Badge variant={status === 'registered' ? 'default' : 'secondary'}>{status}</Badge>
+            <p className="font-semibold text-s2d-teal-deep">{myLine.label}</p>
+            <Badge
+              variant={status === 'registered' ? 'default' : 'secondary'}
+              className={status === 'registered' ? 'bg-s2d-teal' : ''}
+            >
+              {statusLabel}
+            </Badge>
             {transferReady === true && (
-              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+              <Badge className="bg-s2d-gold-soft text-s2d-teal-deep hover:bg-s2d-gold-soft">
                 {isSales ? 'Sally sales handoff' : 'Sales transfer'}
               </Badge>
             )}
           </div>
-          <p className="text-slate-600 font-mono text-xs">
+          <p className="text-s2d-ink-body font-mono text-xs">
             {myLine.sipUsername}@{myLine.sipDomain}
           </p>
-          <p className="text-slate-500">DID {myLine.did}</p>
+          <p className="text-s2d-ink-muted">DID {myLine.did}</p>
         </div>
 
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
-          <p className="font-medium text-amber-950">
+        <div className="rounded-xl border border-s2d-gold/40 bg-s2d-gold-soft/30 px-4 py-3 space-y-2">
+          <p className="font-medium text-s2d-teal-deep">
             {isSales ? 'Sally → you (Sales)' : 'AI → Sales transfer'}
           </p>
-          <p className="text-amber-900/80 text-xs leading-relaxed">
+          <p className="text-s2d-ink-body/80 text-xs leading-relaxed">
             {isSales
               ? 'When Sally warm-transfers a sales caller, Vapi dials the Sales transfer number — not this browser tab. Point Sales at this DID so your Soho66 extension rings (VOIS or this softphone if Connect works).'
               : 'Set Sales transfer to this DID so mid-call handoffs ring this extension.'}
           </p>
           <Button
             size="sm"
+            className="bg-s2d-teal-deep hover:bg-s2d-teal"
             onClick={() => void setAsSallySalesTransfer()}
             disabled={transferSaving || transferReady === true}
           >
@@ -616,7 +629,7 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
         </div>
 
         {lastError && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-900 space-y-1">
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-900 space-y-1">
             <p className="font-medium">Connection issue</p>
             <p>{lastError}</p>
             <p className="text-red-800/80">
@@ -627,12 +640,12 @@ export function SoftPhonePanel(props: { lines?: PhoneLine[]; salesMode?: boolean
         )}
 
         {status === 'registered' && (
-          <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+          <p className="text-xs text-s2d-teal-deep bg-s2d-cream border border-s2d-teal/15 rounded-xl px-3 py-2">
             Softphone online — you can dial out and answer inbound on this extension.
           </p>
         )}
 
-        <p className="text-xs text-slate-500 leading-relaxed">
+        <p className="text-xs text-s2d-ink-muted leading-relaxed">
           Tries <code className="text-[11px]">{wssUrl}</code>. Desk phones use TCP/UDP 8060; browser needs
           SIP-over-WSS (Soho66 often blocks that).
         </p>
