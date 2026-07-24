@@ -563,7 +563,7 @@ export default function CustomerManagement() {
                   )}
                   {!isRestaurant && (
                     <div className="pt-2 mt-2 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
-                      <Link to={`/quote/${customer.interestedTrades?.[0] ?? 'bathroom'}/${customer.id}`}>
+                      <Link to={`/quote/saas/${customer.id}`}>
                         <Button variant="outline" size="sm" className="w-full">
                           <FileText className="w-4 h-4 mr-2" />
                           Create Quote

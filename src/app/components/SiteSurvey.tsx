@@ -245,7 +245,7 @@ export default function SiteSurvey() {
         ? `Survey saved for ${selectedTrades.length} trades — opening first quote`
         : 'Survey saved — opening quote',
     );
-    navigate(`/quote/${primaryTrade}/${customerId}?prefill=survey`);
+    navigate(`/quote/saas/${customerId}`);
   };
 
   const goNext = () => {
