@@ -80,12 +80,14 @@ export async function generateThreadSummary(
   phone: string,
   messages: WhatsAppMessage[],
   customerName?: string,
+  opts?: { channel?: string },
 ): Promise<ChatSummaryRecord> {
   if (!messages.length) {
     throw new Error('No messages to summarize');
   }
 
   const openaiConfig = integrationService.getConfig('openai');
+  const channel = opts?.channel || messages.find((m) => m.channel)?.channel;
   const res = await fetch('/api/ai/summarize', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -94,8 +96,11 @@ export async function generateThreadSummary(
         role: msg.role,
         content: msg.content,
         timestamp: msg.timestamp,
+        channel: msg.channel,
+        fromRole: msg.fromRole,
       })),
       customerName,
+      channel,
       model: openaiConfig.summaryModel || 'gpt-4o-mini',
       apiKey: integrationService.getLiveOpenAIApiKey(),
     }),

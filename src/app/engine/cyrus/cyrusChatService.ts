@@ -19,6 +19,8 @@ export interface WhatsAppMessage {
   phone: string;
   contactName?: string;
   contactRole?: string;
+  channel?: string;
+  fromRole?: string;
 }
 
 const CONVERSATIONS_KEY = 'whatsappConversations';

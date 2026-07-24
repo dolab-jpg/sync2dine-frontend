@@ -5,7 +5,7 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import {
-  MessageCircle, User, FileText, Loader2, RefreshCw, Mic, MicOff, Send, Bot, UserRoundCog,
+  MessageCircle, User, FileText, Loader2, RefreshCw, Mic, MicOff, Send, Bot, UserRoundCog, Headphones,
 } from 'lucide-react';
 import { findCustomerByPhone, getAllConversationThreads } from '../engine/cyrus/cyrusChatService';
 import { integrationService } from '../engine/integrations/integrationService';
@@ -29,7 +29,41 @@ import { checkOpenAIConnection, type OpenAIConnectionState } from '../engine/ai/
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { useVoiceOutput } from '../hooks/useVoiceOutput';
 import { toast } from 'sonner';
+import CallRecordingPlayer from './restaurant/CallRecordingPlayer';
 
+type ThreadCallRow = {
+  id: string;
+  hasRecording?: boolean;
+  recordingPlaybackPath?: string;
+  recordingUrl?: string;
+  startedAt?: string;
+  direction?: string;
+  metadata?: { agentPersona?: string };
+};
+
+function digitsOnly(value: string): string {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function assistantBadgeLabel(
+  fromRole: string | undefined,
+  channel: string | undefined,
+  defaultName: string,
+  phonePersonaHint?: string,
+): string {
+  const role = String(fromRole || '').toLowerCase();
+  if (role === 'staff') return 'Staff';
+  if (role === 'system') return 'System';
+  if (role === 'sally') return 'Sally';
+  if (role === 'judie') return 'Judie';
+  if (role === 'cynthia') return 'Cynthia';
+  const hint = String(phonePersonaHint || '').toLowerCase();
+  if (hint === 'sally') return 'Sally';
+  if (hint === 'judie') return 'Judie';
+  if (hint === 'cynthia') return 'Cynthia';
+  if (String(channel || '').toLowerCase() === 'phone') return 'Phone';
+  return defaultName;
+}
 function mergeThreads(server: ServerThread[], localFallback: ReturnType<typeof getAllConversationThreads>): ServerThread[] {
   if (server.length > 0) return server;
   return localFallback.map((t) => ({
@@ -61,6 +95,9 @@ export default function CyrusConversations() {
   const [composer, setComposer] = useState('');
   const [sending, setSending] = useState(false);
   const [openaiState, setOpenaiState] = useState<OpenAIConnectionState | null>(null);
+  const [threadCalls, setThreadCalls] = useState<ThreadCallRow[]>([]);
+  const [callsLoading, setCallsLoading] = useState(false);
+  const [recordingRefreshId, setRecordingRefreshId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -100,6 +137,57 @@ export default function CyrusConversations() {
     setSummaryError(null);
   }, [selectedId]);
 
+  const selectedThread = threads.find((t) => t.sessionId === selectedId || t.phone === selectedId);
+
+  const loadThreadCalls = useCallback(async (phone: string) => {
+    const q = digitsOnly(phone);
+    if (!q) {
+      setThreadCalls([]);
+      return;
+    }
+    setCallsLoading(true);
+    try {
+      const res = await fetch(`/api/calls?q=${encodeURIComponent(q)}&limit=5`);
+      if (!res.ok) {
+        setThreadCalls([]);
+        return;
+      }
+      const data = await res.json() as { calls?: ThreadCallRow[] };
+      setThreadCalls(Array.isArray(data.calls) ? data.calls : []);
+    } catch {
+      setThreadCalls([]);
+    } finally {
+      setCallsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedThread?.phone) {
+      setThreadCalls([]);
+      return;
+    }
+    void loadThreadCalls(selectedThread.phone);
+  }, [selectedThread?.phone, selectedThread?.updatedAt, loadThreadCalls]);
+
+  const refreshRecordingFromProvider = useCallback(async (callId: string) => {
+    setRecordingRefreshId(callId);
+    try {
+      const res = await fetch(`/api/calls/${encodeURIComponent(callId)}/refresh-from-provider`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error || 'Refresh failed');
+      }
+      if (selectedThread?.phone) await loadThreadCalls(selectedThread.phone);
+      toast.success('Recording refreshed from provider');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not refresh recording');
+    } finally {
+      setRecordingRefreshId(null);
+    }
+  }, [loadThreadCalls, selectedThread?.phone]);
+
   const onVoice = useCallback((text: string) => {
     if (text) setComposer((prev) => (prev ? `${prev} ${text}` : text));
   }, []);
@@ -113,13 +201,24 @@ export default function CyrusConversations() {
   const userRole = user.role;
   const cyrusName = integrationService.getConfig('whatsapp').cyrusDisplayName || 'Cynthia';
 
-  const selectedThread = threads.find((t) => t.sessionId === selectedId || t.phone === selectedId);
   const selectedCustomer = selectedThread
     ? findCustomerByPhone(customers, selectedThread.phone)
     : undefined;
   const summaryIsStale = selectedThread
     ? isSummaryStale(selectedThread.sessionId, selectedThread.messages.length)
     : false;
+  const primaryCall = threadCalls.find((c) => c.hasRecording || c.recordingPlaybackPath || c.recordingUrl)
+    || threadCalls[0]
+    || null;
+  const playbackPath = primaryCall?.recordingPlaybackPath
+    || (primaryCall && (primaryCall.hasRecording || primaryCall.recordingUrl)
+      ? `/api/calls/${encodeURIComponent(primaryCall.id)}/recording`
+      : null);
+  const phonePersonaHint = String(
+    primaryCall?.metadata?.agentPersona
+    || threadCalls.find((c) => c.metadata?.agentPersona)?.metadata?.agentPersona
+    || '',
+  );
 
   const handleGenerateSummary = async () => {
     if (!selectedThread) return;
@@ -132,11 +231,14 @@ export default function CyrusConversations() {
         content: m.content,
         timestamp: m.timestamp,
         phone: selectedThread.phone,
+        channel: m.channel || selectedThread.channel,
+        fromRole: m.fromRole,
       }));
       const record = await generateThreadSummary(
         selectedThread.sessionId,
         msgs,
         selectedCustomer?.name ?? selectedThread.contactName,
+        { channel: selectedThread.channel },
       );
       setSummaryRecord(record);
       if (selectedCustomer) {
@@ -377,10 +479,56 @@ export default function CyrusConversations() {
                   </CardContent>
                 </Card>
 
+                {(String(selectedThread.channel || '').toLowerCase() === 'phone'
+                  || threadCalls.length > 0
+                  || selectedThread.messages.some((m) => String(m.channel || '').toLowerCase() === 'phone')) && (
+                  <Card className="border-slate-200 bg-slate-50/60" data-testid="thread-call-recording">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Headphones className="w-4 h-4 text-slate-700" />
+                        Call recording
+                      </CardTitle>
+                      {primaryCall?.startedAt && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(primaryCall.startedAt).toLocaleString()}
+                          {primaryCall.direction ? ` · ${primaryCall.direction}` : ''}
+                        </p>
+                      )}
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {callsLoading && !primaryCall ? (
+                        <p className="text-sm text-gray-500 flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" /> Looking up calls…
+                        </p>
+                      ) : (
+                        <CallRecordingPlayer
+                          callId={primaryCall?.id}
+                          playbackPath={playbackPath}
+                          recordingUrl={primaryCall?.recordingUrl}
+                          showEmptyState
+                          emptyHint="Recording appears after the provider end-of-call report, or after Refresh from provider."
+                          refreshing={recordingRefreshId === primaryCall?.id}
+                          onRefreshFromProvider={
+                            primaryCall?.id
+                              ? () => void refreshRecordingFromProvider(primaryCall.id)
+                              : undefined
+                          }
+                        />
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
                 <div className="space-y-3 max-h-[360px] overflow-auto">
                   {selectedThread.messages.map((msg, idx) => {
                     const isUser = msg.role === 'user';
                     const isStaff = msg.fromRole === 'staff';
+                    const badge = assistantBadgeLabel(
+                      msg.fromRole,
+                      msg.channel || selectedThread.channel,
+                      cyrusName,
+                      phonePersonaHint,
+                    );
                     return (
                       <div
                         key={`${msg.timestamp}-${idx}`}
@@ -397,7 +545,7 @@ export default function CyrusConversations() {
                         >
                           {!isUser && (
                             <Badge variant="outline" className="mb-1 text-xs">
-                              {isStaff ? 'Staff' : msg.fromRole === 'system' ? 'System' : cyrusName}
+                              {badge}
                             </Badge>
                           )}
                           <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
