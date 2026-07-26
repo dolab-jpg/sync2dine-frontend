@@ -307,6 +307,67 @@ export async function testPlatformPhoneLine(
   );
 }
 
+export async function registerPlatformPhoneLine(
+  lineId: string,
+  orgId: string,
+): Promise<{ ok: boolean; message: string; line: PlatformPhoneLine | null }> {
+  const headers = await platformAuthHeaders();
+  return parseJson(
+    await fetch(`/api/platform/phone-lines/${encodeURIComponent(lineId)}/register`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ orgId }),
+    }),
+  );
+}
+
+export interface AiBridgeLineMasked {
+  id: string;
+  orgId: string;
+  orgName?: string;
+  purpose: 'aria' | 'sally';
+  label: string;
+  sipUsername: string;
+  sipPassword: string;
+  sipDomain: string;
+  did: string;
+  didE164: string;
+  vapiUser: string;
+  aiSipHost: string;
+}
+
+export interface AsteriskBridgeSyncResult {
+  ok: boolean;
+  count: number;
+  linesPath: string;
+  wrote: boolean;
+  lines: AiBridgeLineMasked[];
+  apply: { ran: boolean; ok: boolean; command: string; output: string };
+  registrations?: string;
+  message: string;
+}
+
+/** Preview the COMPLETE AI line set (Sally + every customer Judie) without publishing. */
+export async function fetchAiPhoneLineSet(): Promise<{ count: number; lines: AiBridgeLineMasked[] }> {
+  const headers = await platformAuthHeaders();
+  return parseJson(await fetch('/api/platform/phone-lines/ai-set', { headers }));
+}
+
+/**
+ * Go live: full-replace publish of EVERY enabled Judie + Sally line to the Asterisk
+ * multi-REGISTER bridge. Never single-swaps — editing one customer keeps the rest live.
+ */
+export async function syncAsteriskBridge(apply = true): Promise<AsteriskBridgeSyncResult> {
+  const headers = await platformAuthHeaders();
+  return parseJson(
+    await fetch('/api/platform/phone-lines/sync-asterisk-bridge', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ apply }),
+    }),
+  );
+}
+
 /** Platform-owner Sally sales DID + SIP (home org). */
 export async function fetchSallyPhoneLine(): Promise<PlatformPhoneLine | null> {
   const headers = await platformAuthHeaders();

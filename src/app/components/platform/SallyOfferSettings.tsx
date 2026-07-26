@@ -6,12 +6,14 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
-import { BadgePoundSterling, Phone, Plug, Save } from 'lucide-react';
+import { BadgePoundSterling, Phone, Plug, Radio, RefreshCw, Save } from 'lucide-react';
 import {
   fetchSallyOffer,
   fetchSallyPhoneLine,
+  registerPlatformPhoneLine,
   saveSallyOffer,
   saveSallyPhoneLine,
+  syncAsteriskBridge,
   testPlatformPhoneLine,
   type PlatformPhoneLine,
   type SallyOfferTerms,
@@ -33,6 +35,8 @@ export default function SallyOfferSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingLine, setSavingLine] = useState(false);
+  const [registeringLine, setRegisteringLine] = useState(false);
+  const [goingLive, setGoingLive] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [line, setLine] = useState<PlatformPhoneLine | null>(null);
   const [lineForm, setLineForm] = useState({
@@ -137,6 +141,41 @@ export default function SallyOfferSettings() {
     }
   };
 
+  const registerLine = async () => {
+    if (!line) {
+      toast.error('Save Sally line first');
+      return;
+    }
+    setRegisteringLine(true);
+    try {
+      const result = await registerPlatformPhoneLine(line.id, line.orgId);
+      if (result.line) setLine(result.line);
+      if (result.ok) toast.success(result.message || 'Sally line registered');
+      else toast.error(result.message || 'Register failed');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Register failed');
+    } finally {
+      setRegisteringLine(false);
+    }
+  };
+
+  const goLive = async () => {
+    setGoingLive(true);
+    try {
+      const result = await syncAsteriskBridge(true);
+      const summary = `${result.count} line(s) published${
+        result.apply.ran ? (result.apply.ok ? ' + bridge reloaded' : ' — bridge reload FAILED') : ''
+      }`;
+      if (result.ok) toast.success(`Live: ${summary}`);
+      else toast.error(result.message || `Publish incomplete: ${summary}`);
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Go live failed');
+    } finally {
+      setGoingLive(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-6">
       <div>
@@ -171,7 +210,8 @@ export default function SallyOfferSettings() {
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <p className="text-sm text-muted-foreground sm:col-span-2">
             Platform sales line only. Save DID + SIP username/password here; restaurant diner lines
-            stay on each customer.
+            stay on each customer. <strong>Go live</strong> publishes Sally alongside every customer
+            Judie line as N concurrent REGISTERs — it never drops a customer.
           </p>
           <div className="space-y-2 sm:col-span-2">
             <Label>Label</Label>
@@ -230,6 +270,24 @@ export default function SallyOfferSettings() {
             <Button type="button" variant="outline" disabled={!line || loading} onClick={() => void testLine()}>
               <Plug className="mr-2 h-4 w-4" />
               Test
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!line || loading || registeringLine}
+              onClick={() => void registerLine()}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${registeringLine ? 'animate-spin' : ''}`} />
+              {registeringLine ? 'Registering…' : 'Register'}
+            </Button>
+            <Button
+              type="button"
+              disabled={loading || goingLive}
+              onClick={() => void goLive()}
+              className="min-h-11 rounded-xl bg-s2d-teal font-bold text-white hover:bg-s2d-teal-deep"
+            >
+              <Radio className={`mr-2 h-4 w-4 ${goingLive ? 'animate-pulse' : ''}`} />
+              {goingLive ? 'Publishing all lines…' : 'Go live (all lines)'}
             </Button>
           </div>
         </CardContent>

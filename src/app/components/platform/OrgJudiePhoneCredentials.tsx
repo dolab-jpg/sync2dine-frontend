@@ -4,10 +4,12 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
-import { Phone, Save, Plug } from 'lucide-react';
+import { Phone, Save, Plug, RefreshCw, Radio } from 'lucide-react';
 import {
   fetchJudiePhoneLine,
+  registerPlatformPhoneLine,
   saveJudiePhoneLine,
+  syncAsteriskBridge,
   testPlatformPhoneLine,
   type PlatformPhoneLine,
 } from '../../engine/platform/platformApi';
@@ -25,6 +27,8 @@ type Props = {
 export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [goingLive, setGoingLive] = useState(false);
   const [line, setLine] = useState<PlatformPhoneLine | null>(null);
   const [form, setForm] = useState({
     label: '',
@@ -81,7 +85,7 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
       });
       setLine(saved);
       setForm((f) => ({ ...f, sipPassword: '' }));
-      toast.success('Restaurant Judie phone credentials saved');
+      toast.success('Saved. Click Register (or confirm VPS Asterisk REGISTER) before dialing.');
       onSaved?.(saved);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save');
@@ -99,8 +103,45 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
       const result = await testPlatformPhoneLine(line.id, orgId);
       if (result.ok) toast.success(result.message);
       else toast.error(result.message);
+      await reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Test failed');
+    }
+  };
+
+  const goLive = async () => {
+    setGoingLive(true);
+    try {
+      const result = await syncAsteriskBridge(true);
+      const summary = `${result.count} line(s) published${
+        result.apply.ran ? (result.apply.ok ? ' + bridge reloaded' : ' ù bridge reload FAILED') : ''
+      }`;
+      if (result.ok) toast.success(`Live: ${summary}`);
+      else toast.error(result.message || `Publish incomplete: ${summary}`);
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Go live failed');
+    } finally {
+      setGoingLive(false);
+    }
+  };
+
+  const register = async () => {
+    if (!line) {
+      toast.error('Save the line first');
+      return;
+    }
+    setRegistering(true);
+    try {
+      const result = await registerPlatformPhoneLine(line.id, orgId);
+      if (result.line) setLine(result.line);
+      if (result.ok) toast.success(result.message || 'Line registered');
+      else toast.error(result.message || 'Register failed');
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Register failed');
+    } finally {
+      setRegistering(false);
     }
   };
 
@@ -116,9 +157,15 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Unique number + SIP username/password for this client only. Diners call this line for Judie ó
-        not Sally.
+        Unique number + SIP username/password for this client only. Diners call this line for Judie,
+        not Sally. <strong>Save</strong> stores this client's credentials. <strong>Go live</strong>{' '}
+        publishes every customer Judie line + Sally to the VPS Asterisk bridge as N concurrent
+        REGISTERs ù editing one client never drops another client or Sally. Keep VOIS logged out of
+        each AI SIP username so calls reach Judie, not voicemail.
       </p>
+      {line?.lastError ? (
+        <p className="text-xs text-destructive">{line.lastError}</p>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
           <Label>Label</Label>
@@ -132,7 +179,7 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
           <Label>Phone number (DID)</Label>
           <Input
             disabled={loading}
-            placeholder="0203Ö"
+            placeholder="0203ù"
             value={form.did}
             onChange={(e) => setForm((f) => ({ ...f, did: e.target.value }))}
           />
@@ -173,6 +220,26 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
         <Button type="button" size="sm" variant="outline" disabled={!line || loading} onClick={() => void test()}>
           <Plug className="mr-1 h-3.5 w-3.5" />
           Test
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!line || loading || registering}
+          onClick={() => void register()}
+        >
+          <RefreshCw className={`mr-1 h-3.5 w-3.5 ${registering ? 'animate-spin' : ''}`} />
+          {registering ? 'Registeringù' : 'Register'}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="default"
+          disabled={loading || goingLive}
+          onClick={() => void goLive()}
+        >
+          <Radio className={`mr-1 h-3.5 w-3.5 ${goingLive ? 'animate-pulse' : ''}`} />
+          {goingLive ? 'Publishing all linesù' : 'Go live (all lines)'}
         </Button>
       </div>
     </div>
