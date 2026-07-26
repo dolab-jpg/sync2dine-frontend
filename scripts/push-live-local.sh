@@ -71,14 +71,7 @@ export PATH="/opt/plesk/node/24/bin:\$PATH"
 BE="$BE_DIR"
 cd "\$BE"
 npm ci --omit=dev
-pkill -f 'sync2dine.io/sync2dine-backend.*server/index.ts' || true
-pkill -f 'sync2dine.io/sync2dine-backend/node_modules/tsx' || true
-sleep 2
-nohup npm run start >/tmp/sync2dine-api.log 2>&1 &
-sleep 8
-pgrep -af 'sync2dine.io/sync2dine-backend' | head -5 || true
-curl -sS --max-time 10 https://app.sync2dine.io/health || true
-echo
+bash scripts/restart-sync2dine-api.sh
 REMOTE
 fi
 
