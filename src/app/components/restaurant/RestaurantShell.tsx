@@ -9,6 +9,9 @@ import { BrandLogo } from '../BrandLogo';
 import { OnlineStatusBanner } from '../OnlineStatusBanner';
 import { Toaster } from '../ui/sonner';
 import { getNavBadgeCounts, subscribeNavBadges } from '../../engine/restaurant/navBadgeStore';
+import { getActiveOrgId, setActiveOrgId, subscribeActiveOrg } from '../../engine/platform/orgContext';
+import { getHomeOrgId } from '../../engine/platform/homeOrg';
+import { fetchOrganizations } from '../../engine/platform/platformApi';
 
 /**
  * Tablet-first shell for restaurant tenant staff.
@@ -34,10 +37,10 @@ const TABS: TabDef[] = [
   { to: '/orders/delivery', icon: Truck, label: 'Delivery', end: false, badge: 'delivery' },
   { to: '/bookings', icon: CalendarDays, label: 'Bookings', end: false, badge: 'bookings' },
   { to: '/menu', icon: UtensilsCrossed, label: 'Menu', end: false },
-  { to: '/calls', icon: Phone, label: 'Calls', end: false, roles: ['super_admin', 'manager', 'staff'], railOnly: true, badge: 'calls' },
-  { to: '/call-register', icon: ClipboardList, label: 'Register', end: false, roles: ['super_admin', 'manager', 'staff'], railOnly: true },
-  { to: '/customers', icon: Users, label: 'Customers', end: false, railOnly: true, roles: ['super_admin', 'manager', 'staff'] },
-  { to: '/accounts', icon: Wallet, label: 'Accounts', end: false, railOnly: true, roles: ['super_admin', 'manager'] },
+  { to: '/calls', icon: Phone, label: 'Calls', end: false, roles: ['platform_owner', 'super_admin', 'manager', 'staff'], railOnly: true, badge: 'calls' },
+  { to: '/call-register', icon: ClipboardList, label: 'Register', end: false, roles: ['platform_owner', 'super_admin', 'manager', 'staff'], railOnly: true },
+  { to: '/customers', icon: Users, label: 'Customers', end: false, railOnly: true, roles: ['platform_owner', 'super_admin', 'manager', 'staff'] },
+  { to: '/accounts', icon: Wallet, label: 'Accounts', end: false, railOnly: true, roles: ['platform_owner', 'super_admin', 'manager'] },
   { to: '/settings', icon: SettingsIcon, label: 'Settings', end: false },
 ];
 
@@ -207,6 +210,33 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
     }
   });
   const [opsAlerts, setOpsAlerts] = useState<Array<{ id: string; title: string; message: string; severity: string }>>([]);
+  const [orgTick, setOrgTick] = useState(0);
+  const [actingAsName, setActingAsName] = useState<string | null>(null);
+
+  useEffect(() => subscribeActiveOrg(() => setOrgTick((n) => n + 1)), []);
+
+  const activeOrgId = typeof window !== 'undefined' ? getActiveOrgId() : null;
+  const homeOrgId = getHomeOrgId();
+  const isActingAsClient =
+    Boolean(context?.user?.role === 'platform_owner' && activeOrgId && activeOrgId !== homeOrgId);
+
+  useEffect(() => {
+    if (!isActingAsClient || !activeOrgId) {
+      setActingAsName(null);
+      return;
+    }
+    let cancelled = false;
+    fetchOrganizations()
+      .then((orgs) => {
+        if (cancelled) return;
+        const match = orgs.find((o) => o.id === activeOrgId);
+        setActingAsName(match?.name ?? 'Selected company');
+      })
+      .catch(() => {
+        if (!cancelled) setActingAsName('Selected company');
+      });
+    return () => { cancelled = true; };
+  }, [isActingAsClient, activeOrgId, orgTick]);
 
   useEffect(() => {
     let cancelled = false;
@@ -252,6 +282,12 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
+  }
+
+  function exitActingAs() {
+    setActiveOrgId(null);
+    setActingAsName(null);
+    window.location.assign('/platform/clients');
   }
 
   return (
@@ -397,6 +433,22 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
             </button>
           </div>
         </header>
+
+        {isActingAsClient && (
+          <div className="shrink-0 px-3 sm:px-4 py-2 bg-indigo-950 text-indigo-50 text-sm flex flex-wrap items-center justify-between gap-2 border-b border-indigo-800">
+            <span>
+              Acting as <strong className="text-white">{actingAsName ?? 'company'}</strong>
+              {' '}— restaurant tablet (Exit to return to Platform Clients)
+            </span>
+            <button
+              type="button"
+              className="rounded-md bg-white/15 hover:bg-white/25 px-3 py-1 text-xs sm:text-sm font-medium"
+              onClick={exitActingAs}
+            >
+              Exit
+            </button>
+          </div>
+        )}
 
         <main className="min-h-0 flex-1 overflow-y-auto pb-[calc(4.5rem+var(--safe-area-bottom))] lg:pb-0">
           {children}

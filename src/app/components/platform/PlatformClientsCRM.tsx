@@ -220,8 +220,9 @@ export default function PlatformClientsCRM() {
 
   const handleActAs = (org: PlatformOrganization) => {
     setActiveOrgId(org.id);
-    toast.success(`Acting as ${org.name} — full CRM scoped to this company`);
-    navigate('/');
+    toast.success(`Acting as ${org.name} — opening restaurant tablet`);
+    // Hard navigate so App remounts restaurant shell (experience flips on non-home org).
+    window.location.assign('/');
   };
 
   return (

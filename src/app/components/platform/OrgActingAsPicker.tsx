@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { fetchOrganizations, type PlatformOrganization } from '../../engine/platform/platformApi';
 import { getActiveOrgId, setActiveOrgId } from '../../engine/platform/orgContext';
+import { getHomeOrgId } from '../../engine/platform/homeOrg';
 
 export default function OrgActingAsPicker() {
   const [orgs, setOrgs] = useState<PlatformOrganization[]>([]);
   const [active, setActive] = useState<string>(() => getActiveOrgId() ?? '');
+  const homeOrgId = getHomeOrgId();
 
   useEffect(() => {
     fetchOrganizations()
@@ -20,11 +22,15 @@ export default function OrgActingAsPicker() {
       <span className="text-[10px] uppercase tracking-wide text-indigo-300 hidden sm:inline">Acting as</span>
       <Select
         value={active || '__none__'}
-        onValueChange={v => {
+        onValueChange={(v) => {
           const id = v === '__none__' ? '' : v;
           setActive(id);
           setActiveOrgId(id || null);
-          if (id) window.location.assign('/');
+          if (!id || id === homeOrgId) {
+            window.location.assign('/platform/clients');
+            return;
+          }
+          window.location.assign('/');
         }}
       >
         <SelectTrigger className="h-8 w-[140px] sm:w-[180px] text-xs bg-indigo-900 border-indigo-700 text-white">
@@ -32,7 +38,7 @@ export default function OrgActingAsPicker() {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="__none__">Not acting as a client</SelectItem>
-          {orgs.map(o => (
+          {orgs.map((o) => (
             <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
           ))}
         </SelectContent>

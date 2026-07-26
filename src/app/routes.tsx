@@ -165,45 +165,45 @@ export function RestaurantExperienceRoutes({ user }: { user: User }) {
         <Route path="/orders" element={<Navigate to="/orders/kitchen" replace />} />
         <Route
           path="/orders/kitchen"
-          element={<ProtectedRoute element={<RestaurantOrders tab="kitchen" showTabs={false} />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+          element={<ProtectedRoute element={<RestaurantOrders tab="kitchen" showTabs={false} />} allowedRoles={['platform_owner', 'super_admin', 'manager', 'staff']} user={user} />}
         />
         <Route
           path="/orders/till"
-          element={<ProtectedRoute element={<RestaurantTill />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+          element={<ProtectedRoute element={<RestaurantTill />} allowedRoles={['platform_owner', 'super_admin', 'manager', 'staff']} user={user} />}
         />
         <Route
           path="/orders/delivery"
-          element={<ProtectedRoute element={<RestaurantOrders tab="delivery" showTabs={false} />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+          element={<ProtectedRoute element={<RestaurantOrders tab="delivery" showTabs={false} />} allowedRoles={['platform_owner', 'super_admin', 'manager', 'staff']} user={user} />}
         />
         <Route
           path="/bookings"
-          element={<ProtectedRoute element={<BookingsBoard />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+          element={<ProtectedRoute element={<BookingsBoard />} allowedRoles={['platform_owner', 'super_admin', 'manager', 'staff']} user={user} />}
         />
         <Route
           path="/menu"
-          element={<ProtectedRoute element={<MenuManager />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+          element={<ProtectedRoute element={<MenuManager />} allowedRoles={['platform_owner', 'super_admin', 'manager', 'staff']} user={user} />}
         />
         <Route path="/products" element={<Navigate to="/menu" replace />} />
         <Route
           path="/customers"
-          element={<ProtectedRoute element={<CustomerManagement />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+          element={<ProtectedRoute element={<CustomerManagement />} allowedRoles={['platform_owner', 'super_admin', 'manager', 'staff']} user={user} />}
         />
         <Route
           path="/calls"
-          element={<ProtectedRoute element={<CallCenter />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+          element={<ProtectedRoute element={<CallCenter />} allowedRoles={['platform_owner', 'super_admin', 'manager', 'staff']} user={user} />}
         />
         <Route
           path="/call-register"
-          element={<ProtectedRoute element={<CallRegister />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
+          element={<ProtectedRoute element={<CallRegister />} allowedRoles={['platform_owner', 'super_admin', 'manager', 'staff']} user={user} />}
         />
         <Route
           path="/accounts"
-          element={<ProtectedRoute element={<RestaurantAccounts />} allowedRoles={['super_admin', 'manager']} user={user} />}
+          element={<ProtectedRoute element={<RestaurantAccounts />} allowedRoles={['platform_owner', 'super_admin', 'manager']} user={user} />}
         />
         <Route path="/team" element={<Navigate to="/settings" replace />} />
         <Route
           path="/settings"
-          element={<ProtectedRoute element={<RestaurantSettings />} allowedRoles={['super_admin', 'manager']} user={user} />}
+          element={<ProtectedRoute element={<RestaurantSettings />} allowedRoles={['platform_owner', 'super_admin', 'manager']} user={user} />}
         />
         <Route path="/integrations" element={<IntegrationsPublicPage />} />
         <Route path="/profile" element={<ProfilePage />} />
@@ -290,13 +290,11 @@ export function ConstructionExperienceRoutes({
           />
           <Route path="/cyrus" element={<Navigate to="/cynthia" replace />} />
           <Route
-            path="/cyrus/legacy"
+            path="/inbox"
             element={<ProtectedRoute element={<CyrusConversations />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
           />
-          <Route
-            path="/whatsapp"
-            element={<ProtectedRoute element={<CyrusConversations />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
-          />
+          <Route path="/cyrus/legacy" element={<Navigate to="/inbox" replace />} />
+          <Route path="/whatsapp" element={<Navigate to="/inbox" replace />} />
           <Route
             path="/calls"
             element={<ProtectedRoute element={<CallCenter />} allowedRoles={['super_admin', 'manager', 'staff']} user={user} />}
