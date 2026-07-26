@@ -50,24 +50,39 @@ export default function SallyOfferSettings() {
 
   const reload = useCallback(async () => {
     setLoading(true);
-    try {
-      const [data, phoneLine] = await Promise.all([fetchSallyOffer(), fetchSallyPhoneLine()]);
-      setForm({ ...emptyForm, ...data.offer });
-      setUpdatedAt(data.stored?.updatedAt || null);
+    // Load offer and phone independently — a missing/failing offer endpoint must
+    // never blank a REGISTERED Sally phone line (that was the "Not connected" lie).
+    const offerResult = await fetchSallyOffer().then(
+      (data) => ({ ok: true as const, data }),
+      (err) => ({ ok: false as const, err }),
+    );
+    const phoneResult = await fetchSallyPhoneLine().then(
+      (phoneLine) => ({ ok: true as const, phoneLine }),
+      (err) => ({ ok: false as const, err }),
+    );
+
+    if (offerResult.ok) {
+      setForm({ ...emptyForm, ...offerResult.data.offer });
+      setUpdatedAt(offerResult.data.stored?.updatedAt || null);
+    } else {
+      toast.error(offerResult.err instanceof Error ? offerResult.err.message : 'Failed to load Sally offer');
+    }
+
+    if (phoneResult.ok) {
+      const phoneLine = phoneResult.phoneLine;
       setLine(phoneLine);
       setLineForm({
         label: phoneLine?.label || 'Sally sales',
-        did: phoneLine?.did || data.offer.demoPhone || '',
+        did: phoneLine?.did || (offerResult.ok ? offerResult.data.offer.demoPhone : '') || '',
         sipUsername: phoneLine?.sipUsername || '',
         sipPassword: '',
         sipDomain: phoneLine?.sipDomain || 'sbc.soho66.co.uk',
         enabled: phoneLine?.enabled !== false,
       });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to load Sally offer');
-    } finally {
-      setLoading(false);
+    } else {
+      toast.error(phoneResult.err instanceof Error ? phoneResult.err.message : 'Failed to load Sally phone line');
     }
+    setLoading(false);
   }, []);
 
   useEffect(() => {
