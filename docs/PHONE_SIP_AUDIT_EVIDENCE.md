@@ -1,8 +1,9 @@
-# Phone / SIP full audit ó evidence table
+# Phone / SIP full audit ù evidence table
 
 **Date:** 2026-07-26  
-**WIP ship SHAs:** BE `40261b0` (Phase 0) + Phase 2 follow-up; FE `8771183` (Phase 0) + Phase 2 follow-up  
+**WIP ship SHAs:** BE `40261b0` (Phase 0) ? `9acfe4a` (Phase 2); FE `8771183` (Phase 0) ? `49e035f` (Phase 2)  
 **Live:** https://app.sync2dine.io  
+**Live SPA:** `assets/index-CQqXvw5d.js`
 
 Clarification: **`aria` = Judie** (legacy line purpose). Not a third assistant.  
 **Third customer line:** not in the AI set until credentials are provided.
@@ -11,7 +12,7 @@ Clarification: **`aria` = Judie** (legacy line purpose). Not a third assistant.
 
 | # | Gate | Result | Evidence |
 |---|------|--------|----------|
-| A1 | SPA asset hash vs local dist | PASS* | Live `assets/index-B2C7Y2vj.js`; *byte-hash vs local dist deferred until FE Phase 2 SPA republish |
+| A1 | SPA asset hash vs local dist | PASS | Live `assets/index-CQqXvw5d.js` matches post-Phase-2 build |
 | A2 | Bundle contains `Go live (all lines)` | PASS | Live JS grep matched |
 | A3 | `/health` ok, `/api/orders` 401, `/api/ops/alerts` 200 | PASS | 200 / 401 / 200 |
 | A4 | One listener on `:3011`; pid file matches; `asteriskBridge.ts` == origin/master | PASS | pid `2460638`; empty diff vs `origin/master` Phase 0 files |
@@ -22,20 +23,20 @@ Clarification: **`aria` = Judie** (legacy line purpose). Not a third assistant.
 | B9 | Displacement: sync-asterisk-bridge apply ? both still Registered, count=2, ok:true | PASS | HTTP 200; Objects found: 2; both Registered (exp. 282s) |
 | B10 | Parser: Unregistered ? Registered | PASS | Unit test in `phone-lines.test.ts` |
 | C11 | assistant-request smokes | PASS | Sally `+442037453233` ? sales tools; Judie `+442071128727` ? Judie, no Sally pack |
-| C12 | Vapi BYO both DIDs on cred `bf62dc42Ö`, serverUrl webhook | PASS | `vapi-ensure-byo.mjs` both `already provisioned` |
+| C12 | Vapi BYO both DIDs on cred `bf62dc42ù`, serverUrl webhook | PASS | `vapi-ensure-byo.mjs` both `already provisioned` |
 | C13 | Human PSTN audio | SKIP | Requires human dial; not executed in this session |
 | D14 | Demo kitchen Judie UI: DID/user filled, status registered, Go live present | PASS | Browser: `02071128727` / `1014090093` / badge `registered` |
 | D15 | Sally offer phone: DID `02037453233`, status registered | PASS | Browser screenshot: badge `registered` |
-| D16 | Test honesty (BYO gate) | PASS (code) | Phase 2: `testLineConnection` fails when BYO missing |
+| D16 | Test honesty (BYO gate) | PASS | Phase 2 live: Go live returns `byo.ok=true` for both DIDs; Test checks BYO |
 | E17 | `npm test` ?120 pass | PASS | 120/120 |
-| E18 | extract registries show new routes | PASS* | `ai-set`, `sync-asterisk-bridge`, `sally-offer` in `routes-discovered.json`; `check:agent-maps` fingerprint drift includes unrelated WIP ó baseline deferred |
+| E18 | extract registries show new routes | PASS* | `ai-set`, `sync-asterisk-bridge`, `sally-offer` in `routes-discovered.json`; `check:agent-maps` fingerprint drift includes unrelated WIP ù baseline deferred |
 
 ## Live AI line set (post-audit)
 
 | Role | Org | SIP user | DID | E.164 | Asterisk | Stored status |
 |------|-----|----------|-----|-------|----------|---------------|
-| Sally | home `4fc49703-Ö` | `1005090093` | `02037453233` | `+442037453233` | Registered | registered |
-| Judie | demo kitchen `c2887ddb-Ö` | `1014090093` | `02071128727` | `+442071128727` | Registered | registered |
+| Sally | home `4fc49703-ù` | `1005090093` | `02037453233` | `+442037453233` | Registered | registered |
+| Judie | demo kitchen `c2887ddb-ù` | `1014090093` | `02071128727` | `+442071128727` | Registered | registered |
 
 Staff softphone `1015090093` is **not** in the AI bridge (correct).
 
@@ -56,7 +57,7 @@ Staff softphone `1015090093` is **not** in the AI bridge (correct).
 
 ## Residual risks
 
-- **Human PSTN (C13):** not dialed this session ó call both DIDs to confirm greeting audio.
+- **Human PSTN (C13):** not dialed this session ù call both DIDs to confirm greeting audio.
 - **GH Actions deploy path:** may still restart differently from local `push-live-local.sh`; prefer local hardened script until GH workflow uses `restart-sync2dine-api.sh`.
 - **Demo kitchen ? home alias:** `getDemoKitchenOrgId()` identity debt remains; FE badges distinguish them; DID routing was not changed.
 - **`check:agent-maps` baseline:** defer until unrelated dirty-tree WIP (phone-incidents, provision-from-crm, etc.) is either committed or discarded.
