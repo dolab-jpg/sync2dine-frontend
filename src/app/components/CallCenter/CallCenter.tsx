@@ -798,6 +798,10 @@ export default function CallCenter() {
       toast.error('Enter a phone number');
       return;
     }
+    // Sales shell dials are Sally sales calls; a generic aim must not fall back to Judie.
+    const aim = isSalesShell && (!outboundAim.trim() || outboundAim === 'other')
+      ? 'sales_outreach'
+      : outboundAim;
     try {
       const res = await fetch('/api/calls/outbound', {
         method: 'POST',
@@ -806,9 +810,10 @@ export default function CallCenter() {
           to: outboundTo,
           template: outboundTemplate,
           context: {
-            aim: outboundAim,
-            brief: outboundAim,
+            aim,
+            brief: aim,
             customerId: outboundCustomerId || undefined,
+            ...(isSalesShell ? { agentPersona: 'sally' } : {}),
             source: 'call_centre',
           },
         }),
