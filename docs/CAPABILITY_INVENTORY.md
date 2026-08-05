@@ -1,8 +1,8 @@
 # Sync2Dine capability inventory
 
-Living ownership matrix. Deep lists live in registries ù keep rows short.  
-Atlas: [`APPLICATION_MASTER.md`](./APPLICATION_MASTER.md) ù24ùù25.  
-AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI_REGISTRY.md) ù Tools: [`TOOL_REGISTRY.md`](../../sync2dine-backend/docs/TOOL_REGISTRY.md) ù Workers: [`WORKERS.md`](../../sync2dine-backend/docs/WORKERS.md) ù Routes: [`ROUTE_MAP.md`](../../sync2dine-backend/docs/ROUTE_MAP.md)
+Living ownership matrix. Deep lists live in registries ÔøΩ keep rows short.  
+Atlas: [`APPLICATION_MASTER.md`](./APPLICATION_MASTER.md) ÔøΩ24ÔøΩÔøΩ25.  
+AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI_REGISTRY.md) ÔøΩ Tools: [`TOOL_REGISTRY.md`](../../sync2dine-backend/docs/TOOL_REGISTRY.md) ÔøΩ Workers: [`WORKERS.md`](../../sync2dine-backend/docs/WORKERS.md) ÔøΩ Routes: [`ROUTE_MAP.md`](../../sync2dine-backend/docs/ROUTE_MAP.md)
 
 **Verify host:** `https://app.sync2dine.io` unless the user asks for local.
 
@@ -12,20 +12,21 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 |------------|--------|----|----|------------|-----|--------|--------|
 | Judie diner phone | phone | kiosk / calls | `brains/judie`, `phone/vapi-*` | `judie` / `phone_judie` | Supabase orders | live | PHONE_ARCHITECTURE |
 | Sally sales phone | phone | CRM dial | `brains/sally`, `sally-sales-phone` | `sally` | offer + platform org | live | SALLY_ARCHITECTURE |
-| Sally staff PIN | phone | ù | Sally staff mode | `sally_staff` | CRM/mailbox | live | PIN on Sally line |
+| Sally staff PIN | phone | ÔøΩ | Sally staff mode | `sally_staff` | CRM/mailbox | live | PIN on Sally line |
 | Sally Web | web | widget / hero | `POST /api/sally/web` | `sally_web` | shared BI | live | `npm run smoke:sally-web` |
 | Cynthia staff web | ai | `/cynthia`, overlay | `/api/ai/orchestrate`, staff | `cynthia` | session | live | staff login |
-| Cyrus widget alias | ai | widgets | `/api/cyrus/*` | `cyrus` | ù | live | widget |
+| Cyrus widget alias | ai | widgets | `/api/cyrus/*` | `cyrus` | ÔøΩ | live | widget |
 | Sales Brain | ai | `/platform/sales-brain` | `/api/sales-brain` | `sales_brain` worker | Supabase | live | panel |
 | Sally product KB | ai | `/platform/sally-knowledge` | `/api/sally-knowledge` | KB worker | Supabase | live | panel |
-| Sally offer | sales | `/platform/sally-offer` | `sally/offer.ts` | ù | offer module | live | formatOfferFactsBlock |
+| Sally offer | sales | `/platform/sally-offer` | `sally/offer.ts` | ÔøΩ | offer module | live | formatOfferFactsBlock |
+| Ops alert contacts | platform | `/platform/ops` | `/api/platform/ops-contacts` | VPS cron watchdog | `ops-contacts.json` | live | email/SMS/Trae on API down |
 | AI Studio | config | Settings ? AI | `/api/ai/studio` | config only | studio store | live | settings |
 | Self-heal | ai | `/ai-audit` | `/api/ai/code-fix*` | utility | `code_fix_jobs` | live | Trae handoff LIVE badge |
-| Foreman / project / planning / BC AI | construction | panels | `/api/ai/*` | domain agents | ù | live | construction UI |
+| Foreman / project / planning / BC AI | construction | panels | `/api/ai/*` | domain agents | ÔøΩ | live | construction UI |
 | Call Centre UI | phone | `/calls` | `/api/agent`, vapi, calls | human softphone | lines | live | softphone |
-| Legacy phone orchestrator | ù | ù | throw stub | quarantined | ù | dead | do not edit |
-| IVR | phone | ù | `ivr-handler` | disabled | ù | off | `IVR_ENABLED` |
-| Concierge outbound | channel | ù | `/api/concierge/outbound` | partial | queue | partial | API |
+| Legacy phone orchestrator | ÔøΩ | ÔøΩ | throw stub | quarantined | ÔøΩ | dead | do not edit |
+| IVR | phone | ÔøΩ | `ivr-handler` | disabled | ÔøΩ | off | `IVR_ENABLED` |
+| Concierge outbound | channel | ÔøΩ | `/api/concierge/outbound` | partial | queue | partial | API |
 
 ## Restaurant operations
 
@@ -41,10 +42,10 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 
 | Capability | Domain | FE | BE | Status | Verify |
 |------------|--------|----|----|--------|--------|
-| Auth / invites / profile | auth | `/login` ù | `/api/auth/*` | live | login |
+| Auth / invites / profile | auth | `/login` ÔøΩ | `/api/auth/*` | live | login |
 | Platform orgs / clients | platform | `/platform/clients` | `/api/platform` | live | CRM |
 | Org OpenAI / integrations | admin | settings | org-* routes | live | settings |
-| Experience modes | platform | `experience.ts` | ù | live | restaurant vs construction |
+| Experience modes | platform | `experience.ts` | ÔøΩ | live | restaurant vs construction |
 
 ## Communications
 
@@ -53,9 +54,9 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 | Comms hub / mailbox | mailbox | `/communications` | `/api/mailbox` | live | inbox |
 | Leads inbox | leads | comms tab | `/api/leads` | live | inbox |
 | WhatsApp Web | wa | integrations | `/api/whatsapp-web` | live | QR panel |
-| Meta WhatsApp | wa | ù | webhook gated | cold | `WHATSAPP_META_ENABLED` |
+| Meta WhatsApp | wa | ÔøΩ | webhook gated | cold | `WHATSAPP_META_ENABLED` |
 | Push notifications | push | bridge | `/api/push` | partial | native |
-| Calendar | calendar | ù | `/api/calendar` | live | API |
+| Calendar | calendar | ÔøΩ | `/api/calendar` | live | API |
 
 ## Construction / money (still shipped)
 
@@ -80,5 +81,5 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 
 ## Related
 
-- [`CHANGE_IMPACT.md`](./CHANGE_IMPACT.md) ù [`DEPLOYMENT_MAP.md`](./DEPLOYMENT_MAP.md) ù [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+- [`CHANGE_IMPACT.md`](./CHANGE_IMPACT.md) ÔøΩ [`DEPLOYMENT_MAP.md`](./DEPLOYMENT_MAP.md) ÔøΩ [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 - [`LEGACY_ALIASES.md`](../../sync2dine-backend/docs/LEGACY_ALIASES.md)

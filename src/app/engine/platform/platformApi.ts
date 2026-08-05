@@ -249,6 +249,49 @@ async function platformAuthHeaders(init?: HeadersInit): Promise<Headers> {
   return headers;
 }
 
+export type OpsContacts = {
+  alertEmail: string;
+  alertPhone: string;
+  traeWebhookUrl: string;
+  updatedAt?: string;
+  updatedBy?: string;
+};
+
+/** Platform ops alert contacts — Node platform API (platform_owner). */
+export async function fetchOpsContacts(): Promise<{ contacts: OpsContacts }> {
+  const headers = await platformAuthHeaders();
+  return parseJson(await fetch('/api/platform/ops-contacts', { headers }));
+}
+
+export async function saveOpsContacts(patch: Partial<OpsContacts>): Promise<{ contacts: OpsContacts }> {
+  const headers = await platformAuthHeaders();
+  return parseJson(
+    await fetch('/api/platform/ops-contacts', {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(patch),
+    }),
+  );
+}
+
+export async function testOpsContacts(): Promise<{
+  payload: Record<string, unknown>;
+  results: {
+    email?: { ok: boolean; error?: string };
+    sms?: { ok: boolean; error?: string; stub?: boolean };
+    webhook?: { ok: boolean; error?: string; status?: number };
+  };
+}> {
+  const headers = await platformAuthHeaders();
+  return parseJson(
+    await fetch('/api/platform/ops-contacts/test', {
+      method: 'POST',
+      headers,
+      body: '{}',
+    }),
+  );
+}
+
 /** Sally commercial offer — Node platform API (platform_owner). */
 export async function fetchSallyOffer(): Promise<{
   offer: SallyOfferTerms;

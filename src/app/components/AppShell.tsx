@@ -3,7 +3,7 @@ import {
   Home, ClipboardList, Mail, Settings, TrendingUp,
   Sparkles, Users, BarChart3, UserPlus, UserCircle, LogOut,
   ChevronDown, ChevronLeft, ChevronRight, MessageCircle, ShieldCheck, Menu, Phone,
-  Landmark, Building2, Plug, MoreHorizontal, BadgePoundSterling, BookOpen, Brain,
+  Landmark, Building2, Plug, MoreHorizontal, BadgePoundSterling, BookOpen, Brain, BellRing,
 } from 'lucide-react';
 import { isNativeBridgeAvailable } from '../bridge/nativeBridge';
 import OrgActingAsPicker from './platform/OrgActingAsPicker';
@@ -239,6 +239,7 @@ export default function AppShell({ children }: AppShellProps) {
       ...(user.role === 'platform_owner'
         ? [
             { to: '/platform/clients', icon: Building2, label: t('nav.platformClients') },
+            { to: '/platform/ops', icon: BellRing, label: 'Ops alerts' },
             { to: '/platform/sally-offer', icon: BadgePoundSterling, label: 'Sally offer' },
             { to: '/platform/sally-knowledge', icon: BookOpen, label: 'Sally knowledge' },
             { to: '/platform/sales-brain', icon: Brain, label: 'Sales Brain' },

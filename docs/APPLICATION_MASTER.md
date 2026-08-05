@@ -298,6 +298,7 @@ Phone personality SoT: [`PHONE_ARCHITECTURE.md`](../../sync2dine-backend/docs/PH
 | Pricing / start | `/pricing`, `/start` | `PricingPage.tsx`, `StartCheckoutFlow.tsx` | — | Stripe / billing | — |
 | Public integrations | `/integrations` (public) | `restaurant/IntegrationsPublicPage.tsx` | — | — | — |
 | Sally offer (platform) | `/platform/sally-offer` | `platform/SallyOfferSettings.tsx` | offer facts → BE `sally/offer.ts` | platform / sally | offer config |
+| Ops alerts (platform) | `/platform/ops` | `platform/PlatformOpsSettings.tsx` | — | `/api/platform/ops-contacts` | email/SMS/Trae + VPS watchdog |
 | Sally knowledge | `/platform/sally-knowledge` | `platform/SallyKnowledgePanel.tsx` | — | `/api/sally-knowledge` | Supabase KB |
 | Sales Brain | `/platform/sales-brain` | `platform/SalesBrainPanel.tsx` | — | `/api/sales-brain` | Supabase |
 | Client menu preview | `/platform/clients/:orgId/menu` | `platform/MenuPreview.tsx` | — | `/api/menu` | menu |
@@ -341,7 +342,7 @@ Canonical: **`BE/server/`**. Entry: [`index.ts`](../../sync2dine-backend/server/
 | `org-integrations-routes.ts` | — | `/api/org/.../integrations` |
 | `billing/org-phone-billing-routes.ts` | `org-phone-billing-routes.ts` | org phone billing |
 | `billing/weekly-billing-routes.ts` | `weekly-billing-routes.ts` | `/api/billing/weekly` |
-| `platform-routes.ts` | — | `/api/platform/*` |
+| `platform-routes.ts` | — | `/api/platform/*`, `/api/platform/ops-contacts` |
 | `leads-routes.ts` | — | `/api/leads/*` |
 | `orders/orders-routes.ts` | `orders-routes.ts` | `/api/orders` |
 | `orders/menu-routes.ts` | `menu-routes.ts` | `/api/menu` |

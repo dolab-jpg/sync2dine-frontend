@@ -55,8 +55,11 @@ Canonical API: **`../sync2dine-backend`**.
 
 ```bash
 curl -sS https://app.sync2dine.io/health
+curl -sS https://app.sync2dine.io/api/vapi/health
 npm run check:agent-maps
 ```
+
+Outage notify SoT: [`docs/DEPLOYMENT_MAP.md`](docs/DEPLOYMENT_MAP.md) (watchdog + `/platform/ops`).
 
 ## Personas
 

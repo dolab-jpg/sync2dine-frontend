@@ -30,6 +30,7 @@ import CallRegister from './components/CallCenter/CallRegister';
 import AppShell from './components/AppShell';
 import PlatformClientsCRM from './components/platform/PlatformClientsCRM';
 import SallyOfferSettings from './components/platform/SallyOfferSettings';
+import PlatformOpsSettings from './components/platform/PlatformOpsSettings';
 import SallyKnowledgePanel from './components/platform/SallyKnowledgePanel';
 import SalesBrainPanel from './components/platform/SalesBrainPanel';
 import PricingPage from './components/PricingPage';
@@ -351,6 +352,16 @@ export function ConstructionExperienceRoutes({
             element={
               <ProtectedRoute
                 element={<SallyOfferSettings />}
+                allowedRoles={['platform_owner']}
+                user={user}
+              />
+            }
+          />
+          <Route
+            path="/platform/ops"
+            element={
+              <ProtectedRoute
+                element={<PlatformOpsSettings />}
                 allowedRoles={['platform_owner']}
                 user={user}
               />

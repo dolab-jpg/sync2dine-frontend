@@ -73,6 +73,7 @@ export const ROUTE_MAP: RouteMapEntry[] = [
   { path: '/accounts', experience: 'construction', component: 'components/accounts/AccountsHub.tsx', notes: 'Flag-gated' },
   { path: '/platform/clients', experience: 'construction', component: 'components/platform/PlatformClientsCRM.tsx' },
   { path: '/platform/sally-offer', experience: 'construction', component: 'components/platform/SallyOfferSettings.tsx' },
+  { path: '/platform/ops', experience: 'construction', component: 'components/platform/PlatformOpsSettings.tsx', notes: 'Ops alert email/SMS/Trae webhook' },
   { path: '/platform/sally-knowledge', experience: 'construction', component: 'components/platform/SallyKnowledgePanel.tsx' },
   { path: '/platform/sales-brain', experience: 'construction', component: 'components/platform/SalesBrainPanel.tsx' },
   { path: '/platform/clients/:orgId/menu', experience: 'construction', component: 'components/platform/MenuPreview.tsx' },
