@@ -20,9 +20,10 @@ Local `localhost:5174` / `:3001` is **dev-only**. Do not use it for product veri
 1. **Browser / E2E:** open `https://app.sync2dine.io` (staff login). Prefer Cynthia LIVE gold sparkle on that host.
 2. **API probes:** `https://app.sync2dine.io/api/...` and `/health` — not `127.0.0.1:3001`.
 3. **Persistence:** CRM/quotes/code-fix jobs → Supabase. Treat local JSON / localStorage as cache or offline fallback only.
-4. **Ship path (when user wants live):** commit → push `origin/master` (both repos as needed) → `bash scripts/push-live-local.sh` (SPA from this repo; API rsync/tar from sibling `../sync2dine-backend`). Pushing GitHub alone does not refresh the site.
+4. **Ship path (when user wants live):** commit → push `origin/master` (both repos as needed) → `bash scripts/push-live-local.sh` (SPA from this repo; API rsync/tar from sibling `../sync2dine-backend`). Pushing GitHub alone does not refresh the site. Do this **from the local Windows PC** (`ssh vps` / `id_ed25519`) — never from Cursor Cloud Agents.
 5. **Never** deploy SPA into marketing `httpdocs/`. Docroot is `…/app.sync2dine.io/`.
 6. Do not run legacy `deploy-vps.sh` (rewires API to `tradepro-app` / Builder Diddies paths).
+7. See `local-only-no-cloud.mdc` — Sync2Dine work stays local.
 
 ## Self-heal
 

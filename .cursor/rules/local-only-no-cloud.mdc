@@ -1,0 +1,29 @@
+---
+description: Never use Cursor Cloud Agents for Sync2Dine — local PC only
+alwaysApply: true
+---
+
+# Local-only (no Cursor Cloud)
+
+**Do not use Cursor Cloud Agents** for Sync2Dine work. Always work on this Windows machine against the local repos:
+
+- `C:\Users\dolab\Downloads\sync2dine-frontend`
+- `C:\Users\dolab\Downloads\sync2dine-backend`
+
+## Why
+
+Cloud agents cannot reach the VPS (`ssh vps` / `C:\Users\dolab\.ssh\id_ed25519`), so they cannot restart the live API or run `push-live-local.sh`. Cloud sessions leave GitHub and production out of sync with what the user expects.
+
+## Required workflow
+
+1. Edit and verify **locally**.
+2. Commit on `master` (or merge into `master`).
+3. `git push origin master` (HTTPS + Credential Manager).
+4. Ship live from this PC: `bash scripts/push-live-local.sh` (SPA + API via `ssh vps`).
+5. Prove live: `curl https://app.sync2dine.io/health` and `/api/vapi/health`.
+
+## Forbidden
+
+- Starting or continuing Sync2Dine tasks in Cursor Cloud Agents
+- Assuming a cloud push updated production (it does not without local VPS deploy)
+- Asking the user to authorize a different cloud SSH key when local `ssh vps` already works

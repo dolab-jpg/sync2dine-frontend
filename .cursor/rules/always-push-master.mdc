@@ -12,3 +12,4 @@ When finishing work the user wants shipped (features, fixes, commits they asked 
 3. **Push `origin master`** every time — do not stop after pushing only a feature branch (`cursor/…`).
 4. Production is **https://app.sync2dine.io** (Plesk VPS). Pushing GitHub `master` alone does **not** refresh the live site — after pushing master, run `bash scripts/push-live-local.sh` (SPA → `…/app.sync2dine.io/`; API from sibling `../sync2dine-backend`). Never publish into marketing `httpdocs/`. Do not run legacy `deploy-vps.sh` for routine UI deploys (it rewires API to `tradepro-app`).
 5. Prefer `master` as the long-lived integration branch. Feature branches are fine for WIP, but shipped work must reach `origin/master` in the same session unless the user says otherwise.
+6. **Local PC only** — never use Cursor Cloud Agents for Sync2Dine (see `local-only-no-cloud.mdc`). Cloud cannot `ssh vps` / `push-live-local.sh`.
