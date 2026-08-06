@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -9,14 +10,20 @@ import {
   updateCodeFixStatus,
   mergeCodeFix,
   mergeCodeFixBatch,
+  deleteCodeFix,
+  deleteCodeFixBatch,
   getCodeFixHealth,
   statusLabel,
   traePromptFromJob,
+  enqueueCodeFix,
+  dismissCodeFix,
   type CodeFixJob,
   type CodeFixHealth,
 } from '../../engine/ai/codeFixService';
 import { AlertTriangle, Copy, ExternalLink, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { getActiveOrgId } from '../../engine/platform/orgContext';
+import { AppContext } from '../../App';
 
 function HealthBadge({ health }: { health: CodeFixHealth | null }) {
   if (!health) {
@@ -63,6 +70,9 @@ function HealthBadge({ health }: { health: CodeFixHealth | null }) {
 }
 
 export function CodeFixesAudit() {
+  const app = useContext(AppContext);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusOffers = searchParams.get('focus') === 'offers';
   const [jobs, setJobs] = useState<CodeFixJob[]>([]);
   const [alerts, setAlerts] = useState<CodeFixJob[]>([]);
   const [queueDepth, setQueueDepth] = useState(0);
@@ -74,9 +84,11 @@ export function CodeFixesAudit() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [actingOfferId, setActingOfferId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mergeNote, setMergeNote] = useState<string | null>(null);
   const [prUrlDraft, setPrUrlDraft] = useState('');
+  const [offeredJobs, setOfferedJobs] = useState<CodeFixJob[]>([]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -95,6 +107,13 @@ export function CodeFixesAudit() {
         const h = await getCodeFixHealth();
         setHealth(h);
       }
+      // Always load pending offers for the dedicated section (independent of status filter).
+      if (statusFilter === 'offered') {
+        setOfferedJobs(data.jobs.filter((j) => j.status === 'offered'));
+      } else {
+        const offered = await listCodeFixJobs({ status: 'offered' });
+        setOfferedJobs(offered.jobs.filter((j) => j.status === 'offered'));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -111,10 +130,61 @@ export function CodeFixesAudit() {
   const selected = jobs.find((j) => j.id === selectedId) ?? null;
   const openPrJobs = jobs.filter((j) => j.status === 'pr_open' && j.prUrl);
   const selectedTraePrompt = selected ? traePromptFromJob(selected) : null;
+  const pendingOffers = useMemo(
+    () => offeredJobs.filter((j) => j.status === 'offered'),
+    [offeredJobs],
+  );
 
   useEffect(() => {
     setPrUrlDraft(selected?.prUrl ?? '');
   }, [selected?.id, selected?.prUrl]);
+
+  useEffect(() => {
+    if (!focusOffers) return;
+    const el = document.getElementById('pending-offers');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [focusOffers, pendingOffers.length]);
+
+  const handleQueueOffer = async (job: CodeFixJob) => {
+    setActingOfferId(job.id);
+    try {
+      const role = String(app?.user.role ?? 'staff');
+      await enqueueCodeFix({
+        jobId: job.id,
+        errorCode: job.errorCode,
+        description: job.description,
+        route: job.route,
+        requesterRole: role === 'platform_owner' ? 'super_admin' : role,
+        requesterName: app?.user.name || 'Staff',
+        requesterUserId: app?.user.id,
+        orgId: getActiveOrgId() || undefined,
+      });
+      toast.success(`Queued ${job.errorCode || 'fix'} for Trae`);
+      if (focusOffers) {
+        const next = new URLSearchParams(searchParams);
+        next.delete('focus');
+        setSearchParams(next, { replace: true });
+      }
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setActingOfferId(null);
+    }
+  };
+
+  const handleDismissOffer = async (job: CodeFixJob) => {
+    setActingOfferId(job.id);
+    try {
+      await dismissCodeFix(job.id);
+      toast.message(`Dismissed ${job.errorCode || 'offer'}`);
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setActingOfferId(null);
+    }
+  };
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -170,15 +240,124 @@ export function CodeFixesAudit() {
     }
   };
 
+  const handleDeleteSelected = async () => {
+    const ids = selectedIds.size > 0
+      ? [...selectedIds]
+      : selectedId
+        ? [selectedId]
+        : [];
+    if (ids.length === 0) return;
+    if (!window.confirm(`Permanently delete ${ids.length} code-fix job(s)?`)) return;
+    setMerging(true);
+    setMergeNote(null);
+    try {
+      const result = await deleteCodeFixBatch(ids);
+      toast.success(`Deleted ${result.deleted} job(s)`);
+      if (selectedId && ids.includes(selectedId)) setSelectedId(null);
+      setSelectedIds(new Set());
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMerging(false);
+    }
+  };
+
+  const handleDeleteOne = async (jobId: string) => {
+    if (!window.confirm('Permanently delete this code-fix job?')) return;
+    setMerging(true);
+    try {
+      await deleteCodeFix(jobId);
+      toast.success('Job deleted');
+      if (selectedId === jobId) setSelectedId(null);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(jobId);
+        return next;
+      });
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMerging(false);
+    }
+  };
+
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-3">
       <HealthBadge health={health} />
+
+      <div
+        id="pending-offers"
+        className={`rounded-lg border px-3 py-3 text-sm ${
+          focusOffers || pendingOffers.length > 0
+            ? 'border-amber-300 bg-amber-50 text-amber-950'
+            : 'border-slate-200 bg-slate-50 text-slate-700'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+          <div>
+            <p className="font-semibold">Pending offers</p>
+            <p className="text-xs opacity-90">
+              Runtime errors land here — not in Cynthia chat. Queue for Trae or dismiss.
+            </p>
+          </div>
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-white/80 border border-amber-200">
+            {pendingOffers.length} pending
+          </span>
+        </div>
+        {pendingOffers.length === 0 ? (
+          <p className="text-xs opacity-80">No pending offers right now.</p>
+        ) : (
+          <ul className="space-y-2">
+            {pendingOffers.slice(0, 12).map((job) => (
+              <li
+                key={job.id}
+                className="rounded-md border border-amber-200/80 bg-white px-3 py-2 flex flex-col sm:flex-row sm:items-center gap-2"
+              >
+                <button
+                  type="button"
+                  className="flex-1 text-left min-w-0"
+                  onClick={() => {
+                    setSelectedId(job.id);
+                    setStatusFilter('offered');
+                  }}
+                >
+                  <p className="font-medium text-sm truncate">{job.errorCode || 'Error'}</p>
+                  <p className="text-xs text-slate-600 truncate">
+                    {job.route || 'unknown route'} · {job.description.slice(0, 120)}
+                  </p>
+                </button>
+                <div className="flex gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={actingOfferId === job.id}
+                    onClick={() => void handleQueueOffer(job)}
+                  >
+                    Queue for Trae
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={actingOfferId === job.id}
+                    onClick={() => void handleDismissOffer(job)}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {alerts.length > 0 && (
         <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
           <div className="flex items-center gap-2 font-medium mb-1">
             <AlertTriangle className="w-4 h-4" />
-            Alerts ({alerts.length}) — failed, stuck, needs Trae OK, or PRs awaiting merge
+            Alerts ({alerts.length}) — offered, failed, stuck, needs Trae OK, or PRs awaiting merge
           </div>
           <ul className="space-y-1 text-xs">
             {alerts.slice(0, 8).map((a) => (
@@ -210,7 +389,7 @@ export function CodeFixesAudit() {
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="queued">Queued for Trae</SelectItem>
             <SelectItem value="running">Running</SelectItem>
-            <SelectItem value="offered">Offered (Yes/No)</SelectItem>
+            <SelectItem value="offered">Pending offers</SelectItem>
             <SelectItem value="awaiting_cursor_approval">Needs Trae OK</SelectItem>
             <SelectItem value="pr_open">PR open</SelectItem>
             <SelectItem value="failed">Failed</SelectItem>
@@ -238,6 +417,15 @@ export function CodeFixesAudit() {
         >
           Approve all open PRs ({openPrJobs.length})
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={merging || (selectedIds.size === 0 && !selectedId)}
+          onClick={() => void handleDeleteSelected()}
+        >
+          Delete selected ({selectedIds.size || (selectedId ? 1 : 0)})
+        </Button>
         <span className="text-xs text-slate-500">
           Queue: {queueDepth} · Active: {activeRuns}
         </span>
@@ -256,16 +444,14 @@ export function CodeFixesAudit() {
                   selectedId === j.id ? 'bg-amber-50' : ''
                 }`}
               >
-                {j.status === 'pr_open' && (
-                  <label className="pl-3 pt-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(j.id)}
-                      onChange={() => toggleSelect(j.id)}
-                      aria-label={`Select ${j.errorCode || j.id}`}
-                    />
-                  </label>
-                )}
+                <label className="pl-3 pt-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(j.id)}
+                    onChange={() => toggleSelect(j.id)}
+                    aria-label={`Select ${j.errorCode || j.id}`}
+                  />
+                </label>
                 <button
                   type="button"
                   onClick={() => setSelectedId(j.id)}
@@ -291,6 +477,27 @@ export function CodeFixesAudit() {
             {selected && (
               <>
                 <div className="flex flex-wrap gap-2">
+                  {selected.status === 'offered' && (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={actingOfferId === selected.id}
+                        onClick={() => void handleQueueOffer(selected)}
+                      >
+                        Queue for Trae
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={actingOfferId === selected.id}
+                        onClick={() => void handleDismissOffer(selected)}
+                      >
+                        Dismiss
+                      </Button>
+                    </>
+                  )}
                   {['failed', 'cancelled', 'awaiting_cursor_approval'].includes(selected.status) && (
                     <Button
                       type="button"
@@ -370,6 +577,15 @@ export function CodeFixesAudit() {
                       Legacy agent link <ExternalLink className="w-3 h-3" />
                     </a>
                   )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={merging}
+                    onClick={() => void handleDeleteOne(selected.id)}
+                  >
+                    Delete
+                  </Button>
                 </div>
                 {['queued', 'awaiting_cursor_approval', 'failed', 'running'].includes(selected.status) && (
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">

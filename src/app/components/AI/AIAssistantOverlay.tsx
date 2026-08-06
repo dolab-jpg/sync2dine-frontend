@@ -1,4 +1,4 @@
-import { X, PanelRight } from 'lucide-react';
+import { X, PanelRight, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAIContextSync } from '../../hooks/useAIContext';
 import { AIChatPanel } from './AIChatPanel';
@@ -6,6 +6,8 @@ import { useAIAssistant } from '../../context/AIAssistantContext';
 import { Button } from '../ui/button';
 import { integrationService } from '../../engine/integrations/integrationService';
 import { getCodeFixHealth, type CodeFixHealth } from '../../engine/ai/codeFixService';
+import { toast } from 'sonner';
+import { Link } from 'react-router';
 
 interface AIAssistantPanelProps {
   onClose: () => void;
@@ -27,7 +29,7 @@ export function AIAssistantPanel({
   layout = 'inline',
 }: AIAssistantPanelProps) {
   useAIContextSync();
-  const { bcSessionActive } = useAIAssistant();
+  const { bcSessionActive, clearMessages } = useAIAssistant();
   const [liveAi, setLiveAi] = useState(true);
   const [selfHeal, setSelfHeal] = useState<CodeFixHealth | null>(null);
 
@@ -101,6 +103,27 @@ export function AIAssistantPanel({
           )}
         </h2>
         <div className="flex items-center gap-1 shrink-0">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => {
+              clearMessages();
+              toast.success('Cynthia chat cleared');
+            }}
+            title="Clear chat"
+            aria-label="Clear chat"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+          <Link
+            to="/ai-audit?tab=code_fixes&focus=offers"
+            className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-100"
+            title="Runtime error offers live in AI Audit"
+          >
+            Audit
+          </Link>
           {onToggleDock && (
             <Button
               type="button"

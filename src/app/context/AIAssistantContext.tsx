@@ -138,13 +138,26 @@ function readAiPanelOpen(): boolean {
   return true;
 }
 
+function isSelfHealSpamMessage(item: ChatMessage): boolean {
+  if (item.fixOffer || item.fixJobId || item.mergeAction || item.statusAction) return true;
+  const c = item.content || '';
+  return (
+    /Would you like me to fix this/i.test(c) ||
+    /Queued for Trae/i.test(c) ||
+    /\*\*PR ready\*\*/i.test(c) ||
+    /I can queue a \*\*surgical fix\*\*/i.test(c) ||
+    /Self-heal couldn.t log that error/i.test(c)
+  );
+}
+
 function readStoredMessages(storageKey: string): ChatMessage[] {
   try {
+    const migrateKey = `copilotChatSelfHealCleared:v1:${storageKey}`;
     const raw = localStorage.getItem(storageKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed
+    const messages = parsed
       .filter((item): item is ChatMessage => (
         item &&
         typeof item === 'object' &&
@@ -154,6 +167,18 @@ function readStoredMessages(storageKey: string): ChatMessage[] {
         typeof item.timestamp === 'string'
       ))
       .slice(-200);
+
+    // One-time wipe of self-heal spam that used to flood Cynthia overlay chat.
+    const alreadyMigrated = localStorage.getItem(migrateKey) === '1';
+    if (!alreadyMigrated && messages.some(isSelfHealSpamMessage)) {
+      localStorage.removeItem(storageKey);
+      localStorage.setItem(migrateKey, '1');
+      return [];
+    }
+    if (!alreadyMigrated) {
+      localStorage.setItem(migrateKey, '1');
+    }
+    return messages.filter((m) => !isSelfHealSpamMessage(m));
   } catch {
     return [];
   }

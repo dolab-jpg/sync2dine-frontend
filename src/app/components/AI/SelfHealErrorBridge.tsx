@@ -1,4 +1,5 @@
 import { useContext, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { AppContext } from '../../App';
 import { useAIAssistant } from '../../context/AIAssistantContext';
 import {
@@ -9,24 +10,30 @@ import {
   SELF_HEAL_ERROR_EVENT,
   type SelfHealErrorDetail,
 } from '../../engine/ai/selfHealEvents';
-import { enqueueCodeFix, listCodeFixJobs, offerCodeFix } from '../../engine/ai/codeFixService';
+import { enqueueCodeFix, offerCodeFix } from '../../engine/ai/codeFixService';
 import { getActiveOrgId } from '../../engine/platform/orgContext';
 import { useAIStudioConfig } from '../../hooks/useAIStudioConfig';
 
 const ELIGIBLE = new Set(['super_admin', 'manager', 'staff', 'builder', 'platform_owner']);
 
-/** Throttle soft-fail messages when the offer API itself is down (502 etc.). */
+/** Throttle toasts when the offer API itself is down (502 etc.). */
 let lastOfferFailAt = 0;
 const OFFER_FAIL_COOLDOWN_MS = 5 * 60_000;
+let lastAuthToastAt = 0;
+const AUTH_TOAST_COOLDOWN_MS = 2 * 60_000;
+let lastOfferToastAt = 0;
+const OFFER_TOAST_COOLDOWN_MS = 15_000;
+
+const AUDIT_OFFERS_HREF = '/ai-audit?tab=code_fixes&focus=offers';
 
 /**
- * Listens for app errors and offers Yes/No fix in the existing CRM AI chat.
+ * Listens for app errors and logs code-fix offers to AI Audit (not Cynthia chat).
  * Surgical fixes auto-start when selfHealAutoStart is enabled.
- * Auth + ops/infra (502/503/quota) never open Trae offers — they stay quiet.
+ * Auth + ops/infra (502/503/quota) never open Trae offers.
  */
 export function SelfHealErrorBridge() {
   const app = useContext(AppContext);
-  const { setIsOpen, addMessage, pageContext, trackFixJob } = useAIAssistant();
+  const { pageContext } = useAIAssistant();
   const studio = useAIStudioConfig();
   const busyRef = useRef(false);
 
@@ -80,7 +87,6 @@ export function SelfHealErrorBridge() {
       const detail = (event as CustomEvent<SelfHealErrorDetail>).detail;
       if (!detail || busyRef.current) return;
 
-      // Ops/infra: never open chat or call the offer API (stops 502 spam loops).
       if (isOpsSelfHealError(detail)) {
         if (import.meta.env.DEV) {
           console.info('[self-heal] suppressed ops error', detail.errorCode, detail.description.slice(0, 120));
@@ -93,18 +99,17 @@ export function SelfHealErrorBridge() {
       void (async () => {
         try {
           if (isAuthSelfHealError(detail)) {
-            setIsOpen(true);
-            addMessage({
-              role: 'assistant',
-              content:
-                '**Session unauthorized** — your sign-in may have expired or is no longer valid.\n\n' +
-                '**Sign out and sign back in** to restore access. This is an authentication issue, not an application bug — I will not attempt a code fix.',
-            });
+            const now = Date.now();
+            if (now - lastAuthToastAt >= AUTH_TOAST_COOLDOWN_MS) {
+              lastAuthToastAt = now;
+              toast.error('Session unauthorized — sign out and sign back in. Not a code bug.', {
+                duration: 8000,
+              });
+            }
             return;
           }
 
           const route = detail.route || String(pageContext.route || window.location.pathname);
-          const functionName = detail.functionName;
           const requesterRole = role === 'platform_owner' ? 'super_admin' : role;
           const requesterName = app?.user.name || 'Staff';
           const requesterUserId = app?.user.id;
@@ -125,38 +130,10 @@ export function SelfHealErrorBridge() {
           }
 
           const { job, dedupe, message } = offer;
-
-          setIsOpen(true);
-
-          if (dedupe && job.status !== 'offered') {
-            addMessage({
-              role: 'assistant',
-              content:
-                message ||
-                `I'm already working on **${job.errorCode || 'this error'}** (status: ${job.status}). I'll keep you updated here.`,
-              fixJobId: job.id,
-            });
-            if (['queued', 'running', 'pr_open'].includes(job.status)) {
-              trackFixJob(job.id);
-            }
-            return;
-          }
-
-          let handoffNote = '';
-          try {
-            const status = await listCodeFixJobs();
-            if (status.health && !status.health.live) {
-              handoffNote = `\n\n⚠️ Self-heal is **not LIVE**: ${status.health.reason}`;
-            }
-          } catch {
-            // ignore
-          }
-
-          // Require explicit opt-in (default is false). `!== false` treated unset as on.
           const shouldAutoStart = studio.selfHealAutoStart === true && job.scope === 'surgical';
 
-          if (shouldAutoStart) {
-            const result = await enqueueCodeFix({
+          if (shouldAutoStart && (!dedupe || job.status === 'offered')) {
+            await enqueueCodeFix({
               jobId: job.id,
               errorCode: job.errorCode,
               description: job.description,
@@ -166,54 +143,52 @@ export function SelfHealErrorBridge() {
               requesterUserId,
               orgId,
             });
-            trackFixJob(result.job.id);
-            const schemaIntro = detail.schemaError || functionName
-              ? `OpenAI rejected the tool schema for **\`${functionName || 'unknown'}\`**. `
-              : '';
-            addMessage({
-              role: 'assistant',
-              content:
-                `${schemaIntro}**Queued for Trae** \`${result.job.errorCode || 'error'}\` on **${result.job.route || 'this page'}**.\n\n` +
-                `${result.job.description}\n\n` +
-                (result.message || 'Logged in AI Audit → Code fixes.') +
-                '\n\nOpen **Code fixes**, copy the Trae prompt, then **Attach PR URL** when the PR is ready. This chat gets **Open PR** + **Approve & merge** after that.' +
-                handoffNote,
-              fixJobId: result.job.id,
-              statusAction: {
-                label: 'Open Code fixes',
-                href: '/ai-audit?tab=code_fixes',
+            toast.success('Queued surgical fix for Trae — open AI Audit → Code fixes', {
+              action: {
+                label: 'Open',
+                onClick: () => {
+                  window.location.assign('/ai-audit?tab=code_fixes');
+                },
               },
+              duration: 10_000,
             });
             return;
           }
 
-          const schemaIntro = detail.schemaError || functionName
-            ? `OpenAI rejected the tool schema for **\`${functionName || 'unknown'}\`** (invalid function parameters).\n\n` +
-              `This is a surgical code fix in \`orchestrator-handler.ts\` — not a product redesign.\n\n` +
-              `${job.description}\n\n`
-            : `I see error \`${job.errorCode || 'UNKNOWN'}\` on **${job.route || 'this page'}**.\n\n` +
-              `${job.description}\n\n`;
+          if (dedupe && job.status !== 'offered') {
+            const now = Date.now();
+            if (now - lastOfferToastAt < OFFER_TOAST_COOLDOWN_MS) return;
+            lastOfferToastAt = now;
+            toast.message(message || `Already tracking ${job.errorCode || 'this error'} in AI Audit`, {
+              action: {
+                label: 'Open',
+                onClick: () => {
+                  window.location.assign('/ai-audit?tab=code_fixes');
+                },
+              },
+              duration: 6000,
+            });
+            return;
+          }
 
-          addMessage({
-            role: 'assistant',
-            content:
-              schemaIntro +
-              (job.scope === 'needs_cursor_approval'
-                ? 'This may need a wider change — if you say **Yes**, I\'ll queue it for **your approval in Trae / AI Audit** before any redesign.\n\n'
-                : 'I can queue a **surgical fix** for Trae (smallest patch — not a full redesign).\n\n') +
-              '**Would you like me to fix this?**' +
-              handoffNote,
-            fixOffer: {
-              jobId: job.id,
-              errorCode: job.errorCode,
-              description: job.description,
-              route: job.route,
-              scope: job.scope,
-            },
-          });
+          const now = Date.now();
+          if (now - lastOfferToastAt >= OFFER_TOAST_COOLDOWN_MS) {
+            lastOfferToastAt = now;
+            toast.message(
+              `Logged ${job.errorCode || 'error'} in AI Audit → Pending offers. Queue or dismiss there.`,
+              {
+                action: {
+                  label: 'Open',
+                  onClick: () => {
+                    window.location.assign(AUDIT_OFFERS_HREF);
+                  },
+                },
+                duration: 10_000,
+              },
+            );
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          // Offer API itself often returns 502 when nginx/API is flaky — do not spam chat.
           if (isOpsSelfHealError({ errorCode: 'OFFER_FAILED', description: msg })) {
             if (import.meta.env.DEV) {
               console.info('[self-heal] offer API ops failure suppressed', msg);
@@ -223,11 +198,8 @@ export function SelfHealErrorBridge() {
           const now = Date.now();
           if (now - lastOfferFailAt < OFFER_FAIL_COOLDOWN_MS) return;
           lastOfferFailAt = now;
-          setIsOpen(true);
-          addMessage({
-            role: 'assistant',
-            content:
-              'Self-heal couldn’t log that error right now (temporary). The failure is **not** queued for Trae yet. Try again in a few minutes, or open **AI Audit → Code fixes**.',
+          toast.error('Couldn’t log that error for self-heal. Try AI Audit → Code fixes later.', {
+            duration: 8000,
           });
         } finally {
           busyRef.current = false;
@@ -237,7 +209,7 @@ export function SelfHealErrorBridge() {
 
     window.addEventListener(SELF_HEAL_ERROR_EVENT, onOffer);
     return () => window.removeEventListener(SELF_HEAL_ERROR_EVENT, onOffer);
-  }, [app?.user, pageContext.route, setIsOpen, addMessage, studio.selfHealAutoStart, trackFixJob]);
+  }, [app?.user, pageContext.route, studio.selfHealAutoStart]);
 
   return null;
 }

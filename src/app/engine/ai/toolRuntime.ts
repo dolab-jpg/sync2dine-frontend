@@ -1414,20 +1414,57 @@ async function dispatchSingleTool(
   }
 
   if (name === 'requestCodeFix') {
-    const { emitSelfHealError } = await import('./selfHealEvents');
+    const { offerCodeFix } = await import('./codeFixService');
+    const { getActiveOrgId } = await import('../platform/orgContext');
     const errorCode = readOptionalString(output.errorCode) || readOptionalString(output.code) || 'MANUAL';
     const description =
       readOptionalString(output.description) ||
       readOptionalString(output.message) ||
       'Staff requested a code fix from chat';
     const route = readOptionalString(output.route) || (typeof window !== 'undefined' ? window.location.pathname : '');
-    emitSelfHealError({ errorCode, description, route });
-    return {
-      action: name,
-      summary: `Offered code fix for ${errorCode} in chat (Yes/No).`,
-      output: { errorCode, description, route },
-      executed: true,
-    };
+    const role = String(ctx.app?.user?.role || ctx.role || 'staff');
+    try {
+      const offer = await offerCodeFix({
+        errorCode,
+        description,
+        route,
+        requesterRole: role === 'platform_owner' ? 'super_admin' : role,
+        requesterName: String(ctx.app?.user?.name || 'Staff'),
+        requesterUserId: ctx.app?.user?.id ? String(ctx.app.user.id) : ctx.userId || undefined,
+        orgId: getActiveOrgId() || undefined,
+      });
+      if (offer.skipped || !offer.job) {
+        return {
+          action: name,
+          summary: offer.reason || 'Code fix offer skipped (ops/auth or duplicate).',
+          output: { errorCode, description, route, skipped: true },
+          executed: true,
+        };
+      }
+      return {
+        action: name,
+        summary:
+          `Logged code-fix offer for ${errorCode} in AI Audit → Code fixes → Pending offers. ` +
+          `Do not ask Yes/No in chat — staff Queue or Dismiss there (/ai-audit?tab=code_fixes&focus=offers).`,
+        output: {
+          errorCode,
+          description,
+          route,
+          jobId: offer.job.id,
+          status: offer.job.status,
+          auditPath: '/ai-audit?tab=code_fixes&focus=offers',
+        },
+        openRoute: '/ai-audit?tab=code_fixes&focus=offers',
+        executed: true,
+      };
+    } catch (err) {
+      return {
+        action: name,
+        summary: `Could not log code-fix offer: ${err instanceof Error ? err.message : String(err)}`,
+        output: { errorCode, description, route },
+        executed: false,
+      };
+    }
   }
 
   if (name === 'draftQuote') {
