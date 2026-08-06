@@ -29,11 +29,12 @@ import {
   migrateQuotes,
   migratePricingRules,
 } from './engine/data/dataImportExportService';
-import { getExperience } from './engine/platform/experience';
+import { getExperience, setTabletPreview } from './engine/platform/experience';
 import {
   ensureActiveOrgId,
   getActiveOrgId,
   installApiFetchInterceptor,
+  setActiveOrgId,
   subscribeActiveOrg,
   syncActiveOrgFromProfile,
 } from './engine/platform/orgContext';
@@ -881,6 +882,9 @@ export default function App() {
 
   const handleLogout = () => {
     clearSessionUser();
+    // Drop any acting-as scope / tablet preview so the next login starts clean.
+    setTabletPreview(false);
+    setActiveOrgId(null);
     const finish = () => {
       setIsLoggedIn(false);
       setUser({

@@ -440,38 +440,6 @@ export default function RecruitmentCRM() {
     }
   ]);
 
-  useEffect(() => {
-    const store = loadRecruitmentStore();
-    if (store.jobs.length > 0) setJobs(store.jobs as JobPosting[]);
-    if (store.candidates.length > 0) setCandidates(store.candidates as Candidate[]);
-    if (store.interviews.length > 0) setInterviews(store.interviews as Interview[]);
-    if (store.applications?.length > 0) setApplications(store.applications as Application[]);
-    if (store.onboardingTasks?.length > 0) setOnboardingTasks(store.onboardingTasks as OnboardingTask[]);
-    loadRecruitmentFromApi().then((api) => {
-      if (!api) { setPersistReady(true); return; }
-      if (api.jobs.length > 0) setJobs(api.jobs as JobPosting[]);
-      if (api.candidates.length > 0) setCandidates(api.candidates as Candidate[]);
-      if (api.interviews.length > 0) setInterviews(api.interviews as Interview[]);
-      if (api.applications.length > 0) setApplications(api.applications as Application[]);
-      if (api.onboardingTasks.length > 0) setOnboardingTasks(api.onboardingTasks as OnboardingTask[]);
-      setPersistReady(true);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!persistReady) return;
-    const data = {
-      jobs,
-      candidates,
-      interviews,
-      applications,
-      onboardingTasks,
-      updatedAt: new Date().toISOString(),
-    };
-    saveRecruitmentStore(data);
-    void syncRecruitmentToServer(data);
-  }, [jobs, candidates, interviews, applications, onboardingTasks, persistReady]);
-
   const [onboardingTasks, setOnboardingTasks] = useState<OnboardingTask[]>([
     {
       id: 'OB001',
@@ -528,6 +496,38 @@ export default function RecruitmentCRM() {
       assignedTo: 'Line Manager'
     }
   ]);
+
+  useEffect(() => {
+    const store = loadRecruitmentStore();
+    if (store.jobs.length > 0) setJobs(store.jobs as JobPosting[]);
+    if (store.candidates.length > 0) setCandidates(store.candidates as Candidate[]);
+    if (store.interviews.length > 0) setInterviews(store.interviews as Interview[]);
+    if (store.applications?.length > 0) setApplications(store.applications as Application[]);
+    if (store.onboardingTasks?.length > 0) setOnboardingTasks(store.onboardingTasks as OnboardingTask[]);
+    loadRecruitmentFromApi().then((api) => {
+      if (!api) { setPersistReady(true); return; }
+      if (api.jobs.length > 0) setJobs(api.jobs as JobPosting[]);
+      if (api.candidates.length > 0) setCandidates(api.candidates as Candidate[]);
+      if (api.interviews.length > 0) setInterviews(api.interviews as Interview[]);
+      if (api.applications.length > 0) setApplications(api.applications as Application[]);
+      if (api.onboardingTasks.length > 0) setOnboardingTasks(api.onboardingTasks as OnboardingTask[]);
+      setPersistReady(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!persistReady) return;
+    const data = {
+      jobs,
+      candidates,
+      interviews,
+      applications,
+      onboardingTasks,
+      updatedAt: new Date().toISOString(),
+    };
+    saveRecruitmentStore(data);
+    void syncRecruitmentToServer(data);
+  }, [jobs, candidates, interviews, applications, onboardingTasks, persistReady]);
 
   const [communications, setCommunications] = useState<CommunicationLog[]>([
     {

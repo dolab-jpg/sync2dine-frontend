@@ -10,6 +10,7 @@ import { OnlineStatusBanner } from '../OnlineStatusBanner';
 import { Toaster } from '../ui/sonner';
 import { getNavBadgeCounts, subscribeNavBadges } from '../../engine/restaurant/navBadgeStore';
 import { getActiveOrgId, setActiveOrgId, subscribeActiveOrg } from '../../engine/platform/orgContext';
+import { setTabletPreview } from '../../engine/platform/experience';
 import { getHomeOrgId } from '../../engine/platform/homeOrg';
 import { fetchOrganizations } from '../../engine/platform/platformApi';
 
@@ -285,6 +286,7 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
   }
 
   function exitActingAs() {
+    setTabletPreview(false);
     setActiveOrgId(null);
     setActingAsName(null);
     window.location.assign('/platform/clients');
@@ -437,15 +439,15 @@ export default function RestaurantShell({ children }: { children: ReactNode }) {
         {isActingAsClient && (
           <div className="shrink-0 px-3 sm:px-4 py-2 bg-indigo-950 text-indigo-50 text-sm flex flex-wrap items-center justify-between gap-2 border-b border-indigo-800">
             <span>
-              Acting as <strong className="text-white">{actingAsName ?? 'company'}</strong>
-              {' '}— restaurant tablet (Exit to return to Platform Clients)
+              Tablet preview: <strong className="text-white">{actingAsName ?? 'company'}</strong>
+              {' '}— restaurant view only (Exit returns to Platform Clients)
             </span>
             <button
               type="button"
               className="rounded-md bg-white/15 hover:bg-white/25 px-3 py-1 text-xs sm:text-sm font-medium"
               onClick={exitActingAs}
             >
-              Exit
+              Exit preview
             </button>
           </div>
         )}

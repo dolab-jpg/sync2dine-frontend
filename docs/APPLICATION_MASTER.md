@@ -225,6 +225,7 @@ Data column: Supabase is primary unless marked cache/fallback.
 
 | Feature | UI | Components | Engine | API | Data |
 |---------|-----|------------|--------|-----|------|
+| Live inbox | `/inbox` (`/whatsapp` → redirect) | `CyrusConversations.tsx` | `cyrus/cyrusThreadApi.ts`, summaries | `/api/cyrus/threads*`, `/api/calls` | conversation store + calls |
 | Comms hub | `/communications`, `/email` | `CommunicationsHub.tsx` | `messaging/messagingHub.ts`, … | `/api/messages/send`, mailbox, WA | message logs |
 | Lead inbox tab | `?tab=leads` | `LeadInboxPanel` | leadInboxService | `/api/leads/inbox*` | lead inbox |
 | Mailbox | Comms + Settings | `InboxPanel`, `EmailComposePanel`, `MailboxConnectPanel` | `mailbox/mailboxService.ts` | `/api/mailbox/*` | mailbox tables + JSON cache |
@@ -302,12 +303,13 @@ Phone personality SoT: [`PHONE_ARCHITECTURE.md`](../../sync2dine-backend/docs/PH
 | Sally knowledge | `/platform/sally-knowledge` | `platform/SallyKnowledgePanel.tsx` | — | `/api/sally-knowledge` | Supabase KB |
 | Sales Brain | `/platform/sales-brain` | `platform/SalesBrainPanel.tsx` | — | `/api/sales-brain` | Supabase |
 | Client menu preview | `/platform/clients/:orgId/menu` | `platform/MenuPreview.tsx` | — | `/api/menu` | menu |
+| Tablet preview (platform) | Platform Clients → "View tablet" | `restaurant/RestaurantShell.tsx` exit banner | `experience.ts` `s2d_tablet_preview` session flag — the ONLY way platform_owner sees the tablet | — | session-scoped |
 | Judie phone (diner) | Vapi DID `aria` | — | `brains/judie`, `phone/*` | `phone/vapi-routes.ts` | orders org-scoped |
 | Sally sales phone | Vapi DID `sally` | — | `brains/sally`, `phone/sally-sales-phone.ts`, `sally/*` | `phone/vapi-routes.ts` | platform org |
 | Sally staff PIN | same Sally DID | — | Sally brain staff mode | phone tools | CRM/mailbox |
 | Sally Web chat | marketing widget | — | `sally/web-chat.ts` | `POST /api/sally/web` | shared Sally BI |
 
-Route catalogue SoT for paths: [`src/app/routeMap.ts`](../src/app/routeMap.ts). Experience split: `engine/platform/experience.ts`.
+Route catalogue SoT for paths: [`src/app/routeMap.ts`](../src/app/routeMap.ts). Experience split: `engine/platform/experience.ts` — platform_owner (IT company) ALWAYS gets the sales/IT shell; acting-as a client only scopes data (X-Org-Id) and never reroutes the UI. The restaurant tablet is an explicit session-scoped preview (Platform Clients → "View tablet", exit via the preview banner or logout).
 
 ---
 

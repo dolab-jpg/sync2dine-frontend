@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '../ui/badge';
 import {
   Building2, Mail, Phone, MapPin, Calendar, TrendingUp, Plus, CreditCard,
-  Zap, Crown, Rocket, AlertTriangle, PauseCircle, UtensilsCrossed,
+  Zap, Crown, Rocket, AlertTriangle, PauseCircle, UtensilsCrossed, TabletSmartphone,
 } from 'lucide-react';
 import { AddressMapLink } from '../ui/AddressMapLink';
 import { toast } from 'sonner';
@@ -31,8 +31,16 @@ import {
   type PlatformStats,
 } from '../../engine/platform/platformApi';
 import { setActiveOrgId, buildPublicKioskUrl } from '../../engine/platform/orgContext';
+import { setTabletPreview } from '../../engine/platform/experience';
+import { DEMO_KITCHEN_ORG_ID, getHomeOrgId } from '../../engine/platform/homeOrg';
 import { useNavigate } from 'react-router';
 import OrgJudiePhoneCredentials from './OrgJudiePhoneCredentials';
+
+function clientRoleBadge(orgId: string): { label: string; variant: 'default' | 'secondary' | 'outline' } | null {
+  if (orgId === getHomeOrgId()) return { label: 'Platform home', variant: 'default' };
+  if (orgId === DEMO_KITCHEN_ORG_ID) return { label: 'Demo kitchen', variant: 'secondary' };
+  return null;
+}
 
 type ClientTab = 'all' | OrgStatus;
 
@@ -219,9 +227,19 @@ export default function PlatformClientsCRM() {
   };
 
   const handleActAs = (org: PlatformOrganization) => {
+    setTabletPreview(false);
     setActiveOrgId(org.id);
-    toast.success(`Acting as ${org.name} — opening restaurant tablet`);
-    // Hard navigate so App remounts restaurant shell (experience flips on non-home org).
+    toast.success(`Acting as ${org.name} — dashboard, CRM and calls now scoped to this client`);
+    // Hard navigate so every page reloads data with the new X-Org-Id scope.
+    // Stays in the IT/sales shell — platform_owner never flips into restaurant UI.
+    window.location.assign('/');
+  };
+
+  const handleViewTablet = (org: PlatformOrganization) => {
+    setActiveOrgId(org.id);
+    setTabletPreview(true);
+    toast.success(`Opening ${org.name} restaurant tablet preview`);
+    // Explicit session-scoped preview — the only path that mounts the tablet for a platform_owner.
     window.location.assign('/');
   };
 
@@ -403,6 +421,7 @@ export default function PlatformClientsCRM() {
           <div className="space-y-4">
             {filtered.map(client => {
               const PlanIcon = planIcon(client.plan);
+              const role = clientRoleBadge(client.id);
               const pct = client.monthlyTokenCap > 0
                 ? Math.round((client.tokensUsedThisMonth / client.monthlyTokenCap) * 100)
                 : 0;
@@ -418,12 +437,16 @@ export default function PlatformClientsCRM() {
                         <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3">
                           <PlanIcon className="w-5 h-5 text-indigo-600" />
                           <h3 className="text-xl sm:text-2xl font-bold truncate">{client.name}</h3>
+                          {role ? <Badge variant={role.variant}>{role.label}</Badge> : null}
                           <div
                             className={`w-3 h-3 rounded-full ${tokenUsageColor(client.tokensUsedThisMonth, client.monthlyTokenCap)}`}
                             title={`Tokens: ${pct}% of cap`}
                           />
                           <Badge variant={statusBadgeVariant(client.status)}>{client.status.replace('_', ' ').toUpperCase()}</Badge>
                         </div>
+                        <p className="text-[11px] text-gray-400 mb-2 font-mono truncate" title={client.id}>
+                          {client.id}
+                        </p>
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                           <div className="flex items-center gap-2"><Mail className="w-4 h-4 text-gray-400" /><span>{client.contactEmail}</span></div>
                           <div className="flex items-center gap-2"><Phone className="w-4 h-4 text-gray-400" /><span>{client.contactPhone || '—'}</span></div>
@@ -474,7 +497,15 @@ export default function PlatformClientsCRM() {
           {selected && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-2xl">{selected.name}</DialogTitle>
+                <DialogTitle className="text-2xl flex flex-wrap items-center gap-2">
+                  {selected.name}
+                  {clientRoleBadge(selected.id) ? (
+                    <Badge variant={clientRoleBadge(selected.id)!.variant}>
+                      {clientRoleBadge(selected.id)!.label}
+                    </Badge>
+                  ) : null}
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground font-mono">{selected.id}</p>
               </DialogHeader>
               <div className="space-y-4 text-sm">
                 <div className="grid grid-cols-2 gap-4">
@@ -516,6 +547,15 @@ export default function PlatformClientsCRM() {
                 />
                 <div className="flex flex-wrap gap-2 pt-2">
                   <Button className="flex-1 min-w-[120px]" onClick={() => handleActAs(selected)}>Act as client</Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 min-w-[120px]"
+                    disabled={selected.id === getHomeOrgId()}
+                    title={selected.id === getHomeOrgId() ? 'Platform home has no restaurant tablet' : `Preview ${selected.name}'s restaurant tablet`}
+                    onClick={() => handleViewTablet(selected)}
+                  >
+                    <TabletSmartphone className="w-4 h-4 mr-1" /> View tablet
+                  </Button>
                   <Button variant="outline" className="flex-1 min-w-[120px]" onClick={() => { setSelected(null); navigate(`/platform/clients/${selected.id}/menu`); }}>
                     <UtensilsCrossed className="w-4 h-4 mr-1" /> View Menu
                   </Button>

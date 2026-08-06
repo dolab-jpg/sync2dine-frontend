@@ -30,7 +30,7 @@ import type { Customer } from '../App';
 import { BrandLogo } from './BrandLogo';
 import { OnlineStatusBanner } from './OnlineStatusBanner';
 import { useTranslation } from 'react-i18next';
-import { getExperience } from '../engine/platform/experience';
+import { getExperience, setTabletPreview } from '../engine/platform/experience';
 
 interface AppShellProps {
   children: ReactNode;
@@ -224,8 +224,9 @@ export default function AppShell({ children }: AppShellProps) {
       { to: '/crm', icon: TrendingUp, label: 'CRM' },
       { to: '/customers', icon: Users, label: t('nav.customers') },
       { to: '/communications', icon: Mail, label: t('nav.communications') },
+      { to: '/inbox', icon: MessageCircle, label: 'Inbox' },
       ...(user.role === 'platform_owner'
-        ? [{ to: '/whatsapp', icon: MessageCircle, label: 'WhatsApp' }]
+        ? []
         : [
             {
               to: '/cynthia',
@@ -243,7 +244,6 @@ export default function AppShell({ children }: AppShellProps) {
             { to: '/platform/sally-offer', icon: BadgePoundSterling, label: 'Sally offer' },
             { to: '/platform/sally-knowledge', icon: BookOpen, label: 'Sally knowledge' },
             { to: '/platform/sales-brain', icon: Brain, label: 'Sales Brain' },
-            { to: '/orders', icon: ClipboardList, label: 'Orders' },
           ]
         : []),
       ...(hasSuperAdminAccess(user.role)
@@ -525,6 +525,7 @@ export default function AppShell({ children }: AppShellProps) {
                 type="button"
                 className="rounded-md bg-white/15 hover:bg-white/25 px-3 py-1 text-xs sm:text-sm font-medium"
                 onClick={() => {
+                  setTabletPreview(false);
                   setActiveOrgId(null);
                   setActingAsName(null);
                   window.location.assign('/platform/clients');

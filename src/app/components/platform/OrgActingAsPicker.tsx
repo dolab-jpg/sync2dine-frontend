@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { fetchOrganizations, type PlatformOrganization } from '../../engine/platform/platformApi';
 import { getActiveOrgId, setActiveOrgId } from '../../engine/platform/orgContext';
-import { getHomeOrgId } from '../../engine/platform/homeOrg';
+import { setTabletPreview } from '../../engine/platform/experience';
+import { DEMO_KITCHEN_ORG_ID, getHomeOrgId } from '../../engine/platform/homeOrg';
+
+function orgLabel(o: { id: string; name: string }): string {
+  if (o.id === getHomeOrgId()) return `${o.name} (platform home)`;
+  if (o.id === DEMO_KITCHEN_ORG_ID) return `${o.name} (demo kitchen)`;
+  return o.name;
+}
 
 export default function OrgActingAsPicker() {
   const [orgs, setOrgs] = useState<PlatformOrganization[]>([]);
@@ -25,6 +32,8 @@ export default function OrgActingAsPicker() {
         onValueChange={(v) => {
           const id = v === '__none__' ? '' : v;
           setActive(id);
+          // Switching scope always stays in the IT/sales shell — never the tablet.
+          setTabletPreview(false);
           setActiveOrgId(id || null);
           if (!id || id === homeOrgId) {
             window.location.assign('/platform/clients');
@@ -39,7 +48,7 @@ export default function OrgActingAsPicker() {
         <SelectContent>
           <SelectItem value="__none__">Not acting as a client</SelectItem>
           {orgs.map((o) => (
-            <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+            <SelectItem key={o.id} value={o.id}>{orgLabel(o)}</SelectItem>
           ))}
         </SelectContent>
       </Select>

@@ -2,7 +2,7 @@
  * Declarative route catalogue for agents and humans.
  * JSX trees live in `routes.tsx`; bootstrap/experience gate stay in `App.tsx`.
  *
- * Keep in sync when adding routes — also update docs/APPLICATION_MASTER.md §24.
+ * Keep in sync when adding routes ï¿½ also update docs/APPLICATION_MASTER.md ï¿½24.
  */
 
 export type ExperienceScope = 'public' | 'logged_out' | 'restaurant' | 'construction' | 'both_authed';
@@ -61,8 +61,9 @@ export const ROUTE_MAP: RouteMapEntry[] = [
   { path: '/cynthia', experience: 'construction', component: 'components/Cynthia/CynthiaHome.tsx' },
   { path: '/cynthia/ingest', experience: 'construction', component: 'components/Cynthia/CynthiaHome.tsx' },
   { path: '/cyrus', experience: 'construction', component: '? /cynthia', notes: 'Legacy redirect' },
-  { path: '/cyrus/legacy', experience: 'construction', component: 'components/CyrusConversations.tsx' },
-  { path: '/whatsapp', experience: 'construction', component: 'components/CyrusConversations.tsx' },
+  { path: '/inbox', experience: 'construction', component: 'components/CyrusConversations.tsx', notes: 'In-app live inbox (phone/portal/web)' },
+  { path: '/cyrus/legacy', experience: 'construction', component: '? /inbox', notes: 'Legacy redirect' },
+  { path: '/whatsapp', experience: 'construction', component: '? /inbox', notes: 'Legacy redirect' },
   { path: '/calls', experience: 'construction', component: 'components/CallCenter/CallCenter.tsx' },
   { path: '/call-register', experience: 'construction', component: 'components/CallCenter/CallRegister.tsx' },
   { path: '/integrations', experience: 'construction', component: 'components/integrations/IntegrationsHub.tsx' },
