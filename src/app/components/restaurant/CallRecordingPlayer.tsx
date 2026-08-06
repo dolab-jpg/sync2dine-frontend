@@ -4,7 +4,8 @@ import { Button } from '../ui/button';
 
 const SPEED_OPTIONS = [1, 1.5, 2] as const;
 type PlaybackSpeed = (typeof SPEED_OPTIONS)[number];
-const DEFAULT_SPEED: PlaybackSpeed = 1.5;
+/** Natural pitch/tempo first — ops can still bump to 1.5x / 2x. */
+const DEFAULT_SPEED: PlaybackSpeed = 1;
 
 type Props = {
   /** Preferred prop — provider URL or same-origin playback path */
@@ -34,7 +35,7 @@ function resolveSrc(recordingUrl?: string | null, url?: string | null, playbackP
 
 /**
  * Safe call recording player — http(s), blob, or same-origin /api/calls/:id/recording.
- * Ops default playback rate is 1.5x with 1x / 1.5x / 2x controls.
+ * Default playback is 1x (natural voice); 1.5x / 2x available for skimming.
  */
 export default function CallRecordingPlayer({
   recordingUrl,
@@ -60,7 +61,15 @@ export default function CallRecordingPlayer({
     : (trimmed.startsWith('/') ? `${trimmed}${trimmed.includes('?') ? '&' : '?'}download=1` : trimmed);
 
   useEffect(() => {
-    if (audioRef.current) audioRef.current.playbackRate = speed;
+    const el = audioRef.current;
+    if (!el) return;
+    el.playbackRate = speed;
+    // Keep pitch natural when speeding up (Chrome defaults true; set explicitly).
+    try {
+      el.preservesPitch = true;
+    } catch {
+      /* older browsers */
+    }
   }, [speed]);
 
   if (!safe) {
