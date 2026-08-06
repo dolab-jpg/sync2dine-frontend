@@ -17,8 +17,9 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 | Cynthia staff web | ai | `/cynthia`, overlay | `/api/ai/orchestrate`, staff | `cynthia` | session | live | staff login |
 | Cyrus widget alias | ai | widgets | `/api/cyrus/*` | `cyrus` | � | live | widget |
 | Sales Brain | ai | `/platform/sales-brain` | `/api/sales-brain` | `sales_brain` worker | Supabase | live | panel |
-| Sally product KB | ai | `/platform/sally-knowledge` | `/api/sally-knowledge` | KB worker | Supabase | live | panel |
-| Sally offer | sales | `/platform/sally-offer` | `sally/offer.ts` | � | offer module | live | formatOfferFactsBlock |
+| Sally product KB | ai | `/platform/sally-knowledge` | `/api/sally-knowledge` | KB worker | Supabase | live | approved Atmosphere talking points + panel |
+| Sally offer | sales | `/platform/sally-offer` | `sally/offer.ts` + phone USPs | � | offer module | live | formatOfferFactsBlock; Atmosphere discovery/USPs |
+| Atmosphere (SKU) | sales | `/atmosphere` | package + Sally pitch | � | saas-packages | thin product / live sales language | sales proposition only — not in-app audio controls |
 | Ops alert contacts | platform | `/platform/ops` | `/api/platform/ops-contacts` | VPS cron watchdog | `ops-contacts.json` | live | email/SMS/Trae on API down |
 | AI Studio | config | Settings ? AI | `/api/ai/studio` | config only | studio store | live | settings |
 | Self-heal | ai | `/ai-audit` | `/api/ai/code-fix*` | utility | `code_fix_jobs` | live | Trae handoff LIVE badge |

@@ -295,7 +295,7 @@ Phone personality SoT: [`PHONE_ARCHITECTURE.md`](../../sync2dine-backend/docs/PH
 | Restaurant settings | `/settings` (restaurant) | `restaurant/RestaurantSettings.tsx` | — | org integrations | org |
 | Front kiosk | `/front` | `FrontKiosk.tsx` | public diner | orders/menu as wired | — |
 | Judie marketing | `/judie` | `JudieLandingPage.tsx` | — | — | — |
-| Atmosphere | `/atmosphere` | `AtmosphereLandingPage.tsx` | — | — | — |
+| Atmosphere | `/atmosphere` | `AtmosphereLandingPage.tsx` | Sally sales USPs + approved KB; **THIN product** (no in-app audio controls) | packages / Sally offer | marketing + sales SoT |
 | Pricing / start | `/pricing`, `/start` | `PricingPage.tsx`, `StartCheckoutFlow.tsx` | — | Stripe / billing | — |
 | Public integrations | `/integrations` (public) | `restaurant/IntegrationsPublicPage.tsx` | — | — | — |
 | Sally offer (platform) | `/platform/sally-offer` | `platform/SallyOfferSettings.tsx` | offer facts → BE `sally/offer.ts` | platform / sally | offer config |
