@@ -22,7 +22,7 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 | Atmosphere (SKU) | sales | `/atmosphere` | package + Sally pitch | � | saas-packages | thin product / live sales language | sales proposition only — not in-app audio controls |
 | Ops alert contacts | platform | `/platform/ops` | `/api/platform/ops-contacts` | VPS cron watchdog | `ops-contacts.json` | live | email/SMS/Trae on API down |
 | AI Studio | config | Settings ? AI | `/api/ai/studio` | config only | studio store | live | settings |
-| Self-heal | ai | `/ai-audit` | `/api/ai/code-fix*` | utility | `code_fix_jobs` | live | Trae handoff LIVE badge |
+| Self-heal | ai | `/ai-audit` Code fixes → Pending offers | `/api/ai/code-fix*` | utility | `code_fix_jobs` | live | offers in Audit only (not Cynthia chat) |
 | Foreman / project / planning / BC AI | construction | panels | `/api/ai/*` | domain agents | � | live | construction UI |
 | Call Centre UI | phone | `/calls` | `/api/agent`, vapi, calls | human softphone | lines | live | softphone |
 | Legacy phone orchestrator | � | � | throw stub | quarantined | � | dead | do not edit |
