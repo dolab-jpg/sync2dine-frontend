@@ -27,6 +27,8 @@ export function getExperience(role: string): Experience {
   const homeOrgId = getHomeOrgId();
 
   // platform_owner: sales shell on home / cleared; restaurant tablet when acting-as a tenant.
+  // Note: App.tsx forces sales/AppShell when path starts with /platform so Ops/Clients
+  // never render inside RestaurantShell (which has no /platform/* routes).
   if (role === 'platform_owner') {
     if (orgId && orgId !== homeOrgId) return 'restaurant';
     return 'sales';

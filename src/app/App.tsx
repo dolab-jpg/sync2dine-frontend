@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { BrowserRouter } from 'react-router';
+import { BrowserRouter, useLocation } from 'react-router';
 import ProductCatalog from './components/ProductCatalog';
 import { AIAssistantProvider } from './context/AIAssistantContext';
 import { allTradeProducts, tradePricingRules } from './data/tradeProducts';
@@ -949,33 +949,54 @@ export default function App() {
 
   if (isLoggedIn && !experienceReady) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f6efe0]">
-        <p className="text-lg font-semibold text-[#0f3d3e]">Loading…</p>
+      <div className="flex min-h-screen items-center justify-center bg-s2d-cream">
+        <p className="text-lg font-semibold text-s2d-teal">Loading…</p>
       </div>
-    );
-  }
-
-  if (experience === 'restaurant') {
-    return (
-      <AppContext.Provider value={contextValue}>
-        <BrowserRouter>
-          <RestaurantExperienceRoutes user={user} />
-        </BrowserRouter>
-      </AppContext.Provider>
     );
   }
 
   return (
     <AppContext.Provider value={contextValue}>
-      <AIAssistantProvider>
-        <BrowserRouter>
-          <ConstructionExperienceRoutes
-            user={user}
-            recruitmentAccess={recruitmentAccess}
-            accountsAccess={accountsAccess}
-          />
-        </BrowserRouter>
-      </AIAssistantProvider>
+      <BrowserRouter>
+        <LoggedInExperienceSwitch
+          user={user}
+          experience={experience}
+          recruitmentAccess={recruitmentAccess}
+          accountsAccess={accountsAccess}
+        />
+      </BrowserRouter>
     </AppContext.Provider>
+  );
+}
+
+/** platform_owner on /platform/* always uses AppShell (sales), even when acting-as a restaurant org. */
+function LoggedInExperienceSwitch({
+  user,
+  experience,
+  recruitmentAccess,
+  accountsAccess,
+}: {
+  user: User;
+  experience: ReturnType<typeof getExperience>;
+  recruitmentAccess: RecruitmentAccess;
+  accountsAccess: AccountsAccess;
+}) {
+  const location = useLocation();
+  const forcePlatformShell =
+    user.role === 'platform_owner' && location.pathname.startsWith('/platform');
+  const useRestaurant = experience === 'restaurant' && !forcePlatformShell;
+
+  if (useRestaurant) {
+    return <RestaurantExperienceRoutes user={user} />;
+  }
+
+  return (
+    <AIAssistantProvider>
+      <ConstructionExperienceRoutes
+        user={user}
+        recruitmentAccess={recruitmentAccess}
+        accountsAccess={accountsAccess}
+      />
+    </AIAssistantProvider>
   );
 }

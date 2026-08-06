@@ -53,13 +53,14 @@ Never use legacy `deploy-vps.sh` / `deploy-nginx.sh` for routine ships.
 
 - Script: `sync2dine-backend/scripts/api-health-watchdog.sh`
 - Install: `scripts/install-api-health-watchdog.sh` (also called from `restart-sync2dine-api.sh`)
-- Cron: every minute, probe `127.0.0.1:3011/health`
+- Cron: every minute, probe `127.0.0.1:3011/health` (logs `health_ok` each minute)
 - After 2 failures: run restart script, then notify
 - Contacts file: `server/data/ops-contacts.json` (writable via UI)
+- Email: connected Gmail OAuth mailbox (`server/ops-gmail-send.ts` / `scripts/ops-send-alert-email.ts`); SMTP env is fallback only
 
 ### Platform UI: Ops alerts
 
-- Route: `/platform/ops` (`platform_owner` only)
+- Route: `/platform/ops` (`platform_owner` only; always AppShell even when acting-as a restaurant)
 - API: `GET/PUT /api/platform/ops-contacts`, `POST /api/platform/ops-contacts/test`
 - Fields: `alertEmail`, `alertPhone` (SMS), `traeWebhookUrl`
 - Default email until saved: `dolab@diamondea.co.uk`

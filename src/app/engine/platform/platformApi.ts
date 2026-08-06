@@ -1,5 +1,5 @@
 import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client';
-import { getSupabaseAccessToken } from './orgContext';
+import { getAuthToken, getSupabaseAccessToken } from './orgContext';
 
 export type OrgStatus = 'trial' | 'active' | 'past_due' | 'suspended' | 'cancelled';
 export type OrgPlan = 'starter' | 'pro' | 'enterprise' | 'sync2dine_platform' | 'sync2dine_kiosk';
@@ -244,7 +244,8 @@ export type SallyOfferStored = Partial<Omit<SallyOfferTerms, 'billing'>> & {
 async function platformAuthHeaders(init?: HeadersInit): Promise<Headers> {
   const headers = new Headers(init);
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  const token = await getSupabaseAccessToken();
+  // Prefer Node login JWT (requireAuth); fall back to Supabase session JWT.
+  const token = getAuthToken() || (await getSupabaseAccessToken());
   if (token) headers.set('Authorization', `Bearer ${token}`);
   return headers;
 }
@@ -277,7 +278,7 @@ export async function saveOpsContacts(patch: Partial<OpsContacts>): Promise<{ co
 export async function testOpsContacts(): Promise<{
   payload: Record<string, unknown>;
   results: {
-    email?: { ok: boolean; error?: string };
+    email?: { ok: boolean; error?: string; via?: string; from?: string };
     sms?: { ok: boolean; error?: string; stub?: boolean };
     webhook?: { ok: boolean; error?: string; status?: number };
   };
