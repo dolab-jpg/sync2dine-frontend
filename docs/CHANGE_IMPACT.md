@@ -8,7 +8,8 @@ Before editing shared surfaces, review the rows below. Update registries when be
 | Orders / menu / deals | Judie phone, restaurant UI, connectors | Judie, staff UI | `PHONE_TOOLS` food/reservations; `orders/*` | order-service, food-guards, meal-deals docs | `/api/orders`, `/api/menu` | CAPABILITY ?24.J, MEAL_DEALS | API + SPA |
 | Judie brain / diner tools | Vapi aria | Judie | `phone_judie` | did-routing, phone-lines | `/webhooks/vapi` | AI_REGISTRY, PHONE, TOOL_REGISTRY | API |
 | Sally phone overlay | Vapi sally | Sally sales/staff | `phone_sally_*` + native `voicemail` | phone tests; live call | vapi | SALLY, TOOL_REGISTRY | API |
-| Outbound dial meta (`agentPersona`/`aim`) | Vapi outbound | Sally | `vapiAdapter.placeCall`, bulk outbound | live sales CSV | `/api/calls/outbound*` | CHANGE_IMPACT | API |
+| Outbound dial meta (`agentPersona`/`aim`) | Vapi outbound | Sally | `vapiAdapter.placeCall`, bulk outbound, `sally/schedule-outbound` | live sales CSV | `/api/calls/outbound*` | CHANGE_IMPACT | API |
+| Sally venue dials / referrals | Vapi Sally + CSV | Sally | `dial-windows`, `schedule-outbound`, `captureReferralAndQueue` | tier1 tests | campaigns + vapi | SALLY, TOOL_REGISTRY | API |
 | Inbox phone thread playback | `/inbox` | staff | `CyrusConversations` + `/api/calls` | manual | `/api/calls`, `/api/ai/summarize` | CHANGE_IMPACT | API + SPA |
 | Cynthia orch catalogs | staff web | Cynthia, foreman, project | `orch_*` | tool-facade test; manual orch | `/api/ai/orchestrate` | TOOL_REGISTRY, AI_REGISTRY | API |
 | Billing / Stripe | checkout, webhooks | ? | stripe routes + gap money tools | quote-checkout, weekly billing | `/api/stripe` | CAPABILITY, ROUTE_MAP | API |

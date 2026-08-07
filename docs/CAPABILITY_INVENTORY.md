@@ -27,7 +27,9 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 | Call Centre UI | phone | `/calls` | `/api/agent`, vapi, calls | human softphone | lines | live | softphone |
 | Legacy phone orchestrator | � | � | throw stub | quarantined | � | dead | do not edit |
 | IVR | phone | � | `ivr-handler` | disabled | � | off | `IVR_ENABLED` |
-| Concierge outbound | channel | � | `/api/concierge/outbound` | partial | queue | partial | API |
+| Concierge outbound | channel | — | `/api/concierge/outbound` | partial | queue |
+| Sally venue-timed dials + referrals | phone/sales | CRM dial / CSV | `sally/dial-windows`, `sally/schedule-outbound`, `captureReferralAndQueue` | live | CSV hours + gatekeeper referral |
+| Sally venue-timed dials + referrals | phone/sales | CRM dial / CSV | `sally/dial-windows`, `sally/schedule-outbound`, `captureReferralAndQueue` | live | upload CSV with hours; gatekeeper referral tool | partial | API |
 
 ## Restaurant operations
 
