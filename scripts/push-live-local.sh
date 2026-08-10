@@ -103,7 +103,8 @@ fi
 
 LIVE_SPA_ASSET="$(curl -sS https://app.sync2dine.io/ | grep -oE 'assets/index-[^\"]+\.js' | head -1 || true)"
 echo "live SPA asset: ${LIVE_SPA_ASSET:-unknown}"
-if [ -n "${LOCAL_SPA_ASSET:-}" ] && [ -n "$LIVE_SPA_ASSET" ] && [ "$LOCAL_SPA_ASSET" != "$LIVE_SPA_ASSET" ]; then
+LIVE_SPA_BASENAME="$(basename "${LIVE_SPA_ASSET:-}")"
+if [ -n "${LOCAL_SPA_ASSET:-}" ] && [ -n "$LIVE_SPA_BASENAME" ] && [ "$LOCAL_SPA_ASSET" != "$LIVE_SPA_BASENAME" ]; then
   echo "ERROR: SPA asset mismatch local=$LOCAL_SPA_ASSET live=$LIVE_SPA_ASSET"
   exit 1
 fi

@@ -7,29 +7,11 @@ import { Textarea } from '../ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { PhoneOutgoing, Upload } from 'lucide-react';
 import { toast } from 'sonner';
-import { parseCustomersCsv } from '../../engine/data/dataImportExportService';
+import { parseSallyLeadSheetCsv, type SallyDialRow } from '../../engine/data/sallyLeadSheetParser';
 
 type Props = {
   onImport?: (customers: Customer[]) => Promise<void> | void;
 };
-
-type DialRow = { company: string; phone: string; customerId?: string };
-
-function rowsFromCsvText(text: string): DialRow[] {
-  const trimmed = text.replace(/^\uFEFF/, '').trim();
-  if (!trimmed) return [];
-  const lines = trimmed.split(/\r?\n/).filter((l) => l.trim());
-  const header = lines[0].toLowerCase();
-  const hasHeader = header.includes('phone') || header.includes('company') || header.includes('name');
-  const body = hasHeader ? lines.slice(1) : lines;
-
-  return body.map((line) => {
-    const parts = line.split(/[,\t|;]/).map((p) => p.trim().replace(/^"|"$/g, ''));
-    const phone = parts.find((p) => /\d{7,}/.test(p)) ?? parts[1] ?? '';
-    const company = parts[0] && !/\d{7,}/.test(parts[0]) ? parts[0] : parts.find((p) => p !== phone && !p.includes('@')) ?? '';
-    return { company, phone };
-  }).filter((r) => r.phone);
-}
 
 /** CSV drop zone for company phone numbers — queues outbound sales dials. */
 export function SalesCsvDialPanel({ onImport }: Props) {
@@ -42,9 +24,11 @@ export function SalesCsvDialPanel({ onImport }: Props) {
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
-  const queueRows = useCallback(async (rows: DialRow[]) => {
+  const queueRows = useCallback(async (text: string) => {
+    const parsed = parseSallyLeadSheetCsv(text, { batchId });
+    const rows: SallyDialRow[] = parsed.dialRows;
     if (!rows.length) {
-      toast.error('No phone numbers found in CSV');
+      toast.error(parsed.errors[0] || 'No phone numbers found in CSV');
       return;
     }
     setBusy(true);
@@ -53,22 +37,28 @@ export function SalesCsvDialPanel({ onImport }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          rows,
+          rows: rows.map((r) => ({
+            company: r.company,
+            phone: r.phone,
+            customerId: r.customerId,
+            venueType: r.venueType || 'takeaway',
+            openingHours: r.openingHours,
+            notes: r.notes,
+            address: r.address,
+          })),
           template: 'lead_callback',
           batchId,
           brief,
           agentPersona: 'sally',
           aim: 'sales_outreach',
+          venueAware: true,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to queue calls');
 
-      if (onImport) {
-        const csvHeader = 'name,phone,source,campaign,leadBatchId\n';
-        const csvBody = rows.map((r) => `${r.company || 'Company'},${r.phone},purchased,${batchId},${batchId}`).join('\n');
-        const { customers } = parseCustomersCsv(csvHeader + csvBody);
-        const stamped = customers.map((c) => ({
+      if (onImport && parsed.customers.length) {
+        const stamped = parsed.customers.map((c) => ({
           ...c,
           source: 'purchased' as const,
           leadBatchId: batchId,
@@ -78,12 +68,17 @@ export function SalesCsvDialPanel({ onImport }: Props) {
           status: 'lead' as const,
           tags: [...new Set([...(c.tags ?? []), 'sales-csv', 'sally', batchId])],
         }));
-        if (stamped.length) await onImport(stamped);
+        await onImport(stamped);
       }
 
+      const held = Number(data.held ?? 0);
+      const queued = Number(data.queued ?? rows.length);
       toast.success(
-        `Queued ${data.queued ?? rows.length} Sally outbound call${(data.queued ?? rows.length) === 1 ? '' : 's'}`,
+        held > 0
+          ? `Queued ${queued}; held ${held} for hours research`
+          : `Queued ${queued} Sally outbound call${queued === 1 ? '' : 's'}`,
       );
+      if (parsed.errors.length) toast.message(`${parsed.errors.length} row warning(s)`);
       setPaste('');
       setOpen(false);
     } catch (err) {
@@ -95,7 +90,7 @@ export function SalesCsvDialPanel({ onImport }: Props) {
 
   async function handleFile(file: File) {
     const text = await file.text();
-    await queueRows(rowsFromCsvText(text));
+    await queueRows(text);
   }
 
   return (
@@ -142,10 +137,12 @@ export function SalesCsvDialPanel({ onImport }: Props) {
             }}
           >
             <Upload className="w-8 h-8 mx-auto text-slate-500 mb-2" />
-            <p className="text-sm text-slate-600 mb-2">Drop a CSV with company + phone columns</p>
+            <p className="text-sm text-slate-600 mb-2">
+              Drop a Google Sheet CSV (company_name, phone, hours…)
+            </p>
             <Input
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,text/csv,.tsv,text/tab-separated-values"
               className="max-w-xs mx-auto"
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -155,18 +152,21 @@ export function SalesCsvDialPanel({ onImport }: Props) {
           </div>
           <div>
             <Label>Or paste rows</Label>
-            <p className="text-xs text-slate-500 mt-0.5">company,phone — or Company Name, +447700900123</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Headers supported: company_name, phone, address, city, postcode, category,
+              opening_hours, hours_mon…hours_sun, lead_id — or company,phone
+            </p>
             <Textarea
               className="mt-1 min-h-[100px] font-mono text-sm"
               value={paste}
               onChange={(e) => setPaste(e.target.value)}
-              placeholder={'company,phone\nAcme Takeaway,+447700900123'}
+              placeholder={'company_name,phone,opening_hours\nAcme Takeaway,+447700900123,16:00-23:00'}
             />
           </div>
           <Button
             className="w-full min-h-11"
             disabled={busy || !paste.trim()}
-            onClick={() => queueRows(rowsFromCsvText(paste))}
+            onClick={() => queueRows(paste)}
           >
             {busy ? 'Queuing…' : 'Queue outbound calls'}
           </Button>

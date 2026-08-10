@@ -422,10 +422,19 @@ export function parseCustomersCsv(text: string): { customers: Customer[]; errors
       const i = idx(name);
       return i >= 0 ? values[i]?.trim() ?? '' : '';
     };
+    const getAny = (...names: string[]) => {
+      for (const n of names) {
+        const v = get(n);
+        if (v) return v;
+      }
+      return '';
+    };
 
-    const name = get('name');
+    const name =
+      getAny('name', 'company_name', 'company', 'business_name')
+      || '';
     const email = get('email');
-    const phone = get('phone');
+    const phone = getAny('phone', 'telephone', 'tel', 'mobile');
     if (!name || (!email && !phone)) {
       errors.push(`Row ${row + 1}: name and phone (or email) are required.`);
       continue;
@@ -469,13 +478,41 @@ export function parseCustomersCsv(text: string): { customers: Customer[]; errors
     const leadBatchId = get('leadbatchid') || get('campaign') || undefined;
 
     customers.push({
-      id: get('id') || `${Date.now()}-${row}`,
+      id: getAny('id', 'lead_id', 'leadid') || `${Date.now()}-${row}`,
       name,
       email: email || `${phone.replace(/\D/g, '') || 'lead'}@import.local`,
       phone,
-      address: get('address'),
+      address: (() => {
+        const base = get('address');
+        const city = get('city');
+        const postcode = getAny('postcode', 'postal_code');
+        return [base, city, postcode].filter(Boolean).join(', ') || base;
+      })(),
       status,
-      notes: get('notes'),
+      notes: (() => {
+        const base = get('notes');
+        const extras: string[] = [];
+        const leadId = getAny('lead_id', 'leadid');
+        if (leadId && leadId !== get('id')) extras.push(`lead_id=${leadId}`);
+        const category = get('category');
+        if (category) extras.push(`Category: ${category}`);
+        const cuisine = getAny('cuisine_language', 'cuisine');
+        if (cuisine) extras.push(`Cuisine/language: ${cuisine}`);
+        const hours =
+          getAny('opening_hours', 'openinghours', 'hours')
+          || [
+            get('hours_mon') && `Mon: ${get('hours_mon')}`,
+            get('hours_tue') && `Tue: ${get('hours_tue')}`,
+            get('hours_wed') && `Wed: ${get('hours_wed')}`,
+            get('hours_thu') && `Thu: ${get('hours_thu')}`,
+            get('hours_fri') && `Fri: ${get('hours_fri')}`,
+            get('hours_sat') && `Sat: ${get('hours_sat')}`,
+            get('hours_sun') && `Sun: ${get('hours_sun')}`,
+          ].filter(Boolean).join('; ');
+        if (hours) extras.push(`Hours: ${hours}`);
+        if (!extras.length) return base;
+        return [base, ...extras].filter(Boolean).join(' | ');
+      })(),
       interestedTrades,
       whatsappOptIn: get('whatsappoptin').toLowerCase() === 'true',
       preferredChannel,

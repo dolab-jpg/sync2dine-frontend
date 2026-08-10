@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseCustomersCsv } from '../../engine/data/dataImportExportService';
+import { parseSallyLeadSheetCsv } from '../../engine/data/sallyLeadSheetParser';
 
 type Props = {
   onImport: (customers: Customer[]) => Promise<void> | void;
@@ -23,7 +24,13 @@ export function ScrapeLeadImportDialog({ onImport }: Props) {
   function rowsFromPaste(text: string): string {
     const trimmed = text.trim();
     if (!trimmed) return '';
-    if (trimmed.toLowerCase().startsWith('name')) {
+    const first = trimmed.split(/\r?\n/)[0]?.toLowerCase() || '';
+    if (
+      first.startsWith('name')
+      || first.includes('company_name')
+      || first.includes('company,')
+      || (first.includes('phone') && first.includes(','))
+    ) {
       return trimmed;
     }
     const lines = trimmed.split(/\r?\n/).filter((l) => l.trim());
@@ -41,7 +48,14 @@ export function ScrapeLeadImportDialog({ onImport }: Props) {
   }
 
   async function runImport(csvText: string) {
-    const { customers, errors } = parseCustomersCsv(csvText);
+    const sheet = parseSallyLeadSheetCsv(csvText, { batchId });
+    let customers = sheet.customers;
+    let errors = sheet.errors;
+    if (!customers.length) {
+      const fallback = parseCustomersCsv(csvText);
+      customers = fallback.customers;
+      errors = [...errors, ...fallback.errors];
+    }
     if (errors.length && !customers.length) {
       toast.error(errors[0]);
       return;
@@ -99,7 +113,8 @@ export function ScrapeLeadImportDialog({ onImport }: Props) {
           <div>
             <Label>Paste CSV or Name, Phone lines</Label>
             <p className="text-xs text-slate-500 mt-0.5">
-              CSV headers: name,phone,email,address,notes — or one lead per line: Name, Phone
+              Google Sheet headers OK: company_name,phone,address,city,postcode,opening_hours,hours_mon… —
+              or name,phone,email,address,notes — or one lead per line: Name, Phone
             </p>
             <Textarea
               className="mt-1 min-h-[140px] font-mono text-sm"
