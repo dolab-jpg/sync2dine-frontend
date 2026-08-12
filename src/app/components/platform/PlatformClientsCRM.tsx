@@ -58,6 +58,27 @@ function statusBadgeVariant(status: OrgStatus): 'default' | 'secondary' | 'destr
   return 'secondary';
 }
 
+function getClientAttentionReasons(c: PlatformOrganization, now = Date.now()): string[] {
+  const reasons: string[] = [];
+  if (c.status === 'past_due') reasons.push('Payment past due');
+  if (c.status === 'suspended') reasons.push('Account suspended');
+  if (c.monthlyTokenCap > 0 && c.tokensUsedThisMonth >= c.monthlyTokenCap * 0.9) {
+    const pct = Math.round((c.tokensUsedThisMonth / c.monthlyTokenCap) * 100);
+    reasons.push(`Tokens at ${pct}% of monthly cap`);
+  }
+  if (c.status === 'trial' && c.trialEndsAt) {
+    const msLeft = new Date(c.trialEndsAt).getTime() - now;
+    if (msLeft < 3 * 86400000) {
+      if (msLeft <= 0) reasons.push('Trial ended');
+      else {
+        const days = Math.ceil(msLeft / 86400000);
+        reasons.push(days === 1 ? 'Trial ends tomorrow' : `Trial ends in ${days} days`);
+      }
+    }
+  }
+  return reasons;
+}
+
 export default function PlatformClientsCRM() {
   const navigate = useNavigate();
   const [clients, setClients] = useState<PlatformOrganization[]>([]);
@@ -130,12 +151,9 @@ export default function PlatformClientsCRM() {
 
   const attentionItems = useMemo(() => {
     const now = Date.now();
-    return clients.filter(c => {
-      if (c.status === 'past_due' || c.status === 'suspended') return true;
-      if (c.tokensUsedThisMonth >= c.monthlyTokenCap * 0.9) return true;
-      if (c.trialEndsAt && new Date(c.trialEndsAt).getTime() - now < 3 * 86400000 && c.status === 'trial') return true;
-      return false;
-    });
+    return clients
+      .map(c => ({ client: c, reasons: getClientAttentionReasons(c, now) }))
+      .filter(x => x.reasons.length > 0);
   }, [clients]);
 
   const filtered = useMemo(() => clients.filter(c => {
@@ -148,6 +166,8 @@ export default function PlatformClientsCRM() {
       || c.contactPhone.includes(q);
     return matchesTab && matchesPlan && matchesSearch;
   }), [clients, activeTab, filterPlan, searchTerm]);
+
+  const selectedAttentionReasons = selected ? getClientAttentionReasons(selected) : [];
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.contactEmail.trim()) {
@@ -340,9 +360,19 @@ export default function PlatformClientsCRM() {
                 {attentionItems.length} client{attentionItems.length > 1 ? 's' : ''} need attention
               </p>
               <div className="flex flex-wrap gap-2">
-                {attentionItems.slice(0, 8).map(c => (
-                  <Button key={c.id} variant="outline" size="sm" className="bg-white" onClick={() => setSelected(c)}>
-                    {c.name}
+                {attentionItems.slice(0, 8).map(({ client, reasons }) => (
+                  <Button
+                    key={client.id}
+                    variant="outline"
+                    size="sm"
+                    className="bg-white h-auto py-1.5"
+                    title={reasons.join(' · ')}
+                    onClick={() => setSelected(client)}
+                  >
+                    <span className="flex flex-col items-start text-left gap-0.5">
+                      <span>{client.name}</span>
+                      <span className="text-[11px] font-normal text-amber-800/80">{reasons[0]}</span>
+                    </span>
                   </Button>
                 ))}
               </div>
@@ -507,6 +537,15 @@ export default function PlatformClientsCRM() {
                 </DialogTitle>
                 <p className="text-xs text-muted-foreground font-mono">{selected.id}</p>
               </DialogHeader>
+              {selectedAttentionReasons.length > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <p>
+                    <span className="font-semibold">Needs attention:</span>{' '}
+                    {selectedAttentionReasons.join(' · ')}
+                  </p>
+                </div>
+              )}
               <div className="space-y-4 text-sm">
                 <div className="grid grid-cols-2 gap-4">
                   <div><Label className="font-bold">Plan</Label><p>{selected.planLabel}</p></div>
