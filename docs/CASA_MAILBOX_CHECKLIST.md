@@ -1,14 +1,17 @@
 # CASA / Production Mailbox Checklist
 
-> **Inventory SoT:** [APPLICATION_MASTER.md](./APPLICATION_MASTER.md) §19.1. This file is an ops checklist only.
+> **Host SoT:** use **https://app.sync2dine.io** for production OAuth redirects — not `app.b-diddies.com`.
+> Inventory: [`APPLICATION_MASTER.md`](./APPLICATION_MASTER.md) §24.E · Deploy: `bash scripts/push-live-local.sh`
+>
+> Any `app.b-diddies.com` lines below are **historical** Builder Diddies leftovers — replace with Sync2Dine when configuring live mailbox.
 
 Use this checklist before enabling live Gmail OAuth in production (Google CASA verification).
 
 ## OAuth & Security
 
 - [ ] Register production OAuth client in Google Cloud Console (Web application).
-- [ ] Authorized redirect URI: `https://app.b-diddies.com/api/mailbox/callback` (must match `MAILBOX_OAUTH_REDIRECT_BASE` / `APP_BASE_URL`).
-- [ ] Set `MAILBOX_OAUTH_REDIRECT_BASE` to `https://app.b-diddies.com` (or equivalent HTTPS production base).
+- [ ] Authorized redirect URI: `https://app.sync2dine.io/api/mailbox/callback` (must match `MAILBOX_OAUTH_REDIRECT_BASE` / `APP_BASE_URL`). Historical Builder Diddies URI was `https://app.b-diddies.com/api/mailbox/callback` — do not use unless explicitly maintaining that host.
+- [ ] Set `MAILBOX_OAUTH_REDIRECT_BASE` to `https://app.sync2dine.io`.
 - [ ] Set `TOKEN_ENCRYPTION_KEY` to a strong secret (never commit). If unset, server uses a weak hardcoded dev fallback — do not ship that.
 - [ ] Store OAuth client secrets in server env and/or Integrations Hub → `email_oauth` (persisted server-side) — not browser localStorage as SoT.
 - [ ] Enable Google CASA assessment for restricted scope **`https://mail.google.com/`** (full mail — what the app requests; not `gmail.readonly`).
@@ -17,7 +20,7 @@ Use this checklist before enabling live Gmail OAuth in production (Google CASA v
 
 ## Data & Storage
 
-- [ ] Know runtime SoT today: `server/data/mailbox-data.json` on the API host. Supabase mailbox tables are schema-only until Node is migrated.
+- [x] Know runtime SoT today: `server/data/mailbox-data.json` on the API host. Supabase mailbox tables are schema-only until Node is migrated. RLS is enabled with no anon/authenticated policies (`202608121200_mailbox_rls_lockdown.sql`).
 - [ ] (Future) Run mailbox schema migration on production Supabase and migrate JSON → tables.
 - [ ] Set `INTEGRATIONS_MOCK_MODE=false` (and/or `MAILBOX_MOCK_MODE=false`) in production for live OAuth.
 - [ ] Prefer `AUTH_ENFORCED=true` so mailbox APIs require JWT (today default is header `X-User-Id` / `X-Org-Id` only).
