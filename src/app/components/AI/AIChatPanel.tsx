@@ -52,6 +52,7 @@ import { postAgentActivity } from '../../engine/ai/agentActivity';
 export function AIChatPanel() {
   const app = useContext(AppContext);
   const {
+    isOpen,
     preferVoiceOnOpen, clearPreferVoiceOnOpen,
     messages, addMessage, updateMessage, settings, pageContext,
     setPendingQuoteFields, setLastAcceptedFields,

@@ -39,6 +39,8 @@ import {
   syncActiveOrgFromProfile,
 } from './engine/platform/orgContext';
 import { integrationService } from './engine/integrations/integrationService';
+import { shouldShowWorkspaceLoader } from './engine/platform/workspaceLoader';
+import { WorkspaceLoadingScreen } from './components/WorkspaceLoadingScreen';
 import { requestNativeNotifications, registerDeviceTokenIfNative } from './bridge/nativeBridge';
 import {
   saveSessionUser,
@@ -951,12 +953,8 @@ export default function App() {
     );
   }
 
-  if (isLoggedIn && !experienceReady) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-s2d-cream">
-        <p className="text-lg font-semibold text-s2d-teal">Loading…</p>
-      </div>
-    );
+  if (shouldShowWorkspaceLoader(isLoggedIn, experienceReady)) {
+    return <WorkspaceLoadingScreen />;
   }
 
   return (

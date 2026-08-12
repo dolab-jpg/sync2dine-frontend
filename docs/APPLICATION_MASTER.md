@@ -179,6 +179,7 @@ Data column: Supabase is primary unless marked cache/fallback.
 | Forgot / reset password | `/forgot-password`, `/reset-password` | auth pages | `authApi.ts` | Supabase Auth direct | — |
 | Profile / password | `/profile`, `/profile/password` | `ProfilePage`, `ChangePasswordPage` | session + authApi | Supabase profile update | `profiles` |
 | Role redirect | post-login | `auth/lib/redirectByRole.ts` | — | — | — |
+| Workspace loader | authed bootstrap | `WorkspaceLoadingScreen.tsx` | `workspaceLoader.ts`, `App.tsx` experience gate | — | session + `profiles.org_id` |
 | App shell / nav | `*` authed | `AppShell.tsx` | i18n `shell` | — | localStorage nav expand (UX only) |
 | Org picker | header | `platform/OrgActingAsPicker.tsx` | `orgContext.ts`, `homeOrg.ts`, `platformApi.ts` | `/api/platform/*` | `organizations` |
 | Notifications | shell bell + `/notifications` | `NotificationSystem.tsx`, `NotificationsPage.tsx` | `notifications/notificationStore.ts`, `notify.ts`, `resolveNotificationRoute.ts` | lead inbox poll `/api/leads/inbox` | local + lead inbox |

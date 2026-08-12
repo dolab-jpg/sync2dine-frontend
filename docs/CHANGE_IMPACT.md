@@ -17,6 +17,8 @@ Before editing shared surfaces, review the rows below. Update registries when be
 | Self-heal repos | staff | Cynthia tooling | code-fix-handler | ? | `/api/ai/code-fix` | must stay sync2dine-* remotes | API |
 | Auth / org context | all | ? | auth.ts, account-auth | ? | `/api/auth` | CAPABILITY | API |
 | Act as client (FE experience) | SPA shells | platform_owner | `experience.ts`, RestaurantShell, PlatformClientsCRM | manual Act as to Menu to Exit | `/`, `/menu`, `/platform/clients` | CHANGE_IMPACT | SPA |
+| Authenticated workspace loader | SPA bootstrap | staff | `WorkspaceLoadingScreen`, `workspaceLoader.ts` | `workspaceLoader.test.ts` | `/login` → authed home | CHANGE_IMPACT | SPA |
+| Cynthia panel `isOpen` | sales/platform shell | staff | `AIChatPanel` + `AIAssistantContext` | `aiChatPanelOpen.test.ts` | `/`, `/platform/clients` | CHANGE_IMPACT | SPA |
 | Deploy scripts | ? | ? | push-live-local | health curls | ? | DEPLOYMENT_MAP | ? |
 | API outage / ops contacts | email SMS Trae webhook | platform_owner | ops-contacts-store, ops-notify, api-health-watchdog | curl /health; Send test | `/platform/ops`, `/api/platform/ops-contacts` | DEPLOYMENT_MAP, WORKERS, ROUTE_MAP | API + SPA + VPS cron |
 
