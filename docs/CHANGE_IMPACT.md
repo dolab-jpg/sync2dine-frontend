@@ -17,7 +17,7 @@ Before editing shared surfaces, review the rows below. Update registries when be
 | Self-heal repos | staff | Cynthia tooling | code-fix-handler | ? | `/api/ai/code-fix` | must stay sync2dine-* remotes | API |
 | Auth / org context | all | ? | auth.ts, account-auth | ? | `/api/auth` | CAPABILITY | API |
 | Login / signup (public) | SPA auth | staff + new companies | LoginPage, SignupPage, account-auth register-org | oauth.spec, login.spec | `/login`, `/signup`, `POST /api/auth/register-org` | APPLICATION_MASTER §24.A, CHANGE_IMPACT | SPA + API |
-| CRM lead identity | `/crm` + CSV + signup | Sally sales, platform_owner | ComprehensiveCRM, leadService, sallyLeadSheetParser, captureOrUpdateLead | CSV parse; Add Lead | `/crm`, `/api/leads/from-call`, `POST /api/auth/register-org` | APPLICATION_MASTER §24.C | SPA + API |
+| CRM lead identity | `/crm` + CSV + signup + Sally/Vapi | Sally sales, platform_owner | ComprehensiveCRM, parseCustomersCsv (contact required), sallyLeadSheetParser, SALES_CAPTURE_LEAD_TOOL, from-call (no caller-as-venue), launch-wipe disk CRM | CSV parse; Add Lead; from-call 400 | `/crm`, `/api/leads/from-call`, Vapi captureLead | APPLICATION_MASTER §24.C | SPA + API |
 | Act as client (FE experience) | SPA shells | platform_owner | `experience.ts`, RestaurantShell, PlatformClientsCRM | manual Act as to Menu to Exit | `/`, `/menu`, `/platform/clients` | CHANGE_IMPACT | SPA |
 | Authenticated workspace loader | SPA bootstrap | staff | `WorkspaceLoadingScreen`, `workspaceLoader.ts` | `workspaceLoader.test.ts` | `/login` → authed home | CHANGE_IMPACT | SPA |
 | Cynthia panel `isOpen` | sales/platform shell | staff | `AIChatPanel` + `AIAssistantContext` | `aiChatPanelOpen.test.ts` | `/`, `/platform/clients` | CHANGE_IMPACT | SPA |

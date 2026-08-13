@@ -258,6 +258,10 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
       || get('manager')
       || get('owner')
       || '';
+    if (!contactName) {
+      errors.push(`Row ${r + (hasHeader ? 2 : 1)}: point of contact required (contact_name / manager / owner).`);
+      continue;
+    }
 
     const leadId = cell(values, leadIdI);
     const address = buildAddress(get);
@@ -267,7 +271,7 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
 
     dialRows.push({
       company,
-      contactName: contactName || undefined,
+      contactName,
       phone,
       customerId: leadId || undefined,
       venueType,

@@ -138,7 +138,7 @@ export function SalesCsvDialPanel({ onImport }: Props) {
           >
             <Upload className="w-8 h-8 mx-auto text-slate-500 mb-2" />
             <p className="text-sm text-slate-600 mb-2">
-              Drop a Google Sheet CSV (company_name, phone, hours…)
+              Drop a Google Sheet CSV (company_name, contact_name, phone, hours…)
             </p>
             <Input
               type="file"
@@ -153,14 +153,14 @@ export function SalesCsvDialPanel({ onImport }: Props) {
           <div>
             <Label>Or paste rows</Label>
             <p className="text-xs text-slate-500 mt-0.5">
-              Headers supported: company_name, phone, address, city, postcode, category,
-              opening_hours, hours_mon…hours_sun, lead_id — or company,phone
+              Headers: company_name, contact_name, phone (all required). Also: address, city,
+              postcode, category, opening_hours, hours_mon…hours_sun, lead_id.
             </p>
             <Textarea
               className="mt-1 min-h-[100px] font-mono text-sm"
               value={paste}
               onChange={(e) => setPaste(e.target.value)}
-              placeholder={'company_name,phone,opening_hours\nAcme Takeaway,+447700900123,16:00-23:00'}
+              placeholder={'company_name,contact_name,phone,opening_hours\nAcme Takeaway,Jane Smith,+447700900123,16:00-23:00'}
             />
           </div>
           <Button

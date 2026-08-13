@@ -14,7 +14,7 @@ type Props = {
   onImport: (customers: Customer[]) => Promise<void> | void;
 };
 
-/** Paste or upload scraped lead rows (name + phone required). */
+/** Paste or upload scraped lead rows (restaurant + point of contact + phone required). */
 export function ScrapeLeadImportDialog({ onImport }: Props) {
   const [open, setOpen] = useState(false);
   const [paste, setPaste] = useState('');
@@ -27,7 +27,9 @@ export function ScrapeLeadImportDialog({ onImport }: Props) {
     const first = trimmed.split(/\r?\n/)[0]?.toLowerCase() || '';
     if (
       first.startsWith('name')
+      || first.startsWith('restaurant')
       || first.includes('company_name')
+      || first.includes('contact_name')
       || first.includes('company,')
       || (first.includes('phone') && first.includes(','))
     ) {
@@ -36,15 +38,16 @@ export function ScrapeLeadImportDialog({ onImport }: Props) {
     const lines = trimmed.split(/\r?\n/).filter((l) => l.trim());
     const body = lines.map((line) => {
       const parts = line.split(/[,\t|;]/).map((p) => p.trim());
-      const name = parts[0] || '';
-      const phone = parts[1] || parts.find((p) => /\d{7,}/.test(p)) || '';
+      const restaurant = parts[0] || '';
+      const phone = parts.find((p) => /\d{7,}/.test(p)) || '';
       const email = parts.find((p) => p.includes('@')) || '';
-      const address = parts.slice(2).filter((p) => p !== phone && p !== email).join(' ');
-      return [name, email, phone, address]
+      const contact = parts.find((p) => p && p !== restaurant && p !== phone && p !== email) || '';
+      const address = parts.filter((p) => p && p !== restaurant && p !== contact && p !== phone && p !== email).join(' ');
+      return [restaurant, contact, email, phone, address]
         .map((v) => (/,|"/.test(v) ? `"${v.replace(/"/g, '""')}"` : v))
         .join(',');
     });
-    return ['name,email,phone,address', ...body].join('\n');
+    return ['restaurant_name,contact_name,email,phone,address', ...body].join('\n');
   }
 
   async function runImport(csvText: string) {
@@ -111,16 +114,16 @@ export function ScrapeLeadImportDialog({ onImport }: Props) {
             />
           </div>
           <div>
-            <Label>Paste CSV or Name, Phone lines</Label>
+            <Label>Paste CSV (restaurant, contact, phone)</Label>
             <p className="text-xs text-slate-500 mt-0.5">
-              Google Sheet headers OK: company_name,phone,address,city,postcode,opening_hours,hours_mon… —
-              or name,phone,email,address,notes — or one lead per line: Name, Phone
+              Headers: restaurant_name,contact_name,phone (required). Aliases: company_name, manager/owner.
+              Two-column restaurant+phone rows are rejected — Contact would show “—”.
             </p>
             <Textarea
               className="mt-1 min-h-[140px] font-mono text-sm"
               value={paste}
               onChange={(e) => setPaste(e.target.value)}
-              placeholder={'name,phone\nJane Smith,+447700900123'}
+              placeholder={'restaurant_name,contact_name,phone\nThe Golden Dragon,Jane Smith,+447700900123'}
             />
           </div>
           <div>

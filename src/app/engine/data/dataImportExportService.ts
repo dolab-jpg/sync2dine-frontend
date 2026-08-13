@@ -452,8 +452,8 @@ export function parseCustomersCsv(text: string): { customers: Customer[]; errors
     );
     const email = get('email');
     const phone = getAny('phone', 'telephone', 'tel', 'mobile');
-    if (!name || (!email && !phone)) {
-      errors.push(`Row ${row + 1}: restaurant name and phone (or email) are required.`);
+    if (!name || !contactName || (!email && !phone)) {
+      errors.push(`Row ${row + 1}: restaurant name, point of contact, and phone (or email) are required.`);
       continue;
     }
 
@@ -497,7 +497,7 @@ export function parseCustomersCsv(text: string): { customers: Customer[]; errors
     customers.push({
       id: getAny('id', 'lead_id', 'leadid') || `${Date.now()}-${row}`,
       name,
-      contactName: contactName || undefined,
+      contactName,
       email: email || '',
       phone,
       address: (() => {
