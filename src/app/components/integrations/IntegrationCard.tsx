@@ -299,10 +299,12 @@ export function IntegrationCard({ definition, instance, userName, userId, orgId,
                 if (definition.id === 'openai' && key === 'provider') {
                   const mapModel = (current?: string) => {
                     if (value === 'deepseek') {
-                      if (!current || current.startsWith('gpt-')) return 'deepseek-v4-flash';
-                      if (current === 'deepseek-chat' || current === 'deepseek-reasoner') return current;
-                      return current.startsWith('deepseek') ? current : 'deepseek-v4-flash';
+                      if (current === 'deepseek-v4-pro' || current === 'deepseek-reasoner' || current === 'gpt-4o') {
+                        return 'deepseek-v4-pro';
+                      }
+                      return 'deepseek-v4-flash';
                     }
+                    if (current === 'deepseek-v4-pro' || current === 'deepseek-reasoner') return 'gpt-4o';
                     if (!current || current.startsWith('deepseek')) return 'gpt-4o-mini';
                     return current;
                   };

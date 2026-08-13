@@ -219,7 +219,7 @@ export async function sendOrchestratorMessage(
 
   const activeOrgId = getActiveOrgId();
   const body: Record<string, unknown> = {
-    model: options?.model || openaiConfig.staffModel || 'gpt-4o-mini',
+    model: options?.model || openaiConfig.staffModel || 'deepseek-v4-flash',
     apiKey: integrationService.getLiveOpenAIApiKey(),
     deepseekApiKey: openaiConfig.deepseekApiKey || undefined,
     provider: openaiConfig.provider || 'openai',

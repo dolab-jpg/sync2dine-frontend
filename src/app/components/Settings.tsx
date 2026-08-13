@@ -495,11 +495,16 @@ export default function Settings() {
               </div>
               <div>
                 <Label>Model</Label>
+                <p className="text-xs text-gray-500 mt-0.5 mb-1">
+                  Overlay fallback only — Company AI Brain staff model in Integrations is preferred.
+                </p>
                 <Select value={aiSettings.model} onValueChange={v => updateAiSettings({ model: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="gpt-4o">gpt-4o (best quality)</SelectItem>
-                    <SelectItem value="gpt-4o-mini">gpt-4o-mini (lower cost)</SelectItem>
+                    <SelectItem value="deepseek-v4-flash">deepseek-v4-flash (DeepSeek default)</SelectItem>
+                    <SelectItem value="deepseek-v4-pro">deepseek-v4-pro (DeepSeek quality)</SelectItem>
+                    <SelectItem value="gpt-4o">gpt-4o (OpenAI quality)</SelectItem>
+                    <SelectItem value="gpt-4o-mini">gpt-4o-mini (OpenAI lower cost)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

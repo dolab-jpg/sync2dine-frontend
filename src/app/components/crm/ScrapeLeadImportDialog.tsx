@@ -93,12 +93,12 @@ export function ScrapeLeadImportDialog({ onImport }: Props) {
       <DialogTrigger asChild>
         <Button variant="outline" className="min-h-11">
           <Upload className="w-4 h-4 mr-2" />
-          Import scraped leads
+          Upload CSV
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Import scraped leads</DialogTitle>
+          <DialogTitle>Upload leads CSV</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div>

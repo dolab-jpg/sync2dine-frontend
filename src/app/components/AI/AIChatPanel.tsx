@@ -288,8 +288,9 @@ export function AIChatPanel() {
       : null;
 
     try {
+      const openaiConfig = integrationService.getConfig('openai');
       const orchestratorResult = await sendOrchestratorMessage(history, agentContext, {
-        model: settings.model,
+        model: openaiConfig.staffModel || settings.model || 'deepseek-v4-flash',
         userName: staffContext.userName,
         userId: staffContext.userId,
         companyName: integrationService.getConfig('company').companyName || 'Builder Diddies',

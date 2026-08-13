@@ -64,7 +64,7 @@ export interface AISettings {
 const DEFAULT_SETTINGS: AISettings = {
   enabled: true,
   showOverlay: true,
-  model: 'gpt-4o',
+  model: 'deepseek-v4-flash',
   voiceInput: 'auto',
   voiceOutput: 'browser',
   voiceConversation: false,
