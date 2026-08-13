@@ -2,6 +2,24 @@ import type { Customer, Quote } from '../../App';
 
 export type LeadSource = NonNullable<Customer['source']>;
 
+export function leadRestaurantName(c: Pick<Customer, 'name'>): string {
+  return (c.name ?? '').trim();
+}
+
+export function leadContactName(c: Pick<Customer, 'contactName'>): string {
+  return (c.contactName ?? '').trim();
+}
+
+/** Restaurant — contact, for lists, callbacks, and Sally briefs. */
+export function leadHeadline(c: Pick<Customer, 'name' | 'contactName'>): string {
+  const venue = leadRestaurantName(c);
+  const person = leadContactName(c);
+  if (venue && person && person.toLowerCase() !== venue.toLowerCase()) {
+    return `${venue} — ${person}`;
+  }
+  return venue || person || 'Lead';
+}
+
 const PIPELINE_STATUSES = new Set(['lead', 'quoted', 'won', 'lost']);
 
 export function isLeadCustomer(c: Customer): boolean {

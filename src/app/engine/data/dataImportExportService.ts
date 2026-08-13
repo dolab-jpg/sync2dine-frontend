@@ -431,12 +431,29 @@ export function parseCustomersCsv(text: string): { customers: Customer[]; errors
     };
 
     const name =
-      getAny('name', 'company_name', 'company', 'business_name')
-      || '';
+      getAny(
+        'restaurant_name',
+        'restaurant',
+        'venue_name',
+        'venue',
+        'company_name',
+        'company',
+        'business_name',
+        'name',
+      ) || '';
+    const contactName = getAny(
+      'contact_name',
+      'contact',
+      'contact_person',
+      'manager',
+      'owner',
+      'point_of_contact',
+      'poc',
+    );
     const email = get('email');
     const phone = getAny('phone', 'telephone', 'tel', 'mobile');
     if (!name || (!email && !phone)) {
-      errors.push(`Row ${row + 1}: name and phone (or email) are required.`);
+      errors.push(`Row ${row + 1}: restaurant name and phone (or email) are required.`);
       continue;
     }
 
@@ -480,6 +497,7 @@ export function parseCustomersCsv(text: string): { customers: Customer[]; errors
     customers.push({
       id: getAny('id', 'lead_id', 'leadid') || `${Date.now()}-${row}`,
       name,
+      contactName: contactName || undefined,
       email: email || '',
       phone,
       address: (() => {

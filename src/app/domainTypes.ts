@@ -11,7 +11,10 @@ import {
 
 export interface Customer {
   id: string;
+  /** Restaurant / venue trading name — primary CRM identity */
   name: string;
+  /** Person to speak to (manager, owner, booker) */
+  contactName?: string;
   email: string;
   phone: string;
   address: string;

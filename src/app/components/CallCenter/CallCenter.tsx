@@ -349,6 +349,7 @@ export default function CallCenter() {
   const agentLabel = getExperience(app?.user?.role ?? 'staff') === 'sales' ? 'Sally' : 'Judie';
   const isSalesShell = agentLabel === 'Sally';
   const [leadFormCallId, setLeadFormCallId] = useState<string | null>(null);
+  const [leadFormRestaurant, setLeadFormRestaurant] = useState('');
   const [leadFormName, setLeadFormName] = useState('');
   const [leadFormEmail, setLeadFormEmail] = useState('');
   const [leadFormNotes, setLeadFormNotes] = useState('');
@@ -833,6 +834,7 @@ export default function CallCenter() {
 
   function openLeadForm(call: Pick<CallRecord, 'id' | 'from' | 'contactName' | 'displayPhone' | 'partyPhone' | 'metadata'>) {
     setLeadFormCallId(call.id);
+    setLeadFormRestaurant('');
     setLeadFormName(call.contactName && call.contactName !== 'Guest' ? call.contactName : '');
     setLeadFormEmail('');
     setLeadFormNotes('');
@@ -843,8 +845,12 @@ export default function CallCenter() {
   }
 
   async function submitLeadFromCall(call: Pick<CallRecord, 'id' | 'from' | 'displayPhone' | 'partyPhone' | 'metadata'>) {
+    if (!leadFormRestaurant.trim()) {
+      toast.error('Enter the restaurant name');
+      return;
+    }
     if (!leadFormName.trim()) {
-      toast.error('Enter the caller\'s name to create a lead');
+      toast.error('Enter the point of contact');
       return;
     }
     setCreatingLead(true);
@@ -856,14 +862,15 @@ export default function CallCenter() {
         body: JSON.stringify({
           callId: call.id,
           phone,
-          name: leadFormName.trim(),
+          name: leadFormRestaurant.trim(),
+          contactName: leadFormName.trim(),
           email: leadFormEmail.trim() || undefined,
           notes: leadFormNotes.trim() || undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message ?? data.error ?? 'Failed to create lead');
-      toast.success(`Lead created for ${leadFormName.trim()} — visible in CRM`);
+      toast.success(`Lead created for ${leadFormRestaurant.trim()} — ${leadFormName.trim()}`);
       if (app?.upsertCustomer && data.customer?.id) {
         app.upsertCustomer(data.customer as Parameters<typeof app.upsertCustomer>[0]);
       }
@@ -887,12 +894,20 @@ export default function CallCenter() {
             <Input value={formatPhone(call.from)} disabled className="font-mono" />
           </div>
           <div>
-            <Label>Caller name</Label>
+            <Label>Restaurant name</Label>
+            <Input
+              value={leadFormRestaurant}
+              onChange={e => setLeadFormRestaurant(e.target.value)}
+              placeholder="Venue trading name"
+              autoFocus
+            />
+          </div>
+          <div>
+            <Label>Point of contact</Label>
             <Input
               value={leadFormName}
               onChange={e => setLeadFormName(e.target.value)}
-              placeholder="Name from the call, or type it in"
-              autoFocus
+              placeholder="Manager or owner from the call"
             />
           </div>
           <div>
@@ -916,7 +931,7 @@ export default function CallCenter() {
           <Button
             size="sm"
             onClick={() => submitLeadFromCall(call)}
-            disabled={creatingLead || !leadFormName.trim()}
+            disabled={creatingLead || !leadFormRestaurant.trim() || !leadFormName.trim()}
           >
             {creatingLead ? 'Creating…' : 'Save as new lead'}
           </Button>

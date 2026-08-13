@@ -14,7 +14,7 @@ import { Facebook, Instagram, Search as GoogleIcon, Phone, PhoneCall, Mail, User
 import { toast } from 'sonner';
 import { AddressMapLink } from './ui/AddressMapLink';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { getDueFollowUps, isCallQueueLead, isLeadCustomer, displayLeadEmail } from '../engine/leads/leadService';
+import { getDueFollowUps, isCallQueueLead, isLeadCustomer, displayLeadEmail, leadHeadline, leadContactName } from '../engine/leads/leadService';
 import {
   AIM_LABELS,
   LEAD_AIMS,
@@ -60,6 +60,7 @@ const PAGE_SIZE = 50;
 
 const EMPTY_LEAD_FORM = {
   name: '',
+  contactName: '',
   phone: '',
   email: '',
   address: '',
@@ -217,9 +218,14 @@ export default function ComprehensiveCRM() {
 
   const handleCreateLead = () => {
     const name = leadForm.name.trim();
+    const contactName = leadForm.contactName.trim();
     const phone = leadForm.phone.trim();
     if (!name) {
-      toast.error('Name is required');
+      toast.error('Restaurant name is required');
+      return;
+    }
+    if (!contactName) {
+      toast.error('Point of contact is required');
       return;
     }
     if (!phone && !leadForm.email.trim()) {
@@ -238,6 +244,7 @@ export default function ComprehensiveCRM() {
         : [];
       const created = addCustomer({
         name,
+        contactName,
         phone,
         email: leadForm.email.trim(),
         address: leadForm.address.trim(),
@@ -259,7 +266,7 @@ export default function ComprehensiveCRM() {
         lastContact: new Date().toISOString(),
         activities,
       });
-      toast.success(`Lead created: ${created.name}`);
+      toast.success(`Lead created: ${leadHeadline(created)}`);
       setIsAddLeadOpen(false);
       setLeadForm(EMPTY_LEAD_FORM);
       const lead = toLead(created);
@@ -388,8 +395,10 @@ export default function ComprehensiveCRM() {
       if (!matchesStatus) return false;
     }
     const matchesSource = filterSource === 'all' || lead.source === filterSource;
-    const matchesSearch = String(lead.name ?? '').toLowerCase().includes(searchTerm.toLowerCase())
-      || String(lead.email ?? '').toLowerCase().includes(searchTerm.toLowerCase())
+    const q = searchTerm.toLowerCase();
+    const matchesSearch = String(lead.name ?? '').toLowerCase().includes(q)
+      || String(lead.contactName ?? '').toLowerCase().includes(q)
+      || String(lead.email ?? '').toLowerCase().includes(q)
       || String(lead.phone ?? '').includes(searchTerm)
       || String(lead.leadBatchId ?? '').includes(searchTerm);
     return matchesSource && matchesSearch;
@@ -466,11 +475,20 @@ export default function ComprehensiveCRM() {
                   <div className="space-y-4 pt-2">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <Label className="font-semibold">Name *</Label>
+                        <Label className="font-semibold">Restaurant name *</Label>
                         <Input
                           value={leadForm.name}
                           onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })}
-                          placeholder="Contact or company name"
+                          placeholder="e.g. Dishoom Shoreditch"
+                          className="mt-1 min-h-11"
+                        />
+                      </div>
+                      <div>
+                        <Label className="font-semibold">Point of contact *</Label>
+                        <Input
+                          value={leadForm.contactName}
+                          onChange={(e) => setLeadForm({ ...leadForm, contactName: e.target.value })}
+                          placeholder="e.g. Priya Shah, General Manager"
                           className="mt-1 min-h-11"
                         />
                       </div>
@@ -489,7 +507,7 @@ export default function ComprehensiveCRM() {
                           type="email"
                           value={leadForm.email}
                           onChange={(e) => setLeadForm({ ...leadForm, email: e.target.value })}
-                          placeholder="name@company.com"
+                          placeholder="gm@restaurant.com"
                           className="mt-1 min-h-11"
                         />
                       </div>
@@ -521,7 +539,7 @@ export default function ComprehensiveCRM() {
                       <Input
                         value={leadForm.address}
                         onChange={(e) => setLeadForm({ ...leadForm, address: e.target.value })}
-                        placeholder="Site or company address"
+                        placeholder="Restaurant address"
                         className="mt-1 min-h-11"
                       />
                     </div>
@@ -531,7 +549,7 @@ export default function ComprehensiveCRM() {
                         <Input
                           value={leadForm.tags}
                           onChange={(e) => setLeadForm({ ...leadForm, tags: e.target.value })}
-                          placeholder="saas, builder-diddies"
+                          placeholder="indian, delivery, soho"
                           className="mt-1 min-h-11"
                         />
                       </div>
@@ -606,7 +624,7 @@ export default function ComprehensiveCRM() {
                         if (lead) setSelectedLead(lead);
                       }}
                     >
-                      {c.name}
+                      {leadHeadline(c)}
                     </Button>
                     <span className="text-xs text-indigo-700">
                       {c.nextFollowUp
@@ -654,7 +672,7 @@ export default function ComprehensiveCRM() {
                       if (lead) setSelectedLead(lead);
                     }}
                   >
-                    {c.name}
+                    {leadHeadline(c)}
                   </Button>
                 ))}
               </div>
@@ -778,7 +796,8 @@ export default function ComprehensiveCRM() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
+                    <TableHead>Restaurant</TableHead>
+                    <TableHead className="hidden sm:table-cell">Contact</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead className="hidden md:table-cell min-w-[12rem]">Address</TableHead>
                     <TableHead>Status</TableHead>
@@ -802,6 +821,9 @@ export default function ComprehensiveCRM() {
                             <span className={`w-2 h-2 shrink-0 rounded-full ${getScoreColor(lead.leadScore)}`} title={`Lead score: ${lead.leadScore}`} />
                             <span className="font-medium truncate">{lead.name}</span>
                           </div>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell max-w-[10rem] overflow-hidden">
+                          <span className="text-sm text-slate-600 truncate block">{leadContactName(lead) || '—'}</span>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">{lead.phone || '—'}</TableCell>
                         <TableCell className="hidden md:table-cell max-w-[18rem] overflow-hidden">
@@ -906,9 +928,20 @@ export default function ComprehensiveCRM() {
             <>
               <DialogHeader>
                 <DialogTitle className="text-3xl">{selectedLead.name}</DialogTitle>
+                {leadContactName(selectedLead) ? (
+                  <p className="text-slate-600">Point of contact: {leadContactName(selectedLead)}</p>
+                ) : null}
               </DialogHeader>
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="font-bold">Restaurant</Label>
+                    <p className="mt-1 font-medium">{selectedLead.name}</p>
+                  </div>
+                  <div>
+                    <Label className="font-bold">Point of contact</Label>
+                    <p className="mt-1">{leadContactName(selectedLead) || '—'}</p>
+                  </div>
                   <div>
                     <Label className="font-bold">Source</Label>
                     <div className="flex items-center gap-2 mt-1">
@@ -1133,7 +1166,7 @@ export default function ComprehensiveCRM() {
         <CallThisPersonDialog
           open={callThisPersonOpen}
           onOpenChange={setCallThisPersonOpen}
-          leadName={selectedLead.name}
+          leadName={leadHeadline(selectedLead)}
           leadPhone={selectedLead.phone}
           customerId={selectedLead.id}
           defaultBrief={defaultBrief}

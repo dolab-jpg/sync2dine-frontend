@@ -7,6 +7,7 @@ import { parseCustomersCsv } from './dataImportExportService';
 
 export type SallyDialRow = {
   company: string;
+  contactName?: string;
   phone: string;
   customerId?: string;
   venueType?: string;
@@ -167,7 +168,10 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
   const hasHeader =
     headerCells.some((h) => h === 'phone' || h.includes('phone'))
     && headerCells.some((h) =>
-      h === 'company_name'
+      h === 'restaurant_name'
+      || h === 'restaurant'
+      || h === 'venue_name'
+      || h === 'company_name'
       || h === 'company'
       || h === 'name'
       || h === 'business_name'
@@ -177,15 +181,34 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
   const headers = hasHeader ? headerCells : ['company', 'phone'];
   const body = hasHeader ? lines.slice(1) : lines;
 
-  const companyI = colIndex(headers, 'company_name', 'company', 'business_name', 'name');
+  const companyI = colIndex(
+    headers,
+    'restaurant_name',
+    'restaurant',
+    'venue_name',
+    'company_name',
+    'company',
+    'business_name',
+    'name',
+  );
+  const contactI = colIndex(
+    headers,
+    'contact_name',
+    'contact',
+    'contact_person',
+    'manager',
+    'owner',
+    'point_of_contact',
+    'poc',
+  );
   const phoneI = colIndex(headers, 'phone', 'telephone', 'tel', 'mobile');
   const leadIdI = colIndex(headers, 'lead_id', 'leadid', 'id');
   // Avoid treating lead_id as company: if companyI resolved to lead_id column, fix.
   const companyIdx =
     companyI >= 0 && headers[companyI] === 'lead_id'
-      ? colIndex(headers, 'company_name', 'company', 'business_name')
+      ? colIndex(headers, 'restaurant_name', 'company_name', 'company', 'business_name')
       : companyI === leadIdI && leadIdI >= 0
-        ? colIndex(headers, 'company_name', 'company', 'business_name')
+        ? colIndex(headers, 'restaurant_name', 'company_name', 'company', 'business_name')
         : companyI;
 
   const dialRows: SallyDialRow[] = [];
@@ -214,16 +237,27 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
     let company = cell(values, companyIdx >= 0 ? companyIdx : 0);
     if (!company || /^\d+$/.test(company) || company === cell(values, leadIdI)) {
       company =
-        get('company_name')
+        get('restaurant_name')
+        || get('restaurant')
+        || get('venue_name')
+        || get('company_name')
         || get('company')
         || get('business_name')
         || get('name')
         || '';
     }
     if (!company || company === phone) {
-      errors.push(`Row ${r + (hasHeader ? 2 : 1)}: company name required.`);
+      errors.push(`Row ${r + (hasHeader ? 2 : 1)}: restaurant name required.`);
       continue;
     }
+
+    const contactName =
+      cell(values, contactI)
+      || get('contact_name')
+      || get('contact')
+      || get('manager')
+      || get('owner')
+      || '';
 
     const leadId = cell(values, leadIdI);
     const address = buildAddress(get);
@@ -233,6 +267,7 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
 
     dialRows.push({
       company,
+      contactName: contactName || undefined,
       phone,
       customerId: leadId || undefined,
       venueType,
@@ -244,13 +279,14 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
   }
 
   // Build CRM customers via existing parser (synthetic CSV with aliases).
-  const csvHeader = 'id,name,phone,address,notes,source,campaign,leadBatchId,tags\n';
+  const csvHeader = 'id,restaurant_name,contact_name,phone,address,notes,source,campaign,leadBatchId,tags\n';
   const csvBody = dialRows
     .map((row) => {
       const esc = (v: string) => (/,|"|\n/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
       return [
         esc(row.leadId || ''),
         esc(row.company),
+        esc(row.contactName || ''),
         esc(row.phone),
         esc(row.address || ''),
         esc(row.notes || ''),
