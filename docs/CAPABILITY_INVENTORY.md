@@ -28,9 +28,8 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 | Legacy phone orchestrator | � | � | throw stub | quarantined | � | dead | do not edit |
 | IVR | phone | � | `ivr-handler` | disabled | � | off | `IVR_ENABLED` |
 | Concierge outbound | channel | — | `/api/concierge/outbound` | partial | queue |
-| Sally venue-timed dials + referrals | phone/sales | CRM dial / CSV | `sally/dial-windows`, `sally/schedule-outbound`, `captureReferralAndQueue` | CSV research + venue windows | live | CSV hours + gatekeeper referral |
-| Sally venue-timed dials + referrals | phone/sales | CRM dial / CSV | `sally/dial-windows`, `sally/schedule-outbound`, `captureReferralAndQueue` | live | Call Centre + Sally CSV research hours before dial; gatekeeper referral | live | API |
-| Campaign progress (Cynthia) | sales/chat | Cynthia overlay | `getCampaignProgress` + `/api/campaigns/progress` | live | ask in chat: how many calls / contacted | live | API + SPA |
+| Sally venue-timed dials + referrals | phone/sales | CRM dial / CSV | `sally/dial-windows`, `sally/schedule-outbound`, `captureReferralAndQueue` | CSV research + venue windows | live | live | Call Centre + Sally CSV research hours before dial; gatekeeper referral |
+| Campaign progress (Cynthia) | sales/chat | Cynthia overlay | `getCampaignProgress` + `/api/campaigns/progress` | `getCampaignProgress` | CRM + queue + calls | live | Ask Cynthia: how many calls / contacted |
 
 ## Restaurant operations
 

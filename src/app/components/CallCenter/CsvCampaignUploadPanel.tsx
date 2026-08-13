@@ -39,7 +39,7 @@ export default function CsvCampaignUploadPanel({ onQueued }: { onQueued?: () => 
       setLastResult({ queued, skipped, held });
       toast.success(
         held > 0
-          ? `Queued ${queued}; held ${held} for hours research${skipped ? ` (${skipped} skipped)` : ''}`
+          ? `Queued ${queued}; held ${held} until opening hours are known${skipped ? ` (${skipped} skipped)` : ''}`
           : `Queued ${queued} calls${skipped ? ` (${skipped} skipped)` : ''}`,
       );
       onQueued?.();
