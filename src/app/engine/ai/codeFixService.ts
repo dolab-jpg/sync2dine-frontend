@@ -185,6 +185,20 @@ export async function mergeCodeFixBatch(opts: {
   });
 }
 
+export async function deleteCodeFix(jobId: string): Promise<{ ok: boolean; id: string }> {
+  return api(`/api/ai/code-fix/${encodeURIComponent(jobId)}`, { method: 'DELETE' });
+}
+
+export async function deleteCodeFixBatch(ids: string[]): Promise<{
+  results: Array<{ id: string; ok: boolean }>;
+  deleted: number;
+}> {
+  return api('/api/ai/code-fix/delete-batch', {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  });
+}
+
 export async function listCodeFixJobs(params?: {
   status?: string;
   search?: string;
