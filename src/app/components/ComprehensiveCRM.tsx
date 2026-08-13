@@ -10,11 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Badge } from './ui/badge';
-import { Facebook, Instagram, Search as GoogleIcon, Phone, PhoneCall, Mail, User, TrendingUp, Plus, ExternalLink } from 'lucide-react';
+import { Facebook, Instagram, Search as GoogleIcon, Phone, PhoneCall, Mail, User, Users, TrendingUp, Plus, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { AddressMapLink } from './ui/AddressMapLink';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { getDueFollowUps, isCallQueueLead, isLeadCustomer, displayLeadEmail, leadHeadline, leadContactName } from '../engine/leads/leadService';
+import { getDueFollowUps, isCallQueueLead, isLeadCustomer, displayLeadEmail, leadHeadline, leadContactName, leadPeople } from '../engine/leads/leadService';
 import {
   AIM_LABELS,
   LEAD_AIMS,
@@ -133,6 +133,10 @@ export default function ComprehensiveCRM() {
 
   const selectedActivities = useMemo(
     () => (selectedLead ? normalizeLeadActivities(selectedLead.activities) : []),
+    [selectedLead],
+  );
+  const selectedPeople = useMemo(
+    () => (selectedLead ? leadPeople(selectedLead) : []),
     [selectedLead],
   );
 
@@ -398,6 +402,7 @@ export default function ComprehensiveCRM() {
     const q = searchTerm.toLowerCase();
     const matchesSearch = String(lead.name ?? '').toLowerCase().includes(q)
       || String(lead.contactName ?? '').toLowerCase().includes(q)
+      || leadPeople(lead).some((p) => p.name.toLowerCase().includes(q) || (p.phone ?? '').includes(searchTerm))
       || String(lead.email ?? '').toLowerCase().includes(q)
       || String(lead.phone ?? '').includes(searchTerm)
       || String(lead.leadBatchId ?? '').includes(searchTerm);
@@ -928,19 +933,50 @@ export default function ComprehensiveCRM() {
             <>
               <DialogHeader>
                 <DialogTitle className="text-3xl">{selectedLead.name}</DialogTitle>
-                {leadContactName(selectedLead) ? (
-                  <p className="text-slate-600">Point of contact: {leadContactName(selectedLead)}</p>
-                ) : null}
               </DialogHeader>
               <div className="space-y-6">
+                <div className="border rounded-2xl p-4 bg-amber-50 space-y-3">
+                  <Label className="font-bold text-lg flex items-center gap-2">
+                    <Users className="w-5 h-5 text-amber-800" />
+                    People
+                  </Label>
+                  {selectedPeople.length === 0 ? (
+                    <p className="text-sm text-slate-500">No people on this account yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {selectedPeople.map((person, i) => (
+                        <li
+                          key={`${person.name}-${person.phone ?? ''}-${i}`}
+                          className="flex flex-wrap items-baseline gap-x-3 gap-y-1 bg-white/80 rounded-xl border border-amber-100 px-3 py-2"
+                        >
+                          <span className="font-medium text-slate-800">{person.name}</span>
+                          {person.role ? (
+                            <span className="text-xs text-amber-800 uppercase tracking-wide">{person.role}</span>
+                          ) : null}
+                          {person.phone ? (
+                            <span className="text-sm text-slate-600">{person.phone}</span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {selectedLead.tags?.length ? (
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {selectedLead.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="text-xs bg-white text-slate-700">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                  {selectedLead.notes?.trim() ? (
+                    <p className="text-sm text-slate-600 whitespace-pre-wrap">{selectedLead.notes}</p>
+                  ) : null}
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="font-bold">Restaurant</Label>
                     <p className="mt-1 font-medium">{selectedLead.name}</p>
-                  </div>
-                  <div>
-                    <Label className="font-bold">Point of contact</Label>
-                    <p className="mt-1">{leadContactName(selectedLead) || '—'}</p>
                   </div>
                   <div>
                     <Label className="font-bold">Source</Label>

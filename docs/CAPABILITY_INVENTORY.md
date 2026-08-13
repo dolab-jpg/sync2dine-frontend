@@ -29,6 +29,7 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 | IVR | phone | � | `ivr-handler` | disabled | � | off | `IVR_ENABLED` |
 | Concierge outbound | channel | — | `/api/concierge/outbound` | partial | queue |
 | Sally venue-timed dials + referrals | phone/sales | CRM dial / CSV | `sally/dial-windows`, `sally/schedule-outbound`, `captureReferralAndQueue` | CSV research + venue windows | live | live | Call Centre + Sally CSV research hours before dial; gatekeeper referral |
+| CSV auto-import + people memory | sales/CRM | `/crm` Upload CSV | `normalize-csv`, `toUkE164`, `rememberPerson` | DeepSeek map + E.164; research if undialable | live | live | Upload TSV; CRM people list; Sally rememberPerson |
 | Campaign progress (Cynthia) | sales/chat | Cynthia overlay | `getCampaignProgress` + `/api/campaigns/progress` | `getCampaignProgress` | CRM + queue + calls | live | Ask Cynthia: how many calls / contacted |
 
 ## Restaurant operations

@@ -8,13 +8,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseCustomersCsv } from '../../engine/data/dataImportExportService';
-import { parseSallyLeadSheetCsv } from '../../engine/data/sallyLeadSheetParser';
+import { normalizeLeadSheet } from '../../engine/data/normalizeLeadCsv';
 
 type Props = {
   onImport: (customers: Customer[]) => Promise<void> | void;
 };
 
-/** Paste or upload scraped lead rows (restaurant + point of contact + phone required). */
+/** Paste or upload scraped lead rows — formats and UK phones (0 / +44) are detected automatically. */
 export function ScrapeLeadImportDialog({ onImport }: Props) {
   const [open, setOpen] = useState(false);
   const [paste, setPaste] = useState('');
@@ -51,41 +51,47 @@ export function ScrapeLeadImportDialog({ onImport }: Props) {
   }
 
   async function runImport(csvText: string) {
-    const sheet = parseSallyLeadSheetCsv(csvText, { batchId });
-    let customers = sheet.customers;
-    let errors = sheet.errors;
-    if (!customers.length) {
-      const fallback = parseCustomersCsv(csvText);
-      customers = fallback.customers;
-      errors = [...errors, ...fallback.errors];
-    }
-    if (errors.length && !customers.length) {
-      toast.error(errors[0]);
-      return;
-    }
-    const stamped = customers.map((c) => ({
-      ...c,
-      source: c.source ?? ('purchased' as const),
-      leadBatchId: c.leadBatchId || batchId,
-      campaign: c.campaign || batchId,
-      callQueueStatus: 'not_called' as const,
-      callAttemptCount: 0,
-      status: 'lead' as const,
-      tags: [...new Set([...(c.tags ?? []), 'scraped', batchId])],
-    }));
-    if (!stamped.length) {
-      toast.error('No leads found to import');
-      return;
-    }
+    const toastId = toast.loading('Recognising sheet…');
     setBusy(true);
     try {
+      const sheet = await normalizeLeadSheet(csvText, batchId);
+      let customers = sheet.customers;
+      let errors = sheet.errors;
+      if (!customers.length) {
+        const fallback = parseCustomersCsv(csvText);
+        customers = fallback.customers;
+        errors = [...errors, ...fallback.errors];
+      }
+      if (errors.length && !customers.length) {
+        toast.error(errors[0], { id: toastId });
+        return;
+      }
+      const stamped = customers.map((c) => ({
+        ...c,
+        source: c.source ?? ('purchased' as const),
+        leadBatchId: c.leadBatchId || batchId,
+        campaign: c.campaign || batchId,
+        callQueueStatus: 'not_called' as const,
+        callAttemptCount: 0,
+        status: 'lead' as const,
+        tags: [...new Set([...(c.tags ?? []), 'scraped', batchId])],
+        people: c.people?.length
+          ? c.people
+          : (c.contactName
+            ? [{ name: c.contactName, role: 'Manager' as const, phone: c.phone || undefined }]
+            : c.people),
+      }));
+      if (!stamped.length) {
+        toast.error('No leads found to import', { id: toastId });
+        return;
+      }
       await onImport(stamped);
-      toast.success(`Imported ${stamped.length} lead${stamped.length === 1 ? '' : 's'} into Call Queue`);
+      toast.success(`Imported ${stamped.length} lead${stamped.length === 1 ? '' : 's'}`, { id: toastId });
       if (errors.length) toast.message(`${errors.length} row warning(s)`);
       setPaste('');
       setOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Import failed');
+      toast.error(err instanceof Error ? err.message : 'Import failed', { id: toastId });
     } finally {
       setBusy(false);
     }
@@ -114,29 +120,30 @@ export function ScrapeLeadImportDialog({ onImport }: Props) {
             />
           </div>
           <div>
-            <Label>Paste CSV (restaurant, contact, phone)</Label>
+            <Label>Paste CSV</Label>
             <p className="text-xs text-slate-500 mt-0.5">
-              Headers: restaurant_name,contact_name,phone (required). Aliases: company_name, manager/owner.
-              Two-column restaurant+phone rows are rejected — Contact would show “—”.
+              Formats are detected automatically — no column mapping.
+              UK phones starting 0 or +44 are normalised to E.164.
             </p>
             <Textarea
               className="mt-1 min-h-[140px] font-mono text-sm"
               value={paste}
               onChange={(e) => setPaste(e.target.value)}
-              placeholder={'restaurant_name,contact_name,phone\nThe Golden Dragon,Jane Smith,+447700900123'}
+              placeholder={'restaurant_name,contact_name,phone\nThe Golden Dragon,Jane Smith,07700900123'}
             />
           </div>
           <div>
             <Label>Or upload CSV</Label>
             <Input
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,text/csv,.tsv,text/tab-separated-values"
               className="mt-1"
+              disabled={busy}
               onChange={async (e) => {
                 const file = e.target.files?.[0];
+                e.target.value = '';
                 if (!file) return;
-                const text = await file.text();
-                await runImport(text);
+                await runImport(await file.text());
               }}
             />
           </div>
@@ -145,7 +152,7 @@ export function ScrapeLeadImportDialog({ onImport }: Props) {
             disabled={busy || !paste.trim()}
             onClick={() => runImport(rowsFromPaste(paste))}
           >
-            {busy ? 'Importing…' : 'Import into Call Queue'}
+            {busy ? 'Recognising sheet…' : 'Import into Call Queue'}
           </Button>
         </div>
       </DialogContent>

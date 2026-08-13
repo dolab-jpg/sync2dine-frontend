@@ -6,8 +6,42 @@ export function leadRestaurantName(c: Pick<Customer, 'name'>): string {
   return (c.name ?? '').trim();
 }
 
+export type LeadPerson = { name: string; role?: string; phone?: string };
+
 export function leadContactName(c: Pick<Customer, 'contactName'>): string {
   return (c.contactName ?? '').trim();
+}
+
+type LeadPeopleSource = Pick<Customer, 'contactName' | 'phone' | 'people' | 'tags' | 'leadBatchId'> & {
+  contacts?: LeadPerson[];
+};
+
+/** People on the account: people / contacts / contactName fallback (Manager when from CSV). */
+export function leadPeople(c: LeadPeopleSource): LeadPerson[] {
+  const fromPeople = (c.people ?? []).filter((p) => (p?.name ?? '').trim());
+  if (fromPeople.length) {
+    return fromPeople.map((p) => ({
+      name: p.name.trim(),
+      role: p.role?.trim() || undefined,
+      phone: p.phone?.trim() || undefined,
+    }));
+  }
+  const fromContacts = (c.contacts ?? []).filter((p) => (p?.name ?? '').trim());
+  if (fromContacts.length) {
+    return fromContacts.map((p) => ({
+      name: p.name.trim(),
+      role: p.role?.trim() || undefined,
+      phone: p.phone?.trim() || undefined,
+    }));
+  }
+  const name = leadContactName(c);
+  if (!name) return [];
+  const fromCsv = !!(c.leadBatchId || (c.tags ?? []).some((t) => t === 'scraped' || t === 'sales-csv'));
+  return [{
+    name,
+    role: fromCsv ? 'Manager' : undefined,
+    phone: (c.phone ?? '').trim() || undefined,
+  }];
 }
 
 /** Restaurant — contact, for lists, callbacks, and Sally briefs. */

@@ -15,6 +15,8 @@ export interface Customer {
   name: string;
   /** Person to speak to (manager, owner, booker) */
   contactName?: string;
+  /** People on the account (CSV import + CRM drawer). */
+  people?: Array<{ name: string; role?: string; phone?: string }>;
   email: string;
   phone: string;
   address: string;

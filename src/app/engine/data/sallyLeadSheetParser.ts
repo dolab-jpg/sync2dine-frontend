@@ -34,13 +34,59 @@ const DAY_LABELS: Record<(typeof DAY_KEYS)[number], string> = {
   sun: 'Sun',
 };
 
+export type SallyLeadSheetColumnMap = {
+  restaurant?: string;
+  contact?: string;
+  phone?: string;
+};
+
+export type ParseSallyLeadSheetOpts = {
+  batchId?: string;
+  columnMap?: SallyLeadSheetColumnMap;
+  defaultContact?: string;
+};
+
+export type InspectedLeadSheet = {
+  headers: string[];
+  rows: string[][];
+  delimiter: string;
+};
+
 function normalizeHeader(header: string): string {
   return header.trim().toLowerCase().replace(/\s+/g, '_').replace(/-+/g, '_');
 }
 
-/** Split CSV/TSV line respecting quotes. */
-export function parseSheetLine(line: string): string[] {
-  const delim = line.includes('\t') && !line.includes(',') ? '\t' : ',';
+/**
+ * Detect delimiter from the HEADER only.
+ * Tabs win even when later data cells contain commas (Google Sheet TSV addresses).
+ */
+export function detectSheetDelimiter(headerLine: string): '\t' | ',' {
+  return headerLine.includes('\t') ? '\t' : ',';
+}
+
+/**
+ * Thin UK E.164 helper for dial rows (also used when DeepSeek is down).
+ * 1296715055 / 01296715055 / 441296715055 / +441296715055 -> +441296715055
+ * 07700900123 / +447700900123 -> +447700900123
+ */
+export function toUkE164(raw: string): string {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return trimmed;
+  const digits = trimmed.replace(/\D/g, '');
+  if (!digits) return trimmed;
+  if (digits.startsWith('44')) return `+${digits}`;
+  if (digits.startsWith('0')) return `+44${digits.slice(1)}`;
+  // 10-digit NSN missing leading 0 (landline 1… or mobile 7…), including a wrong + prefix.
+  if (digits.length === 10 && (digits.startsWith('1') || digits.startsWith('7'))) {
+    return `+44${digits}`;
+  }
+  if (trimmed.startsWith('+')) return `+${digits}`;
+  return `+${digits}`;
+}
+
+/** Split CSV/TSV line respecting quotes. Pass delim from the header -- do not re-detect per data line. */
+export function parseSheetLine(line: string, delim?: '\t' | ','): string[] {
+  const d = delim ?? detectSheetDelimiter(line);
   const fields: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -59,7 +105,7 @@ export function parseSheetLine(line: string): string[] {
       }
     } else if (ch === '"') {
       inQuotes = true;
-    } else if (ch === delim || (delim === ',' && (ch === ';' || ch === '|'))) {
+    } else if (ch === d || (d === ',' && (ch === ';' || ch === '|'))) {
       fields.push(current.trim());
       current = '';
     } else {
@@ -70,15 +116,33 @@ export function parseSheetLine(line: string): string[] {
   return fields;
 }
 
+/**
+ * Sample headers + rows for DeepSeek / UI column mapping.
+ * Empty header cells keep their column index (not collapsed).
+ */
+export function inspectLeadSheetCsv(text: string): InspectedLeadSheet {
+  const trimmed = text.replace(/^\uFEFF/, '').trim();
+  if (!trimmed) {
+    return { headers: [], rows: [], delimiter: ',' };
+  }
+  const lines = trimmed.split(/\r?\n/).filter((l) => l.trim());
+  const delimiter = detectSheetDelimiter(lines[0]);
+  const headers = parseSheetLine(lines[0], delimiter);
+  const rows = lines.slice(1).map((l) => parseSheetLine(l, delimiter));
+  return { headers, rows, delimiter };
+}
+
 function colIndex(headers: string[], ...aliases: string[]): number {
-  const norms = aliases.map((a) => normalizeHeader(a));
+  const norms = aliases.map((a) => normalizeHeader(a)).filter(Boolean);
   for (let i = 0; i < headers.length; i++) {
     const h = headers[i];
+    if (!h) continue; // blank header cells keep position but are not named
     if (norms.includes(h)) return i;
   }
   // Prefer exact company_name over bare "name" substring matches on lead_id etc.
   for (let i = 0; i < headers.length; i++) {
     const h = headers[i];
+    if (!h) continue;
     for (const a of norms) {
       if (a === 'name' && (h === 'name' || h === 'company' || h === 'company_name' || h === 'business_name')) {
         return i;
@@ -156,15 +220,17 @@ function buildNotes(opts: {
 
 /**
  * Parse Sally lead sheet CSV/TSV (Google Sheet export) into dial rows + CRM customers.
+ * Blank / missing contact_name fills defaultContact ('Manager') instead of rejecting the row.
  */
-export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }): ParsedSallyLeadSheet {
+export function parseSallyLeadSheetCsv(text: string, opts?: ParseSallyLeadSheetOpts): ParsedSallyLeadSheet {
   const trimmed = text.replace(/^\uFEFF/, '').trim();
   if (!trimmed) {
     return { dialRows: [], customers: [], errors: ['CSV is empty.'] };
   }
 
   const lines = trimmed.split(/\r?\n/).filter((l) => l.trim());
-  const headerCells = parseSheetLine(lines[0]).map(normalizeHeader);
+  const delim = detectSheetDelimiter(lines[0]);
+  const headerCells = parseSheetLine(lines[0], delim).map(normalizeHeader);
   const hasHeader =
     headerCells.some((h) => h === 'phone' || h.includes('phone'))
     && headerCells.some((h) =>
@@ -180,9 +246,12 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
 
   const headers = hasHeader ? headerCells : ['company', 'phone'];
   const body = hasHeader ? lines.slice(1) : lines;
+  const map = opts?.columnMap;
+  const defaultContact = opts?.defaultContact || 'Manager';
 
   const companyI = colIndex(
     headers,
+    ...(map?.restaurant ? [map.restaurant] : []),
     'restaurant_name',
     'restaurant',
     'venue_name',
@@ -193,6 +262,7 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
   );
   const contactI = colIndex(
     headers,
+    ...(map?.contact ? [map.contact] : []),
     'contact_name',
     'contact',
     'contact_person',
@@ -201,7 +271,14 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
     'point_of_contact',
     'poc',
   );
-  const phoneI = colIndex(headers, 'phone', 'telephone', 'tel', 'mobile');
+  const phoneI = colIndex(
+    headers,
+    ...(map?.phone ? [map.phone] : []),
+    'phone',
+    'telephone',
+    'tel',
+    'mobile',
+  );
   const leadIdI = colIndex(headers, 'lead_id', 'leadid', 'id');
   // Avoid treating lead_id as company: if companyI resolved to lead_id column, fix.
   const companyIdx =
@@ -221,18 +298,19 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
   };
 
   for (let r = 0; r < body.length; r++) {
-    const values = parseSheetLine(body[r]);
+    const values = parseSheetLine(body[r], delim);
     if (values.every((v) => !v.trim())) continue;
 
     const get = (key: string) => headerGet(headers, values, key);
-    const phone =
+    const phoneRaw =
       cell(values, phoneI >= 0 ? phoneI : 1)
       || values.find((p) => /\d{7,}/.test(p.replace(/\D/g, '')))
       || '';
-    if (!phone || !/\d{7,}/.test(phone.replace(/\D/g, ''))) {
+    if (!phoneRaw || !/\d{7,}/.test(phoneRaw.replace(/\D/g, ''))) {
       errors.push(`Row ${r + (hasHeader ? 2 : 1)}: phone required.`);
       continue;
     }
+    const phone = toUkE164(phoneRaw);
 
     let company = cell(values, companyIdx >= 0 ? companyIdx : 0);
     if (!company || /^\d+$/.test(company) || company === cell(values, leadIdI)) {
@@ -246,7 +324,7 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
         || get('name')
         || '';
     }
-    if (!company || company === phone) {
+    if (!company || company === phone || company === phoneRaw) {
       errors.push(`Row ${r + (hasHeader ? 2 : 1)}: restaurant name required.`);
       continue;
     }
@@ -257,11 +335,7 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
       || get('contact')
       || get('manager')
       || get('owner')
-      || '';
-    if (!contactName) {
-      errors.push(`Row ${r + (hasHeader ? 2 : 1)}: point of contact required (contact_name / manager / owner).`);
-      continue;
-    }
+      || defaultContact;
 
     const leadId = cell(values, leadIdI);
     const address = buildAddress(get);

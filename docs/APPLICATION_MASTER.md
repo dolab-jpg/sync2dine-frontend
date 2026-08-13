@@ -205,7 +205,8 @@ Data column: Supabase is primary unless marked cache/fallback.
 
 | Feature | UI | Components | Engine | API | Data |
 |---------|-----|------------|--------|-----|------|
-| CRM | `/crm` | `ComprehensiveCRM.tsx` + `leads/leadActivity.ts` | `leads/leadService.ts` | `/api/leads/*` | customers (`name` = restaurant, `contactName` = point of contact; CSV and from-call both required) |
+| CRM | `/crm` | `ComprehensiveCRM.tsx` + `leads/leadActivity.ts` | `leads/leadService.ts` | `/api/leads/*` | customers (`name` = restaurant; `people[]` + `contactName`; CSV auto-detect) |
+| CSV one-click import | `/crm` | `ScrapeLeadImportDialog`, `SalesCsvDialPanel` | `normalizeLeadCsv.ts`, sallyLeadSheetParser | `POST /api/leads/normalize-csv` | phone 0/+44 → E.164; people memory on account |
 | Customers | `/customers` | `CustomerManagement.tsx`, `CustomerContactsPanel.tsx` | `contacts/contactStore.ts`, leads | `/api/auth/customers`, data sync | `customers`, `contacts` |
 | Lead inbox | `/communications?tab=leads` | `mailbox/LeadInboxPanel.tsx` | `leads/leadInboxService.ts` | `/api/leads/inbox*` | lead inbox + Supabase |
 | Sales mgmt | `/sales` | `SalesManagement.tsx` | — | — | quotes/customers |

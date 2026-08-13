@@ -7,7 +7,8 @@ import { Textarea } from '../ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { PhoneOutgoing, Upload } from 'lucide-react';
 import { toast } from 'sonner';
-import { parseSallyLeadSheetCsv, type SallyDialRow } from '../../engine/data/sallyLeadSheetParser';
+import { normalizeLeadSheet } from '../../engine/data/normalizeLeadCsv';
+import type { SallyDialRow } from '../../engine/data/sallyLeadSheetParser';
 
 type Props = {
   onImport?: (customers: Customer[]) => Promise<void> | void;
@@ -25,14 +26,15 @@ export function SalesCsvDialPanel({ onImport }: Props) {
   const [dragOver, setDragOver] = useState(false);
 
   const queueRows = useCallback(async (text: string) => {
-    const parsed = parseSallyLeadSheetCsv(text, { batchId });
-    const rows: SallyDialRow[] = parsed.dialRows;
-    if (!rows.length) {
-      toast.error(parsed.errors[0] || 'No phone numbers found in CSV');
-      return;
-    }
+    const toastId = toast.loading('Recognising sheet…');
     setBusy(true);
     try {
+      const parsed = await normalizeLeadSheet(text, batchId);
+      const rows: SallyDialRow[] = parsed.dialRows;
+      if (!rows.length) {
+        toast.error(parsed.errors[0] || 'No phone numbers found in CSV', { id: toastId });
+        return;
+      }
       const res = await fetch('/api/calls/outbound/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,6 +69,11 @@ export function SalesCsvDialPanel({ onImport }: Props) {
           callAttemptCount: 0,
           status: 'lead' as const,
           tags: [...new Set([...(c.tags ?? []), 'sales-csv', 'sally', batchId])],
+          people: c.people?.length
+            ? c.people
+            : (c.contactName
+              ? [{ name: c.contactName, role: 'Manager' as const, phone: c.phone || undefined }]
+              : c.people),
         }));
         await onImport(stamped);
       }
@@ -77,12 +84,13 @@ export function SalesCsvDialPanel({ onImport }: Props) {
         held > 0
           ? `Queued ${queued}; held ${held} for hours research`
           : `Queued ${queued} Sally outbound call${queued === 1 ? '' : 's'}`,
+        { id: toastId },
       );
       if (parsed.errors.length) toast.message(`${parsed.errors.length} row warning(s)`);
       setPaste('');
       setOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Queue failed');
+      toast.error(err instanceof Error ? err.message : 'Queue failed', { id: toastId });
     } finally {
       setBusy(false);
     }
@@ -138,14 +146,16 @@ export function SalesCsvDialPanel({ onImport }: Props) {
           >
             <Upload className="w-8 h-8 mx-auto text-slate-500 mb-2" />
             <p className="text-sm text-slate-600 mb-2">
-              Drop a Google Sheet CSV (company_name, contact_name, phone, hours…)
+              Drop a Google Sheet CSV — formats are detected automatically.
             </p>
             <Input
               type="file"
               accept=".csv,text/csv,.tsv,text/tab-separated-values"
               className="max-w-xs mx-auto"
+              disabled={busy}
               onChange={(e) => {
                 const file = e.target.files?.[0];
+                e.target.value = '';
                 if (file) void handleFile(file);
               }}
             />
@@ -153,8 +163,7 @@ export function SalesCsvDialPanel({ onImport }: Props) {
           <div>
             <Label>Or paste rows</Label>
             <p className="text-xs text-slate-500 mt-0.5">
-              Headers: company_name, contact_name, phone (all required). Also: address, city,
-              postcode, category, opening_hours, hours_mon…hours_sun, lead_id.
+              Column mapping is automatic. UK phones starting 0 or +44 become E.164 before dial.
             </p>
             <Textarea
               className="mt-1 min-h-[100px] font-mono text-sm"
@@ -168,7 +177,7 @@ export function SalesCsvDialPanel({ onImport }: Props) {
             disabled={busy || !paste.trim()}
             onClick={() => queueRows(paste)}
           >
-            {busy ? 'Queuing…' : 'Queue outbound calls'}
+            {busy ? 'Recognising sheet…' : 'Queue outbound calls'}
           </Button>
         </div>
       </DialogContent>
