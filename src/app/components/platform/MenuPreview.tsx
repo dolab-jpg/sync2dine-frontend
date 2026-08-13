@@ -33,10 +33,10 @@ export default function MenuPreview() {
   useEffect(() => {
     if (!orgId) return;
     setLoading(true);
-    fetch(`/api/products?orgId=${encodeURIComponent(orgId)}`)
+    fetch('/api/menu', { headers: { 'x-org-id': orgId } })
       .then((r) => r.json())
       .then((data) => {
-        const rows = Array.isArray(data.products ?? data) ? (data.products ?? data) : [];
+        const rows = Array.isArray(data.items) ? data.items : [];
         setItems(rows as MenuItem[]);
       })
       .catch(() => setItems([]))
