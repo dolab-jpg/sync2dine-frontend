@@ -4,15 +4,41 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
+import { Checkbox } from '../../components/ui/checkbox';
 import { syncActiveOrgFromProfile } from '../../engine/platform/orgContext';
 import { integrationService } from '../../engine/integrations/integrationService';
 import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client';
 import { AuthLayout } from '../AuthLayout';
 import { AuthFormError } from '../components/AuthFormError';
 import { PasswordField } from '../components/PasswordField';
-import { SEED_ACCOUNTS, SEED_PASSWORD, SeedAccountsPanel } from '../components/SeedAccountsPanel';
 import { homePathForRole, isStaffLoginRole, resolveUsername } from '../lib/authApi';
 import IntegrationsLogoStrip from '../../components/restaurant/IntegrationsLogoStrip';
+
+const REMEMBER_KEY = 's2d.rememberLogin';
+
+function readRememberedIdentifier(): string {
+  try {
+    return localStorage.getItem(REMEMBER_KEY)?.trim() || '';
+  } catch {
+    return '';
+  }
+}
+
+function persistRememberedIdentifier(value: string) {
+  try {
+    localStorage.setItem(REMEMBER_KEY, value.trim());
+  } catch {
+    /* private mode */
+  }
+}
+
+function clearRememberedIdentifier() {
+  try {
+    localStorage.removeItem(REMEMBER_KEY);
+  } catch {
+    /* private mode */
+  }
+}
 
 interface LoginProps {
   onLogin: (user: {
@@ -23,20 +49,21 @@ interface LoginProps {
   }) => void;
 }
 
-type DemoRole = LoginProps['onLogin'] extends (u: infer U) => void ? U['role'] : never;
+type StaffRole = LoginProps['onLogin'] extends (u: infer U) => void ? U['role'] : never;
 
 export default function LoginPage({ onLogin }: LoginProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const next = searchParams.get('next');
+  const remembered = readRememberedIdentifier();
 
-  const [identifier, setIdentifier] = useState('');
+  const [identifier, setIdentifier] = useState(remembered);
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(Boolean(remembered));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [inviteToken, setInviteToken] = useState('');
 
-  // OAuth / existing Supabase session return
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
     let cancelled = false;
@@ -58,7 +85,7 @@ export default function LoginPage({ onLogin }: LoginProps) {
           navigate('/signup', { replace: true });
           return;
         }
-        const role = (profile.role ?? 'staff') as DemoRole;
+        const role = (profile.role ?? 'staff') as StaffRole;
         if (!isStaffLoginRole(role)) {
           await supabase.auth.signOut();
           if (!cancelled) {
@@ -76,7 +103,6 @@ export default function LoginPage({ onLogin }: LoginProps) {
           email: profile.email || data.session.user.email || '',
           role,
         });
-        // App remounts BrowserRouter on login — use full navigation
         if (!profile.username) {
           window.location.assign('/profile?complete=1');
           return;
@@ -100,12 +126,13 @@ export default function LoginPage({ onLogin }: LoginProps) {
     id: string;
     name: string;
     email: string;
-    role: DemoRole;
+    role: StaffRole;
   }) => {
+    if (rememberMe) persistRememberedIdentifier(identifier);
+    else clearRememberedIdentifier();
     await syncActiveOrgFromProfile();
     await integrationService.initOrgOpenAIKey(user.role);
     onLogin(user);
-    // App remounts a new BrowserRouter on login — use full navigation, not react-router navigate
     const dest =
       next && next.startsWith('/') && !next.startsWith('//')
         ? next
@@ -136,18 +163,12 @@ export default function LoginPage({ onLogin }: LoginProps) {
         try {
           email = await resolveUsername(email);
         } catch (resolveErr) {
-          // Seed/dev fallback when API is down — map known usernames to emails
-          const seed = SEED_ACCOUNTS.find((a) => a.username === email.toLowerCase());
-          if (seed) {
-            email = seed.email;
-          } else {
-            setError(
-              resolveErr instanceof Error
-                ? `${resolveErr.message} (Tip: use the email from Test accounts, or start the API on port 3001.)`
-                : 'Could not resolve username. Use the email from Test accounts.',
-            );
-            return;
-          }
+          setError(
+            resolveErr instanceof Error
+              ? resolveErr.message
+              : 'Could not resolve username. Use your email address instead.',
+          );
+          return;
         }
       }
       const supabase = getSupabase();
@@ -168,7 +189,7 @@ export default function LoginPage({ onLogin }: LoginProps) {
         setError(profileError.message);
         return;
       }
-      const role = (profile?.role ?? 'staff') as DemoRole;
+      const role = (profile?.role ?? 'staff') as StaffRole;
       if (!isStaffLoginRole(role)) {
         await supabase.auth.signOut();
         setError(
@@ -189,28 +210,13 @@ export default function LoginPage({ onLogin }: LoginProps) {
     }
   };
 
-  const handleOAuth = async (provider: 'google' | 'github') => {
-    if (!isSupabaseConfigured()) {
-      setError('Supabase is not configured.');
-      return;
-    }
-    setError('');
-    const supabase = getSupabase();
-    const redirectTo = `${window.location.origin}/login${next ? `?next=${encodeURIComponent(next)}` : ''}`;
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo },
-    });
-    if (oauthError) setError(oauthError.message);
-  };
-
   return (
-    <AuthLayout wide>
+    <AuthLayout>
       <Card className="shadow-2xl rounded-2xl border-0">
         <CardHeader className="bg-gradient-to-r from-slate-800 to-slate-900 text-white">
           <CardTitle className="text-center text-2xl">Sign in to Sync2Dine</CardTitle>
         </CardHeader>
-        <CardContent className="p-6 space-y-4">
+        <CardContent className="p-6 space-y-5">
           <form onSubmit={(e) => void handleCredentialSubmit(e)} className="space-y-4">
             <div>
               <Label htmlFor="login-identifier">Email or username</Label>
@@ -220,7 +226,7 @@ export default function LoginPage({ onLogin }: LoginProps) {
                 autoComplete="username"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="you@company.com or jane.smith"
+                placeholder="you@company.com"
                 className="mt-1"
               />
             </div>
@@ -231,20 +237,21 @@ export default function LoginPage({ onLogin }: LoginProps) {
               onChange={setPassword}
               autoComplete="current-password"
             />
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="remember-me"
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked === true)}
+              />
+              <Label htmlFor="remember-me" className="text-sm font-medium text-slate-700 cursor-pointer">
+                Remember me
+              </Label>
+            </div>
             <AuthFormError message={error} />
             <Button type="submit" className="w-full py-6 text-lg" disabled={isLoading}>
               {isLoading ? 'Signing in...' : 'Sign in'}
             </Button>
           </form>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Button type="button" variant="outline" onClick={() => void handleOAuth('google')}>
-              Continue with Google
-            </Button>
-            <Button type="button" variant="outline" onClick={() => void handleOAuth('github')}>
-              Continue with GitHub
-            </Button>
-          </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <Link to="/forgot-password" className="text-amber-700 hover:text-amber-900 font-medium">
@@ -279,15 +286,6 @@ export default function LoginPage({ onLogin }: LoginProps) {
           </div>
         </CardContent>
       </Card>
-
-      <SeedAccountsPanel
-        defaultOpen
-        onFill={(account) => {
-          setIdentifier(account.email);
-          setPassword(SEED_PASSWORD);
-          setError('');
-        }}
-      />
 
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-4">
         <IntegrationsLogoStrip compact />

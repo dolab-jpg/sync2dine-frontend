@@ -32,6 +32,7 @@ export default function SignupPage() {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [pasteToken, setPasteToken] = useState(inviteFromUrl);
@@ -145,6 +146,7 @@ export default function SignupPage() {
         username: normalizeUsername(username),
         email: email.trim().toLowerCase(),
         password,
+        phone: phone.trim() || undefined,
       });
       await signInAfterCreate(email.trim().toLowerCase(), password);
     } catch (err) {
@@ -248,6 +250,17 @@ export default function SignupPage() {
                   className="mt-1"
                 />
               </div>
+              <div>
+                <Label htmlFor="work-phone">Phone (optional)</Label>
+                <Input
+                  id="work-phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="07123 456789"
+                  className="mt-1"
+                />
+              </div>
               <PasswordField
                 id="signup-password"
                 label="Password"
@@ -338,35 +351,6 @@ export default function SignupPage() {
               </Button>
             </form>
           )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                if (!isSupabaseConfigured()) return;
-                void getSupabase().auth.signInWithOAuth({
-                  provider: 'google',
-                  options: { redirectTo: `${window.location.origin}/login` },
-                });
-              }}
-            >
-              Google
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                if (!isSupabaseConfigured()) return;
-                void getSupabase().auth.signInWithOAuth({
-                  provider: 'github',
-                  options: { redirectTo: `${window.location.origin}/login` },
-                });
-              }}
-            >
-              GitHub
-            </Button>
-          </div>
 
           <p className="text-sm text-center text-slate-600">
             Already have an account?{' '}

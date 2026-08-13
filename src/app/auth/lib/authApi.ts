@@ -29,6 +29,7 @@ export async function registerOrg(input: {
   username: string;
   email: string;
   password: string;
+  phone?: string;
 }) {
   const res = await fetch(`${apiBase()}/api/auth/register-org`, {
     method: 'POST',

@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-const email = process.env.E2E_USER_EMAIL || 'john@bathroompro.com';
-const password = process.env.E2E_USER_PASSWORD || 'TradeProSeed1!';
-const username = process.env.E2E_USER_USERNAME || 'john.smith';
+const email = process.env.E2E_USER_EMAIL || 'owner@sync2dine.io';
+const password = process.env.E2E_USER_PASSWORD || '';
+const username = process.env.E2E_USER_USERNAME || 'owner';
 
 test.describe('auth login', () => {
   test('shows credential login and no demo when demo off', async ({ page }) => {
@@ -21,7 +21,7 @@ test.describe('auth login', () => {
   });
 
   test('email login with seeded account', async ({ page }) => {
-    test.skip(!process.env.VITE_SUPABASE_URL && !process.env.E2E_USER_EMAIL, 'Needs Supabase / E2E credentials');
+    test.skip(!process.env.E2E_USER_PASSWORD, 'Needs E2E_USER_PASSWORD');
     await page.goto('/login', { waitUntil: 'domcontentloaded' });
     await page.getByLabel(/Email or username/i).fill(email);
     await page.locator('#login-password').fill(password);

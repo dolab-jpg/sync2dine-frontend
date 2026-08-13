@@ -16,6 +16,7 @@ Before editing shared surfaces, review the rows below. Update registries when be
 | DID / phone lines / org | all phone | Judie/Sally | phone-lines resolve | did-routing.test | vapi + agent lines | PHONE, CHANGE_IMPACT | API |
 | Self-heal repos | staff | Cynthia tooling | code-fix-handler | ? | `/api/ai/code-fix` | must stay sync2dine-* remotes | API |
 | Auth / org context | all | ? | auth.ts, account-auth | ? | `/api/auth` | CAPABILITY | API |
+| Login / signup (public) | SPA auth | staff + new companies | LoginPage, SignupPage, account-auth register-org | oauth.spec, login.spec | `/login`, `/signup`, `POST /api/auth/register-org` | APPLICATION_MASTER §24.A, CHANGE_IMPACT | SPA + API |
 | Act as client (FE experience) | SPA shells | platform_owner | `experience.ts`, RestaurantShell, PlatformClientsCRM | manual Act as to Menu to Exit | `/`, `/menu`, `/platform/clients` | CHANGE_IMPACT | SPA |
 | Authenticated workspace loader | SPA bootstrap | staff | `WorkspaceLoadingScreen`, `workspaceLoader.ts` | `workspaceLoader.test.ts` | `/login` → authed home | CHANGE_IMPACT | SPA |
 | Cynthia panel `isOpen` | sales/platform shell | staff | `AIChatPanel` + `AIAssistantContext` | `aiChatPanelOpen.test.ts` | `/`, `/platform/clients` | CHANGE_IMPACT | SPA |
