@@ -115,21 +115,12 @@ export default function PlatformClientsCRM() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      // Always light-sync: provision any home-org won CRM sales missing a tenant org
       let orgs: PlatformOrganization[] = [];
       let s: PlatformStats | null = null;
       try {
-        const synced = await syncOrganizationsFromCrm();
-        orgs = synced.organizations;
-        if (synced.created > 0) {
-          toast.success(
-            synced.created === 1
-              ? '1 won CRM sale synced as a Platform Client'
-              : `${synced.created} won CRM sales synced as Platform Clients`,
-          );
-        }
-      } catch {
         orgs = await fetchOrganizations();
+      } catch {
+        orgs = [];
       }
       try {
         s = await fetchPlatformStats();
@@ -138,9 +129,26 @@ export default function PlatformClientsCRM() {
       }
       setClients(orgs);
       setStats(s);
+      setLoading(false);
+
+      // Provision won CRM sales in the background — never block the client table.
+      try {
+        const synced = await syncOrganizationsFromCrm();
+        if (Array.isArray(synced.organizations) && synced.organizations.length > 0) {
+          setClients(synced.organizations);
+        }
+        if (synced.created > 0) {
+          toast.success(
+            synced.created === 1
+              ? '1 won CRM sale synced as a Platform Client'
+              : `${synced.created} won CRM sales synced as Platform Clients`,
+          );
+        }
+      } catch {
+        // table already shows GET /organizations
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load clients');
-    } finally {
       setLoading(false);
     }
   }, []);
