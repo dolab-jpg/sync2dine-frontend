@@ -8,6 +8,14 @@ export function isLeadCustomer(c: Customer): boolean {
   return PIPELINE_STATUSES.has(c.status) || !!c.source;
 }
 
+/** CSV import used to invent `digits@import.local` when the sheet had no email. Hide those. */
+export function displayLeadEmail(email?: string | null): string {
+  const v = (email ?? '').trim();
+  if (!v) return '';
+  if (v.toLowerCase().endsWith('@import.local')) return '';
+  return v;
+}
+
 export function getDueFollowUps(customers: Customer[]): Customer[] {
   const now = Date.now();
   return customers.filter((c) => {

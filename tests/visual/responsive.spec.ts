@@ -114,6 +114,37 @@ test.describe('Responsive smoke — staff routes (demo login)', () => {
     });
   }
 
+  test('crm lead table columns fit the viewport', async ({ page, viewport }) => {
+    await openStaffRoute(page, viewport, '/crm');
+    await expect(page.getByRole('heading', { name: /Lead Management CRM/i })).toBeVisible({ timeout: 15_000 });
+    await assertNoHorizontalOverflow(page);
+
+    const table = page.locator('[data-testid="crm-leads-table"] table');
+    if (!(await table.isVisible().catch(() => false))) {
+      await expect(page.getByTestId('crm-leads-empty')).toBeVisible();
+      return;
+    }
+
+    const width = viewport?.width ?? 1280;
+    await expect(table.getByRole('columnheader', { name: 'Name' })).toBeVisible();
+    await expect(table.getByRole('columnheader', { name: 'Phone' })).toBeVisible();
+    await expect(table.getByRole('columnheader', { name: 'Status' })).toBeVisible();
+
+    if (width < 768) {
+      await expect(table.getByRole('columnheader', { name: 'Address' })).toBeHidden();
+      await expect(table.getByRole('columnheader', { name: 'Last call' })).toBeHidden();
+      await expect(table.getByRole('columnheader', { name: 'Added' })).toBeHidden();
+    } else if (width < 1024) {
+      await expect(table.getByRole('columnheader', { name: 'Address' })).toBeVisible();
+      await expect(table.getByRole('columnheader', { name: 'Last call' })).toBeHidden();
+      await expect(table.getByRole('columnheader', { name: 'Added' })).toBeHidden();
+    } else {
+      await expect(table.getByRole('columnheader', { name: 'Address' })).toBeVisible();
+      await expect(table.getByRole('columnheader', { name: 'Last call' })).toBeVisible();
+      await expect(table.getByRole('columnheader', { name: 'Added' })).toBeVisible();
+    }
+  });
+
   test('mobile nav hamburger visible below md', async ({ page, viewport }) => {
     test.skip(!viewport || viewport.width >= 768, 'phone-only');
     await demoLoginAsStaff(page, viewport);

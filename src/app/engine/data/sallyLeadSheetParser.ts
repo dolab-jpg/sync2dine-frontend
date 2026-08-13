@@ -1,6 +1,6 @@
 /**
  * Parse Google Sheet / CSV exports for Sally outbound dials.
- * Supports headers like company_name, phone, address, opening_hours, hours_mon…hours_sun.
+ * Supports headers like company_name, phone, address, opening_hours, hours_monhours_sun.
  */
 import type { Customer } from '../../App';
 import { parseCustomersCsv } from './dataImportExportService';
@@ -92,7 +92,7 @@ function cell(values: string[], index: number): string {
   return index >= 0 ? (values[index] ?? '').trim().replace(/^"|"$/g, '') : '';
 }
 
-/** Merge opening_hours or hours_mon…hours_sun into one free-text string. */
+/** Merge opening_hours or hours_monhours_sun into one free-text string. */
 export function mergeOpeningHoursFromRow(
   get: (key: string) => string,
 ): string {
@@ -134,16 +134,16 @@ function buildAddress(get: (key: string) => string): string {
 
 function buildNotes(opts: {
   get: (key: string) => string;
-  address: string;
   leadId: string;
 }): string {
   const bits: string[] = [];
   if (opts.leadId) bits.push(`lead_id=${opts.leadId}`);
-  if (opts.address) bits.push(`Address: ${opts.address}`);
   const category = opts.get('category');
   if (category) bits.push(`Category: ${category}`);
   const cuisine = opts.get('cuisine_language') || opts.get('cuisine');
   if (cuisine) bits.push(`Cuisine/language: ${cuisine}`);
+  const hours = mergeOpeningHoursFromRow(opts.get);
+  if (hours) bits.push(`Hours: ${hours}`);
   const agent = opts.get('agent_name');
   if (agent) bits.push(`Agent: ${agent}`);
   const phoneType = opts.get('phone_type');
@@ -229,7 +229,7 @@ export function parseSallyLeadSheetCsv(text: string, opts?: { batchId?: string }
     const address = buildAddress(get);
     const openingHours = mergeOpeningHoursFromRow(get);
     const venueType = normalizeTakeawayVenue(get('category') || get('venue_type') || get('venue'));
-    const notes = buildNotes({ get, address, leadId });
+    const notes = buildNotes({ get, leadId });
 
     dialRows.push({
       company,

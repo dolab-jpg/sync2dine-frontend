@@ -10,10 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Badge } from './ui/badge';
-import { Facebook, Instagram, Search as GoogleIcon, Phone, PhoneCall, Mail, User, MapPin, Calendar, TrendingUp, Plus, ExternalLink } from 'lucide-react';
+import { Facebook, Instagram, Search as GoogleIcon, Phone, PhoneCall, Mail, User, TrendingUp, Plus, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { AddressMapLink } from './ui/AddressMapLink';
-import { getDueFollowUps, isCallQueueLead, isLeadCustomer } from '../engine/leads/leadService';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { getDueFollowUps, isCallQueueLead, isLeadCustomer, displayLeadEmail } from '../engine/leads/leadService';
 import {
   AIM_LABELS,
   LEAD_AIMS,
@@ -54,6 +55,8 @@ function toLead(c: Customer): Lead | null {
     preferredLanguage: c.preferredLanguage ?? 'en',
   };
 }
+
+const PAGE_SIZE = 50;
 
 const EMPTY_LEAD_FORM = {
   name: '',
@@ -107,6 +110,11 @@ export default function ComprehensiveCRM() {
   const [callThisPersonOpen, setCallThisPersonOpen] = useState(false);
   const [defaultBrief, setDefaultBrief] = useState('');
   const [queueStatusFilter, setQueueStatusFilter] = useState<string>('all');
+  const [listPage, setListPage] = useState(0);
+
+  useEffect(() => {
+    setListPage(0);
+  }, [activeTab, filterSource, searchTerm, queueStatusFilter]);
 
   useEffect(() => {
     fetch('/api/agent/settings')
@@ -387,6 +395,22 @@ export default function ComprehensiveCRM() {
     return matchesSource && matchesSearch;
   });
 
+  const pageCount = Math.max(1, Math.ceil(filteredLeads.length / PAGE_SIZE));
+  const safePage = Math.min(listPage, pageCount - 1);
+  const pageStart = safePage * PAGE_SIZE;
+  const pagedLeads = filteredLeads.slice(pageStart, pageStart + PAGE_SIZE);
+  const showingFrom = filteredLeads.length === 0 ? 0 : pageStart + 1;
+  const showingTo = Math.min(pageStart + PAGE_SIZE, filteredLeads.length);
+
+  const lastCallCell = (lead: Lead) => {
+    if (lead.lastCallDisposition) {
+      return DISPOSITION_LABELS[lead.lastCallDisposition as LeadCallDisposition]
+        ?? lead.lastCallDisposition;
+    }
+    if (lead.lastCallAt) return new Date(lead.lastCallAt).toLocaleDateString('en-GB');
+    return '—';
+  };
+
   const queueStats = useMemo(() => {
     const queue = leads.filter(isCallQueueLead);
     return {
@@ -408,8 +432,8 @@ export default function ComprehensiveCRM() {
   };
 
   return (
-    <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-3 sm:p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-3 sm:p-6 min-w-0">
+      <div className="max-w-7xl mx-auto min-w-0">
         <div className="mb-6 sm:mb-8 bg-gradient-to-r from-slate-900 to-slate-800 p-5 sm:p-8 rounded-2xl sm:rounded-3xl shadow-2xl">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3 sm:gap-4 min-w-0">
@@ -710,10 +734,10 @@ export default function ComprehensiveCRM() {
                 placeholder="Search leads..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="flex-1 text-base sm:text-lg p-4 sm:p-6 border-2 rounded-2xl min-h-11"
+                className="flex-1 text-sm p-2 border rounded-xl min-h-11"
               />
               <Select value={filterSource} onValueChange={setFilterSource}>
-                <SelectTrigger className="w-full sm:w-64 text-base sm:text-lg p-4 sm:p-6 border-2 rounded-2xl min-h-11">
+                <SelectTrigger className="w-full sm:w-56 text-sm min-h-11">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -731,94 +755,108 @@ export default function ComprehensiveCRM() {
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
+        <Card data-testid="crm-leads-table" className="shadow-lg rounded-2xl border-0 overflow-hidden min-w-0">
           {filteredLeads.length === 0 ? (
-            <Card className="shadow-lg rounded-2xl border-0">
-              <CardContent className="text-center py-12">
-                <TrendingUp className="w-14 h-14 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-600 font-medium">No leads match your filters</p>
-                <p className="text-sm text-gray-400 mt-1">Try Add Lead, or clear filters</p>
-                <Button
-                  variant="outline"
-                  className="mt-4 min-h-11"
-                  onClick={() => {
-                    setSearchTerm('');
-                    setFilterSource('all');
-                    setActiveTab('all');
-                  }}
-                >
-                  Clear filters
-                </Button>
-              </CardContent>
-            </Card>
-          ) : filteredLeads.map((lead) => (
-            <Card key={lead.id} className="shadow-lg rounded-2xl border-0 hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setSelectedLead(lead)}>
-              <CardContent className="p-6">
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3">
-                      {getSourceIcon(lead.source)}
-                      <h3 className="text-xl sm:text-2xl font-bold truncate">{lead.name}</h3>
-                      <div className={`w-3 h-3 rounded-full ${getScoreColor(lead.leadScore)}`} title={`Lead Score: ${lead.leadScore}`} />
-                      <Badge variant={lead.status === 'won' ? 'default' : 'secondary'} className="text-sm px-3 py-1">
-                        {lead.status.toUpperCase()}
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-gray-400" />
-                        <span>{lead.email || '—'}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-4 h-4 text-gray-400" />
-                        <span>{lead.phone || '—'}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-gray-400" />
-                        <AddressMapLink address={lead.address} className="truncate" />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        <span>{new Date(lead.createdAt).toLocaleDateString('en-GB')}</span>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {lead.tags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
-                      ))}
-                      {(activeTab === 'queue' || lead.callQueueStatus) && (
-                        <Badge variant="outline" className="text-xs">
-                          {CALL_QUEUE_STATUS_LABELS[(lead.callQueueStatus ?? 'not_called') as CallQueueStatus]
-                            ?? lead.callQueueStatus
-                            ?? 'Not called'}
-                        </Badge>
-                      )}
-                      {lead.lastCallDisposition && (
-                        <Badge className="text-xs bg-slate-800">
-                          {DISPOSITION_LABELS[lead.lastCallDisposition as LeadCallDisposition]
-                            ?? lead.lastCallDisposition}
-                        </Badge>
-                      )}
-                    </div>
-                    {lead.lastCallSummary && (
-                      <p className="mt-2 text-xs text-slate-600 line-clamp-2">
-                        Last call: {lead.lastCallSummary}
-                      </p>
-                    )}
-                    {lead.notes && (
-                      <p className="mt-3 text-gray-700 text-sm line-clamp-2">{lead.notes}</p>
-                    )}
-                  </div>
-                  <div className="text-left sm:text-right sm:ml-6 shrink-0">
-                    <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white px-4 py-2 rounded-full font-bold mb-2">
-                      Score: {lead.leadScore}
-                    </div>
-                  </div>
+            <CardContent data-testid="crm-leads-empty" className="text-center py-12">
+              <TrendingUp className="w-14 h-14 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-600 font-medium">No leads match your filters</p>
+              <p className="text-sm text-gray-400 mt-1">Try Add Lead, or clear filters</p>
+              <Button
+                variant="outline"
+                className="mt-4 min-h-11"
+                onClick={() => {
+                  setSearchTerm('');
+                  setFilterSource('all');
+                  setActiveTab('all');
+                }}
+              >
+                Clear filters
+              </Button>
+            </CardContent>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead className="hidden md:table-cell min-w-[12rem]">Address</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden lg:table-cell">Last call</TableHead>
+                    <TableHead className="hidden lg:table-cell">Added</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pagedLeads.map((lead) => {
+                    const callStatus = lead.callQueueStatus
+                      ? (CALL_QUEUE_STATUS_LABELS[(lead.callQueueStatus) as CallQueueStatus] ?? lead.callQueueStatus)
+                      : null;
+                    return (
+                      <TableRow
+                        key={lead.id}
+                        className="cursor-pointer"
+                        onClick={() => setSelectedLead(lead)}
+                      >
+                        <TableCell className="max-w-[10rem] sm:max-w-[14rem] overflow-hidden">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`w-2 h-2 shrink-0 rounded-full ${getScoreColor(lead.leadScore)}`} title={`Lead score: ${lead.leadScore}`} />
+                            <span className="font-medium truncate">{lead.name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{lead.phone || '—'}</TableCell>
+                        <TableCell className="hidden md:table-cell max-w-[18rem] overflow-hidden">
+                          <AddressMapLink address={lead.address} className="block truncate" />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Badge variant={lead.status === 'won' ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0">
+                              {lead.status}
+                            </Badge>
+                            {callStatus ? (
+                              <span className="hidden sm:inline text-xs text-slate-500 truncate">{callStatus}</span>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell text-xs text-slate-600">{lastCallCell(lead)}</TableCell>
+                        <TableCell className="hidden lg:table-cell whitespace-nowrap text-xs text-slate-600">
+                          {new Date(lead.createdAt).toLocaleDateString('en-GB')}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2 border-t bg-slate-50 text-sm text-slate-600">
+                <p>
+                  Showing {showingFrom.toLocaleString('en-GB')} to {showingTo.toLocaleString('en-GB')} of {filteredLeads.length.toLocaleString('en-GB')}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-9"
+                    disabled={safePage <= 0}
+                    onClick={() => setListPage((p) => Math.max(0, p - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-xs tabular-nums">
+                    {safePage + 1} / {pageCount}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-9"
+                    disabled={safePage >= pageCount - 1}
+                    onClick={() => setListPage((p) => Math.min(pageCount - 1, p + 1))}
+                  >
+                    Next
+                  </Button>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+              </div>
+            </>
+          )}
+        </Card>
 
         {isSuperAdmin && (
           <Card className="shadow-xl rounded-3xl border-0 mt-6">
@@ -891,7 +929,7 @@ export default function ComprehensiveCRM() {
                   </div>
                   <div>
                     <Label className="font-bold">Email</Label>
-                    <p className="mt-1">{selectedLead.email || '—'}</p>
+                    <p className="mt-1">{displayLeadEmail(selectedLead.email) || '—'}</p>
                   </div>
                   <div>
                     <Label className="font-bold">Call status</Label>

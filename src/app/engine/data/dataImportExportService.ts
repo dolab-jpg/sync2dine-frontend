@@ -480,7 +480,7 @@ export function parseCustomersCsv(text: string): { customers: Customer[]; errors
     customers.push({
       id: getAny('id', 'lead_id', 'leadid') || `${Date.now()}-${row}`,
       name,
-      email: email || `${phone.replace(/\D/g, '') || 'lead'}@import.local`,
+      email: email || '',
       phone,
       address: (() => {
         const base = get('address');
