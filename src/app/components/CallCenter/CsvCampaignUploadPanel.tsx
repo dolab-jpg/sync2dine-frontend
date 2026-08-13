@@ -12,7 +12,7 @@ export default function CsvCampaignUploadPanel({ onQueued }: { onQueued?: () => 
   const [fileName, setFileName] = useState('');
   const [template, setTemplate] = useState('lead_callback');
   const [busy, setBusy] = useState(false);
-  const [lastResult, setLastResult] = useState<{ queued: number; skipped: number } | null>(null);
+  const [lastResult, setLastResult] = useState<{ queued: number; skipped: number; held: number } | null>(null);
 
   async function queueUpload() {
     if (!csvText.trim()) {
@@ -30,10 +30,18 @@ export default function CsvCampaignUploadPanel({ onQueued }: { onQueued?: () => 
         error?: string;
         queued?: number;
         skipped?: number;
+        held?: number;
       };
       if (!res.ok) throw new Error(data.error || 'Upload failed');
-      setLastResult({ queued: data.queued ?? 0, skipped: data.skipped ?? 0 });
-      toast.success(`Queued ${data.queued ?? 0} calls${data.skipped ? ` (${data.skipped} skipped)` : ''}`);
+      const queued = data.queued ?? 0;
+      const skipped = data.skipped ?? 0;
+      const held = data.held ?? 0;
+      setLastResult({ queued, skipped, held });
+      toast.success(
+        held > 0
+          ? `Queued ${queued}; held ${held} for hours research${skipped ? ` (${skipped} skipped)` : ''}`
+          : `Queued ${queued} calls${skipped ? ` (${skipped} skipped)` : ''}`,
+      );
       onQueued?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed');
@@ -50,8 +58,8 @@ export default function CsvCampaignUploadPanel({ onQueued }: { onQueued?: () => 
           Upload call list (CSV)
         </CardTitle>
         <CardDescription>
-          Columns: name, phone, optional notes. Queues one-by-one using outbound agent slots
-          (restaurant default: 1 outbound, 4 inbound reserved).
+          Columns: name, phone, optional notes. Researches each restaurant (hours, address, website)
+          before queuing. One-by-one using outbound slots (default 1 outbound).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -89,7 +97,9 @@ export default function CsvCampaignUploadPanel({ onQueued }: { onQueued?: () => 
         </Button>
         {lastResult ? (
           <p className="text-sm text-slate-600">
-            Last upload: {lastResult.queued} queued · {lastResult.skipped} skipped
+            Last upload: {lastResult.queued} queued
+            {lastResult.held ? ` · ${lastResult.held} held for hours` : ''}
+            {' · '}{lastResult.skipped} skipped
           </p>
         ) : null}
       </CardContent>

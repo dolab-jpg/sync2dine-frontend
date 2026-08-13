@@ -74,6 +74,7 @@ export const AUTO_ACTIONS = new Set([
   'searchProjects',
   'searchQuotes',
   'searchLeads',
+  'getCampaignProgress',
   'getTeamPerformance',
   'updateLeadStatus',
   'logFollowUp',

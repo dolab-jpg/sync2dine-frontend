@@ -20,6 +20,7 @@ export const FACADE_OPERATION_MAP: Readonly<Record<string, OperationMap>> = {
     projects: 'searchProjects',
     quotes: 'searchQuotes',
     leads: 'searchLeads',
+    campaignProgress: 'getCampaignProgress',
     emails: 'searchEmails',
     businessSnapshot: 'getBusinessSnapshot',
     teamPerformance: 'getTeamPerformance',

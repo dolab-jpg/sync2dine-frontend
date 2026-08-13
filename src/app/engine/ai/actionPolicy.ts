@@ -106,6 +106,7 @@ export function getHumanActionLabel(action: string, output?: Record<string, unkn
     generateQuotePdf: 'Quote PDF ready.',
     draftQuote: 'Quote draft ready — confirm to make PDF.',
     generateOpsReport: 'Report ready.',
+    getCampaignProgress: 'Campaign progress ready.',
     sendToStaffCynthia: 'Card sent to Cynthia.',
     writeData: 'Delete this record?',
   };

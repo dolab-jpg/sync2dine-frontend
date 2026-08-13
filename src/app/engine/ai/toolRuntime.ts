@@ -781,6 +781,39 @@ function executeSearchLeads(output: Record<string, unknown>, ctx: ToolRuntimeCon
   };
 }
 
+async function executeGetCampaignProgress(output: Record<string, unknown>): Promise<ToolExecutionResult> {
+  const batchId = readOptionalString(output.batchId) || readOptionalString(output.campaign);
+  const qs = batchId ? `?batchId=${encodeURIComponent(batchId)}` : '';
+  try {
+    const res = await fetch(`/api/campaigns/progress${qs}`);
+    const data = await res.json().catch(() => ({})) as Record<string, unknown> & {
+      spokenHint?: string;
+      error?: string;
+    };
+    if (!res.ok) {
+      return {
+        action: 'getCampaignProgress',
+        summary: data.error || 'Could not load campaign progress.',
+        output: { ...output, ...data },
+        executed: false,
+      };
+    }
+    return {
+      action: 'getCampaignProgress',
+      summary: String(data.spokenHint || 'Campaign progress ready.'),
+      output: { ...output, ...data },
+      executed: true,
+    };
+  } catch (err) {
+    return {
+      action: 'getCampaignProgress',
+      summary: err instanceof Error ? err.message : 'Campaign progress failed.',
+      output,
+      executed: false,
+    };
+  }
+}
+
 function executeUpdateLeadStatus(output: Record<string, unknown>, ctx: ToolRuntimeContext): ToolExecutionResult {
   const { app } = ctx;
   if (!app) return { action: 'updateLeadStatus', summary: 'App not ready.', output, executed: false };
@@ -1373,6 +1406,7 @@ async function dispatchSingleTool(
   if (name === 'sendContract') return executeSendContract(output, ctx);
   if (name === 'getTeamPerformance') return executeGetTeamPerformance(ctx);
   if (name === 'searchLeads') return executeSearchLeads(output, ctx);
+  if (name === 'getCampaignProgress') return executeGetCampaignProgress(output);
   if (name === 'updateLeadStatus') return executeUpdateLeadStatus(output, ctx);
   if (name === 'logFollowUp') return executeLogFollowUp(output, ctx);
   if (name === 'getLeadBrief') return executeGetLeadBrief(output, ctx);
