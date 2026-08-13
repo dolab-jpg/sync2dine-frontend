@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { AppContext } from '../../App';
 import { Button } from '../ui/button';
-import { useCynthiaVapiVoice } from '../../hooks/useCynthiaVapiVoice';
+import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { sendOrchestratorMessage, type CopilotAction } from '../../engine/ai/orchestratorService';
 import {
   processToolActions,
@@ -232,37 +232,21 @@ export default function CynthiaHome() {
     toast.message(`${name} ready`, { description: 'Shared content loaded — send to process.' });
   }, [ingestText, name]);
 
+  const runSendRef = useRef<(text: string, source?: 'cynthia' | 'voice' | 'paste' | 'share') => Promise<void>>(
+    async () => undefined,
+  );
   const {
-    status: vapiStatus,
-    isActive: vapiActive,
-    toggle: toggleVapi,
-    error: vapiError,
-  } = useCynthiaVapiVoice({
-    userId,
-    onTranscript: (role, text) => {
-      setBubbles((prev) => [
-        ...prev,
-        {
-          id: `vapi_${role}_${Date.now()}`,
-          kind: 'text',
-          role: role === 'assistant' ? 'assistant' : 'user',
-          content: text,
-          ts: new Date().toISOString(),
-        },
-      ]);
-      void postCynthiaMessage(userId, {
-        role: role === 'assistant' ? 'assistant' : 'user',
-        content: text,
-        source: 'voice',
-      });
-      if (role === 'assistant') void reloadThread();
-    },
-    onStatusMessage: (message) => toast.message(message),
+    isListening,
+    isTranscribing,
+    startListening,
+    stopListening,
+    isSupported: voiceSupported,
+  } = useVoiceInput((text) => {
+    void runSendRef.current(text, 'voice');
+  }, {
+    onError: (message) => toast.error(message),
+    onStarted: () => toast.message('Listening — tap the mic again when you finish'),
   });
-
-  useEffect(() => {
-    if (vapiError) toast.error(vapiError);
-  }, [vapiError]);
 
   const handleToolOutputs = async (executed: ToolExecutionResult[]) => {
     for (const r of executed) {
@@ -428,6 +412,7 @@ export default function CynthiaHome() {
       setSending(false);
     }
   };
+  runSendRef.current = runSend;
 
   const pasteFromClipboard = async () => {
     try {
@@ -493,15 +478,11 @@ export default function CynthiaHome() {
         <div className="min-w-0 flex-1">
           <p className="font-semibold leading-tight">{name}</p>
           <p className="text-[11px] text-emerald-100 truncate">
-            {vapiActive
-              ? vapiStatus === 'speaking'
-                ? 'Speaking…'
-                : vapiStatus === 'pin_required'
-                  ? 'Say your 4-digit PIN'
-                  : vapiStatus === 'connecting'
-                    ? 'Connecting voice…'
-                    : 'Listening…'
-              : 'Runs the whole operation · chat first'}
+            {isListening
+              ? 'Listening… tap the mic when you finish'
+              : isTranscribing
+                ? 'Turning speech into text…'
+                : 'Runs the whole operation · chat first'}
           </p>
         </div>
         <Button
@@ -740,20 +721,29 @@ export default function CynthiaHome() {
           trailing={
             <button
               type="button"
-              disabled={sending || vapiStatus === 'connecting'}
+              disabled={sending || isTranscribing || !voiceSupported}
               className={`inline-flex items-center justify-center size-9 rounded-full transition-colors disabled:opacity-50 ${
-                vapiActive
+                isListening
                   ? 'bg-red-100 text-red-600'
                   : 'text-slate-500 hover:bg-slate-200/70 hover:text-slate-700'
               }`}
-              title={vapiActive ? 'End Cynthia voice' : 'Talk to Cynthia (same phone voice)'}
-              aria-label={vapiActive ? 'End Cynthia voice' : 'Talk to Cynthia'}
-              onClick={() => { void toggleVapi(); }}
+              title={
+                isListening
+                  ? 'Tap to send what you said'
+                  : isTranscribing
+                    ? 'Turning speech into text…'
+                    : 'Tap to speak'
+              }
+              aria-label={isListening ? 'Stop listening and send' : 'Talk to Cynthia'}
+              onClick={() => {
+                if (isListening) void stopListening();
+                else void startListening();
+              }}
             >
-              {vapiStatus === 'connecting' ? (
+              {isTranscribing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
-              ) : vapiActive ? (
-                <MicOff className="h-4 w-4" />
+              ) : isListening ? (
+                <MicOff className="h-4 w-4 animate-pulse" />
               ) : (
                 <Mic className="h-4 w-4" />
               )}

@@ -1,6 +1,7 @@
 import { Mic, MicOff, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
+import { isNativeBridgeAvailable } from '../../bridge/nativeBridge';
 import { toast } from 'sonner';
 
 interface VoiceInputButtonProps {
@@ -13,7 +14,7 @@ interface VoiceInputButtonProps {
 
 /**
  * Mic control: native hold-to-record (+ Whisper) in the Flutter shell,
- * click-to-toggle Web Speech API elsewhere.
+ * click-to-toggle browser recording + Whisper elsewhere.
  */
 export function VoiceInputButton({ onTranscript, compact = false }: VoiceInputButtonProps) {
   const {
@@ -25,6 +26,11 @@ export function VoiceInputButton({ onTranscript, compact = false }: VoiceInputBu
     isNative,
   } = useVoiceInput(onTranscript, {
     onError: (message) => toast.error(message),
+    onStarted: () => {
+      if (!isNativeBridgeAvailable()) {
+        toast.message('Listening — tap the mic again when you finish');
+      }
+    },
   });
 
   if (!isSupported) return null;
@@ -72,17 +78,24 @@ export function VoiceInputButton({ onTranscript, compact = false }: VoiceInputBu
     <Button
       type="button"
       size="icon"
-      variant={isListening ? 'destructive' : compact ? 'ghost' : 'outline'}
+      variant={busy ? 'destructive' : compact ? 'ghost' : 'outline'}
       className={`${sizeClass} touch-manipulation`}
       onClick={() => {
         if (isListening) void stopListening();
         else void startListening();
       }}
-      title={isListening ? 'Stop listening' : 'Tap to speak'}
-      aria-label={isListening ? 'Stop listening' : 'Tap to speak'}
+      title={isListening ? 'Tap to send what you said' : isTranscribing ? 'Turning speech into text…' : 'Tap to speak'}
+      aria-label={isListening ? 'Stop listening and send' : 'Tap to speak'}
       aria-pressed={isListening}
+      disabled={isTranscribing}
     >
-      {isListening ? <MicOff className="w-4 h-4 animate-pulse" /> : <Mic className="w-4 h-4" />}
+      {isTranscribing ? (
+        <Loader2 className="w-4 h-4 animate-spin" />
+      ) : isListening ? (
+        <MicOff className="w-4 h-4 animate-pulse" />
+      ) : (
+        <Mic className="w-4 h-4" />
+      )}
     </Button>
   );
 }
