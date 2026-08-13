@@ -13,6 +13,7 @@ import {
 import {
   loadNotifications,
   markRead,
+  clearAllNotifications,
   subscribe,
   type NotificationType,
   type ProjectNotification,
@@ -85,15 +86,26 @@ export default function NotificationsPage() {
             {unreadCount === 0 ? 'You\'re all caught up' : `${unreadCount} unread`}
           </p>
         </div>
-        {unreadCount > 0 && (
-          <button
-            type="button"
-            onClick={markAllAsRead}
-            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 min-h-10 touch-manipulation"
-          >
-            Mark all read
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {unreadCount > 0 && (
+            <button
+              type="button"
+              onClick={markAllAsRead}
+              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 min-h-10 touch-manipulation"
+            >
+              Mark all read
+            </button>
+          )}
+          {notifications.length > 0 && (
+            <button
+              type="button"
+              onClick={() => clearAllNotifications()}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 min-h-10 touch-manipulation"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
       </div>
 
       {notifications.length === 0 ? (

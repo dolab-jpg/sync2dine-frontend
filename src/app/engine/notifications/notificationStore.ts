@@ -1,4 +1,6 @@
 export const NOTIFICATIONS_STORAGE_KEY = 'tradepro_notifications';
+/** One-shot: drop construction-smoke briefs left after the launch wipe. */
+const LAUNCH_NOTIFICATION_WIPE_KEY = 's2d.notificationsLaunchCleared.v1';
 
 export type NotificationType =
   | 'builder_brief_sent'
@@ -105,6 +107,28 @@ function persist(): void {
   );
 }
 
+export function clearAllNotifications(): void {
+  cache = [];
+  try {
+    localStorage.removeItem(NOTIFICATIONS_STORAGE_KEY);
+  } catch {
+    /* private mode */
+  }
+  emit();
+}
+
+function applyLaunchWipeIfNeeded(): void {
+  try {
+    if (localStorage.getItem(LAUNCH_NOTIFICATION_WIPE_KEY) === '1') return;
+    localStorage.setItem(LAUNCH_NOTIFICATION_WIPE_KEY, '1');
+    if (cache.length === 0) return;
+    cache = [];
+    persist();
+  } catch {
+    /* private mode */
+  }
+}
+
 function emit(): void {
   const snapshot = [...cache];
   subscribers.forEach((callback) => callback(snapshot));
@@ -120,6 +144,7 @@ function nextId(): string {
 
 export function loadNotifications(): ProjectNotification[] {
   refreshCache();
+  applyLaunchWipeIfNeeded();
   return [...cache];
 }
 

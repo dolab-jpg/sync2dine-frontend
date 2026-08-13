@@ -15,6 +15,7 @@ import {
   addNotification,
   loadNotifications,
   markRead,
+  clearAllNotifications,
   subscribe,
   type NotificationType,
   type ProjectNotification,
@@ -211,6 +212,15 @@ export default function NotificationSystem({ onNewLead }: NotificationSystemProp
                       className="px-3 py-2 bg-blue-500 text-white rounded-lg text-xs hover:bg-blue-600 min-h-9 touch-manipulation"
                     >
                       Mark read
+                    </button>
+                  )}
+                  {notifications.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => clearAllNotifications()}
+                      className="px-3 py-2 bg-white/15 text-white rounded-lg text-xs hover:bg-white/25 min-h-9 touch-manipulation"
+                    >
+                      Clear all
                     </button>
                   )}
                 </div>
