@@ -20,7 +20,7 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 | Sally product KB | ai | `/platform/sally-knowledge` | `/api/sally-knowledge` | KB worker | Supabase | live | approved Atmosphere talking points + panel |
 | Sally offer | sales | `/platform/sally-offer` | `sally/offer.ts` + phone USPs | � | offer module | live | formatOfferFactsBlock; Atmosphere discovery/USPs |
 | Atmosphere (SKU) | sales | `/atmosphere` | package + Sally pitch | � | saas-packages | thin product / live sales language | sales proposition only — not in-app audio controls |
-| Ops alert contacts | platform | `/platform/ops` | `/api/platform/ops-contacts` | VPS cron watchdog | `ops-contacts.json` | live | email/SMS/Trae on API down |
+| Ops alert contacts | platform | `/platform/ops` | `/api/platform/ops-contacts` | VPS cron watchdogs (API 1m, SIP 2m) | `ops-contacts.json` | live | email/SMS/Trae on API down or Judie/Sally line offline |
 | AI Studio | config | Settings ? AI | `/api/ai/studio` | config only | studio store | live | settings |
 | Self-heal | ai | `/ai-audit` Code fixes → Pending offers | `/api/ai/code-fix*` | utility | `code_fix_jobs` | live | offers in Audit only (not Cynthia chat) |
 | Foreman / project / planning / BC AI | construction | panels | `/api/ai/*` | domain agents | � | live | construction UI |

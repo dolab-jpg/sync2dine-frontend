@@ -49,20 +49,23 @@ Never use legacy `deploy-vps.sh` / `deploy-nginx.sh` for routine ships.
 
 **API-down (502)** means nginx has no upstream on `:3011`. In-app `/api/ops/alerts` **cannot** page anyone when the process is dead.
 
-### Watchdog (outside Node)
+### Watchdogs (outside Node)
 
-- Script: `sync2dine-backend/scripts/api-health-watchdog.sh`
-- Install: `scripts/install-api-health-watchdog.sh` (also called from `restart-sync2dine-api.sh`)
-- Cron: every minute, probe `127.0.0.1:3011/health` (logs `health_ok` each minute)
-- After 2 failures: run restart script, then notify
-- Contacts file: `server/data/ops-contacts.json` (writable via UI)
+Both read `server/data/ops-contacts.json` (writable via `/platform/ops`). Install together: `scripts/install-api-health-watchdog.sh` (also called from `restart-sync2dine-api.sh`).
+
+| Watchdog | Script | Cron | Triggers notify |
+|----------|--------|------|-----------------|
+| **API health** | `sync2dine-backend/scripts/api-health-watchdog.sh` | **Every 1 minute** — probe `127.0.0.1:3011/health` (logs `health_ok` each minute) | After 2 consecutive failures: restart script, then email/SMS/webhook |
+| **SIP registration** | `sync2dine-backend/scripts/sip-reg-watchdog.sh` (+ `sip-reg-watchdog.mts`) | **Every 2 minutes** — `docker exec tradepro-sip-bridge asterisk -rx 'pjsip show registrations'` vs bridge `lines.json` | After 2 consecutive bad statuses per Judie/Sally line (900s cooldown); recovery alert once. State: `/tmp/sync2dine-sip-watchdog.state` |
+
 - Email: connected Gmail OAuth mailbox (`server/ops-gmail-send.ts` / `scripts/ops-send-alert-email.ts`); SMTP env is fallback only
+- **SMS:** short plain-English text to `alertPhone` — e.g. `Judie on 0203… is offline. Callers to that number may not get through.` Requires Twilio on the API host.
 
 ### Platform UI: Ops alerts
 
 - Route: `/platform/ops` (`platform_owner` only; always AppShell even when acting-as a restaurant)
 - API: `GET/PUT /api/platform/ops-contacts`, `POST /api/platform/ops-contacts/test`
-- Fields: `alertEmail`, `alertPhone` (SMS), `traeWebhookUrl`
+- Fields: `alertEmail`, `alertPhone` (SMS — saved here; UK `07…` numbers normalized to E.164 on save), `traeWebhookUrl`
 - Default email until saved: `dolab@diamondea.co.uk`
 - Trae payload: `{ source: "sync2dine-ops", event, severity, title, message, at, healthUrl }`
 

@@ -69,18 +69,22 @@ export default function PlatformOpsSettings() {
     try {
       await saveOpsContacts(form);
       const result = await testOpsContacts();
+      const { email, sms, webhook } = result.results;
+
+      if (sms) {
+        if (sms.stub || sms.error === 'twilio_not_configured') {
+          toast.error('SMS is not configured on the server (Twilio).');
+        } else if (sms.ok) {
+          toast.success('Test text sent to your alert mobile.');
+        }
+      }
+
       const bits = [
-        result.results.email
-          ? `email=${result.results.email.ok ? 'ok' : result.results.email.error}`
-          : 'email=skip',
-        result.results.sms
-          ? `sms=${result.results.sms.ok ? 'ok' : result.results.sms.error}`
-          : 'sms=skip',
-        result.results.webhook
-          ? `webhook=${result.results.webhook.ok ? 'ok' : result.results.webhook.error}`
-          : 'webhook=skip',
+        email ? `email=${email.ok ? 'ok' : email.error}` : 'email=skip',
+        sms ? `sms=${sms.ok ? 'ok' : sms.error ?? (sms.stub ? 'stub' : 'fail')}` : 'sms=skip',
+        webhook ? `webhook=${webhook.ok ? 'ok' : webhook.error}` : 'webhook=skip',
       ];
-      if (result.results.email?.ok) {
+      if (email?.ok) {
         toast.success(`Test sent — ${bits.join(', ')}`);
       } else {
         toast.error(`Test incomplete — ${bits.join(', ')}`);
@@ -101,8 +105,9 @@ export default function PlatformOpsSettings() {
             Ops alerts
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Platform-owner contacts for API outages and critical ops. Alert email is sent via the
-            connected Gmail mailbox (OAuth). SMS needs Twilio; webhook is optional for Trae/agents.
+            Platform-owner contacts for API outages, Judie/Sally phone-line offline alerts, and
+            critical ops. Alert email is sent via the connected Gmail mailbox (OAuth). SMS needs
+            Twilio; webhook is optional for Trae/agents.
           </p>
           {updatedAt && (
             <p className="mt-1 text-xs text-muted-foreground">
@@ -152,10 +157,15 @@ export default function PlatformOpsSettings() {
               type="tel"
               value={form.alertPhone}
               onChange={(e) => setForm((f) => ({ ...f, alertPhone: e.target.value }))}
-              placeholder="+447…"
+              placeholder="+447576442345"
               disabled={loading}
             />
-            <p className="text-xs text-muted-foreground">Optional. E.164. Requires Twilio on the API host.</p>
+            <p className="text-xs text-muted-foreground">
+              Optional. You&apos;ll get a short plain-English text if the app goes down or a
+              Judie/Sally phone line goes offline — for example: &quot;Judie on 0203… is offline.
+              Callers may not get through.&quot; UK numbers like 07576… are fine; we save E.164
+              (+447…). Requires Twilio on the API host.
+            </p>
           </div>
 
           <div className="space-y-2">

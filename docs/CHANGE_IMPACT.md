@@ -23,7 +23,7 @@ Before editing shared surfaces, review the rows below. Update registries when be
 | Authenticated workspace loader | SPA bootstrap | staff | `WorkspaceLoadingScreen`, `workspaceLoader.ts` | `workspaceLoader.test.ts` | `/login` → authed home | CHANGE_IMPACT | SPA |
 | Cynthia panel `isOpen` | sales/platform shell | staff | `AIChatPanel` + `AIAssistantContext` | `aiChatPanelOpen.test.ts` | `/`, `/platform/clients` | CHANGE_IMPACT | SPA |
 | Deploy scripts | ? | ? | push-live-local | health curls | ? | DEPLOYMENT_MAP | ? |
-| API outage / ops contacts | email SMS Trae webhook | platform_owner | ops-contacts-store, ops-notify, api-health-watchdog | curl /health; Send test | `/platform/ops`, `/api/platform/ops-contacts` | DEPLOYMENT_MAP, WORKERS, ROUTE_MAP | API + SPA + VPS cron |
+| API outage / ops contacts | email SMS Trae webhook | platform_owner | ops-sms, ops-contacts-store, ops-notify, api-health-watchdog, sip-reg-watchdog | curl /health; Send test SMS | `/platform/ops`, `/api/platform/ops-contacts` | DEPLOYMENT_MAP, WORKERS, ROUTE_MAP | API + SPA + VPS cron (API 1m, SIP 2m) |
 
 ## Dual-implementation traps
 
