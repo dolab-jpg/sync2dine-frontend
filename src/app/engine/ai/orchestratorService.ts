@@ -141,61 +141,63 @@ export function splitOrchestratorActions(actions: CopilotAction[]) {
 const QUOTE_PAYLOAD_CAP = 100;
 const CUSTOMER_PAYLOAD_CAP = 100;
 
-export async function sendOrchestratorMessage(
+export interface OrchestratorSendOptions {
+  model?: string;
+  userName?: string;
+  userId?: string;
+  companyName?: string;
+  customers?: Array<{
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    interestedTrades?: string[];
+    status?: string;
+    source?: string;
+    leadScore?: number;
+    nextFollowUp?: string;
+    budget?: string;
+    notes?: string;
+  }>;
+  quotes?: Array<{
+    id: string;
+    customerId: string;
+    customerName: string;
+    tradeId?: string;
+    tradeName?: string;
+    total: number;
+    status: string;
+  }>;
+  businessSnapshot?: {
+    customerCount?: number;
+    quoteCount?: number;
+    projectCount?: number;
+    builderCount?: number;
+    officeStaffCount?: number;
+    managerCount?: number;
+    salesStaffCount?: number;
+    recentCustomerNames?: string[];
+    recentQuoteSummaries?: string[];
+    leadPipeline?: Record<string, unknown>;
+    officeTeamRoster?: Array<Record<string, unknown>>;
+  };
+  projectContext?: Record<string, unknown>;
+  planningApplicationContext?: Record<string, unknown>;
+  orchestratorMode?: OrchestratorMode;
+  channel?: OrchestratorChannel;
+  pendingTask?: PendingTaskPayload;
+  customerName?: string;
+  customerId?: string;
+  dataContext?: Record<string, unknown[] | Record<string, unknown>>;
+  /** Image data URLs for vision (photos attached in Cynthia / overlay). */
+  images?: string[];
+}
+
+function buildOrchestratorBody(
   messages: { role: string; content: string }[],
   context: AgentContext,
-  options?: {
-    model?: string;
-    userName?: string;
-    userId?: string;
-    companyName?: string;
-    customers?: Array<{
-      id: string;
-      name: string;
-      email: string;
-      phone: string;
-      interestedTrades?: string[];
-      status?: string;
-      source?: string;
-      leadScore?: number;
-      nextFollowUp?: string;
-      budget?: string;
-      notes?: string;
-    }>;
-    quotes?: Array<{
-      id: string;
-      customerId: string;
-      customerName: string;
-      tradeId?: string;
-      tradeName?: string;
-      total: number;
-      status: string;
-    }>;
-    businessSnapshot?: {
-      customerCount?: number;
-      quoteCount?: number;
-      projectCount?: number;
-      builderCount?: number;
-      officeStaffCount?: number;
-      managerCount?: number;
-      salesStaffCount?: number;
-      recentCustomerNames?: string[];
-      recentQuoteSummaries?: string[];
-      leadPipeline?: Record<string, unknown>;
-      officeTeamRoster?: Array<Record<string, unknown>>;
-    };
-    projectContext?: Record<string, unknown>;
-    planningApplicationContext?: Record<string, unknown>;
-    orchestratorMode?: OrchestratorMode;
-    channel?: OrchestratorChannel;
-    pendingTask?: PendingTaskPayload;
-    customerName?: string;
-    customerId?: string;
-    dataContext?: Record<string, unknown[] | Record<string, unknown>>;
-    /** Image data URLs for vision (photos attached in Cynthia / overlay). */
-    images?: string[];
-  }
-): Promise<OrchestratorResponse> {
+  options?: OrchestratorSendOptions,
+): Record<string, unknown> {
   const openaiConfig = integrationService.getConfig('openai');
   const studio = loadAIStudioConfig();
   const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
@@ -274,25 +276,105 @@ export async function sendOrchestratorMessage(
     }
   }
 
+  return body;
+}
+
+async function throwOrchestratorHttpError(response: Response): Promise<never> {
+  let detail = response.status === 503
+    ? 'AI brain not connected — add a DeepSeek or OpenAI key in Settings → Integrations → Company AI Brain and Save.'
+    : `Orchestrator request failed: ${response.status}`;
+  try {
+    const data = await response.json() as { error?: string; code?: 'missing' | 'rejected' };
+    if (data.error) detail = data.error;
+  } catch {
+    // keep default detail
+  }
+  throw new Error(detail);
+}
+
+export async function sendOrchestratorMessage(
+  messages: { role: string; content: string }[],
+  context: AgentContext,
+  options?: OrchestratorSendOptions,
+): Promise<OrchestratorResponse> {
   const response = await fetch('/api/ai/orchestrate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(buildOrchestratorBody(messages, context, options)),
   });
+  if (!response.ok) await throwOrchestratorHttpError(response);
+  return await response.json() as OrchestratorResponse;
+}
 
-  if (!response.ok) {
-    let detail = response.status === 503
-      ? 'AI brain not connected — add a DeepSeek or OpenAI key in Settings → Integrations → Company AI Brain and Save.'
-      : `Orchestrator request failed: ${response.status}`;
-    try {
-      const data = await response.json() as { error?: string; code?: 'missing' | 'rejected' };
-      if (data.error) detail = data.error;
-    } catch {
-      // keep default detail
-    }
-    throw new Error(detail);
+export async function sendOrchestratorMessageStream(
+  messages: { role: string; content: string }[],
+  context: AgentContext,
+  options: OrchestratorSendOptions | undefined,
+  handlers: {
+    onToken?: (text: string) => void;
+    onStatus?: (phase: string) => void;
+  } = {},
+): Promise<OrchestratorResponse> {
+  const response = await fetch('/api/ai/orchestrate/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildOrchestratorBody(messages, context, options)),
+  });
+  if (!response.ok) await throwOrchestratorHttpError(response);
+  if (!response.body) {
+    return sendOrchestratorMessage(messages, context, options);
   }
 
-  const parsed = await response.json() as OrchestratorResponse;
-  return parsed;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let final: OrchestratorResponse | null = null;
+
+  const consumeBlock = (block: string) => {
+    const event = /^event:\s*(\w+)/m.exec(block)?.[1];
+    const dataLine = block.split('\n').find((line) => line.startsWith('data: '));
+    if (!event || !dataLine) return;
+    let data: Record<string, unknown> = {};
+    try {
+      data = JSON.parse(dataLine.slice(6)) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    if (event === 'status' && typeof data.phase === 'string') {
+      handlers.onStatus?.(data.phase);
+    }
+    if (event === 'token' && typeof data.text === 'string' && data.text) {
+      handlers.onToken?.(data.text);
+    }
+    if (event === 'error') {
+      throw new Error(typeof data.message === 'string' ? data.message : 'Orchestrator stream failed');
+    }
+    if (event === 'done') {
+      final = {
+        content: String(data.content ?? ''),
+        proposedActions: (data.proposedActions as OrchestratorResponse['proposedActions']) ?? [],
+        autoActions: (data.autoActions as OrchestratorResponse['autoActions']) ?? [],
+        detectedTrades: (data.detectedTrades as OrchestratorResponse['detectedTrades']) ?? [],
+        phase: data.phase as OrchestratorResponse['phase'],
+        clarifyingQuestions: data.clarifyingQuestions as string[] | undefined,
+        taskSummary: data.taskSummary as string | undefined,
+        pendingTaskId: data.pendingTaskId as string | undefined,
+      };
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop() ?? '';
+    for (const part of parts) consumeBlock(part);
+  }
+  if (buffer.trim()) consumeBlock(buffer);
+
+  if (!final) {
+    throw new Error('Cynthia reply was cut off — try again.');
+  }
+  return final;
 }

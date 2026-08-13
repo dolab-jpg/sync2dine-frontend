@@ -83,7 +83,7 @@ interface AIAssistantContextType {
   requestVoiceStart: () => void;
   clearPreferVoiceOnOpen: () => void;
   messages: ChatMessage[];
-  addMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  addMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => string;
   updateMessage: (id: string, patch: Partial<ChatMessage>) => void;
   clearMessages: () => void;
   settings: AISettings;
@@ -339,10 +339,12 @@ export function AIAssistantProvider({ children }: { children: React.ReactNode })
   }, [messages, chatStorageKey]);
 
   const addMessage = useCallback((msg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
+    const id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     setMessages((prev) => [
       ...prev,
-      { ...msg, id: Date.now().toString(), timestamp: new Date().toISOString() },
+      { ...msg, id, timestamp: new Date().toISOString() },
     ]);
+    return id;
   }, []);
 
   const updateMessage = useCallback((id: string, patch: Partial<ChatMessage>) => {

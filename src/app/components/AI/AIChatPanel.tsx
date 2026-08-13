@@ -2,7 +2,6 @@ import { useState, useContext, useMemo, useRef, useEffect, useCallback } from 'r
 import { Loader2, AlertCircle } from 'lucide-react';
 import { useAIAssistant } from '../../context/AIAssistantContext';
 import { VoiceInputButton } from './VoiceInputButton';
-import { useVoiceConversation } from '../../hooks/useVoiceConversation';
 import { PhotoCapture, type PhotoCaptureActions } from './PhotoCapture';
 import { estimateFromPhotos, type EstimationResult } from '../../engine/aiEstimationService';
 import { AIReviewPanel } from './AIReviewPanel';
@@ -19,7 +18,7 @@ import { AppContext } from '../../App';
 import { useResolvedTrade } from '../../hooks/useResolvedTrade';
 import { toast } from 'sonner';
 import { buildAgentContext, getAgentScope } from '../../engine/ai/agentContext';
-import { sendOrchestratorMessage, type CopilotAction } from '../../engine/ai/orchestratorService';
+import { sendOrchestratorMessageStream, type CopilotAction } from '../../engine/ai/orchestratorService';
 import { isWriteToolBlockedInClarify } from '../../engine/ai/actionPolicy';
 import { TaskClarifyCard } from './TaskClarifyCard';
 import {
@@ -49,11 +48,19 @@ import { buildPlanningOrchestratorContext } from '../../engine/planning/planning
 import { getActiveOrgId } from '../../engine/platform/orgContext';
 import { postAgentActivity } from '../../engine/ai/agentActivity';
 
+function TypingDots() {
+  return (
+    <span className="inline-flex items-center gap-1 h-5 px-0.5" aria-label="Cynthia is typing">
+      <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:-0.3s]" />
+      <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:-0.15s]" />
+      <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" />
+    </span>
+  );
+}
+
 export function AIChatPanel() {
   const app = useContext(AppContext);
   const {
-    isOpen,
-    preferVoiceOnOpen, clearPreferVoiceOnOpen,
     messages, addMessage, updateMessage, settings, pageContext,
     setPendingQuoteFields, setLastAcceptedFields,
     detectedTrades, setDetectedTrades,
@@ -65,6 +72,7 @@ export function AIChatPanel() {
   const { tradeId, tradeName, setTradeOverride } = useResolvedTrade();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [streamingId, setStreamingId] = useState<string | null>(null);
   const [photos, setPhotos] = useState<string[]>([]);
   const [estimation, setEstimation] = useState<EstimationResult | null>(null);
   const [toolResults, setToolResults] = useState<ToolExecutionResult[]>([]);
@@ -158,7 +166,7 @@ export function AIChatPanel() {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, loading, toolResults, safetyPending, pendingTask]);
+  }, [messages, loading, streamingId, toolResults, safetyPending, pendingTask]);
 
   const refreshConnection = useCallback(async () => {
     setConnection({ status: 'checking' });
@@ -280,7 +288,10 @@ export function AIChatPanel() {
     return `${content}\n\n⚠️ ${notes}`;
   };
 
-  const runCopilotBrain = async (content: string) => {
+  const runCopilotBrain = async (
+    content: string,
+    stream?: { onToken?: (text: string) => void },
+  ) => {
     const history = [...messages, { role: 'user', content }].map((m) => ({ role: m.role, content: m.content }));
     const activeProject = agentContext.projectId ? getProject(agentContext.projectId) : null;
     const activePlanning = agentContext.planningApplicationId
@@ -289,7 +300,7 @@ export function AIChatPanel() {
 
     try {
       const openaiConfig = integrationService.getConfig('openai');
-      const orchestratorResult = await sendOrchestratorMessage(history, agentContext, {
+      const orchestratorResult = await sendOrchestratorMessageStream(history, agentContext, {
         model: openaiConfig.staffModel || settings.model || 'deepseek-v4-flash',
         userName: staffContext.userName,
         userId: staffContext.userId,
@@ -317,6 +328,8 @@ export function AIChatPanel() {
           ? buildPlanningOrchestratorContext(activePlanning)
           : undefined,
         dataContext,
+      }, {
+        onToken: stream?.onToken,
       });
 
       if (orchestratorResult.phase === 'clarify' && orchestratorResult.clarifyingQuestions?.length) {
@@ -333,7 +346,7 @@ export function AIChatPanel() {
         };
       }
 
-      const detected = orchestratorResult.detectedTrades
+      const detected = (orchestratorResult.detectedTrades ?? [])
         .filter((d) => isValidTradeId(d.tradeId))
         .map((d) => ({ ...d, tradeId: d.tradeId as TradeId }));
 
@@ -344,8 +357,8 @@ export function AIChatPanel() {
       }
 
       const allActions = [
-        ...orchestratorResult.autoActions,
-        ...orchestratorResult.proposedActions,
+        ...(orchestratorResult.autoActions ?? []),
+        ...(orchestratorResult.proposedActions ?? []),
       ];
       const isClarifyPhase = orchestratorResult.phase === 'clarify';
       const actionsToRun = isClarifyPhase
@@ -397,6 +410,26 @@ export function AIChatPanel() {
       logMsg('user', content);
       syncConversation('user', content);
     }
+    const assistantId = addMessage({ role: 'assistant', content: '' });
+    setStreamingId(assistantId);
+    let streamed = '';
+    const onToken = (text: string) => {
+      streamed += text;
+      updateMessage(assistantId, { content: streamed });
+    };
+    const finishAssistant = async (text: string) => {
+      if (!streamed.trim() && text.trim()) {
+        const parts = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+        let acc = '';
+        for (const part of parts) {
+          acc = acc ? `${acc} ${part}` : part;
+          updateMessage(assistantId, { content: acc });
+          await new Promise((resolve) => window.setTimeout(resolve, 55));
+        }
+      }
+      updateMessage(assistantId, { content: text });
+      setStreamingId(null);
+    };
 
     if (
       content
@@ -404,7 +437,7 @@ export function AIChatPanel() {
       && /invoice|send bill|payment request|draft invoice/i.test(content)
     ) {
       const refusal = blockedActionMessage('customer');
-      addMessage({ role: 'assistant', content: refusal });
+      await finishAssistant(refusal);
       logMsg('assistant', refusal);
       setLoading(false);
       return refusal;
@@ -412,12 +445,12 @@ export function AIChatPanel() {
 
     if (photos.length > 0) {
       try {
-        const brainResult = await runCopilotBrain(content || 'Analyse site photos and detect trades');
+        const brainResult = await runCopilotBrain(content || 'Analyse site photos and detect trades', { onToken });
         const detected = brainResult.detectedTrades?.length ? brainResult.detectedTrades : detectedTrades;
         const primaryTrade = detected[0]?.tradeId ?? tradeId;
         if (!primaryTrade) {
           const ask = brainResult.content || 'Describe the job type (e.g. bathroom refit) so I can analyse your photos.';
-          addMessage({ role: 'assistant', content: ask });
+          await finishAssistant(ask);
           setPhotos([]);
           setLoading(false);
           return ask;
@@ -426,32 +459,32 @@ export function AIChatPanel() {
         const result = await estimateFromPhotos(primaryTrade, photos);
         setEstimation(result);
         const photoReply = brainResult.content || result.summary;
-        addMessage({
-          role: 'assistant',
-          content: photoReply,
-          suggestions: result.suggestions,
-        });
+        await finishAssistant(photoReply);
+        updateMessage(assistantId, { suggestions: result.suggestions });
         setPhotos([]);
         setLoading(false);
         return photoReply;
       } catch (err) {
         const connectionError = connectionFromOrchestratorError(err);
+        const failText = connectionError?.message
+          ?? (err instanceof Error ? err.message : 'Could not analyse those photos. Try again or type a description.');
         if (connectionError) {
           setConnection(connectionError);
           toast.error(connectionError.message ?? 'Chat is not connected to OpenAI.');
         } else {
-          toast.error(err instanceof Error ? err.message : 'AI request failed.');
+          toast.error(failText);
         }
+        await finishAssistant(failText);
+        setPhotos([]);
+        setLoading(false);
+        return undefined;
       }
-      setPhotos([]);
-      setLoading(false);
-      return undefined;
     }
 
     try {
-      const brainResult = await runCopilotBrain(content);
-      const responseContent = brainResult.content || 'Sorry — I could not produce a reply. Try again.';
-      addMessage({ role: 'assistant', content: responseContent });
+      const brainResult = await runCopilotBrain(content, { onToken });
+      const responseContent = brainResult.content || streamed || 'Sorry — I could not produce a reply. Try again.';
+      await finishAssistant(responseContent);
       logMsg('assistant', responseContent);
       setLoading(false);
       return responseContent;
@@ -464,6 +497,7 @@ export function AIChatPanel() {
         toast.error(err instanceof Error ? err.message : 'AI request failed.');
       }
     }
+    await finishAssistant(streamed || 'Sorry — I could not produce a reply. Try again.');
     setLoading(false);
     return undefined;
   };
@@ -471,40 +505,6 @@ export function AIChatPanel() {
   const handleProceedWithBestJudgment = () => {
     void handleSend('Use context and proceed with your best judgment');
   };
-
-  const voice = useVoiceConversation({
-    onUserMessage: async (text) => (await handleSend(text)) ?? '',
-  });
-
-  // Auto-start hands-free voice when opened from AI Design (requestVoiceStart).
-  useEffect(() => {
-    if (!isOpen || !preferVoiceOnOpen) return;
-    if (!voice.isSupported || !isChatConnected) {
-      if (isOpen && preferVoiceOnOpen && !voice.isSupported) {
-        clearPreferVoiceOnOpen();
-        toast.info('Voice not supported in this browser — type your message instead');
-      }
-      return;
-    }
-    if (!voice.active) {
-      voice.start();
-    }
-    clearPreferVoiceOnOpen();
-  }, [
-    isOpen,
-    preferVoiceOnOpen,
-    isChatConnected,
-    voice.isSupported,
-    voice.active,
-    voice.start,
-    clearPreferVoiceOnOpen,
-  ]);
-
-  const voiceStatusLabel =
-    voice.status === 'listening' ? 'Listening…'
-    : voice.status === 'thinking' ? 'Thinking…'
-    : voice.status === 'speaking' ? 'Speaking… (tap to interrupt)'
-    : 'Voice mode on';
 
   const photoGuidance = tradeId ? getTrade(tradeId).aiExtraction?.photoGuidance : undefined;
 
@@ -594,7 +594,16 @@ export function AIChatPanel() {
               m.role === 'user' ? 'bg-amber-500 text-white text-sm whitespace-pre-wrap' : 'bg-slate-100 text-slate-800'
             }`}>
               {m.role === 'assistant' ? (
-                <ChatMarkdown content={m.content} />
+                m.content ? (
+                  <div className="text-sm">
+                    <ChatMarkdown content={m.content} />
+                    {streamingId === m.id ? (
+                      <span className="inline-block w-1.5 h-3.5 ml-0.5 align-middle bg-slate-500 animate-pulse" />
+                    ) : null}
+                  </div>
+                ) : (
+                  <TypingDots />
+                )
               ) : (
                 m.content
               )}
@@ -662,7 +671,7 @@ export function AIChatPanel() {
             onCancel={() => setEstimation(null)}
           />
         )}
-        {loading && <Loader2 className="w-5 h-5 animate-spin text-amber-500 mx-auto" />}
+        {loading && !streamingId && <Loader2 className="w-5 h-5 animate-spin text-amber-500 mx-auto" />}
       </div>
       <div className="shrink-0 p-3 border-t bg-white space-y-2">
         {messages.length > 0 && studio.starterQuestionsEnabled && isChatConnected && (
@@ -682,19 +691,6 @@ export function AIChatPanel() {
           compact
           actionRef={photoCaptureRef}
         />
-        {voice.active && (
-          <button
-            type="button"
-            onClick={voice.interrupt}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 text-white text-sm py-2 animate-pulse"
-          >
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
-            </span>
-            {voiceStatusLabel}
-          </button>
-        )}
         <ChatComposer
           value={input}
           onChange={setInput}
@@ -707,17 +703,15 @@ export function AIChatPanel() {
             <ComposerAttachMenu
               onUpload={() => photoCaptureRef.current?.openUpload()}
               onCamera={() => photoCaptureRef.current?.openCamera()}
-              handsFreeSupported={voice.isSupported}
-              handsFreeActive={voice.active}
-              onToggleHandsFree={() => (voice.active ? voice.stop() : voice.start())}
             />
           }
           trailing={
             <VoiceInputButton
               compact
               onTranscript={(t) => {
-                setInput(t);
-                if ((settings.voiceConversation || voice.active) && isChatConnected) void handleSend(t);
+                const spoken = t.trim();
+                if (!spoken || !isChatConnected || loading) return;
+                void handleSend(spoken);
               }}
             />
           }
