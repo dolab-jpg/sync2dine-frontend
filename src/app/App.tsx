@@ -49,7 +49,6 @@ import {
   parseDemoRoleFromUrl,
 } from './engine/auth/sessionStore';
 import { testCustomers } from './data/testData';
-import { crmLeadSeed } from './data/crmLeads';
 import { migrateQuoteToLines } from './engine/quotes/quoteLineUtils';
 import { syncCustomerStatusFromQuote } from './engine/leads/leadService';
 import { startPmScheduler } from './engine/ai/pmScheduler';
@@ -100,6 +99,20 @@ export type {
 export { canCreateContract, canApproveQuotes } from './domainTypes';
 
 const CLOUD_MODE = isSupabaseConfigured();
+/** One-shot: drop smoke CRM rows left in this browser after launch wipe. */
+const LAUNCH_CRM_WIPE_KEY = 's2d.crmLaunchCleared.v1';
+
+function applyLaunchCrmWipe(): void {
+  try {
+    if (localStorage.getItem(LAUNCH_CRM_WIPE_KEY) === '1') return;
+    localStorage.setItem(LAUNCH_CRM_WIPE_KEY, '1');
+    localStorage.removeItem('customers');
+    localStorage.removeItem('quotes');
+    localStorage.removeItem('contacts');
+  } catch {
+    /* private mode */
+  }
+}
 
 /** Prefer primary rows; append secondary ids not already present. */
 function unionById<T extends { id: string }>(primary: T[], secondary: T[]): T[] {
@@ -221,22 +234,13 @@ export default function App() {
       tags: c.tags ?? [],
     }));
 
-  const mergeCrmLeads = (items: Customer[]): Customer[] => {
-    const ids = new Set(items.map((c) => c.id));
-    const merged = [...items];
-    for (const lead of crmLeadSeed) {
-      if (!ids.has(lead.id)) merged.push(lead);
-    }
-    return merged;
-  };
-
   const [customers, setCustomers] = useState<Customer[]>(() => {
+    applyLaunchCrmWipe();
     if (CLOUD_MODE) return [];
     const saved = localStorage.getItem('customers');
-    const base = saved
+    return saved
       ? migrateCustomers(JSON.parse(saved))
       : migrateCustomers(testCustomers as Customer[]);
-    return mergeCrmLeads(base);
   });
 
   // Food menu rows (Sync2Dine) must never get the BD 'bathroom' tradeId stamp —
@@ -447,7 +451,7 @@ export default function App() {
           const remote = migrateCustomers(remoteCustomers as Customer[]);
           setCustomers((prev) => (prev.length ? unionById(remote, prev) : remote));
         } else if (!CLOUD_MODE) {
-          setCustomers((prev) => (prev.length ? prev : mergeCrmLeads(migrateCustomers(testCustomers as Customer[]))));
+          setCustomers((prev) => (prev.length ? prev : migrateCustomers(testCustomers as Customer[])));
         }
         if (remoteQuotes.length) {
           const remote = migrateQuotes(remoteQuotes as Quote[]);
@@ -503,7 +507,7 @@ export default function App() {
       try {
         const saved = localStorage.getItem('customers');
         if (CLOUD_MODE) return;
-        if (saved) setCustomers(mergeCrmLeads(migrateCustomers(JSON.parse(saved))));
+        if (saved) setCustomers(migrateCustomers(JSON.parse(saved)));
       } catch { /* ignore */ }
     };
     window.addEventListener('tradepro:quotes-updated', onQuotes);
