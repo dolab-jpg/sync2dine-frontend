@@ -4,6 +4,14 @@ import {
   nativeStartVoice,
   nativeStopVoice,
 } from '../bridge/nativeBridge';
+import {
+  createMediaRecorder,
+  mediaRecorderAvailable,
+  stopMediaSession,
+  transcribeAudioDataUrl,
+  transcribeBlob,
+  type MediaSession,
+} from './voiceRecord';
 
 interface SpeechRecognitionEvent {
   results: { [index: number]: { [index: number]: { transcript: string } } };
@@ -32,83 +40,6 @@ export interface UseVoiceInputOptions {
   onError?: (message: string) => void;
   /** Fired after the mic is actually live (permission granted / recorder started). */
   onStarted?: () => void;
-}
-
-type MediaSession = {
-  stream: MediaStream;
-  recorder: MediaRecorder;
-  chunks: Blob[];
-};
-
-function mediaRecorderAvailable(): boolean {
-  return typeof navigator !== 'undefined'
-    && !!navigator.mediaDevices?.getUserMedia
-    && typeof MediaRecorder !== 'undefined';
-}
-
-function pickRecorderMime(): string {
-  const candidates = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/mp4',
-    'audio/ogg;codecs=opus',
-  ];
-  for (const type of candidates) {
-    if (MediaRecorder.isTypeSupported(type)) return type;
-  }
-  return '';
-}
-
-async function transcribeBlob(blob: Blob): Promise<string> {
-  const mime = blob.type || 'audio/webm';
-  const ext = mime.includes('mp4') ? 'mp4' : mime.includes('ogg') ? 'ogg' : 'webm';
-  const form = new FormData();
-  form.append('file', new File([blob], `voice.${ext}`, { type: mime }));
-  const res = await fetch('/api/ai/transcribe', { method: 'POST', body: form });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(err.error || `Transcription failed (${res.status})`);
-  }
-  const data = await res.json() as { text?: string };
-  return data.text?.trim() ?? '';
-}
-
-async function transcribeAudioDataUrl(
-  dataUrl: string,
-  mimeType?: string,
-  fileName?: string,
-): Promise<string> {
-  const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl);
-  if (match) {
-    const res = await fetch('/api/ai/transcribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        audio: match[2],
-        mimeType: mimeType || match[1] || 'audio/mp4',
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { error?: string };
-      throw new Error(err.error || `Transcription failed (${res.status})`);
-    }
-    const data = await res.json() as { text?: string };
-    return data.text?.trim() ?? '';
-  }
-
-  const blobRes = await fetch(dataUrl);
-  const blob = await blobRes.blob();
-  return transcribeBlob(new File([blob], fileName || 'voice.m4a', {
-    type: mimeType || blob.type || 'audio/mp4',
-  }));
-}
-
-function stopMediaSession(session: MediaSession | null) {
-  if (!session) return;
-  try {
-    if (session.recorder.state !== 'inactive') session.recorder.stop();
-  } catch { /* already stopped */ }
-  session.stream.getTracks().forEach((track) => track.stop());
 }
 
 /**
@@ -169,10 +100,7 @@ export function useVoiceInput(
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
       });
-      const mimeType = pickRecorderMime();
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
+      const recorder = createMediaRecorder(stream);
       const chunks: Blob[] = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunks.push(event.data);

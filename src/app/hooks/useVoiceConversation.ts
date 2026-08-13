@@ -1,192 +1,84 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { integrationService } from '../engine/integrations/integrationService';
-
-interface SpeechRecognitionResult {
-  0: { transcript: string };
-  isFinal: boolean;
-}
-interface SpeechRecognitionEvt {
-  results: { length: number; [index: number]: SpeechRecognitionResult };
-}
-interface SpeechRecognitionInstance {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((e: SpeechRecognitionEvt) => void) | null;
-  onerror: ((e: unknown) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-}
+import {
+  JUDIE_VOICE_ID,
+  createMediaRecorder,
+  mediaRecorderAvailable,
+  rmsFromAnalyser,
+  stopStream,
+  transcribeBlob,
+} from './voiceRecord';
 
 export type VoiceStatus = 'idle' | 'listening' | 'thinking' | 'speaking';
 
 interface UseVoiceConversationOptions {
   /** Send a transcript to the assistant and resolve with the spoken reply. */
-  onUserMessage: (text: string) => Promise<string>;
+  onUserMessage: (text: string) => Promise<string | undefined>;
+  onError?: (message: string) => void;
 }
 
+const SPEECH_RMS = 0.045;
+const SILENCE_MS = 800;
+const MIN_SPEECH_MS = 400;
+const MAX_UTTERANCE_MS = 20_000;
+const POLL_MS = 50;
+
 /**
- * Hands-free, ChatGPT-style voice loop: listen → send → speak → listen again.
+ * Hands-free, ChatGPT-style voice loop: listen → send → speak (Judie) → listen again.
  * Mic is paused while the assistant speaks to avoid echo; tap-to-interrupt
- * stops playback and resumes listening. Reuses browser STT + OpenAI/browser TTS.
- * Structured so OpenAI Realtime (WebRTC) can replace the internals later.
+ * stops playback and resumes listening.
  */
-export function useVoiceConversation({ onUserMessage }: UseVoiceConversationOptions) {
+export function useVoiceConversation({ onUserMessage, onError }: UseVoiceConversationOptions) {
   const [status, setStatus] = useState<VoiceStatus>('idle');
   const [active, setActive] = useState(false);
   const [lastUser, setLastUser] = useState('');
 
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const vadTimerRef = useRef<number | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const interruptedRef = useRef(false);
   const activeRef = useRef(false);
   const processingRef = useRef(false);
+  const listenGenRef = useRef(0);
 
-  // Always call the latest callback so the loop never uses a stale chat history.
   const onUserMessageRef = useRef(onUserMessage);
+  const onErrorRef = useRef(onError);
   useEffect(() => { onUserMessageRef.current = onUserMessage; }, [onUserMessage]);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
 
-  const isSupported =
-    typeof window !== 'undefined' &&
-    !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  const isSupported = mediaRecorderAvailable();
 
-  const playAudioBlob = useCallback((blob: Blob): Promise<void> => {
-    return new Promise((resolve) => {
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-      audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-      void audio.play();
-    });
+  const clearVad = useCallback(() => {
+    if (vadTimerRef.current != null) {
+      window.clearInterval(vadTimerRef.current);
+      vadTimerRef.current = null;
+    }
   }, []);
 
-  const fetchTts = useCallback(async (text: string): Promise<Blob | null> => {
-    const openaiConfig = integrationService.getConfig('openai');
-    const res = await fetch('/api/ai/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text,
-        voice: openaiConfig.ttsVoice || 'fable',
-        apiKey: integrationService.getLiveOpenAIApiKey(),
-      }),
-    });
-    if (!res.ok) return null;
-    return res.blob();
+  const stopRecorder = useCallback(() => {
+    const rec = recorderRef.current;
+    recorderRef.current = null;
+    if (rec && rec.state !== 'inactive') {
+      try { rec.stop(); } catch { /* already stopped */ }
+    }
   }, []);
 
-  const speak = useCallback((text: string): Promise<void> => {
-    return new Promise<void>((resolve) => {
-      if (!text) { resolve(); return; }
-
-      const browserFallback = () => {
-        if (!('speechSynthesis' in window)) { resolve(); return; }
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = 'en-GB';
-        u.onend = () => resolve();
-        u.onerror = () => resolve();
-        window.speechSynthesis.speak(u);
-      };
-
-      void fetchTts(text)
-        .then(async (blob) => {
-          if (!blob) { browserFallback(); return; }
-          await playAudioBlob(blob);
-          resolve();
-        })
-        .catch(() => browserFallback());
-    });
-  }, [fetchTts, playAudioBlob]);
-
-  /** Speak the first sentence immediately, queue the rest (lower lag while streaming). */
-  const speakChunked = useCallback(async (text: string): Promise<void> => {
-    const parts = text.split(/(?<=[.!?])\s+/).filter(Boolean);
-    if (parts.length === 0) return;
-    setStatus('speaking');
-    const first = parts[0];
-    const rest = parts.slice(1).join(' ');
-    const firstBlobPromise = fetchTts(first);
-    if (rest) void fetchTts(rest);
-    const firstBlob = await firstBlobPromise;
-    if (firstBlob) await playAudioBlob(firstBlob);
-    else await speak(first);
-    if (rest && activeRef.current) {
-      const restBlob = await fetchTts(rest);
-      if (restBlob) await playAudioBlob(restBlob);
+  const teardownMic = useCallback(() => {
+    clearVad();
+    stopRecorder();
+    stopStream(streamRef.current);
+    streamRef.current = null;
+    chunksRef.current = [];
+    if (audioCtxRef.current) {
+      void audioCtxRef.current.close().catch(() => undefined);
+      audioCtxRef.current = null;
     }
-  }, [fetchTts, playAudioBlob, speak]);
-
-  const startListening = useCallback(() => {
-    if (!activeRef.current) return;
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    const rec = new SpeechRecognition();
-    rec.continuous = false;
-    rec.interimResults = false;
-    rec.lang = 'en-GB';
-
-    let finalText = '';
-    rec.onresult = (e: SpeechRecognitionEvt) => {
-      for (let i = 0; i < e.results.length; i += 1) {
-        const r = e.results[i];
-        if (r && r.isFinal) finalText += r[0].transcript;
-      }
-      if (!finalText) {
-        // some engines don't flag isFinal with continuous=false
-        finalText = e.results[0]?.[0]?.transcript ?? '';
-      }
-    };
-    rec.onerror = () => { /* handled in onend */ };
-    rec.onend = () => {
-      recognitionRef.current = null;
-      if (!activeRef.current) { setStatus('idle'); return; }
-      const text = finalText.trim();
-      if (text && !processingRef.current) {
-        void handleUtterance(text);
-      } else if (!processingRef.current) {
-        // nothing heard — keep the loop alive
-        setTimeout(() => startListening(), 400);
-      }
-    };
-
-    recognitionRef.current = rec;
-    try {
-      rec.start();
-      setStatus('listening');
-    } catch {
-      setTimeout(() => startListening(), 500);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleUtterance = useCallback(async (text: string) => {
-    if (processingRef.current) return;
-    processingRef.current = true;
-    setLastUser(text);
-    setStatus('thinking');
-    try {
-      const reply = await onUserMessageRef.current(text);
-      if (activeRef.current && reply) {
-        setStatus('speaking');
-        await speakChunked(reply);
-      }
-    } catch {
-      // swallow — keep the conversation going
-    } finally {
-      processingRef.current = false;
-      if (activeRef.current) {
-        startListening();
-      } else {
-        setStatus('idle');
-      }
-    }
-  }, [speakChunked, startListening]);
+  }, [clearVad, stopRecorder]);
 
   const stopAudio = useCallback(() => {
+    interruptedRef.current = true;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -194,30 +86,244 @@ export function useVoiceConversation({ onUserMessage }: UseVoiceConversationOpti
     window.speechSynthesis?.cancel();
   }, []);
 
+  const playAudioBlob = useCallback((blob: Blob): Promise<void> => {
+    return new Promise((resolve) => {
+      if (interruptedRef.current || !activeRef.current) {
+        resolve();
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      const finish = () => {
+        URL.revokeObjectURL(url);
+        if (audioRef.current === audio) audioRef.current = null;
+        resolve();
+      };
+      audio.onended = finish;
+      audio.onerror = finish;
+      void audio.play().catch(finish);
+    });
+  }, []);
+
+  const fetchJudieTts = useCallback(async (text: string): Promise<Blob | null> => {
+    const body = JSON.stringify({ text, voiceId: JUDIE_VOICE_ID });
+    const headers = { 'Content-Type': 'application/json' };
+    const tryAgent = await fetch('/api/agent/tts', { method: 'POST', headers, body });
+    if (tryAgent.ok) return tryAgent.blob();
+    const tryAi = await fetch('/api/ai/tts', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ text, voice: JUDIE_VOICE_ID }),
+    });
+    if (tryAi.ok) return tryAi.blob();
+    return null;
+  }, []);
+
+  const speak = useCallback(async (text: string): Promise<void> => {
+    if (!text || interruptedRef.current || !activeRef.current) return;
+    const blob = await fetchJudieTts(text);
+    if (blob && !interruptedRef.current && activeRef.current) {
+      await playAudioBlob(blob);
+      return;
+    }
+    if (!('speechSynthesis' in window) || interruptedRef.current) return;
+    await new Promise<void>((resolve) => {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-GB';
+      u.onend = () => resolve();
+      u.onerror = () => resolve();
+      window.speechSynthesis.speak(u);
+    });
+  }, [fetchJudieTts, playAudioBlob]);
+
+  const speakChunked = useCallback(async (text: string): Promise<void> => {
+    const parts = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+    if (parts.length === 0) return;
+    setStatus('speaking');
+    interruptedRef.current = false;
+    for (const part of parts) {
+      if (!activeRef.current || interruptedRef.current) return;
+      await speak(part);
+    }
+  }, [speak]);
+
+  const collectStoppedBlob = useCallback((rec: MediaRecorder, chunks: Blob[]): Promise<Blob> => {
+    return new Promise((resolve) => {
+      rec.onstop = () => {
+        resolve(new Blob(chunks, { type: rec.mimeType || 'audio/webm' }));
+      };
+      try {
+        if (rec.state !== 'inactive') rec.stop();
+        else resolve(new Blob(chunks, { type: rec.mimeType || 'audio/webm' }));
+      } catch {
+        resolve(new Blob(chunks, { type: rec.mimeType || 'audio/webm' }));
+      }
+    });
+  }, []);
+
+  const startListening = useCallback(async () => {
+    if (!activeRef.current || processingRef.current) return;
+    const gen = ++listenGenRef.current;
+    teardownMic();
+
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        onErrorRef.current?.('Microphone permission denied — allow the mic and try again');
+        activeRef.current = false;
+        setActive(false);
+        setStatus('idle');
+        return;
+      }
+      onErrorRef.current?.('Could not start microphone');
+      window.setTimeout(() => {
+        if (activeRef.current && listenGenRef.current === gen) void startListening();
+      }, 800);
+      return;
+    }
+
+    if (!activeRef.current || listenGenRef.current !== gen) {
+      stopStream(stream);
+      return;
+    }
+
+    streamRef.current = stream;
+    const recorder = createMediaRecorder(stream);
+    const chunks: Blob[] = [];
+    chunksRef.current = chunks;
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    };
+    recorderRef.current = recorder;
+    recorder.start(200);
+    setStatus('listening');
+
+    const audioCtx = new AudioContext();
+    audioCtxRef.current = audioCtx;
+    const source = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    source.connect(analyser);
+    const buffer = new Uint8Array(new ArrayBuffer(analyser.fftSize));
+
+    let speaking = false;
+    let speechStartedAt = 0;
+    let lastLoudAt = 0;
+    const loopStartedAt = Date.now();
+
+    const finishUtterance = async () => {
+      if (processingRef.current || listenGenRef.current !== gen) return;
+      clearVad();
+      const rec = recorderRef.current;
+      recorderRef.current = null;
+      const blob = rec
+        ? await collectStoppedBlob(rec, chunks)
+        : new Blob(chunks, { type: 'audio/webm' });
+      teardownMic();
+      if (!activeRef.current || listenGenRef.current !== gen) return;
+
+      if (blob.size < 800) {
+        window.setTimeout(() => {
+          if (activeRef.current) void startListening();
+        }, 250);
+        return;
+      }
+
+      processingRef.current = true;
+      setStatus('thinking');
+      try {
+        const text = await transcribeBlob(blob);
+        if (!activeRef.current || listenGenRef.current !== gen) return;
+        if (!text) {
+          processingRef.current = false;
+          void startListening();
+          return;
+        }
+        setLastUser(text);
+        const reply = await onUserMessageRef.current(text);
+        if (!activeRef.current || listenGenRef.current !== gen) return;
+        if (reply) {
+          setStatus('speaking');
+          await speakChunked(reply);
+        }
+      } catch (err) {
+        onErrorRef.current?.(err instanceof Error ? err.message : 'Voice recognition failed');
+      } finally {
+        processingRef.current = false;
+        if (activeRef.current && listenGenRef.current === gen) {
+          void startListening();
+        } else if (!activeRef.current) {
+          setStatus('idle');
+        }
+      }
+    };
+
+    vadTimerRef.current = window.setInterval(() => {
+      if (!activeRef.current || listenGenRef.current !== gen || processingRef.current) {
+        clearVad();
+        return;
+      }
+      const rms = rmsFromAnalyser(analyser, buffer);
+      const now = Date.now();
+      if (rms >= SPEECH_RMS) {
+        if (!speaking) {
+          speaking = true;
+          speechStartedAt = now;
+        }
+        lastLoudAt = now;
+      }
+      if (speaking && now - lastLoudAt >= SILENCE_MS && now - speechStartedAt >= MIN_SPEECH_MS) {
+        void finishUtterance();
+        return;
+      }
+      if (now - loopStartedAt >= MAX_UTTERANCE_MS) {
+        if (speaking) void finishUtterance();
+        else {
+          clearVad();
+          teardownMic();
+          window.setTimeout(() => {
+            if (activeRef.current) void startListening();
+          }, 200);
+        }
+      }
+    }, POLL_MS);
+  }, [clearVad, collectStoppedBlob, speakChunked, teardownMic]);
+
   const start = useCallback(() => {
-    if (!isSupported) return;
+    if (!isSupported) {
+      onErrorRef.current?.('Hands-free voice needs a browser that can record audio');
+      return;
+    }
     activeRef.current = true;
+    processingRef.current = false;
+    interruptedRef.current = false;
     setActive(true);
-    startListening();
+    void startListening();
   }, [isSupported, startListening]);
 
   const stop = useCallback(() => {
+    listenGenRef.current += 1;
     activeRef.current = false;
-    setActive(false);
     processingRef.current = false;
-    recognitionRef.current?.abort?.();
-    recognitionRef.current = null;
+    setActive(false);
+    teardownMic();
     stopAudio();
     setStatus('idle');
-  }, [stopAudio]);
+  }, [stopAudio, teardownMic]);
 
-  /** Tap-to-interrupt: stop the assistant talking and listen again immediately. */
   const interrupt = useCallback(() => {
     if (!activeRef.current) return;
     stopAudio();
     if (status === 'speaking') {
       processingRef.current = false;
-      startListening();
+      void startListening();
     }
   }, [status, stopAudio, startListening]);
 

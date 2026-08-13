@@ -2,6 +2,7 @@ import { useState, useContext, useMemo, useRef, useEffect, useCallback } from 'r
 import { Loader2, AlertCircle } from 'lucide-react';
 import { useAIAssistant } from '../../context/AIAssistantContext';
 import { VoiceInputButton } from './VoiceInputButton';
+import { useVoiceConversation } from '../../hooks/useVoiceConversation';
 import { PhotoCapture, type PhotoCaptureActions } from './PhotoCapture';
 import { estimateFromPhotos, type EstimationResult } from '../../engine/aiEstimationService';
 import { AIReviewPanel } from './AIReviewPanel';
@@ -61,6 +62,8 @@ function TypingDots() {
 export function AIChatPanel() {
   const app = useContext(AppContext);
   const {
+    isOpen,
+    preferVoiceOnOpen, clearPreferVoiceOnOpen,
     messages, addMessage, updateMessage, settings, pageContext,
     setPendingQuoteFields, setLastAcceptedFields,
     detectedTrades, setDetectedTrades,
@@ -506,6 +509,38 @@ export function AIChatPanel() {
     void handleSend('Use context and proceed with your best judgment');
   };
 
+  const voice = useVoiceConversation({
+    onUserMessage: async (text) => (await handleSend(text)) ?? '',
+    onError: (message) => toast.error(message),
+  });
+
+  useEffect(() => {
+    if (!isOpen || !preferVoiceOnOpen) return;
+    if (!voice.isSupported || !isChatConnected) {
+      if (isOpen && preferVoiceOnOpen && !voice.isSupported) {
+        clearPreferVoiceOnOpen();
+        toast.info('Voice not supported in this browser — type your message instead');
+      }
+      return;
+    }
+    if (!voice.active) voice.start();
+    clearPreferVoiceOnOpen();
+  }, [
+    isOpen,
+    preferVoiceOnOpen,
+    isChatConnected,
+    voice.isSupported,
+    voice.active,
+    voice.start,
+    clearPreferVoiceOnOpen,
+  ]);
+
+  const voiceStatusLabel =
+    voice.status === 'listening' ? 'Listening…'
+    : voice.status === 'thinking' ? 'Thinking…'
+    : voice.status === 'speaking' ? 'Speaking… (tap to interrupt)'
+    : 'Voice mode on';
+
   const photoGuidance = tradeId ? getTrade(tradeId).aiExtraction?.photoGuidance : undefined;
 
   return (
@@ -691,6 +726,19 @@ export function AIChatPanel() {
           compact
           actionRef={photoCaptureRef}
         />
+        {voice.active && (
+          <button
+            type="button"
+            onClick={voice.interrupt}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 text-white text-sm py-2 animate-pulse"
+          >
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
+            </span>
+            {voiceStatusLabel}
+          </button>
+        )}
         <ChatComposer
           value={input}
           onChange={setInput}
@@ -703,6 +751,9 @@ export function AIChatPanel() {
             <ComposerAttachMenu
               onUpload={() => photoCaptureRef.current?.openUpload()}
               onCamera={() => photoCaptureRef.current?.openCamera()}
+              handsFreeSupported={voice.isSupported}
+              handsFreeActive={voice.active}
+              onToggleHandsFree={() => (voice.active ? voice.stop() : voice.start())}
             />
           }
           trailing={
