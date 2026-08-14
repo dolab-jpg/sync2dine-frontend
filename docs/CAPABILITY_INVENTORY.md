@@ -11,7 +11,7 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 | Capability | Domain | FE | BE | AI / tools | SoT | Status | Verify |
 |------------|--------|----|----|------------|-----|--------|--------|
 | Judie diner phone | phone | kiosk / calls | `brains/judie`, `phone/vapi-*` | `judie` / `phone_judie` | Supabase orders | live | PHONE_ARCHITECTURE |
-| Sally sales phone | phone | CRM dial | `brains/sally`, `sally-sales-phone` | `sally` | offer + platform org | live | SALLY_ARCHITECTURE |
+| Sally sales phone | phone | CRM dial | `brains/sally`, `sally-sales-phone` | `sally` | offer + platform org; spoken **sync Two dine** | live | SALLY_ARCHITECTURE |
 | Sally staff PIN | phone | � | Sally staff mode | `sally_staff` | CRM/mailbox | live | PIN on Sally line |
 | Sally Web | web | widget / hero | `POST /api/sally/web` | `sally_web` | shared BI | live | `npm run smoke:sally-web` |
 | Cynthia staff web | ai | `/cynthia`, overlay | `/api/ai/orchestrate`, staff | `cynthia` | session | live | staff login |
@@ -24,11 +24,12 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 | AI Studio | config | Settings ? AI | `/api/ai/studio` | config only | studio store | live | settings |
 | Self-heal | ai | `/ai-audit` Code fixes → Pending offers | `/api/ai/code-fix*` | utility | `code_fix_jobs` | live | offers in Audit only (not Cynthia chat) |
 | Foreman / project / planning / BC AI | construction | panels | `/api/ai/*` | domain agents | � | live | construction UI |
-| Call Centre UI | phone | `/calls` | `/api/agent`, vapi, calls | human softphone | lines | live | softphone |
+| Call Centre UI | phone | `/calls` | `/api/agent`, vapi, calls, campaigns | Start/Pause/Stop + capacity; no quiet/attempts/retry knobs | lines + outbound_queue | live | SALLY_ARCHITECTURE outbound |
 | Legacy phone orchestrator | � | � | throw stub | quarantined | � | dead | do not edit |
 | IVR | phone | � | `ivr-handler` | disabled | � | off | `IVR_ENABLED` |
 | Concierge outbound | channel | — | `/api/concierge/outbound` | partial | queue |
-| Sally venue-timed dials + referrals | phone/sales | CRM dial / CSV | `sally/dial-windows`, `sally/schedule-outbound`, `captureReferralAndQueue` | CSV research + venue windows | live | live | Call Centre + Sally CSV research hours before dial; gatekeeper referral |
+| Sally venue-timed dials + referrals | phone/sales | CRM dial / CSV | `sally/dial-windows`, `sally/schedule-outbound`, `captureReferralAndQueue` | CSV research + venue windows | live | live | CSV/Leeds path may hold `needs_hours`. **`allCrm` sets `venueAware: false`** so the 405-style list is not held. |
+| Sally CRM outbound (all phones) | phone/sales | `/crm` Start calling | `outbound-campaigns` `queueCrmCampaign` `allCrm` | Sally `sally_sales` | Supabase customers + outbound_queue | live | `POST /api/campaigns/queue-crm` `{ allCrm: true }`; worker ignores global quiet hours; reclaim stale `dialling` |
 | CSV auto-import + people memory | sales/CRM | `/crm` Upload CSV | `normalize-csv`, `toUkE164`, `rememberPerson` | DeepSeek map + E.164; research if undialable | live | live | Upload TSV; CRM people list; Sally rememberPerson |
 | Campaign progress (Cynthia) | sales/chat | Cynthia overlay | `getCampaignProgress` + `/api/campaigns/progress` | `getCampaignProgress` | CRM + queue + calls | live | Ask Cynthia: how many calls / contacted |
 

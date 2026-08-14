@@ -17,6 +17,7 @@ Asterisk Soho66 bridge, "Go live".
 - `../sync2dine-backend/docs/TOOL_REGISTRY.md` (phone_* surfaces)
 - `server/brains/{judie,sally}/`, `server/phone/vapi-routes.ts`, `vapi-assistant.ts`
 - Sally overlay: `server/phone/sally-sales-phone.ts` + offer `server/sally/offer.ts`
+- Spoken brand: `SYNC2DINE_SPOKEN` in `server/home-org.ts` (**sync Two dine**). CRM queue: `outbound-campaigns` `allCrm` — see SALLY_ARCHITECTURE.
 - Multi-line REGISTER SoT: `server/telephony/asteriskBridge.ts`, `server/telephony/vapiByo.ts`
 - Bridge runtime: `/var/www/vhosts/b-diddies.com/tradepro-sip-bridge` (`lines.json` + docker)
 

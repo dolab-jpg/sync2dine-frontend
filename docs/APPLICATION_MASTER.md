@@ -114,7 +114,8 @@ Legend: **DONE** = detailed in this MD · **THIN** = mentioned only · **MISSING
 | Atmosphere / pricing / start checkout | YES | THIN | §24.J, CAPABILITY_INVENTORY |
 | Sally offer / knowledge / Sales Brain UI | YES | DONE | §24.J |
 | Sally Web marketing chat | YES | DONE | SALLY_ARCHITECTURE, CAPABILITY_INVENTORY |
-| Sally sales + staff PIN phone | YES | DONE | PHONE_ARCHITECTURE |
+| Sally sales + staff PIN phone | YES | DONE | PHONE_ARCHITECTURE, SALLY_ARCHITECTURE |
+| Sally CRM outbound (all dialable phones) | YES | DONE | §24.C, §24.F, SALLY_ARCHITECTURE |
 | Orders / menu / reservations API | YES | DONE | §25.1 |
 | Connectors / POS forward | YES | THIN | §25.1 |
 
@@ -130,7 +131,7 @@ Legend: **DONE** = detailed in this MD · **THIN** = mentioned only · **MISSING
 | Quotes / estimating | YES | DONE | §24.B |
 | Projects / builder / portal | YES | DONE | §24.D |
 | Communications / mailbox / WhatsApp Web | YES | DONE | §24.E |
-| Call Centre UI (softphone + lines) | YES | DONE | §24.F — phone **AI** is Judie/Sally, not Cynthia |
+| Call Centre UI (softphone + lines + queue kill switch) | YES | DONE | §24.F — Start/Pause/Stop only; Sally owns dial policy |
 | Contracts / planning / BC | YES | DONE | §24.G |
 | Costing / accounts / recruitment / team / platform | YES | DONE | §24.H |
 | Designer / survey / booking / products / settings | YES | DONE | §24.I |
@@ -142,6 +143,7 @@ Legend: **DONE** = detailed in this MD · **THIN** = mentioned only · **MISSING
 | Mount order + domain folders | BE `server/README.md` + §25 |
 | Orders / menu / reservations / connectors | DONE §25.1 |
 | Sally web / knowledge / sales-brain | DONE §25.1 |
+| Campaigns / CRM outbound queue | DONE §25.1 (`/api/campaigns/*` on `ai/agent-routes`) |
 | `ai-proxy` sub-handlers | DONE §25.2 |
 | JSON under `server/data/` = **cache only** | DONE §25.4 |
 | FE `server-legacy/` | LEGACY — not in git; never edit |
@@ -205,8 +207,9 @@ Data column: Supabase is primary unless marked cache/fallback.
 
 | Feature | UI | Components | Engine | API | Data |
 |---------|-----|------------|--------|-----|------|
-| CRM | `/crm` | `ComprehensiveCRM.tsx` + `leads/leadActivity.ts` | `leads/leadService.ts` | `/api/leads/*` | customers (`name` = restaurant; `people[]` + `contactName`; CSV auto-detect) |
-| CSV one-click import | `/crm` | `ScrapeLeadImportDialog`, `SalesCsvDialPanel` | `normalizeLeadCsv.ts`, sallyLeadSheetParser | `POST /api/leads/normalize-csv` | phone 0/+44 → E.164; people memory on account |
+| CRM | `/crm` | `ComprehensiveCRM.tsx` + `leads/leadActivity.ts` | `leads/leadService.ts` | `/api/leads/*` | customers (`name` = restaurant; `people[]` + `contactName`; CSV auto-detect). Home org `4fc49703-…` is the live Sally list — not Demo Kitchen. |
+| Start calling this list | `/crm` | `ComprehensiveCRM.tsx` | `leedsCampaign.ts` (label only) | `POST /api/campaigns/queue-crm` `{ allCrm: true, template: 'sally_sales', remapLeeds: false }` | Queues **every dialable CRM phone** (lead/quoted, skip Leeds-only + DNC). Stamp `callQueueStatus` only from returned `customerId`s when `queued > 0`. |
+| CSV one-click import | `/crm` | `UploadLeadsDialog`, `ScrapeLeadImportDialog`, `SalesCsvDialPanel` | `normalizeLeadCsv.ts`, sallyLeadSheetParser | `POST /api/leads/normalize-csv` | phone 0/+44 → E.164 (10-digit NSN starting `1–9` → `+44`); people memory on account |
 | Customers | `/customers` | `CustomerManagement.tsx`, `CustomerContactsPanel.tsx` | `contacts/contactStore.ts`, leads | `/api/auth/customers`, data sync | `customers`, `contacts` |
 | Lead inbox | `/communications?tab=leads` | `mailbox/LeadInboxPanel.tsx` | `leads/leadInboxService.ts` | `/api/leads/inbox*` | lead inbox + Supabase |
 | Sales mgmt | `/sales` | `SalesManagement.tsx` | — | — | quotes/customers |
@@ -240,7 +243,7 @@ Data column: Supabase is primary unless marked cache/fallback.
 |---------|-----|------------|--------|-----|-------|
 | Cynthia (staff web) | `/cynthia` | `Cynthia/*`, `AI/*` | `cynthia/*`, `ai/toolRuntime*` | `ai/cynthia-routes.ts`, `ai-proxy` → staff/orchestrate | **Not** a phone brain |
 | Cynthia website widget | external embed | `public/cynthia-widget.js` (+ `cyrus-widget.js` alias) | `engine/cyrus/*` | `ai/cyrus-routes.ts`, `/api/ai/cyrus` | Legacy Cyrus name |
-| Call Centre (lines UI) | `/calls` | `CallCenter/*` | — | `phone/vapi-routes`, `phone/phone-webhook`, `ai/agent-routes` | Phone AI = **Judie / Sally** |
+| Call Centre (lines + queue) | `/calls` | `CallCenter/*`, `OutboundQueueControlBar` | — | `phone/vapi-routes`, `phone/phone-webhook`, `ai/agent-routes`, `/api/campaigns/*` | Phone AI = **Judie / Sally**. Staff see Start/Pause/Stop + capacity chips + lead callback + default brief. **Removed:** quiet hours, max attempts, retry delay, post-call note, concurrent-slot knobs. Running badge = kill switch, not “jobs queued”. |
 | Softphone | `/calls?tab=softphone` | `SoftPhonePanel.tsx` | jssip | SIP WSS (PARTIAL) | Human softphone |
 | Staff phones | Settings → Team | `StaffSoftphones`, `StaffPhoneRegistration` | — | `/api/agent/lines*`, `/api/org/staff/*` | |
 | AI Studio | Settings → AI | `aiStudio/AIStudioPanel.tsx` | `aiStudioStore.ts` | `/api/ai/studio`, language-packs, conversation-log, code-fix | |
@@ -307,7 +310,7 @@ Phone personality SoT: [`PHONE_ARCHITECTURE.md`](../../sync2dine-backend/docs/PH
 | Client menu preview | `/platform/clients/:orgId/menu` | `platform/MenuPreview.tsx` | — | `/api/menu` | menu |
 | Tablet preview (platform) | Platform Clients → "View tablet" | `restaurant/RestaurantShell.tsx` exit banner | `experience.ts` `s2d_tablet_preview` session flag — the ONLY way platform_owner sees the tablet | — | session-scoped |
 | Judie phone (diner) | Vapi DID `aria` | — | `brains/judie`, `phone/*` | `phone/vapi-routes.ts` | orders org-scoped |
-| Sally sales phone | Vapi DID `sally` | — | `brains/sally`, `phone/sally-sales-phone.ts`, `sally/*` | `phone/vapi-routes.ts` | platform org |
+| Sally sales phone | Vapi DID `sally` | — | `brains/sally`, `phone/sally-sales-phone.ts`, `sally/*` | `phone/vapi-routes.ts` | platform org. Spoken brand: **sync Two dine** (`SYNC2DINE_SPOKEN` in `home-org.ts`). Write Sync2Dine in CRM/email. |
 | Sally staff PIN | same Sally DID | — | Sally brain staff mode | phone tools | CRM/mailbox |
 | Sally Web chat | marketing widget | — | `sally/web-chat.ts` | `POST /api/sally/web` | shared Sally BI |
 
@@ -324,9 +327,9 @@ Canonical: **`BE/server/`**. Entry: [`index.ts`](../../sync2dine-backend/server/
 | Canonical module | Root stub (if any) | Paths / family |
 |------------------|--------------------|----------------|
 | `whatsapp-webhook.ts` | — | `/webhooks/whatsapp`, `/api/messages/send`, `/health` |
-| `phone/phone-webhook.ts` | `phone-webhook.ts` | `/webhooks/voice/*`, `/api/calls`, `/api/calls/outbound` |
+| `phone/phone-webhook.ts` | `phone-webhook.ts` | `/webhooks/voice/*`, `/api/calls`, `/api/calls/outbound`, `/api/calls/outbound/bulk` → `queueCsvCampaign` |
 | `phone/vapi-routes.ts` | `vapi-routes.ts` | `/webhooks/vapi`, `/api/vapi/*` |
-| `ai/agent-routes.ts` | `agent-routes.ts` | `/api/agent/*`, contacts lookup |
+| `ai/agent-routes.ts` | `agent-routes.ts` | `/api/agent/*`, `/api/campaigns/*` (`queue-crm` `allCrm`), contacts lookup |
 | `project-routes.ts` | — | `/api/data/sync`, `/api/files/upload`, `/api/portal/:token`, project checkout |
 | `building-control-routes.ts` | — | `/api/building-control/*` |
 | `ai/ai-studio-routes.ts` | `ai-studio-routes.ts` | `/api/ai/studio` |
