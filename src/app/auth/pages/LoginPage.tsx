@@ -70,7 +70,12 @@ export default function LoginPage({ onLogin }: LoginProps) {
     void (async () => {
       try {
         const supabase = getSupabase();
-        const { data } = await supabase.auth.getSession();
+        const { data } = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise<never>((_, reject) => {
+            window.setTimeout(() => reject(new Error('session-timeout')), 8000);
+          }),
+        ]);
         if (cancelled || !data.session?.user) return;
         const { data: profile } = await supabase
           .from('profiles')
@@ -172,10 +177,15 @@ export default function LoginPage({ onLogin }: LoginProps) {
         }
       }
       const supabase = getSupabase();
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data, error: authError } = await Promise.race([
+        supabase.auth.signInWithPassword({
+          email,
+          password,
+        }),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => reject(new Error('signin-timeout')), 12000);
+        }),
+      ]);
       if (authError || !data.user) {
         setError(authError?.message || 'Invalid email/username or password.');
         return;
@@ -204,7 +214,12 @@ export default function LoginPage({ onLogin }: LoginProps) {
         role,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign-in failed.');
+      const raw = err instanceof Error ? err.message : 'Sign-in failed.';
+      setError(
+        raw === 'signin-timeout'
+          ? 'Sign-in timed out. Turn off any VPN, refresh, and try again. If it still hangs, Auth is not answering — wait a minute and retry.'
+          : raw,
+      );
     } finally {
       setIsLoading(false);
     }

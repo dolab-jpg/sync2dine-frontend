@@ -23,6 +23,8 @@ export function getSupabase(): SupabaseClient<Database> {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
+        // Avoid orphaned navigator.locks leaving Sign in stuck on "Signing in..."
+        lock: async (_name, _acquireTimeout, fn) => fn(),
       },
     });
   }
