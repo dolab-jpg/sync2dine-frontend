@@ -59,7 +59,7 @@ function TypingDots() {
   );
 }
 
-export function AIChatPanel() {
+export function AIChatPanel({ allowVoiceAutoStart = false }: { allowVoiceAutoStart?: boolean }) {
   const app = useContext(AppContext);
   const {
     isOpen,
@@ -515,7 +515,7 @@ export function AIChatPanel() {
   });
 
   useEffect(() => {
-    if (!isOpen || !preferVoiceOnOpen) return;
+    if (!allowVoiceAutoStart || !isOpen || !preferVoiceOnOpen) return;
     if (!voice.isSupported || !isChatConnected) {
       if (isOpen && preferVoiceOnOpen && !voice.isSupported) {
         clearPreferVoiceOnOpen();
@@ -526,6 +526,7 @@ export function AIChatPanel() {
     if (!voice.active) voice.start();
     clearPreferVoiceOnOpen();
   }, [
+    allowVoiceAutoStart,
     isOpen,
     preferVoiceOnOpen,
     isChatConnected,
@@ -757,14 +758,16 @@ export function AIChatPanel() {
             />
           }
           trailing={
-            <VoiceInputButton
-              compact
-              onTranscript={(t) => {
-                const spoken = t.trim();
-                if (!spoken || !isChatConnected || loading) return;
-                void handleSend(spoken);
-              }}
-            />
+            voice.active ? null : (
+              <VoiceInputButton
+                compact
+                onTranscript={(t) => {
+                  const spoken = t.trim();
+                  if (!spoken || !isChatConnected || loading) return;
+                  void handleSend(spoken);
+                }}
+              />
+            )
           }
         />
       </div>

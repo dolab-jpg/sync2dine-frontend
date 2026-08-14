@@ -14,6 +14,8 @@ interface AIAssistantPanelProps {
   onToggleDock?: () => void;
   docked?: boolean;
   layout?: 'inline' | 'floating' | 'sheet';
+  /** Only the visible AppShell host should auto-start mic on open. */
+  allowVoiceAutoStart?: boolean;
 }
 
 const LAYOUT_WIDTH: Record<NonNullable<AIAssistantPanelProps['layout']>, string> = {
@@ -27,6 +29,7 @@ export function AIAssistantPanel({
   onToggleDock,
   docked = true,
   layout = 'inline',
+  allowVoiceAutoStart = false,
 }: AIAssistantPanelProps) {
   useAIContextSync();
   const { bcSessionActive, clearMessages } = useAIAssistant();
@@ -151,7 +154,7 @@ export function AIAssistantPanel({
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        <AIChatPanel />
+        <AIChatPanel allowVoiceAutoStart={allowVoiceAutoStart} />
       </div>
     </aside>
   );

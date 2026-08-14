@@ -549,28 +549,29 @@ export default function AppShell({ children }: AppShellProps) {
             {children}
           </main>
           {aiSettings.enabled && aiSettings.showOverlay && aiOpen && !onCynthiaRoute && (
-            <>
+            aiDockedInline ? (
+              <div className="flex shrink-0 h-full min-h-0 pb-[var(--bottom-bar-offset,0px)]">
+                <AIAssistantPanel
+                  onClose={() => setAiOpen(false)}
+                  docked={aiSettings.panelDocked}
+                  layout="inline"
+                  allowVoiceAutoStart
+                  onToggleDock={() => updateAiSettings({ panelDocked: !aiSettings.panelDocked })}
+                />
+              </div>
+            ) : (
               <div
-                className={`${aiDockedInline ? 'hidden' : 'fixed'} z-50 flex flex-col min-h-0 overflow-hidden bg-white/98 backdrop-blur-sm shadow-2xl border-slate-200/80 inset-x-0 bottom-[var(--bottom-bar-offset,0px)] h-[min(85vh,100%)] rounded-t-2xl border-t sm:inset-x-auto sm:left-auto sm:top-14 sm:right-0 sm:bottom-[var(--bottom-bar-offset,0px)] sm:h-auto sm:w-96 sm:max-w-[min(24rem,100vw)] sm:rounded-none sm:rounded-l-2xl sm:border-t-0 sm:border-l`}
+                className="fixed z-50 flex flex-col min-h-0 overflow-hidden bg-white/98 backdrop-blur-sm shadow-2xl border-slate-200/80 inset-x-0 bottom-[var(--bottom-bar-offset,0px)] h-[min(85vh,100%)] rounded-t-2xl border-t sm:inset-x-auto sm:left-auto sm:top-14 sm:right-0 sm:bottom-[var(--bottom-bar-offset,0px)] sm:h-auto sm:w-96 sm:max-w-[min(24rem,100vw)] sm:rounded-none sm:rounded-l-2xl sm:border-t-0 sm:border-l"
               >
                 <AIAssistantPanel
                   onClose={() => setAiOpen(false)}
                   docked={false}
                   layout={isMobile ? 'sheet' : 'floating'}
+                  allowVoiceAutoStart
                   onToggleDock={isWideViewport ? () => updateAiSettings({ panelDocked: !aiSettings.panelDocked }) : undefined}
                 />
               </div>
-              {aiDockedInline && (
-                <div className="hidden lg:flex shrink-0 h-full min-h-0 pb-[var(--bottom-bar-offset,0px)]">
-                  <AIAssistantPanel
-                    onClose={() => setAiOpen(false)}
-                    docked={aiSettings.panelDocked}
-                    layout="inline"
-                    onToggleDock={() => updateAiSettings({ panelDocked: !aiSettings.panelDocked })}
-                  />
-                </div>
-              )}
-            </>
+            )
           )}
         </div>
 

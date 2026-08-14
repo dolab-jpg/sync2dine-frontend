@@ -21,7 +21,7 @@ Before editing shared surfaces, review the rows below. Update registries when be
 | CRM lead identity | `/crm` + CSV + signup + Sally/Vapi | Sally sales, platform_owner | ComprehensiveCRM, parseCustomersCsv, sallyLeadSheetParser, normalizeLeadCsv, rememberPerson, SALES_CAPTURE_LEAD_TOOL, from-call (no caller-as-venue), launch-wipe disk CRM | CSV auto-detect; Add Lead; from-call 400 | `/crm`, `/api/leads/from-call`, `POST /api/leads/normalize-csv`, Vapi captureLead / rememberPerson | APPLICATION_MASTER §24.C | SPA + API |
 | Act as client (FE experience) | SPA shells | platform_owner | `experience.ts`, RestaurantShell, PlatformClientsCRM | manual Act as to Menu to Exit | `/`, `/menu`, `/platform/clients` | CHANGE_IMPACT | SPA |
 | Authenticated workspace loader | SPA bootstrap | staff | `WorkspaceLoadingScreen`, `workspaceLoader.ts` | `workspaceLoader.test.ts` | `/login` → authed home | CHANGE_IMPACT | SPA |
-| Cynthia panel `isOpen` | sales/platform shell | staff | `AIChatPanel` + `AIAssistantContext` | `aiChatPanelOpen.test.ts` | `/`, `/platform/clients` | CHANGE_IMPACT | SPA |
+| Cynthia panel `isOpen` | sales/platform shell | staff | `AIChatPanel` + `AIAssistantContext` + exclusive AppShell overlay mount (`allowVoiceAutoStart` on visible host only) | `aiChatPanelOpen.test.ts` | `/`, `/platform/clients` | CHANGE_IMPACT | SPA |
 | Deploy scripts | ? | ? | push-live-local | health curls | ? | DEPLOYMENT_MAP | ? |
 | API outage / ops contacts | email SMS Trae webhook | platform_owner | ops-sms, ops-contacts-store, ops-notify, api-health-watchdog, sip-reg-watchdog | curl /health; Send test SMS | `/platform/ops`, `/api/platform/ops-contacts` | DEPLOYMENT_MAP, WORKERS, ROUTE_MAP | API + SPA + VPS cron (API 1m, SIP 2m) |
 
