@@ -34,6 +34,7 @@ import { CallThisPersonDialog } from './crm/CallThisPersonDialog';
 import { ScrapeLeadImportDialog } from './crm/ScrapeLeadImportDialog';
 import { SalesCsvDialPanel } from './crm/SalesCsvDialPanel';
 import CallRecordingPlayer from './restaurant/CallRecordingPlayer';
+import { toUkE164 } from '../engine/data/sallyLeadSheetParser';
 
 type Lead = Customer & {
   source: NonNullable<Customer['source']>;
@@ -337,7 +338,20 @@ export default function ComprehensiveCRM() {
   };
 
   const handleImportScrapedLeads = async (incoming: Customer[]) => {
+    const existingPhones = new Set(
+      customers
+        .map((c) => toUkE164(String(c.phone || '').trim()))
+        .filter((p) => /^\+44[1-9]\d{8,9}$/.test(p)),
+    );
+    let added = 0;
+    let skipped = 0;
     for (const c of incoming) {
+      const phone = toUkE164(String(c.phone || '').trim());
+      if (phone && existingPhones.has(phone)) {
+        skipped += 1;
+        continue;
+      }
+      if (phone) existingPhones.add(phone);
       const { id: _id, createdAt: _createdAt, ...rest } = c;
       addCustomer({
         ...rest,
@@ -346,8 +360,10 @@ export default function ComprehensiveCRM() {
         preferredLanguage: rest.preferredLanguage ?? 'en',
         photos: rest.photos ?? [],
       });
+      added += 1;
     }
     setActiveTab('queue');
+    return { added, skipped };
   };
 
   const handleMarkCallbackDone = (lead: Lead) => {

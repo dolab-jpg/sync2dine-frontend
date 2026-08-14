@@ -29,7 +29,8 @@ export type NormalizedLeadRow = {
   [key: string]: unknown;
 };
 
-const SMALL_SHEET_ROWS = 250;
+/** DeepSeek only needs a small sample; every sheet row is still sent for local mapping. */
+const SAMPLE_ROWS_FOR_LLM = 8;
 
 function pick(...vals: Array<string | undefined | null>): string {
   for (const v of vals) {
@@ -237,16 +238,24 @@ function coerceNormalizedRows(raw: unknown, headers: string[]): NormalizedLeadRo
   });
 }
 
+/** Payload for POST /api/leads/normalize-csv — always include full rows (LLM still uses sample only). */
+export function buildNormalizeCsvPayload(inspected: InspectedLeadSheet): {
+  headers: string[];
+  sampleRows: string[][];
+  rows: string[][];
+} {
+  return {
+    headers: inspected.headers,
+    sampleRows: inspected.rows.slice(0, SAMPLE_ROWS_FOR_LLM),
+    rows: inspected.rows,
+  };
+}
+
 async function fetchNormalizedRows(
   inspected: InspectedLeadSheet,
 ): Promise<NormalizedLeadRow[] | null> {
-  const payload: { headers: string[]; sampleRows: string[][]; rows?: string[][] } = {
-    headers: inspected.headers,
-    sampleRows: inspected.rows.slice(0, 8),
-  };
-  if (inspected.rows.length > 0 && inspected.rows.length <= SMALL_SHEET_ROWS) {
-    payload.rows = inspected.rows;
-  }
+  if (!inspected.rows.length) return null;
+  const payload = buildNormalizeCsvPayload(inspected);
   const res = await fetch('/api/leads/normalize-csv', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -266,13 +275,28 @@ async function fetchNormalizedRows(
   return null;
 }
 
+function withPeopleOverlay(parsed: ParsedSallyLeadSheet): ParsedSallyLeadSheet {
+  return {
+    ...parsed,
+    customers: parsed.customers.map((c) => overlayCustomer(c)),
+    dialRows: parsed.dialRows,
+  };
+}
+
 function mergeParsedWithApi(
   parsed: ParsedSallyLeadSheet,
   apiRows: NormalizedLeadRow[],
   batchId: string,
+  inspectedRowCount: number,
 ): ParsedSallyLeadSheet {
+  // Sample-only / truncated API responses must not replace a full local parse
+  // (historically happened when sheets >250 omitted `rows` and only 8 samples came back).
+  if (apiRows.length < inspectedRowCount) {
+    return withPeopleOverlay(parsed);
+  }
+
   // API returns one object per sheet row. Local parse may have dropped rows, so
-  // never overlay by array index  trust the normalised rows as the source of truth.
+  // never overlay by array index — trust the normalised rows as the source of truth.
   const customers = apiRows
     .map((row, i) => customerFromNorm(row, i, batchId))
     .filter((c): c is Customer => !!c)
@@ -285,11 +309,7 @@ function mergeParsedWithApi(
       errors: parsed.errors.filter((e) => !/point of contact required/i.test(e)),
     };
   }
-  return {
-    ...parsed,
-    customers: parsed.customers.map((c) => overlayCustomer(c)),
-    dialRows: parsed.dialRows,
-  };
+  return withPeopleOverlay(parsed);
 }
 
 /** Inspect sheet, normalise via API when possible, else parse locally. */
@@ -307,10 +327,7 @@ export async function normalizeLeadSheet(
 
   const parsed = sallyParser.parseSallyLeadSheetCsv(text, { batchId });
   if (apiRows?.length) {
-    return mergeParsedWithApi(parsed, apiRows, batchId);
+    return mergeParsedWithApi(parsed, apiRows, batchId, inspected.rows.length);
   }
-  return {
-    ...parsed,
-    customers: parsed.customers.map((c) => overlayCustomer(c)),
-  };
+  return withPeopleOverlay(parsed);
 }

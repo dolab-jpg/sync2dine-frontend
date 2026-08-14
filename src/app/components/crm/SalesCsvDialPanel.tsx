@@ -11,7 +11,7 @@ import { normalizeLeadSheet } from '../../engine/data/normalizeLeadCsv';
 import type { SallyDialRow } from '../../engine/data/sallyLeadSheetParser';
 
 type Props = {
-  onImport?: (customers: Customer[]) => Promise<void> | void;
+  onImport?: (customers: Customer[]) => Promise<{ added: number; skipped: number } | void> | { added: number; skipped: number } | void;
 };
 
 /** CSV drop zone for company phone numbers — queues outbound sales dials. */

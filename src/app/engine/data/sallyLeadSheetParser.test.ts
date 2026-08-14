@@ -89,7 +89,12 @@ describe('toUkE164', () => {
     assert.equal(toUkE164('441296715055'), '+441296715055');
   });
 
-  it('keeps mobiles as +4477', () => {
+  it('normalises High Wycombe 01494 and Oxford 01865 missing leading 0', () => {
+    assert.equal(toUkE164('1494437982'), '+441494437982');
+    assert.equal(toUkE164('1865817005'), '+441865817005');
+  });
+
+  it('keeps mobiles as +4477', () => {
     assert.equal(toUkE164('+447700900123'), '+447700900123');
     assert.equal(toUkE164('07700900123'), '+447700900123');
     assert.equal(toUkE164('7700900123'), '+447700900123');
@@ -146,5 +151,26 @@ describe('parseSallyLeadSheetCsv comma CSV with contact_name', () => {
     const parsed = parseSallyLeadSheetCsv(csv);
     assert.equal(parsed.dialRows.length, 0);
     assert.ok(parsed.errors.some((e) => /phone required/i.test(e)));
+  });
+
+  it('parses 251+ rows including 01494 and 01865 area codes', () => {
+    const header = 'company_name,phone,address,city,postcode';
+    const rows = [
+      'Golden Palace,1494437982,"11 Mentmore Rd",High Wycombe,HP12 4LU',
+      'Little Four Seasons,1865817005,"65 London Rd",Headington,OX3 7RD',
+      'Chutney Jacks,1296715055,"36A High St",Winslow,MK18 3HB',
+    ];
+    for (let i = 0; i < 248; i++) {
+      // Unique 10-digit NSNs in the 1xxx geographic range (missing leading 0).
+      const nsn = String(1200000000 + i);
+      rows.push(`Venue ${i},${nsn},"${i} High St",Town,AB1 2CD`);
+    }
+    assert.equal(rows.length, 251);
+    const parsed = parseSallyLeadSheetCsv([header, ...rows].join('\n'), { batchId: 'big-sheet' });
+    assert.equal(parsed.dialRows.length, 251);
+    assert.equal(parsed.customers.length, 251);
+    assert.equal(parsed.dialRows[0].phone, '+441494437982');
+    assert.equal(parsed.dialRows[1].phone, '+441865817005');
+    assert.equal(parsed.dialRows[2].phone, '+441296715055');
   });
 });

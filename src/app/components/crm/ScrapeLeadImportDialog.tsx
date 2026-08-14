@@ -10,11 +10,13 @@ import { toast } from 'sonner';
 import { parseCustomersCsv } from '../../engine/data/dataImportExportService';
 import { normalizeLeadSheet } from '../../engine/data/normalizeLeadCsv';
 
+export type LeadImportResult = { added: number; skipped: number };
+
 type Props = {
-  onImport: (customers: Customer[]) => Promise<void> | void;
+  onImport: (customers: Customer[]) => Promise<LeadImportResult | void> | LeadImportResult | void;
 };
 
-/** Paste or upload scraped lead rows — formats and UK phones (0 / +44) are detected automatically. */
+/** Paste or upload scraped lead rows — formats and UK phones (0 / +44 / missing leading 0) are detected automatically. */
 export function ScrapeLeadImportDialog({ onImport }: Props) {
   const [open, setOpen] = useState(false);
   const [paste, setPaste] = useState('');
@@ -85,8 +87,15 @@ export function ScrapeLeadImportDialog({ onImport }: Props) {
         toast.error('No leads found to import', { id: toastId });
         return;
       }
-      await onImport(stamped);
-      toast.success(`Imported ${stamped.length} lead${stamped.length === 1 ? '' : 's'}`, { id: toastId });
+      const result = await onImport(stamped);
+      const added = result && typeof result === 'object' ? result.added : stamped.length;
+      const skipped = result && typeof result === 'object' ? result.skipped : 0;
+      toast.success(
+        skipped > 0
+          ? `Imported ${added} lead${added === 1 ? '' : 's'} (${skipped} already in CRM)`
+          : `Imported ${added} lead${added === 1 ? '' : 's'}`,
+        { id: toastId },
+      );
       if (errors.length) toast.message(`${errors.length} row warning(s)`);
       setPaste('');
       setOpen(false);
@@ -123,7 +132,7 @@ export function ScrapeLeadImportDialog({ onImport }: Props) {
             <Label>Paste CSV</Label>
             <p className="text-xs text-slate-500 mt-0.5">
               Formats are detected automatically — no column mapping.
-              UK phones starting 0 or +44 are normalised to E.164.
+              UK phones (0…, +44…, or missing leading 0 like 1296715055) are normalised to E.164.
             </p>
             <Textarea
               className="mt-1 min-h-[140px] font-mono text-sm"
