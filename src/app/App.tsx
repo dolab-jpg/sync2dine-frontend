@@ -599,7 +599,9 @@ export default function App() {
       whatsappOptIn: customer.whatsappOptIn ?? false,
       preferredChannel: customer.preferredChannel ?? 'email',
       preferredLanguage: customer.preferredLanguage ?? 'en',
-      id: Date.now().toString(),
+      id: (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+        ? crypto.randomUUID()
+        : `cust-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       createdAt: new Date().toISOString()
     };
     setCustomers((prev) => {
@@ -623,6 +625,49 @@ export default function App() {
     });
     mirrorCustomerToPhoneBackend(newCustomer);
     return newCustomer;
+  };
+
+  const addCustomersBulk = (
+    incoming: Array<Omit<Customer, 'id' | 'createdAt'> & { id?: string }>,
+  ): Customer[] => {
+    if (!incoming.length) return [];
+    const created: Customer[] = incoming.map((customer, index) => ({
+      ...customer,
+      whatsappOptIn: customer.whatsappOptIn ?? false,
+      preferredChannel: customer.preferredChannel ?? 'email',
+      preferredLanguage: customer.preferredLanguage ?? 'en',
+      id: customer.id
+        || ((typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+          ? crypto.randomUUID()
+          : `cust-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 10)}`),
+      createdAt: new Date().toISOString(),
+      photos: customer.photos ?? [],
+    }));
+    setCustomers((prev) => {
+      const seen = new Set(prev.map((c) => c.id));
+      const append = created.filter((c) => {
+        if (seen.has(c.id)) return false;
+        seen.add(c.id);
+        return true;
+      });
+      const next = [...prev, ...append];
+      if (useCloudPersistence()) {
+        void import('./engine/data/supabaseStore').then(({ saveCustomersToSupabase }) => {
+          void saveCustomersToSupabase(next as unknown as Record<string, unknown>[]).then((err) => {
+            if (err) {
+              window.dispatchEvent(
+                new CustomEvent('tradepro:persist-error', {
+                  detail: { table: 'customers', error: err },
+                }),
+              );
+            }
+          });
+        });
+      }
+      return next;
+    });
+    for (const c of created) mirrorCustomerToPhoneBackend(c);
+    return created;
   };
 
   const upsertCustomer = (customer: Customer) => {
@@ -923,6 +968,7 @@ export default function App() {
     accountsAccess,
     setAccountsAccess,
     addCustomer,
+    addCustomersBulk,
     upsertCustomer,
     updateCustomer,
     deleteCustomer,

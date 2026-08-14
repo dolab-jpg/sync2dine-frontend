@@ -79,7 +79,7 @@ export default function ComprehensiveCRM() {
   const [searchParams, setSearchParams] = useSearchParams();
   if (!context) return null;
 
-  const { user, customers, updateCustomer, addCustomer } = context;
+  const { user, customers, updateCustomer, addCustomer, addCustomersBulk } = context;
   const isSuperAdmin = user.role === 'super_admin' || user.role === 'platform_owner';
 
   const leads = useMemo(
@@ -343,27 +343,35 @@ export default function ComprehensiveCRM() {
         .map((c) => toUkE164(String(c.phone || '').trim()))
         .filter((p) => /^\+44[1-9]\d{8,9}$/.test(p)),
     );
-    let added = 0;
+    const usedIds = new Set(customers.map((c) => c.id));
+    const toAdd: Array<Omit<Customer, 'id' | 'createdAt'> & { id?: string }> = [];
     let skipped = 0;
-    for (const c of incoming) {
+    for (let i = 0; i < incoming.length; i++) {
+      const c = incoming[i];
       const phone = toUkE164(String(c.phone || '').trim());
       if (phone && existingPhones.has(phone)) {
         skipped += 1;
         continue;
       }
       if (phone) existingPhones.add(phone);
-      const { id: _id, createdAt: _createdAt, ...rest } = c;
-      addCustomer({
+      const { createdAt: _createdAt, ...rest } = c;
+      let id = rest.id;
+      if (!id || usedIds.has(id)) {
+        id = `lead-${rest.leadBatchId || 'import'}-${i}-${(typeof crypto !== 'undefined' && 'randomUUID' in crypto) ? crypto.randomUUID() : Math.random().toString(36).slice(2, 10)}`;
+      }
+      usedIds.add(id);
+      toAdd.push({
         ...rest,
+        id,
         whatsappOptIn: rest.whatsappOptIn ?? false,
         preferredChannel: rest.preferredChannel ?? 'phone',
         preferredLanguage: rest.preferredLanguage ?? 'en',
         photos: rest.photos ?? [],
       });
-      added += 1;
     }
+    if (toAdd.length) addCustomersBulk(toAdd);
     setActiveTab('queue');
-    return { added, skipped };
+    return { added: toAdd.length, skipped };
   };
 
   const handleMarkCallbackDone = (lead: Lead) => {

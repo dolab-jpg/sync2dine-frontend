@@ -238,7 +238,7 @@ function coerceNormalizedRows(raw: unknown, headers: string[]): NormalizedLeadRo
   });
 }
 
-/** Payload for POST /api/leads/normalize-csv — always include full rows (LLM still uses sample only). */
+/** Payload for POST /api/leads/normalize-csv  always include full rows (LLM still uses sample only). */
 export function buildNormalizeCsvPayload(inspected: InspectedLeadSheet): {
   headers: string[];
   sampleRows: string[][];
@@ -296,7 +296,7 @@ function mergeParsedWithApi(
   }
 
   // API returns one object per sheet row. Local parse may have dropped rows, so
-  // never overlay by array index — trust the normalised rows as the source of truth.
+  // never overlay by array index  trust the normalised rows as the source of truth.
   const customers = apiRows
     .map((row, i) => customerFromNorm(row, i, batchId))
     .filter((c): c is Customer => !!c)
@@ -327,7 +327,12 @@ export async function normalizeLeadSheet(
 
   const parsed = sallyParser.parseSallyLeadSheetCsv(text, { batchId });
   if (apiRows?.length) {
-    return mergeParsedWithApi(parsed, apiRows, batchId, inspected.rows.length);
+    const merged = mergeParsedWithApi(parsed, apiRows, batchId, inspected.rows.length);
+    // Prefer the larger set: truncated API samples must never win over a full local parse.
+    if (parsed.customers.length > merged.customers.length) {
+      return withPeopleOverlay(parsed);
+    }
+    return merged;
   }
   return withPeopleOverlay(parsed);
 }
