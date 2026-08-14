@@ -881,11 +881,10 @@ export default function ComprehensiveCRM() {
                         };
                         if (!res.ok) throw new Error(data.error || 'Failed to queue CRM campaign');
                         const impliedIds = collectQueuedCustomerIds(data);
-                        const toStamp = impliedIds.length > 0
-                          ? leads.filter((l) => impliedIds.includes(l.id))
-                          : leads.filter(isDialableCrmLead);
-                        for (const lead of toStamp) {
-                          updateCustomer(lead.id, { callQueueStatus: 'queued' });
+                        if ((data.queued ?? 0) > 0 && impliedIds.length > 0) {
+                          for (const lead of leads.filter((l) => impliedIds.includes(l.id))) {
+                            updateCustomer(lead.id, { callQueueStatus: 'queued' });
+                          }
                         }
                         toast.success(
                           `Queued ${data.queued ?? 0} dials`

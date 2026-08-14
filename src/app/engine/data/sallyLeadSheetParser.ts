@@ -1,6 +1,6 @@
 /**
  * Parse Google Sheet / CSV exports for Sally outbound dials.
- * Supports headers like company_name, phone, address, opening_hours, hours_monhours_sun.
+ * Supports headers like company_name, phone, address, opening_hours, hours_mon?hours_sun.
  */
 import type { Customer } from '../../App';
 import { parseCustomersCsv } from './dataImportExportService';
@@ -76,8 +76,8 @@ export function toUkE164(raw: string): string {
   if (!digits) return trimmed;
   if (digits.startsWith('44')) return `+${digits}`;
   if (digits.startsWith('0')) return `+44${digits.slice(1)}`;
-  // 10-digit NSN missing leading 0 (landline 1 or mobile 7), including a wrong + prefix.
-  if (digits.length === 10 && (digits.startsWith('1') || digits.startsWith('7'))) {
+  // 10-digit NSN missing leading 0 (landline 1? or mobile 7?), including a wrong + prefix.
+  if (digits.length === 10 && /^[1-9]/.test(digits)) {
     return `+44${digits}`;
   }
   if (trimmed.startsWith('+')) return `+${digits}`;
@@ -176,7 +176,7 @@ function cell(values: string[], index: number): string {
   return index >= 0 ? (values[index] ?? '').trim().replace(/^"|"$/g, '') : '';
 }
 
-/** Merge opening_hours or hours_monhours_sun into one free-text string. */
+/** Merge opening_hours or hours_mon?hours_sun into one free-text string. */
 export function mergeOpeningHoursFromRow(
   get: (key: string) => string,
 ): string {
