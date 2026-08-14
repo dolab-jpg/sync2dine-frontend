@@ -92,11 +92,16 @@ export function ScrapeLeadImportDialog({ onImport }: Props) {
       const skipped = result && typeof result === 'object' ? result.skipped : 0;
       toast.success(
         skipped > 0
-          ? `Imported ${added} lead${added === 1 ? '' : 's'} (${skipped} already in CRM)`
+          ? `Imported ${added} lead${added === 1 ? '' : 's'} · skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}`
           : `Imported ${added} lead${added === 1 ? '' : 's'}`,
         { id: toastId },
       );
-      if (errors.length) toast.message(`${errors.length} row warning(s)`);
+      if (errors.length) {
+        const dupWarns = errors.filter((e) => /duplicate phone/i.test(e)).length;
+        const otherWarns = errors.length - dupWarns;
+        if (dupWarns) toast.message(`${dupWarns} duplicate phone${dupWarns === 1 ? '' : 's'} in the file (kept first only)`);
+        if (otherWarns) toast.message(`${otherWarns} row warning${otherWarns === 1 ? '' : 's'}`);
+      }
       setPaste('');
       setOpen(false);
     } catch (err) {

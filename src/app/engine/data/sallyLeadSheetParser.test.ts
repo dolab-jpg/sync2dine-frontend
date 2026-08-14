@@ -6,6 +6,7 @@ import {
   parseSallyLeadSheetCsv,
   parseSheetLine,
   toUkE164,
+  ukPhoneDigest,
 } from './sallyLeadSheetParser.ts';
 
 const TSV_HEADERS = [
@@ -94,6 +95,12 @@ describe('toUkE164', () => {
     assert.equal(toUkE164('1865817005'), '+441865817005');
   });
 
+  it('ukPhoneDigest matches bare NSN to E.164', () => {
+    assert.equal(ukPhoneDigest('1296715055'), '1296715055');
+    assert.equal(ukPhoneDigest('+441296715055'), '1296715055');
+    assert.equal(ukPhoneDigest('01296715055'), '1296715055');
+  });
+
   it('keeps mobiles as +4477', () => {
     assert.equal(toUkE164('+447700900123'), '+447700900123');
     assert.equal(toUkE164('07700900123'), '+447700900123');
@@ -151,6 +158,20 @@ describe('parseSallyLeadSheetCsv comma CSV with contact_name', () => {
     const parsed = parseSallyLeadSheetCsv(csv);
     assert.equal(parsed.dialRows.length, 0);
     assert.ok(parsed.errors.some((e) => /phone required/i.test(e)));
+  });
+
+  it('skips duplicate phones in the same sheet', () => {
+    const csv = [
+      'company_name,phone',
+      'No.1 Kitchen,1296658688',
+      'Top Chips Top Chef,1296658688',
+      'Chutney Jacks,1296715055',
+    ].join('\n');
+    const parsed = parseSallyLeadSheetCsv(csv, { batchId: 'dup-test' });
+    assert.equal(parsed.dialRows.length, 2);
+    assert.equal(parsed.dialRows[0].company, 'No.1 Kitchen');
+    assert.equal(parsed.dialRows[1].company, 'Chutney Jacks');
+    assert.ok(parsed.errors.some((e) => /duplicate phone/i.test(e)));
   });
 
   it('parses 251+ rows including 01494 and 01865 area codes', () => {

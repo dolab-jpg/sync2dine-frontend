@@ -34,7 +34,7 @@ import { CallThisPersonDialog } from './crm/CallThisPersonDialog';
 import { ScrapeLeadImportDialog } from './crm/ScrapeLeadImportDialog';
 import { SalesCsvDialPanel } from './crm/SalesCsvDialPanel';
 import CallRecordingPlayer from './restaurant/CallRecordingPlayer';
-import { toUkE164 } from '../engine/data/sallyLeadSheetParser';
+import { toUkE164, ukPhoneDigest, venueNameDigest } from '../engine/data/sallyLeadSheetParser';
 
 type Lead = Customer & {
   source: NonNullable<Customer['source']>;
@@ -338,22 +338,37 @@ export default function ComprehensiveCRM() {
   };
 
   const handleImportScrapedLeads = async (incoming: Customer[]) => {
-    const existingPhones = new Set(
-      customers
-        .map((c) => toUkE164(String(c.phone || '').trim()))
-        .filter((p) => /^\+44[1-9]\d{8,9}$/.test(p)),
-    );
+    const existingPhones = new Set<string>();
+    const existingNames = new Set<string>();
+    for (const c of customers) {
+      const digests = [
+        ukPhoneDigest(String(c.phone || '')),
+        ...(c.people ?? []).map((p) => ukPhoneDigest(String(p.phone || ''))),
+      ].filter(Boolean);
+      for (const d of digests) existingPhones.add(d);
+      const nameKey = venueNameDigest(String(c.name || ''));
+      if (nameKey) existingNames.add(nameKey);
+    }
+
     const usedIds = new Set(customers.map((c) => c.id));
     const toAdd: Array<Omit<Customer, 'id' | 'createdAt'> & { id?: string }> = [];
     let skipped = 0;
     for (let i = 0; i < incoming.length; i++) {
       const c = incoming[i];
       const phone = toUkE164(String(c.phone || '').trim());
-      if (phone && existingPhones.has(phone)) {
+      const phoneKey = ukPhoneDigest(phone);
+      const nameKey = venueNameDigest(String(c.name || ''));
+      if (phoneKey && existingPhones.has(phoneKey)) {
         skipped += 1;
         continue;
       }
-      if (phone) existingPhones.add(phone);
+      // Name-only match when the new row has no dialable phone.
+      if (!phoneKey && nameKey && existingNames.has(nameKey)) {
+        skipped += 1;
+        continue;
+      }
+      if (phoneKey) existingPhones.add(phoneKey);
+      if (nameKey) existingNames.add(nameKey);
       const { createdAt: _createdAt, ...rest } = c;
       let id = rest.id;
       if (!id || usedIds.has(id)) {
@@ -363,6 +378,7 @@ export default function ComprehensiveCRM() {
       toAdd.push({
         ...rest,
         id,
+        phone: phone || rest.phone,
         whatsappOptIn: rest.whatsappOptIn ?? false,
         preferredChannel: rest.preferredChannel ?? 'phone',
         preferredLanguage: rest.preferredLanguage ?? 'en',

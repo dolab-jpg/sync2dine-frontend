@@ -76,12 +76,31 @@ export function toUkE164(raw: string): string {
   if (!digits) return trimmed;
   if (digits.startsWith('44')) return `+${digits}`;
   if (digits.startsWith('0')) return `+44${digits.slice(1)}`;
-  // 10-digit NSN missing leading 0 (landline 1… or mobile 7…), including a wrong + prefix.
+  // 10-digit NSN missing leading 0 (landline 1 or mobile 7), including a wrong + prefix.
   if (digits.length === 10 && (digits.startsWith('1') || digits.startsWith('7'))) {
     return `+44${digits}`;
   }
   if (trimmed.startsWith('+')) return `+${digits}`;
   return `+${digits}`;
+}
+
+/** Stable UK phone key for dedupe (last 10 national digits). */
+export function ukPhoneDigest(raw: string): string {
+  const e164 = toUkE164(String(raw || '').trim());
+  const digits = e164.replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('44') && digits.length >= 12) return digits.slice(-10);
+  if (digits.length >= 10) return digits.slice(-10);
+  return digits;
+}
+
+/** Loose venue-name key so "No.1 Kitchen" matches re-imports. */
+export function venueNameDigest(raw: string): string {
+  return String(raw || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '')
+    .trim();
 }
 
 /** Split CSV/TSV line respecting quotes. Pass delim from the header -- do not re-detect per data line. */
@@ -291,6 +310,7 @@ export function parseSallyLeadSheetCsv(text: string, opts?: ParseSallyLeadSheetO
   const dialRows: SallyDialRow[] = [];
   const errors: string[] = [];
   const batchId = opts?.batchId || `sales-${new Date().toISOString().slice(0, 10)}`;
+  const seenPhones = new Set<string>();
 
   const headerGet = (h: string[], values: string[], key: string) => {
     const i = colIndex(h, key);
@@ -311,6 +331,12 @@ export function parseSallyLeadSheetCsv(text: string, opts?: ParseSallyLeadSheetO
       continue;
     }
     const phone = toUkE164(phoneRaw);
+    const phoneKey = ukPhoneDigest(phone);
+    if (phoneKey && seenPhones.has(phoneKey)) {
+      errors.push(`Row ${r + (hasHeader ? 2 : 1)}: duplicate phone skipped (${phone}).`);
+      continue;
+    }
+    if (phoneKey) seenPhones.add(phoneKey);
 
     let company = cell(values, companyIdx >= 0 ? companyIdx : 0);
     if (!company || /^\d+$/.test(company) || company === cell(values, leadIdI)) {

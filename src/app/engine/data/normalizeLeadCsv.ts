@@ -312,12 +312,36 @@ function mergeParsedWithApi(
   return withPeopleOverlay(parsed);
 }
 
+function sheetHasKnownLeadHeaders(headers: string[]): boolean {
+  const norms = headers.map((h) => String(h || '').trim().toLowerCase().replace(/\s+/g, '_'));
+  const hasCompany = norms.some((h) =>
+    h === 'company_name'
+    || h === 'restaurant_name'
+    || h === 'restaurant'
+    || h === 'company'
+    || h === 'business_name'
+    || h === 'venue_name',
+  );
+  const hasPhone = norms.some((h) =>
+    h === 'phone' || h === 'telephone' || h === 'tel' || h === 'mobile',
+  );
+  return hasCompany && hasPhone;
+}
+
 /** Inspect sheet, normalise via API when possible, else parse locally. */
 export async function normalizeLeadSheet(
   text: string,
   batchId: string,
 ): Promise<ParsedSallyLeadSheet> {
   const inspected = inspectLeadSheet(text);
+  const parsed = sallyParser.parseSallyLeadSheetCsv(text, { batchId });
+
+  // Known lead sheets (company_name + phone) parse fully locally — never let a
+  // truncated / sample API response replace hundreds of rows with 8.
+  if (sheetHasKnownLeadHeaders(inspected.headers)) {
+    return withPeopleOverlay(parsed);
+  }
+
   let apiRows: NormalizedLeadRow[] | null = null;
   try {
     apiRows = await fetchNormalizedRows(inspected);
@@ -325,10 +349,8 @@ export async function normalizeLeadSheet(
     apiRows = null;
   }
 
-  const parsed = sallyParser.parseSallyLeadSheetCsv(text, { batchId });
   if (apiRows?.length) {
     const merged = mergeParsedWithApi(parsed, apiRows, batchId, inspected.rows.length);
-    // Prefer the larger set: truncated API samples must never win over a full local parse.
     if (parsed.customers.length > merged.customers.length) {
       return withPeopleOverlay(parsed);
     }
