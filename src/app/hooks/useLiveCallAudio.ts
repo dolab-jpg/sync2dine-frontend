@@ -88,9 +88,18 @@ export function useLiveCallAudio(listenUrl?: string | null) {
   const nextTimeRef = useRef(0);
   const activeRef = useRef(false);
   const stereoModeRef = useRef<'unknown' | 'mono' | 'stereo'>('unknown');
+  const connectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearConnectTimer = useCallback(() => {
+    if (connectTimerRef.current !== null) {
+      clearTimeout(connectTimerRef.current);
+      connectTimerRef.current = null;
+    }
+  }, []);
 
   const stop = useCallback(() => {
     activeRef.current = false;
+    clearConnectTimer();
     try {
       wsRef.current?.close();
     } catch {
@@ -105,7 +114,7 @@ export function useLiveCallAudio(listenUrl?: string | null) {
     stereoModeRef.current = 'unknown';
     setStatus('idle');
     setError(null);
-  }, []);
+  }, [clearConnectTimer]);
 
   const start = useCallback(async () => {
     if (!listenUrl || !/^wss?:\/\//i.test(listenUrl)) {
@@ -131,16 +140,33 @@ export function useLiveCallAudio(listenUrl?: string | null) {
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
 
+      // Dead/zombie calls never fire onopen — fail fast instead of "Connecting…" forever.
+      clearConnectTimer();
+      connectTimerRef.current = setTimeout(() => {
+        connectTimerRef.current = null;
+        if (!activeRef.current) return;
+        try {
+          ws.close();
+        } catch {
+          /* ignore */
+        }
+        setError('Call ended or audio unavailable');
+        setStatus('error');
+      }, 5000);
+
       ws.onopen = () => {
+        clearConnectTimer();
         if (!activeRef.current) return;
         setStatus('listening');
       };
       ws.onerror = () => {
+        clearConnectTimer();
         if (!activeRef.current) return;
         setError('Could not connect to live audio');
         setStatus('error');
       };
       ws.onclose = () => {
+        clearConnectTimer();
         if (!activeRef.current) return;
         setStatus((s) => (s === 'listening' ? 'idle' : s));
       };
@@ -191,7 +217,7 @@ export function useLiveCallAudio(listenUrl?: string | null) {
       setStatus('error');
       stop();
     }
-  }, [listenUrl, stop]);
+  }, [listenUrl, stop, clearConnectTimer]);
 
   useEffect(() => () => stop(), [stop]);
 
