@@ -1,4 +1,4 @@
-import { useState, useContext, useMemo, useEffect } from 'react';
+import { useState, useContext, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { AppContext, Customer } from '../App';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -31,10 +31,11 @@ import {
 import { findPlanningApplicationsByCustomerId } from '../engine/planning/planningStore';
 import { stageLabel } from '../engine/planning/types';
 import { CallThisPersonDialog } from './crm/CallThisPersonDialog';
-import { ScrapeLeadImportDialog } from './crm/ScrapeLeadImportDialog';
-import { SalesCsvDialPanel } from './crm/SalesCsvDialPanel';
+import { UploadLeadsDialog } from './crm/UploadLeadsDialog';
+import { OutboundQueueControlBar } from './crm/OutboundQueueControlBar';
 import CallRecordingPlayer from './restaurant/CallRecordingPlayer';
 import { toUkE164, ukPhoneDigest, venueNameDigest } from '../engine/data/sallyLeadSheetParser';
+import { DEFAULT_SALLY_BRIEF, LEEDS_CAMPAIGN_ID, leedsRemapPatch } from '../engine/leads/leedsCampaign';
 
 type Lead = Customer & {
   source: NonNullable<Customer['source']>;
@@ -55,6 +56,46 @@ function toLead(c: Customer): Lead | null {
     preferredChannel: c.preferredChannel ?? 'email',
     preferredLanguage: c.preferredLanguage ?? 'en',
   };
+}
+
+function leadHasDialablePhone(lead: Lead): boolean {
+  if (String(lead.phone ?? '').trim()) return true;
+  return leadPeople(lead).some((p) => Boolean(String(p.phone ?? '').trim()));
+}
+
+function isDncLead(lead: Lead): boolean {
+  if (lead.callQueueStatus === 'do_not_call') return true;
+  const rec = lead as Lead & { doNotCall?: boolean; dnc?: boolean; consentToCall?: boolean };
+  if (rec.doNotCall === true || rec.dnc === true) return true;
+  if (rec.consentToCall === false) return true;
+  return false;
+}
+
+function isDialableCrmLead(lead: Lead): boolean {
+  return leadHasDialablePhone(lead) && !isDncLead(lead);
+}
+
+function collectQueuedCustomerIds(data: {
+  customerIds?: unknown;
+  jobs?: Array<Record<string, unknown>>;
+}): string[] {
+  const ids = new Set<string>();
+  if (Array.isArray(data.customerIds)) {
+    for (const id of data.customerIds) {
+      const s = String(id ?? '').trim();
+      if (s) ids.add(s);
+    }
+  }
+  if (Array.isArray(data.jobs)) {
+    for (const job of data.jobs) {
+      const ctx = job.context && typeof job.context === 'object'
+        ? job.context as Record<string, unknown>
+        : {};
+      const id = String(job.customerId ?? ctx.customerId ?? '').trim();
+      if (id) ids.add(id);
+    }
+  }
+  return [...ids];
 }
 
 const PAGE_SIZE = 50;
@@ -113,6 +154,8 @@ export default function ComprehensiveCRM() {
   const [defaultBrief, setDefaultBrief] = useState('');
   const [queueStatusFilter, setQueueStatusFilter] = useState<string>('all');
   const [listPage, setListPage] = useState(0);
+  const [queueingLeeds, setQueueingLeeds] = useState(false);
+  const leedsRemapDoneRef = useRef(false);
 
   useEffect(() => {
     setListPage(0);
@@ -126,6 +169,22 @@ export default function ComprehensiveCRM() {
       })
       .catch(() => {});
   }, []);
+
+  // One-shot: rename Hindi / scrape-date labels → Leeds on already-imported cards
+  useEffect(() => {
+    if (leedsRemapDoneRef.current || customers.length === 0) return;
+    let remapped = 0;
+    for (const c of customers) {
+      const patch = leedsRemapPatch(c);
+      if (!patch) continue;
+      updateCustomer(c.id, patch);
+      remapped += 1;
+    }
+    leedsRemapDoneRef.current = true;
+    if (remapped > 0) {
+      toast.message(`Relabelled ${remapped} lead${remapped === 1 ? '' : 's'} as ${LEEDS_CAMPAIGN_ID}`);
+    }
+  }, [customers, updateCustomer]);
 
   const customerPlanningApps = useMemo(
     () => (selectedLead ? findPlanningApplicationsByCustomerId(selectedLead.id) : []),
@@ -470,6 +529,7 @@ export default function ComprehensiveCRM() {
     return {
       total: queue.length,
       notCalled: queue.filter((l) => (l.callQueueStatus ?? 'not_called') === 'not_called').length,
+      dialable: leads.filter(isDialableCrmLead).length,
       dialling: queue.filter((l) => l.callQueueStatus === 'dialling' || l.callQueueStatus === 'queued').length,
       called: queue.filter((l) => l.callQueueStatus === 'called').length,
       needsRetry: queue.filter((l) => l.callQueueStatus === 'needs_retry').length,
@@ -503,8 +563,7 @@ export default function ComprehensiveCRM() {
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
-              <ScrapeLeadImportDialog onImport={handleImportScrapedLeads} />
-              <SalesCsvDialPanel onImport={handleImportScrapedLeads} />
+              <UploadLeadsDialog onImport={handleImportScrapedLeads} />
               {isSuperAdmin && (
               <Dialog open={isAddLeadOpen} onOpenChange={setIsAddLeadOpen}>
                 <DialogTrigger asChild>
@@ -772,23 +831,82 @@ export default function ComprehensiveCRM() {
             </Tabs>
 
             {activeTab === 'queue' && (
-              <div className="flex flex-wrap gap-2 mb-4 text-sm">
-                <Badge variant="secondary">Queue: {queueStats.total}</Badge>
-                <Badge variant="outline">Not called: {queueStats.notCalled}</Badge>
-                <Badge variant="outline">Dialling: {queueStats.dialling}</Badge>
-                <Badge variant="outline">Needs retry: {queueStats.needsRetry}</Badge>
-                <Badge variant="outline">Called: {queueStats.called}</Badge>
-                <Select value={queueStatusFilter} onValueChange={setQueueStatusFilter}>
-                  <SelectTrigger className="w-44 min-h-9">
-                    <SelectValue placeholder="Call status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All call statuses</SelectItem>
-                    {(Object.keys(CALL_QUEUE_STATUS_LABELS) as CallQueueStatus[]).map((s) => (
-                      <SelectItem key={s} value={s}>{CALL_QUEUE_STATUS_LABELS[s]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-3 mb-4">
+                <OutboundQueueControlBar />
+                <div className="flex flex-wrap gap-2 text-sm items-center">
+                  <Badge variant="secondary">Queue: {queueStats.total}</Badge>
+                  <Badge variant="outline">Not called: {queueStats.notCalled}</Badge>
+                  <Badge variant="outline">Dialling: {queueStats.dialling}</Badge>
+                  <Badge variant="outline">Needs retry: {queueStats.needsRetry}</Badge>
+                  <Badge variant="outline">Called: {queueStats.called}</Badge>
+                  <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100">Dialable: {queueStats.dialable}</Badge>
+                  <Select value={queueStatusFilter} onValueChange={setQueueStatusFilter}>
+                    <SelectTrigger className="w-44 min-h-9">
+                      <SelectValue placeholder="Call status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All call statuses</SelectItem>
+                      {(Object.keys(CALL_QUEUE_STATUS_LABELS) as CallQueueStatus[]).map((s) => (
+                        <SelectItem key={s} value={s}>{CALL_QUEUE_STATUS_LABELS[s]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    className="min-h-9 bg-amber-500 hover:bg-amber-600"
+                    disabled={queueingLeeds || queueStats.dialable === 0}
+                    onClick={async () => {
+                      setQueueingLeeds(true);
+                      const toastId = toast.loading('Starting CRM dials…');
+                      try {
+                        const res = await fetch('/api/campaigns/queue-crm', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            allCrm: true,
+                            template: 'sally_sales',
+                            brief: defaultBrief || DEFAULT_SALLY_BRIEF,
+                            remapLeeds: false,
+                          }),
+                        });
+                        const data = await res.json().catch(() => ({})) as {
+                          error?: string;
+                          queued?: number;
+                          held?: number;
+                          skipped?: number;
+                          matched?: number;
+                          remapped?: number;
+                          customerIds?: unknown;
+                          jobs?: Array<Record<string, unknown>>;
+                        };
+                        if (!res.ok) throw new Error(data.error || 'Failed to queue CRM campaign');
+                        const impliedIds = collectQueuedCustomerIds(data);
+                        const toStamp = impliedIds.length > 0
+                          ? leads.filter((l) => impliedIds.includes(l.id))
+                          : leads.filter(isDialableCrmLead);
+                        for (const lead of toStamp) {
+                          updateCustomer(lead.id, { callQueueStatus: 'queued' });
+                        }
+                        toast.success(
+                          `Queued ${data.queued ?? 0} dials`
+                            + (data.held ? ` · held ${data.held} for hours` : '')
+                            + (data.skipped ? ` · skipped ${data.skipped}` : ''),
+                          { id: toastId },
+                        );
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : 'Queue failed', { id: toastId });
+                      } finally {
+                        setQueueingLeeds(false);
+                      }
+                    }}
+                  >
+                    <PhoneCall className="w-4 h-4 mr-1" />
+                    {queueingLeeds ? 'Queueing…' : 'Start calling this list'}
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-500">
+                  This queues every lead with a phone. Dial queue Start/Pause/Stop is the kill switch. Sally owns when to retry or note.
+                </p>
               </div>
             )}
 

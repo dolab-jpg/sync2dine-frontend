@@ -14,12 +14,12 @@ import {
   Phone, PhoneIncoming, PhoneOutgoing,
   RefreshCw, Play, Send, Voicemail, Mic, Search,
   ChevronDown, ChevronUp, User, ExternalLink, Power, Volume2, Plus, Trash2, Radio,
-  PhoneForwarded, ShieldCheck, Globe, UserPlus, Pause, Square,
+  PhoneForwarded, ShieldCheck, Globe, UserPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SoftPhonePanel } from './SoftPhonePanel';
 import LapsedCampaignPanel from './LapsedCampaignPanel';
-import CsvCampaignUploadPanel from './CsvCampaignUploadPanel';
+import { OutboundQueueControlBar } from '../crm/OutboundQueueControlBar';
 import { AppContext } from '../../App';
 import { integrationService } from '../../engine/integrations/integrationService';
 import { getExperience } from '../../engine/platform/experience';
@@ -335,13 +335,6 @@ export default function CallCenter() {
   const [transferSaving, setTransferSaving] = useState(false);
   const [leadCallbackPolicy, setLeadCallbackPolicy] = useState<'alert_only' | 'outbound_first' | 'inbound_only'>('alert_only');
   const [defaultOutboundBrief, setDefaultOutboundBrief] = useState('');
-  const [postCallNotePrompt, setPostCallNotePrompt] = useState('');
-  const [callQueueMaxAttempts, setCallQueueMaxAttempts] = useState(3);
-  const [callQueueRetryMinutes, setCallQueueRetryMinutes] = useState(60);
-  const [callQueueQuietStart, setCallQueueQuietStart] = useState('20:00');
-  const [callQueueQuietEnd, setCallQueueQuietEnd] = useState('08:00');
-  const [callQueueMaxConcurrent, setCallQueueMaxConcurrent] = useState(2);
-  const [outboundQueueState, setOutboundQueueState] = useState<'running' | 'paused' | 'stopped'>('running');
   const [queueSettingsSaving, setQueueSettingsSaving] = useState(false);
 
   const app = useContext(AppContext);
@@ -391,17 +384,6 @@ export default function CallCenter() {
         setLeadCallbackPolicy(data.leadCallbackPolicy);
       }
       if (typeof data.defaultOutboundBrief === 'string') setDefaultOutboundBrief(data.defaultOutboundBrief);
-      if (typeof data.postCallNotePrompt === 'string') setPostCallNotePrompt(data.postCallNotePrompt);
-      if (Number.isFinite(Number(data.callQueueMaxAttempts))) setCallQueueMaxAttempts(Number(data.callQueueMaxAttempts));
-      if (Number.isFinite(Number(data.callQueueRetryMinutes))) setCallQueueRetryMinutes(Number(data.callQueueRetryMinutes));
-      if (typeof data.callQueueQuietStart === 'string') setCallQueueQuietStart(data.callQueueQuietStart);
-      if (typeof data.callQueueQuietEnd === 'string') setCallQueueQuietEnd(data.callQueueQuietEnd);
-      if (Number.isFinite(Number(data.callQueueMaxConcurrent))) {
-        setCallQueueMaxConcurrent(Math.max(1, Math.min(5, Number(data.callQueueMaxConcurrent))));
-      }
-      if (data.outboundQueueState === 'paused' || data.outboundQueueState === 'stopped' || data.outboundQueueState === 'running') {
-        setOutboundQueueState(data.outboundQueueState);
-      }
     } catch {
       // keep defaults
     }
@@ -751,44 +733,15 @@ export default function CallCenter() {
         body: JSON.stringify({
           leadCallbackPolicy,
           defaultOutboundBrief,
-          postCallNotePrompt,
-          callQueueMaxAttempts,
-          callQueueRetryMinutes,
-          callQueueQuietStart,
-          callQueueQuietEnd,
-          callQueueMaxConcurrent,
-          outboundQueueState,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to save');
       if (data.leadCallbackPolicy) setLeadCallbackPolicy(data.leadCallbackPolicy);
       if (typeof data.defaultOutboundBrief === 'string') setDefaultOutboundBrief(data.defaultOutboundBrief);
-      if (typeof data.postCallNotePrompt === 'string') setPostCallNotePrompt(data.postCallNotePrompt);
       toast.success('Call Queue / AI dial settings saved');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save settings');
-    } finally {
-      setQueueSettingsSaving(false);
-    }
-  }
-
-  async function setOutboundQueueControl(state: 'running' | 'paused' | 'stopped') {
-    setQueueSettingsSaving(true);
-    try {
-      const res = await fetch('/api/agent/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outboundQueueState: state }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Failed to update queue');
-      setOutboundQueueState(data.outboundQueueState ?? state);
-      const labels = { running: 'resumed', paused: 'paused', stopped: 'stopped' };
-      toast.success(`Outbound queue ${labels[state]}`);
-      if (state === 'running') fetchCalls();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to update queue');
     } finally {
       setQueueSettingsSaving(false);
     }
@@ -1097,7 +1050,7 @@ export default function CallCenter() {
                 variant={isActive ? 'default' : 'destructive'}
                 className={`text-[10px] ${isActive ? 'bg-s2d-teal hover:bg-s2d-teal' : ''}`}
               >
-                {isActive ? 'Answering' : 'Paused'}
+                {isActive ? 'Answering' : 'Off'}
               </Badge>
             </div>
 
@@ -1142,7 +1095,11 @@ export default function CallCenter() {
                   Overflow ready{capacity.overflowNumber ? ` · ${capacity.overflowNumber}` : ''}
                 </span>
               )}
+              <OutboundQueueControlBar compact className="ml-1" />
             </div>
+          )}
+          {!capacity && (
+            <OutboundQueueControlBar compact />
           )}
         </div>
 
@@ -1564,7 +1521,7 @@ export default function CallCenter() {
                 Call queue & AI dial settings
               </h2>
               <p className="text-sm text-s2d-ink-muted mt-1">
-                Controls CRM “Call this person” defaults, lead callback policy, and how Judie notes outcomes after dials.
+                Controls CRM “Call this person” defaults and lead callback policy. Sally writes the CRM note after each call.
               </p>
             </div>
               <div>
@@ -1589,115 +1546,12 @@ export default function CallCenter() {
                   className="mt-1 min-h-[80px]"
                   value={defaultOutboundBrief}
                   onChange={(e) => setDefaultOutboundBrief(e.target.value)}
-                  placeholder="What Judie should cover by default…"
+                  placeholder="What Sally should cover by default…"
                 />
-              </div>
-              <div>
-                <Label>Post-call note prompt</Label>
-                <Textarea
-                  className="mt-1 min-h-[60px]"
-                  value={postCallNotePrompt}
-                  onChange={(e) => setPostCallNotePrompt(e.target.value)}
-                  placeholder="What Judie must capture after every call…"
-                />
-              </div>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <Label>Max dial attempts</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={10}
-                    className="mt-1"
-                    value={callQueueMaxAttempts}
-                    onChange={(e) => setCallQueueMaxAttempts(Number(e.target.value) || 3)}
-                  />
-                </div>
-                <div>
-                  <Label>Retry delay (minutes)</Label>
-                  <Input
-                    type="number"
-                    min={5}
-                    className="mt-1"
-                    value={callQueueRetryMinutes}
-                    onChange={(e) => setCallQueueRetryMinutes(Number(e.target.value) || 60)}
-                  />
-                </div>
-                <div>
-                  <Label>Quiet hours start</Label>
-                  <Input
-                    className="mt-1"
-                    value={callQueueQuietStart}
-                    onChange={(e) => setCallQueueQuietStart(e.target.value)}
-                    placeholder="20:00"
-                  />
-                </div>
-                <div>
-                  <Label>Quiet hours end</Label>
-                  <Input
-                    className="mt-1"
-                    value={callQueueQuietEnd}
-                    onChange={(e) => setCallQueueQuietEnd(e.target.value)}
-                    placeholder="08:00"
-                  />
-                </div>
-                <div>
-                  <Label>Max concurrent dials</Label>
-                  <Select
-                    value={String(callQueueMaxConcurrent)}
-                    onValueChange={(v) => setCallQueueMaxConcurrent(Number(v))}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <SelectItem key={n} value={String(n)}>{n} at a time</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Label className="w-full sm:w-auto">Outbound queue</Label>
-                <Badge variant={outboundQueueState === 'running' ? 'default' : outboundQueueState === 'paused' ? 'secondary' : 'destructive'}>
-                  {outboundQueueState}
-                </Badge>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={queueSettingsSaving || outboundQueueState === 'running'}
-                  onClick={() => setOutboundQueueControl('running')}
-                >
-                  <Play className="w-4 h-4 mr-1" />
-                  Resume
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={queueSettingsSaving || outboundQueueState === 'paused'}
-                  onClick={() => setOutboundQueueControl('paused')}
-                >
-                  <Pause className="w-4 h-4 mr-1" />
-                  Pause
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={queueSettingsSaving || outboundQueueState === 'stopped'}
-                  onClick={() => {
-                    if (confirm('Stop outbound queue and cancel queued dials?')) {
-                      void setOutboundQueueControl('stopped');
-                    }
-                  }}
-                >
-                  <Square className="w-4 h-4 mr-1" />
-                  Stop
-                </Button>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={saveCallQueueSettings} disabled={queueSettingsSaving} className="bg-s2d-teal-deep hover:bg-s2d-teal">
-                  {queueSettingsSaving ? 'Saving…' : 'Save Call Queue settings'}
+                  {queueSettingsSaving ? 'Saving…' : 'Save dial settings'}
                 </Button>
                 <Button variant="outline" className="border-s2d-teal/20" onClick={() => navigate('/crm?tab=queue')}>
                   Open Call Queue in CRM
@@ -1955,7 +1809,15 @@ export default function CallCenter() {
           </div>
           <div className="mt-4 space-y-4">
             <LapsedCampaignPanel onQueued={() => void fetchCalls()} />
-            <CsvCampaignUploadPanel onQueued={() => void fetchCalls()} />
+            <div className={`${cardShell} p-4 space-y-2`}>
+              <h2 className="text-base font-bold text-s2d-teal-deep">Venue lead dials</h2>
+              <p className="text-sm text-s2d-ink-muted">
+                Queue every CRM lead with a phone from Call Queue. Call Centre keeps one-off dials and lapsed-customer campaigns here.
+              </p>
+              <Button variant="outline" className="border-s2d-teal/20" onClick={() => navigate('/crm?tab=queue')}>
+                Open CRM Call Queue
+              </Button>
+            </div>
           </div>
         </TabsContent>
       </Tabs>
