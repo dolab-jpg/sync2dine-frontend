@@ -28,8 +28,8 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 | Legacy phone orchestrator | � | � | throw stub | quarantined | � | dead | do not edit |
 | IVR | phone | � | `ivr-handler` | disabled | � | off | `IVR_ENABLED` |
 | Concierge outbound | channel | — | `/api/concierge/outbound` | partial | queue |
-| Sally venue-timed dials + referrals | phone/sales | CRM dial / CSV | `sally/dial-windows`, `sally/schedule-outbound`, `captureReferralAndQueue` | CSV research + venue windows | live | live | CSV/Leeds path may hold `needs_hours`. **`allCrm` sets `venueAware: false`** so the 405-style list is not held. |
-| Sally CRM outbound (all phones) | phone/sales | `/crm` Start calling | `outbound-campaigns` `queueCrmCampaign` `allCrm` | Sally `sally_sales` | Supabase customers + outbound_queue | live | `POST /api/campaigns/queue-crm` `{ allCrm: true }`; worker ignores global quiet hours; reclaim stale `dialling` |
+| Sally venue-timed dials + referrals | phone/sales | CRM dial / CSV | `sally/dial-windows`, `sally/schedule-outbound`, `captureReferralAndQueue` | CSV research + venue windows | live | live | CSV/Leeds upload may hold `needs_hours`. **`allCrm` and `/api/calls/outbound/bulk` default `venueAware: false`**. |
+| Sally CRM outbound (all phones) | phone/sales | `/crm` Start calling | `outbound-campaigns` `queueCrmCampaign` `allCrm` | Sally `sally_sales` | Supabase customers + outbound_queue | live | `POST /api/campaigns/queue-crm` `{ allCrm: true }`; keeps quoted/won status; reload errors 503; reclaim `dialling` → CRM `needs_retry`; worker ignores global quiet hours |
 | CSV auto-import + people memory | sales/CRM | `/crm` Upload CSV | `normalize-csv`, `toUkE164`, `rememberPerson` | DeepSeek map + E.164; research if undialable | live | live | Upload TSV; CRM people list; Sally rememberPerson |
 | Campaign progress (Cynthia) | sales/chat | Cynthia overlay | `getCampaignProgress` + `/api/campaigns/progress` | `getCampaignProgress` | CRM + queue + calls | live | Ask Cynthia: how many calls / contacted |
 
@@ -69,7 +69,7 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 |------------|--------|----|----|--------|
 | CRM / quotes / projects / portal | construction | `/crm`, `/quotes`, `/projects` | sync, portal, contracts | live |
 | Banking / accounts | money | `/accounts` | `/api/banking` | flag-gated |
-| Stripe / weekly / phone billing | billing | pricing/start | `billing/*` | live/partial |
+| Stripe / weekly / phone billing | billing | pricing/start | `billing/*` | live/partial — org package checkout includes Sally `setupFeeGbp` when offer terms > 0 |
 | Recruitment | hr | `/recruitment` | phone tools | flag-gated |
 | Building control / planning | compliance | hubs | BC + planning AI | live |
 

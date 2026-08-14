@@ -165,9 +165,11 @@ Documented in AI_REGISTRY. Bannered HISTORICAL: VOICE_SETUP, VAPI_SIP, INTEGRATI
 
 Other agents: read this before changing CRM dial / Call Centre / Sally greeting.
 
-- **Start calling this list** on `/crm` queues **all dialable home-org phones** via `POST /api/campaigns/queue-crm` `{ allCrm: true, template: 'sally_sales', remapLeeds: false }`. Not Leeds-only. Reloads Supabase customers. `venueAware: false` (no `needs_hours` hold).
+- **Start calling this list** on `/crm` queues **all dialable home-org phones** via `POST /api/campaigns/queue-crm` `{ allCrm: true, template: 'sally_sales', remapLeeds: false }`. Not Leeds-only. Reloads Supabase customers. `venueAware: false` (no `needs_hours` hold). Existing CRM rows **keep pipeline status** (quoted stays quoted). Supabase customer-load errors throw → API **503**, never `matched: 0` while CRM still has rows.
 - **Go live (all lines)** only SIP-registers. It does not enqueue CRM.
-- **Call Centre `/calls`**: Start/Pause/Stop + capacity. Quiet hours / max attempts / retry / post-call note / concurrent knobs removed. Running ≠ queued. Worker ignores stored quiet hours; reclaim stale `dialling` before capacity.
+- **Call Centre `/calls`**: Start/Pause/Stop + capacity. Quiet hours / max attempts / retry / post-call note / concurrent knobs removed. Running ≠ queued. Worker ignores stored quiet hours; reclaim stale `dialling` **and** set that lead `callQueueStatus` to `needs_retry` (do not add `dialling` to the allCrm filter).
+- **Bulk outbound** `POST /api/calls/outbound/bulk` defaults `venueAware: false` (opt in). CSV upload still defaults true.
+- **Package checkout** `createCheckoutSessionForOrg` must pass `getSallyOfferTerms().setupFeeGbp` when > 0. Do not invent a fee.
 - **Spoken brand:** say **sync Two dine** (`SYNC2DINE_SPOKEN` in `home-org.ts`). Write Sync2Dine. Judie venue greetings unchanged.
 - **UK phones:** 10-digit NSN starting `1–9` → `+44`. Skip implausible E.164. Vapi DeepSeek models must be `deepseek-chat` / `deepseek-reasoner` (`vapiDeepSeekModelName`).
 - **Login** is Supabase Auth (`signInWithPassword`), not `/api/auth/login`. SPA has a 12s timeout so the button cannot spin forever if Auth hangs.

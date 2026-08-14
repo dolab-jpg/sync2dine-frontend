@@ -208,7 +208,7 @@ Data column: Supabase is primary unless marked cache/fallback.
 | Feature | UI | Components | Engine | API | Data |
 |---------|-----|------------|--------|-----|------|
 | CRM | `/crm` | `ComprehensiveCRM.tsx` + `leads/leadActivity.ts` | `leads/leadService.ts` | `/api/leads/*` | customers (`name` = restaurant; `people[]` + `contactName`; CSV auto-detect). Home org `4fc49703-…` is the live Sally list — not Demo Kitchen. |
-| Start calling this list | `/crm` | `ComprehensiveCRM.tsx` | `leedsCampaign.ts` (label only) | `POST /api/campaigns/queue-crm` `{ allCrm: true, template: 'sally_sales', remapLeeds: false }` | Queues **every dialable CRM phone** (lead/quoted, skip Leeds-only + DNC). Stamp `callQueueStatus` only from returned `customerId`s when `queued > 0`. |
+| Start calling this list | `/crm` | `ComprehensiveCRM.tsx` | `leedsCampaign.ts` (label only) | `POST /api/campaigns/queue-crm` `{ allCrm: true, template: 'sally_sales', remapLeeds: false }` | Queues **every dialable CRM phone** (lead/quoted, skip Leeds-only + DNC). **Keeps existing pipeline status** (quoted stays quoted). Stamp `callQueueStatus` only from returned `customerId`s when `queued > 0`. Supabase reload errors → API **503**, not `matched: 0`. |
 | CSV one-click import | `/crm` | `UploadLeadsDialog`, `ScrapeLeadImportDialog`, `SalesCsvDialPanel` | `normalizeLeadCsv.ts`, sallyLeadSheetParser | `POST /api/leads/normalize-csv` | phone 0/+44 → E.164 (10-digit NSN starting `1–9` → `+44`); people memory on account |
 | Customers | `/customers` | `CustomerManagement.tsx`, `CustomerContactsPanel.tsx` | `contacts/contactStore.ts`, leads | `/api/auth/customers`, data sync | `customers`, `contacts` |
 | Lead inbox | `/communications?tab=leads` | `mailbox/LeadInboxPanel.tsx` | `leads/leadInboxService.ts` | `/api/leads/inbox*` | lead inbox + Supabase |
@@ -327,7 +327,7 @@ Canonical: **`BE/server/`**. Entry: [`index.ts`](../../sync2dine-backend/server/
 | Canonical module | Root stub (if any) | Paths / family |
 |------------------|--------------------|----------------|
 | `whatsapp-webhook.ts` | — | `/webhooks/whatsapp`, `/api/messages/send`, `/health` |
-| `phone/phone-webhook.ts` | `phone-webhook.ts` | `/webhooks/voice/*`, `/api/calls`, `/api/calls/outbound`, `/api/calls/outbound/bulk` → `queueCsvCampaign` |
+| `phone/phone-webhook.ts` | `phone-webhook.ts` | `/webhooks/voice/*`, `/api/calls`, `/api/calls/outbound`, `/api/calls/outbound/bulk` → `queueCsvCampaign` (`venueAware` default false) |
 | `phone/vapi-routes.ts` | `vapi-routes.ts` | `/webhooks/vapi`, `/api/vapi/*` |
 | `ai/agent-routes.ts` | `agent-routes.ts` | `/api/agent/*`, `/api/campaigns/*` (`queue-crm` `allCrm`), contacts lookup |
 | `project-routes.ts` | — | `/api/data/sync`, `/api/files/upload`, `/api/portal/:token`, project checkout |
