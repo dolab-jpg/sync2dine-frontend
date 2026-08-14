@@ -11,7 +11,7 @@ AI: [`../sync2dine-backend/docs/AI_REGISTRY.md`](../../sync2dine-backend/docs/AI
 | Capability | Domain | FE | BE | AI / tools | SoT | Status | Verify |
 |------------|--------|----|----|------------|-----|--------|--------|
 | Judie diner phone | phone | kiosk / calls | `brains/judie`, `phone/vapi-*` | `judie` / `phone_judie` | Supabase orders | live | PHONE_ARCHITECTURE |
-| Sally sales phone | phone | CRM dial | `brains/sally`, `sally-sales-phone` | `sally` | offer + platform org; spoken **sync Two dine** | live | SALLY_ARCHITECTURE |
+| Sally sales phone | phone | CRM dial | `brains/sally`, `sally-sales-phone` | `sally` | offer + platform org; spoken **sync Two dine**; gatekeeper-first (ask manager/own AI; optional names; message or referral callback; `gatekeeper_manager_callback` = called not needs_retry) | live | SALLY_ARCHITECTURE |
 | Sally staff PIN | phone | � | Sally staff mode | `sally_staff` | CRM/mailbox | live | PIN on Sally line |
 | Sally Web | web | widget / hero | `POST /api/sally/web` | `sally_web` | shared BI | live | `npm run smoke:sally-web` |
 | Cynthia staff web | ai | `/cynthia`, overlay | `/api/ai/orchestrate`, staff | `cynthia` | session | live | staff login |
