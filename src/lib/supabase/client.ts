@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './types';
+import { fetchWithAuthTimeout } from './authSafety';
 
 // import.meta.env only exists under Vite/Vitest — guard so Node scripts
 // (e.g. scripts/verify-generic-ai.mjs via tsx) can import this module chain.
@@ -23,8 +24,11 @@ export function getSupabase(): SupabaseClient<Database> {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        // Avoid orphaned navigator.locks leaving Sign in stuck on "Signing in..."
+        // Avoid orphaned navigator.locks leaving Sign in / Sign out stuck
         lock: async (_name, _acquireTimeout, fn) => fn(),
+      },
+      global: {
+        fetch: fetchWithAuthTimeout,
       },
     });
   }

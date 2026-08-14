@@ -8,6 +8,7 @@ import { Checkbox } from '../../components/ui/checkbox';
 import { syncActiveOrgFromProfile } from '../../engine/platform/orgContext';
 import { integrationService } from '../../engine/integrations/integrationService';
 import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase/client';
+import { forceLocalSignOut, withTimeout } from '../../../lib/supabase/authSafety';
 import { AuthLayout } from '../AuthLayout';
 import { AuthFormError } from '../components/AuthFormError';
 import { PasswordField } from '../components/PasswordField';
@@ -70,12 +71,7 @@ export default function LoginPage({ onLogin }: LoginProps) {
     void (async () => {
       try {
         const supabase = getSupabase();
-        const { data } = await Promise.race([
-          supabase.auth.getSession(),
-          new Promise<never>((_, reject) => {
-            window.setTimeout(() => reject(new Error('session-timeout')), 8000);
-          }),
-        ]);
+        const { data } = await withTimeout(supabase.auth.getSession(), 8000, 'session');
         if (cancelled || !data.session?.user) return;
         const { data: profile } = await supabase
           .from('profiles')
@@ -92,7 +88,8 @@ export default function LoginPage({ onLogin }: LoginProps) {
         }
         const role = (profile.role ?? 'staff') as StaffRole;
         if (!isStaffLoginRole(role)) {
-          await supabase.auth.signOut();
+          forceLocalSignOut();
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
           if (!cancelled) {
             setError(
               'This login is for restaurant and platform staff only. Diners order at the counter kiosk (/front) — no account needed.',
@@ -135,8 +132,8 @@ export default function LoginPage({ onLogin }: LoginProps) {
   }) => {
     if (rememberMe) persistRememberedIdentifier(identifier);
     else clearRememberedIdentifier();
-    await syncActiveOrgFromProfile();
-    await integrationService.initOrgOpenAIKey(user.role);
+    await withTimeout(syncActiveOrgFromProfile(), 8000, 'login-org').catch(() => undefined);
+    await withTimeout(integrationService.initOrgOpenAIKey(user.role), 8000, 'login-brain').catch(() => undefined);
     onLogin(user);
     const dest =
       next && next.startsWith('/') && !next.startsWith('//')
@@ -177,15 +174,14 @@ export default function LoginPage({ onLogin }: LoginProps) {
         }
       }
       const supabase = getSupabase();
-      const { data, error: authError } = await Promise.race([
+      const { data, error: authError } = await withTimeout(
         supabase.auth.signInWithPassword({
           email,
           password,
         }),
-        new Promise<never>((_, reject) => {
-          window.setTimeout(() => reject(new Error('signin-timeout')), 12000);
-        }),
-      ]);
+        8000,
+        'signin',
+      );
       if (authError || !data.user) {
         setError(authError?.message || 'Invalid email/username or password.');
         return;
@@ -201,7 +197,8 @@ export default function LoginPage({ onLogin }: LoginProps) {
       }
       const role = (profile?.role ?? 'staff') as StaffRole;
       if (!isStaffLoginRole(role)) {
-        await supabase.auth.signOut();
+        forceLocalSignOut();
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
         setError(
           'This login is for restaurant and platform staff only. Diners order at the counter kiosk (/front) — no account needed.',
         );
@@ -215,9 +212,10 @@ export default function LoginPage({ onLogin }: LoginProps) {
       });
     } catch (err) {
       const raw = err instanceof Error ? err.message : 'Sign-in failed.';
+      const timedOut = raw === 'signin-timeout' || /abort/i.test(raw);
       setError(
-        raw === 'signin-timeout'
-          ? 'Sign-in timed out. Turn off any VPN, refresh, and try again. If it still hangs, Auth is not answering — wait a minute and retry.'
+        timedOut
+          ? 'Sign-in service is not answering. Hard-refresh (Ctrl+Shift+R), turn off VPN, and try again. This is not a wrong-password error.'
           : raw,
       );
     } finally {

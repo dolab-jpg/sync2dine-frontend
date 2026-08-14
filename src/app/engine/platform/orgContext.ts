@@ -111,9 +111,15 @@ export async function getSupabaseAccessToken(): Promise<string | null> {
 
 export async function signOut(): Promise<void> {
   setAuthToken(null);
+  const { forceLocalSignOut } = await import('../../../lib/supabase/authSafety');
+  forceLocalSignOut();
   if (isSupabaseConfigured()) {
     const supabase = getSupabase();
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      /* hung GoTrue must not block */
+    }
   }
 }
 

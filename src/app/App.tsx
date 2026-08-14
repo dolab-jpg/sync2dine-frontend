@@ -162,7 +162,9 @@ export default function App() {
           if (isSupabaseConfigured()) {
             try {
               const { getSupabase } = await import('../lib/supabase/client');
-              await getSupabase().auth.signOut();
+              const { forceLocalSignOut } = await import('../lib/supabase/authSafety');
+              forceLocalSignOut();
+              await getSupabase().auth.signOut({ scope: 'local' });
             } catch {
               // ignore
             }
@@ -178,8 +180,13 @@ export default function App() {
         if (await rejectNonStaff(stored.role)) return;
         setUser(stored);
         setIsLoggedIn(true);
-        await syncActiveOrgFromProfile();
-        await integrationService.initOrgOpenAIKey(stored.role);
+        try {
+          const { withTimeout } = await import('../lib/supabase/authSafety');
+          await withTimeout(syncActiveOrgFromProfile(), 8000, 'restore-org');
+          await withTimeout(integrationService.initOrgOpenAIKey(stored.role), 8000, 'restore-brain');
+        } catch {
+          /* Auth/API hang — still show the shell so Sign out is reachable */
+        }
         setOrgTick((n) => n + 1);
         setExperienceReady(true);
         return;
@@ -189,7 +196,8 @@ export default function App() {
         try {
           const { getSupabase } = await import('../lib/supabase/client');
           const supabase = getSupabase();
-          const { data } = await supabase.auth.getSession();
+          const { withTimeout } = await import('../lib/supabase/authSafety');
+          const { data } = await withTimeout(supabase.auth.getSession(), 8000, 'get-session');
           if (data.session?.user) {
             const { data: profile } = await supabase
               .from('profiles')
@@ -933,27 +941,25 @@ export default function App() {
 
   const handleLogout = () => {
     clearSessionUser();
+    void import('../lib/supabase/authSafety').then(({ forceLocalSignOut }) => {
+      forceLocalSignOut();
+    });
     // Drop any acting-as scope / tablet preview so the next login starts clean.
     setTabletPreview(false);
     setActiveOrgId(null);
-    const finish = () => {
-      setIsLoggedIn(false);
-      setUser({
-        id: '',
-        name: 'Signed out',
-        email: '',
-        role: 'staff',
-      });
-    };
+    setIsLoggedIn(false);
+    setUser({
+      id: '',
+      name: 'Signed out',
+      email: '',
+      role: 'staff',
+    });
+    setExperienceReady(true);
     if (isSupabaseConfigured()) {
-      // Sign out of Supabase BEFORE showing the login page, otherwise the
-      // login page's session check signs the same user straight back in.
+      // Local scope only — a hung GoTrue must not block the login screen.
       void import('../lib/supabase/client')
-        .then(({ getSupabase }) => getSupabase().auth.signOut())
-        .catch(() => undefined)
-        .then(finish);
-    } else {
-      finish();
+        .then(({ getSupabase }) => getSupabase().auth.signOut({ scope: 'local' }))
+        .catch(() => undefined);
     }
   };
 
@@ -1004,7 +1010,7 @@ export default function App() {
   }
 
   if (shouldShowWorkspaceLoader(isLoggedIn, experienceReady)) {
-    return <WorkspaceLoadingScreen />;
+    return <WorkspaceLoadingScreen onSignOut={handleLogout} />;
   }
 
   return (

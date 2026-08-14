@@ -1,6 +1,6 @@
 import { BrandLogo } from './BrandLogo';
 
-export function WorkspaceLoadingScreen() {
+export function WorkspaceLoadingScreen({ onSignOut }: { onSignOut?: () => void }) {
   return (
     <div
       className="flex min-h-screen items-center justify-center bg-s2d-cream px-6"
@@ -15,6 +15,15 @@ export function WorkspaceLoadingScreen() {
           aria-hidden="true"
         />
         <p className="text-lg font-semibold text-s2d-teal">Loading your workspace…</p>
+        {onSignOut ? (
+          <button
+            type="button"
+            className="text-sm font-medium text-amber-800 underline underline-offset-2 hover:text-amber-950"
+            onClick={onSignOut}
+          >
+            Sign out
+          </button>
+        ) : null}
       </div>
     </div>
   );
