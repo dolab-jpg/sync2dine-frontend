@@ -19,6 +19,7 @@ Before editing shared surfaces, review the rows below. Update registries when be
 | Cynthia orch catalogs | staff web | Cynthia, foreman, project | `orch_*` | tool-facade test; manual orch | `/api/ai/orchestrate` | TOOL_REGISTRY, AI_REGISTRY | API |
 | Billing / Stripe | checkout, webhooks | Sally + staff | stripe routes + gap money tools; `createCheckoutSessionForOrg` must pass `getSallyOfferTerms().setupFeeGbp` when > 0 | quote-checkout, weekly billing, `payg-commercial.test.ts` | `/api/stripe` | CAPABILITY, ROUTE_MAP | API |
 | DID / phone lines / org | all phone | Judie/Sally | phone-lines resolve | did-routing.test | vapi + agent lines | PHONE, CHANGE_IMPACT | API |
+| SIP REGISTER live status / watchdog | Call Centre, Sally offer, Judie phone | Judie/Sally | `asteriskBridge.refreshAiLineStatusesFromAsterisk`, `sip-reg-watchdog.sh` auto-recover | phone-lines.test | `/api/platform/phone-lines/registration-status` | WORKERS, CHANGE_IMPACT | API + cron |
 | Self-heal repos | staff | Cynthia tooling | code-fix-handler | ? | `/api/ai/code-fix` | must stay sync2dine-* remotes | API |
 | Auth / org context | all | ? | auth.ts, account-auth | ? | `/api/auth` | CAPABILITY | API |
 | Login / signup (public) | SPA auth | staff + new companies | LoginPage, SignupPage, account-auth register-org | oauth.spec, login.spec | `/login`, `/signup`, `POST /api/auth/register-org` | APPLICATION_MASTER §24.A, CHANGE_IMPACT | SPA + API |

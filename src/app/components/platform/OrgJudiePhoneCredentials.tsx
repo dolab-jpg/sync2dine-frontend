@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Phone, Save, Plug, RefreshCw, Radio } from 'lucide-react';
 import {
   fetchJudiePhoneLine,
+  fetchPhoneRegistrationStatus,
   registerPlatformPhoneLine,
   saveJudiePhoneLine,
   syncAsteriskBridge,
@@ -20,6 +21,14 @@ type Props = {
   onSaved?: (line: PlatformPhoneLine) => void;
 };
 
+function liveBadgeLabel(line: PlatformPhoneLine | null, liveStatus: string | null): string {
+  if (!line) return 'Not connected';
+  if (!line.enabled) return 'disabled';
+  if (liveStatus === 'Registered') return 'Registered (live)';
+  if (liveStatus === 'Rejected' || liveStatus === 'Unregistered') return liveStatus;
+  return line.status;
+}
+
 /**
  * Platform owner: attach this restaurant's Judie number + SIP credentials.
  * Sally sales credentials live separately under Platform ? Sally offer.
@@ -30,6 +39,7 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
   const [registering, setRegistering] = useState(false);
   const [goingLive, setGoingLive] = useState(false);
   const [line, setLine] = useState<PlatformPhoneLine | null>(null);
+  const [liveStatus, setLiveStatus] = useState<string | null>(null);
   const [form, setForm] = useState({
     label: '',
     did: '',
@@ -52,6 +62,14 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
         sipDomain: existing?.sipDomain || 'sbc.soho66.co.uk',
         enabled: existing?.enabled !== false,
       });
+      const live = await fetchPhoneRegistrationStatus().catch(() => null);
+      if (live && existing) {
+        const row = live.lines.find((l) => l.id === existing.id || (l.orgId === orgId && l.purpose === 'aria'));
+        setLiveStatus(row?.liveStatus ?? null);
+        if (row) setLine({ ...existing, status: row.status });
+      } else {
+        setLiveStatus(null);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load Judie line');
     } finally {
@@ -114,7 +132,7 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
     try {
       const result = await syncAsteriskBridge(true);
       const summary = `${result.count} line(s) published${
-        result.apply.ran ? (result.apply.ok ? ' + bridge reloaded' : ' ù bridge reload FAILED') : ''
+        result.apply.ran ? (result.apply.ok ? ' + bridge reloaded' : ' ? bridge reload FAILED') : ''
       }`;
       if (result.ok) toast.success(`Live: ${summary}`);
       else toast.error(result.message || `Publish incomplete: ${summary}`);
@@ -151,7 +169,9 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
         <Phone className="h-4 w-4 text-s2d-teal" />
         <p className="font-semibold text-s2d-teal-deep">Judie phone (this restaurant)</p>
         {line ? (
-          <Badge variant="secondary">{line.enabled ? line.status : 'disabled'}</Badge>
+          <Badge variant={liveStatus === 'Registered' || line.status === 'registered' ? 'default' : 'destructive'}>
+            {liveBadgeLabel(line, liveStatus)}
+          </Badge>
         ) : (
           <Badge variant="outline">Not connected</Badge>
         )}
@@ -160,7 +180,7 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
         Unique number + SIP username/password for this client only. Diners call this line for Judie,
         not Sally. <strong>Save</strong> stores this client's credentials. <strong>Go live</strong>{' '}
         publishes every customer Judie line + Sally to the VPS Asterisk bridge as N concurrent
-        REGISTERs ù editing one client never drops another client or Sally. Keep VOIS logged out of
+        REGISTERs ? editing one client never drops another client or Sally. Keep VOIS logged out of
         each AI SIP username so calls reach Judie, not voicemail.
       </p>
       {line?.lastError ? (
@@ -179,7 +199,7 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
           <Label>Phone number (DID)</Label>
           <Input
             disabled={loading}
-            placeholder="0203ù"
+            placeholder="0203?"
             value={form.did}
             onChange={(e) => setForm((f) => ({ ...f, did: e.target.value }))}
           />
@@ -215,7 +235,7 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" disabled={loading || saving} onClick={() => void save()}>
           <Save className="mr-1 h-3.5 w-3.5" />
-          {saving ? 'SavingÖ' : 'Save credentials'}
+          {saving ? 'Saving?' : 'Save credentials'}
         </Button>
         <Button type="button" size="sm" variant="outline" disabled={!line || loading} onClick={() => void test()}>
           <Plug className="mr-1 h-3.5 w-3.5" />
@@ -229,7 +249,7 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
           onClick={() => void register()}
         >
           <RefreshCw className={`mr-1 h-3.5 w-3.5 ${registering ? 'animate-spin' : ''}`} />
-          {registering ? 'Registeringù' : 'Register'}
+          {registering ? 'Registering?' : 'Register'}
         </Button>
         <Button
           type="button"
@@ -239,7 +259,7 @@ export default function OrgJudiePhoneCredentials({ orgId, orgName, onSaved }: Pr
           onClick={() => void goLive()}
         >
           <Radio className={`mr-1 h-3.5 w-3.5 ${goingLive ? 'animate-pulse' : ''}`} />
-          {goingLive ? 'Publishing all linesù' : 'Go live (all lines)'}
+          {goingLive ? 'Publishing all lines?' : 'Go live (all lines)'}
         </Button>
       </div>
     </div>

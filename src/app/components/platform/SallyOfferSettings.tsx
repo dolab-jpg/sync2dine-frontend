@@ -8,6 +8,7 @@ import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
 import { BadgePoundSterling, Phone, Plug, Radio, RefreshCw, Save } from 'lucide-react';
 import {
+  fetchPhoneRegistrationStatus,
   fetchSallyOffer,
   fetchSallyPhoneLine,
   registerPlatformPhoneLine,
@@ -30,6 +31,14 @@ const emptyForm: SallyOfferTerms = {
   salesPdfUrl: '',
 };
 
+function liveBadgeLabel(line: PlatformPhoneLine | null, liveStatus: string | null): string {
+  if (!line) return 'Not connected';
+  if (!line.enabled) return 'disabled';
+  if (liveStatus === 'Registered') return 'Registered (live)';
+  if (liveStatus === 'Rejected' || liveStatus === 'Unregistered') return liveStatus;
+  return line.status;
+}
+
 export default function SallyOfferSettings() {
   const [form, setForm] = useState<SallyOfferTerms>(emptyForm);
   const [loading, setLoading] = useState(true);
@@ -39,6 +48,7 @@ export default function SallyOfferSettings() {
   const [goingLive, setGoingLive] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [line, setLine] = useState<PlatformPhoneLine | null>(null);
+  const [liveStatus, setLiveStatus] = useState<string | null>(null);
   const [lineForm, setLineForm] = useState({
     label: 'Sally sales',
     did: '',
@@ -60,6 +70,10 @@ export default function SallyOfferSettings() {
       (phoneLine) => ({ ok: true as const, phoneLine }),
       (err) => ({ ok: false as const, err }),
     );
+    const liveResult = await fetchPhoneRegistrationStatus().then(
+      (data) => ({ ok: true as const, data }),
+      () => ({ ok: false as const }),
+    );
 
     if (offerResult.ok) {
       setForm({ ...emptyForm, ...offerResult.data.offer });
@@ -79,6 +93,15 @@ export default function SallyOfferSettings() {
         sipDomain: phoneLine?.sipDomain || 'sbc.soho66.co.uk',
         enabled: phoneLine?.enabled !== false,
       });
+      if (liveResult.ok && phoneLine) {
+        const row = liveResult.data.lines.find((l) => l.id === phoneLine.id || l.purpose === 'sally');
+        setLiveStatus(row?.liveStatus ?? null);
+        if (row) {
+          setLine((prev) => (prev ? { ...prev, status: row.status, lastError: row.liveStatus === 'Registered' ? undefined : prev.lastError } : prev));
+        }
+      } else {
+        setLiveStatus(null);
+      }
     } else {
       toast.error(phoneResult.err instanceof Error ? phoneResult.err.message : 'Failed to load Sally phone line');
     }
@@ -217,7 +240,9 @@ export default function SallyOfferSettings() {
             Sally phone credentials
           </CardTitle>
           {line ? (
-            <Badge variant="secondary">{line.enabled ? line.status : 'disabled'}</Badge>
+            <Badge variant={liveStatus === 'Registered' || line.status === 'registered' ? 'default' : 'destructive'}>
+              {liveBadgeLabel(line, liveStatus)}
+            </Badge>
           ) : (
             <Badge variant="outline">Not connected</Badge>
           )}

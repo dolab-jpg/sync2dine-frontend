@@ -391,6 +391,30 @@ export interface AsteriskBridgeSyncResult {
   message: string;
 }
 
+export type AsteriskLiveStatus = 'Registered' | 'Unregistered' | 'Rejected' | 'Unknown';
+
+export interface AiRegistrationStatusRow {
+  id: string;
+  orgId: string;
+  orgName?: string;
+  purpose: 'aria' | 'sally';
+  label: string;
+  sipUsername: string;
+  did: string;
+  liveStatus: AsteriskLiveStatus;
+  status: 'registered' | 'error' | 'disconnected';
+}
+
+/** Live Asterisk REGISTER probe — also refreshes stored phone-line status. */
+export async function fetchPhoneRegistrationStatus(): Promise<{
+  ok: boolean;
+  registrations: string;
+  lines: AiRegistrationStatusRow[];
+}> {
+  const headers = await platformAuthHeaders();
+  return parseJson(await fetch('/api/platform/phone-lines/registration-status', { headers }));
+}
+
 /** Preview the COMPLETE AI line set (Sally + every customer Judie) without publishing. */
 export async function fetchAiPhoneLineSet(): Promise<{ count: number; lines: AiBridgeLineMasked[] }> {
   const headers = await platformAuthHeaders();

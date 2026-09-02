@@ -192,8 +192,8 @@ interface ContactLookupResult {
 const LINE_STATUS_LABELS: Record<string, string> = {
   disconnected: 'Disconnected',
   registering: 'Registering…',
-  registered: 'Registered',
-  error: 'Error',
+  registered: 'Registered (live)',
+  error: 'Offline / error',
 };
 
 const INTENT_LABELS: Record<string, string> = {
