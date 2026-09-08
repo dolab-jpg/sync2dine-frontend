@@ -228,7 +228,7 @@ export function loadRecruitmentStore(): RecruitmentStoreData {
     const parsed = JSON.parse(raw) as Partial<RecruitmentStoreData>;
     return {
       jobs: ensureRestaurantSalesJob(Array.isArray(parsed.jobs) && parsed.jobs.length ? parsed.jobs : DEFAULT_JOBS),
-      candidates: Array.isArray(parsed.candidates) ? parsed.candidates : [],
+      candidates: Array.isArray(parsed.candidates) ? parsed.candidates.map(normalizeCandidate) : [],
       interviews: Array.isArray(parsed.interviews) ? parsed.interviews : [],
       applications: Array.isArray(parsed.applications) ? parsed.applications : [],
       onboardingTasks: Array.isArray(parsed.onboardingTasks) ? parsed.onboardingTasks : [],
@@ -262,6 +262,24 @@ export async function syncRecruitmentToServer(data: RecruitmentStoreData): Promi
   }
 }
 
+/**
+ * Candidates written by Sally's phone tools or CV upload only carry the fields she learned,
+ * so fill the list/profile arrays the UI iterates over.
+ */
+export function normalizeCandidate(candidate: RecruitmentCandidate): RecruitmentCandidate {
+  const list = (value: unknown): string[] => (Array.isArray(value) ? value.map(String) : []);
+  return {
+    ...candidate,
+    name: String(candidate.name ?? 'Candidate'),
+    phone: String(candidate.phone ?? ''),
+    email: String(candidate.email ?? ''),
+    skills: list(candidate.skills),
+    certifications: list(candidate.certifications),
+    preferredLocations: list(candidate.preferredLocations),
+    rating: Number.isFinite(Number(candidate.rating)) ? Number(candidate.rating) : 0,
+  };
+}
+
 export async function loadRecruitmentFromApi(): Promise<RecruitmentStoreData | null> {
   try {
     const res = await fetch('/api/recruitment', { headers: recruitmentHeaders() });
@@ -270,7 +288,9 @@ export async function loadRecruitmentFromApi(): Promise<RecruitmentStoreData | n
     const jobs = Array.isArray(data.jobs) ? data.jobs as RecruitmentJob[] : [];
     return {
       jobs: jobs.length ? ensureRestaurantSalesJob(jobs) : jobs,
-      candidates: Array.isArray(data.candidates) ? data.candidates as RecruitmentCandidate[] : [],
+      candidates: Array.isArray(data.candidates)
+        ? (data.candidates as RecruitmentCandidate[]).map(normalizeCandidate)
+        : [],
       interviews: Array.isArray(data.interviews) ? data.interviews as RecruitmentInterview[] : [],
       applications: Array.isArray(data.applications) ? data.applications as RecruitmentApplication[] : [],
       onboardingTasks: Array.isArray(data.onboardingTasks) ? data.onboardingTasks as RecruitmentOnboardingTask[] : [],

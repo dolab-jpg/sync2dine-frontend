@@ -1,0 +1,41 @@
+---
+description: Mandatory - open every UI surface in Cursor's internal browser and show screenshot proof of every change
+alwaysApply: true
+---
+
+# Visible work rule: browser open + screenshot proof (MANDATORY, always-on)
+
+The user cannot see what you are doing unless you show it. This rule is **not optional** and has **no "quick change" exception**.
+
+## How to open the page (this laptop)
+
+Use **Cursor's internal / Simple Browser on this machine** — not an external Chrome window as the only proof, and **not** "Browser MCP unavailable → stop".
+
+1. **Preferred:** `cursor-app-control` → `open_resource` with the live (or local) `https://…` / `http://…` URL so the page opens in Cursor next to the agent.
+2. If `cursor-ide-browser` MCP tools (`browser_navigate`, `browser_take_screenshot`, etc.) are listed and ready, use those too for navigate + screenshot.
+3. If those MCP tools are **not** in the catalog, **do not stop and do not write that MCP is unavailable**. Keep the tab open via `open_resource`, then capture proof on **this Windows laptop** with Playwright / Edge / Chrome headless (e.g. `npx playwright screenshot …`) and save under `.cursor/local/` or a temp path.
+4. Tell the user in one line which page you opened so they can watch it.
+
+Default target: **https://app.sync2dine.io** (live). Local only when the user asks: `http://localhost:5174/...`.
+
+## After every change
+
+5. After **each** UI change lands (hot reload or deploy): refresh / re-open that same URL, then take a **new screenshot**.
+6. **Embed the screenshot inline** in your reply (`![what changed](path)`). The user relies on these print-screens.
+7. **Never** write "done", "fixed", "updated", or similar for a UI change without an accompanying screenshot of the page.
+
+## Forbidden excuses
+
+- Do **not** say "Browser MCP isn't available in this session" and skip proof.
+- Do **not** claim the laptop cannot take screenshots — it can (`open_resource` + Playwright/Edge on this PC).
+
+## Page defaults
+
+| Task | Open in Cursor browser |
+|------|------------------------|
+| Any component/page/style edit | the exact route that renders it |
+| Phone / outbound / Call Centre | `https://app.sync2dine.io/calls` |
+| Marketing / landing pages | the specific landing path on live |
+| AI Studio / Cynthia | the matching `/ai-studio` route |
+| Platform / CRM / ops | the matching `/platform/...` or `/crm` path |
+| After SPA deploy | re-open the same URL, screenshot again |

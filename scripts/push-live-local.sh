@@ -41,8 +41,9 @@ if [ "${SKIP_SPA:-0}" != "1" ]; then
   npm run build
   LOCAL_SPA_ASSET="$(ls -1 dist/assets/index-*.js 2>/dev/null | head -1 | xargs -n1 basename 2>/dev/null || true)"
   tar -czf /tmp/sync2dine-deploy.tar.gz dist
-  scp /tmp/sync2dine-deploy.tar.gz "$VPS_SSH:/tmp/sync2dine-deploy.tar.gz"
-  scp "$ROOT/scripts/deploy-spa.sh" "$VPS_SSH:/tmp/deploy-spa.sh"
+  # -O forces the legacy scp protocol: the VPS sshd drops the SFTP subsystem mid-transfer.
+  scp -O /tmp/sync2dine-deploy.tar.gz "$VPS_SSH:/tmp/sync2dine-deploy.tar.gz"
+  scp -O "$ROOT/scripts/deploy-spa.sh" "$VPS_SSH:/tmp/deploy-spa.sh"
   ssh "$VPS_SSH" 'sudo bash /tmp/deploy-spa.sh'
 fi
 
@@ -66,7 +67,7 @@ if [ "${SKIP_API:-0}" != "1" ]; then
         --exclude=.env \
         .
     )
-    scp "$TAR" "$VPS_SSH:/tmp/sync2dine-backend-sync.tar.gz"
+    scp -O "$TAR" "$VPS_SSH:/tmp/sync2dine-backend-sync.tar.gz"
     ssh "$VPS_SSH" "mkdir -p '$BE_DIR' && tar -xzf /tmp/sync2dine-backend-sync.tar.gz -C '$BE_DIR'"
   fi
 

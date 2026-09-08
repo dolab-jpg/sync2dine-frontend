@@ -1,0 +1,3 @@
+Clarify CSV hold toast and document staff-only campaign progress.
+
+Held leads wait for known opening hours, not unfinished research.

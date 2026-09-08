@@ -1,0 +1,35 @@
+{
+    "access_token":  "eyJhbGciOiJFUzI1NiIsImtpZCI6IjIyMjYwZWUzLTc1YTUtNDJjZi04NTQxLTY3OWFkZmFkMjhiOCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL29scGJ2dW1heXh4eHFtc2JmdXVhLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiJjMjAyZjg3OS04MzhhLTRjNGItOTE3NC01MzM0YzdhNmRkZjQiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzg2NzQ1OTIwLCJpYXQiOjE3ODY3NDIzMjAsImVtYWlsIjoib3duZXJAc3luYzJkaW5lLmlvIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwibmFtZSI6IlBsYXRmb3JtIE93bmVyIiwib3JnX2lkIjoiIiwicm9sZSI6InBsYXRmb3JtX293bmVyIiwidXNlcm5hbWUiOiJvd25lciJ9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzg2NzQyMzIwfV0sInNlc3Npb25faWQiOiI3ZTRiMTVmZC02ZjUzLTRmNjYtYWMzNi05ZjIxZDZmNzM4MjYiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.b1OILD-WKlu5gXKbRaVDAqgj8pLnFyHinbpln6NFet20Q0zvlqSHrAGnU6c3hDRnZUvasZ7KVlDvMa1GPzAb7A",
+    "token_type":  "bearer",
+    "expires_in":  3600,
+    "expires_at":  1786745920,
+    "refresh_token":  "davvrvxjdxc7",
+    "user":  {
+                 "id":  "c202f879-838a-4c4b-9174-5334c7a6ddf4",
+                 "aud":  "authenticated",
+                 "role":  "authenticated",
+                 "email":  "owner@sync2dine.io",
+                 "email_confirmed_at":  "2026-07-17T00:20:24.687163Z",
+                 "phone":  "",
+                 "confirmed_at":  "2026-07-17T00:20:24.687163Z",
+                 "last_sign_in_at":  "2026-08-14T21:18:40.45903373Z",
+                 "app_metadata":  {
+                                      "provider":  "email",
+                                      "providers":  "email"
+                                  },
+                 "user_metadata":  {
+                                       "email_verified":  true,
+                                       "name":  "Platform Owner",
+                                       "org_id":  "",
+                                       "role":  "platform_owner",
+                                       "username":  "owner"
+                                   },
+                 "identities":  [
+                                    "@{identity_id=af4f4ee1-c0aa-4b2f-9b47-b34b9d87cf45; id=c202f879-838a-4c4b-9174-5334c7a6ddf4; user_id=c202f879-838a-4c4b-9174-5334c7a6ddf4; identity_data=; provider=email; last_sign_in_at=2026-07-16T23:15:16.952758Z; created_at=2026-07-16T23:15:16.95283Z; updated_at=2026-07-16T23:15:16.95283Z; email=owner@sync2dine.io}"
+                                ],
+                 "created_at":  "2026-07-16T23:15:16.920215Z",
+                 "updated_at":  "2026-08-14T21:18:40.469644Z",
+                 "is_anonymous":  false
+             },
+    "weak_password":  null
+}

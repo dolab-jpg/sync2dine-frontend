@@ -1,0 +1,3 @@
+feat(comms): mirror marketing sales email preview in Communications hub
+
+Match the in-app email preview to the branded server template with hero, packages, and CTA.

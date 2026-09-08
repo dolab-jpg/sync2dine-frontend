@@ -1,0 +1,5 @@
+fix(platform): AppShell for /platform/* and Gmail-ready Ops UI
+
+Force platform_owner on /platform paths into AppShell so Ops never
+renders under the restaurant tablet shell. Prefer Node authToken for
+platform API calls; tidy Ops settings card for go-live.
