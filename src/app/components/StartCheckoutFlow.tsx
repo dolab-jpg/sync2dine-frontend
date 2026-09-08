@@ -193,7 +193,7 @@ export default function StartCheckoutFlow() {
                 idx === draft.step
                   ? 'bg-s2d-teal-deep text-white'
                   : idx < draft.step
-                    ? 'bg-teal-100 text-teal-800'
+                    ? 'bg-s2d-cream text-s2d-teal-deep'
                     : 'bg-slate-100 text-slate-500'
               }`}
             >
@@ -463,8 +463,8 @@ export default function StartCheckoutFlow() {
 
           {draft.step === 5 && (
             <div className="space-y-6 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-teal-100">
-                <CreditCard className="h-7 w-7 text-teal-700" aria-hidden />
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-s2d-cream">
+                <CreditCard className="h-7 w-7 text-s2d-teal" aria-hidden />
               </div>
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Ready to pay</h2>
@@ -479,7 +479,7 @@ export default function StartCheckoutFlow() {
               </div>
               <Button
                 type="button"
-                className="min-h-12 w-full bg-teal-700 text-base hover:bg-teal-800"
+                className="min-h-12 w-full bg-s2d-teal text-base hover:bg-s2d-teal-deep"
                 disabled={paying}
                 onClick={() => void handlePay()}
               >
@@ -503,7 +503,7 @@ export default function StartCheckoutFlow() {
             >
               Back
             </Button>
-            <Button type="button" className="min-h-11 bg-teal-700 hover:bg-teal-800" onClick={goNext}>
+            <Button type="button" className="min-h-11 bg-s2d-teal hover:bg-s2d-teal-deep" onClick={goNext}>
               Continue
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -534,7 +534,7 @@ function ConsentRow({
         <Label htmlFor={id} className="cursor-pointer text-sm font-normal leading-snug text-slate-700">
           {children}
         </Label>
-        {checked ? <Check className="ml-auto h-4 w-4 shrink-0 text-teal-600" aria-hidden /> : null}
+        {checked ? <Check className="ml-auto h-4 w-4 shrink-0 text-s2d-teal" aria-hidden /> : null}
       </div>
       {error ? <p className="mt-1 pl-7 text-xs text-red-600">{error}</p> : null}
     </div>

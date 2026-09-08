@@ -624,7 +624,7 @@ export default function MenuManager() {
                 type="checkbox"
                 checked={form.available}
                 onChange={(e) => setForm({ ...form, available: e.target.checked })}
-                className="h-5 w-5 accent-[#0f3d3e]"
+                className="h-5 w-5 accent-s2d-teal"
               />
               <span className="font-medium text-s2d-teal-deep">Available to order</span>
             </label>

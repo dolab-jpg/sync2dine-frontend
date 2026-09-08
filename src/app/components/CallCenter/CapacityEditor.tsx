@@ -73,7 +73,7 @@ export function CapacityEditor({ capacity, onSaved, triggerClassName = '' }: Pro
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as { error?: string }).error || 'Failed to save capacity');
-      toast.success(`Capacity saved — Max ${total}, Inbound ${inbound}, Outbound ${outbound}`);
+      toast.success(`Capacity saved ï¿½ Max ${total}, Inbound ${inbound}, Outbound ${outbound}`);
       setOpen(false);
       onSaved?.();
     } catch (err) {
@@ -145,8 +145,8 @@ export function CapacityEditor({ capacity, onSaved, triggerClassName = '' }: Pro
 
           <p className="text-xs text-muted-foreground rounded-lg bg-s2d-cream/60 border border-s2d-teal/10 px-3 py-2">
             Recommended for a 4-channel Soho66 trunk: Total 4, Inbound 2, Outbound 2.
-            Currently live: Inbound {capacity?.inboundActive ?? 0}/{capacity?.maxInbound ?? '—'},
-            Outbound {capacity?.outboundActive ?? 0}/{capacity?.maxOutbound ?? '—'}.
+            Currently live: Inbound {capacity?.inboundActive ?? 0}/{capacity?.maxInbound ?? 'ï¿½'},
+            Outbound {capacity?.outboundActive ?? 0}/{capacity?.maxOutbound ?? 'ï¿½'}.
           </p>
 
           <div className="flex items-center justify-between gap-3 rounded-lg border border-s2d-teal/10 px-3 py-2.5">
@@ -164,7 +164,7 @@ export function CapacityEditor({ capacity, onSaved, triggerClassName = '' }: Pro
             <Input
               id="cap-overflow"
               type="tel"
-              placeholder="+44…"
+              placeholder="+44ï¿½"
               value={overflowNumber}
               onChange={(e) => setOverflowNumber(e.target.value)}
               disabled={!overflowWhenFull}

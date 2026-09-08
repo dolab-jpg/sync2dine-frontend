@@ -9,6 +9,8 @@ import {
   fetchConversationTranscript,
   exportTranscriptCsv,
   exportTranscriptJson,
+  deleteConversationThread,
+  deleteConversationThreadsBatch,
   type ConversationLogEntry,
 } from '../../engine/ai/conversationLogService';
 import { canViewAudit } from '../../engine/ai/rolePermissions';
@@ -17,6 +19,7 @@ import { CodeFixesAudit } from './CodeFixesAudit';
 import { PhoneErrorsAudit } from './PhoneErrorsAudit';
 import { listCodeFixJobs } from '../../engine/ai/codeFixService';
 import { listPhoneIncidents } from '../../engine/ai/phoneIncidentsService';
+import { toast } from 'sonner';
 
 type AuditTab = 'conversations' | 'code_fixes' | 'phone_errors';
 
@@ -37,9 +40,18 @@ export default function ConversationAudit() {
   const [search, setSearch] = useState('');
   const [alertCount, setAlertCount] = useState(0);
   const [phoneAlertCount, setPhoneAlertCount] = useState(0);
+  const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
   const phoneIncidentId = searchParams.get('id');
 
   const allowed = Boolean(app && canViewAudit(app.user.role as Parameters<typeof canViewAudit>[0]));
+
+  const refreshThreads = () => {
+    void fetchConversationThreads({
+      role: roleFilter === 'all' ? undefined : roleFilter,
+      search: search || undefined,
+    }).then((r) => setThreads(r.threads));
+  };
 
   useEffect(() => {
     setTab(tabFromSearch(searchParams.get('tab')));
@@ -47,10 +59,7 @@ export default function ConversationAudit() {
 
   useEffect(() => {
     if (!allowed) return;
-    void fetchConversationThreads({
-      role: roleFilter === 'all' ? undefined : roleFilter,
-      search: search || undefined,
-    }).then((r) => setThreads(r.threads));
+    refreshThreads();
   }, [allowed, roleFilter, search]);
 
   useEffect(() => {
@@ -93,13 +102,66 @@ export default function ConversationAudit() {
     URL.revokeObjectURL(url);
   };
 
+  const toggleThreadSelect = (id: string) => {
+    setSelectedThreadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleDeleteThread = async (threadId: string) => {
+    if (!window.confirm('Permanently delete this conversation thread?')) return;
+    setDeleting(true);
+    try {
+      await deleteConversationThread(threadId);
+      if (selectedId === threadId) {
+        setSelectedId(null);
+        setMessages([]);
+      }
+      setSelectedThreadIds((prev) => {
+        const next = new Set(prev);
+        next.delete(threadId);
+        return next;
+      });
+      toast.success('Thread deleted');
+      refreshThreads();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteSelectedThreads = async () => {
+    const ids = [...selectedThreadIds];
+    if (ids.length === 0) return;
+    if (!window.confirm(`Permanently delete ${ids.length} conversation thread(s)?`)) return;
+    setDeleting(true);
+    try {
+      await deleteConversationThreadsBatch({ threadIds: ids });
+      if (selectedId && ids.includes(selectedId)) {
+        setSelectedId(null);
+        setMessages([]);
+      }
+      setSelectedThreadIds(new Set());
+      toast.success(`Deleted ${ids.length} thread(s)`);
+      refreshThreads();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="p-4 max-w-6xl mx-auto h-[calc(100vh-4rem)] flex flex-col">
       <div className="mb-4">
         <h1 className="text-2xl font-bold">AI Audit</h1>
         <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
           Conversation, code-fix, and phone/webhook incident logs are retained for quality and ops.
-          Do not share outside authorised staff.
+          Authorised staff can permanently delete logs from each tab. Do not share outside authorised staff.
         </p>
       </div>
 
@@ -149,7 +211,7 @@ export default function ConversationAudit() {
         <PhoneErrorsAudit initialId={phoneIncidentId} />
       ) : (
         <>
-          <div className="flex gap-2 mb-4 flex-wrap">
+          <div className="flex gap-2 mb-4 flex-wrap items-center">
             <Input
               placeholder="Search..."
               value={search}
@@ -165,23 +227,44 @@ export default function ConversationAudit() {
                 <SelectItem value="manager">Manager</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={deleting || selectedThreadIds.size === 0}
+              onClick={() => void handleDeleteSelectedThreads()}
+            >
+              Delete selected ({selectedThreadIds.size})
+            </Button>
           </div>
           <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 min-h-0">
             <Card className="md:col-span-1 overflow-hidden flex flex-col">
               <CardContent className="p-0 flex-1 overflow-y-auto">
                 {threads.map((t) => (
-                  <button
+                  <div
                     key={t.id}
-                    type="button"
-                    onClick={() => setSelectedId(t.id)}
-                    className={`w-full text-left p-3 border-b hover:bg-slate-50 ${
+                    className={`flex items-start gap-2 border-b hover:bg-slate-50 ${
                       selectedId === t.id ? 'bg-amber-50' : ''
                     }`}
                   >
-                    <p className="font-medium text-sm">{t.userName}</p>
-                    <p className="text-xs text-slate-500">{t.role} · {t.scope}</p>
-                    <p className="text-xs text-slate-600 truncate mt-1">{t.lastMessage}</p>
-                  </button>
+                    <label className="pl-3 pt-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedThreadIds.has(t.id)}
+                        onChange={() => toggleThreadSelect(t.id)}
+                        aria-label={`Select ${t.userName}`}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(t.id)}
+                      className="flex-1 text-left p-3"
+                    >
+                      <p className="font-medium text-sm">{t.userName}</p>
+                      <p className="text-xs text-slate-500">{t.role} · {t.scope}</p>
+                      <p className="text-xs text-slate-600 truncate mt-1">{t.lastMessage}</p>
+                    </button>
+                  </div>
                 ))}
                 {threads.length === 0 && (
                   <p className="p-4 text-sm text-slate-500">No logged conversations yet.</p>
@@ -191,12 +274,21 @@ export default function ConversationAudit() {
             <Card className="md:col-span-2 overflow-hidden flex flex-col">
               <CardContent className="p-4 flex-1 overflow-y-auto space-y-3">
                 {selectedId && (
-                  <div className="flex gap-2 mb-2">
+                  <div className="flex gap-2 mb-2 flex-wrap">
                     <Button type="button" size="sm" variant="outline" onClick={() => download('json')}>
                       Export JSON
                     </Button>
                     <Button type="button" size="sm" variant="outline" onClick={() => download('csv')}>
                       Export CSV
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      disabled={deleting}
+                      onClick={() => void handleDeleteThread(selectedId)}
+                    >
+                      Delete thread
                     </Button>
                   </div>
                 )}

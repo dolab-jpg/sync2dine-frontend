@@ -55,7 +55,7 @@ export const SAAS_PACKAGES: Record<SaasPackageId, SaasPackageDef> = {
     id: 'judie_payg_inbound',
     name: 'Judie Pay-as-you-go',
     shortName: 'Pay-as-you-go',
-    description: 'Inbound-only Judie receptionist — orders and bookings into the app',
+    description: 'Inbound-only Judie receptionist — weekly fee with included AI minutes; venue diverts when they want cover; orders and bookings into the app',
     family: 'judie',
     standardWeeklyGbp: 77,
     launchWeeklyGbp: 46,

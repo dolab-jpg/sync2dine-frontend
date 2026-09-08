@@ -61,6 +61,33 @@ export async function fetchConversationTranscript(threadId: string): Promise<Con
   return data.messages ?? [];
 }
 
+export async function deleteConversationThread(threadId: string): Promise<{ ok: boolean; deleted: number }> {
+  const res = await fetch(`/api/ai/conversation-log/${encodeURIComponent(threadId)}`, {
+    method: 'DELETE',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as { error?: string }).error || `Request failed (${res.status})`);
+  }
+  return data as { ok: boolean; deleted: number };
+}
+
+export async function deleteConversationThreadsBatch(opts: {
+  threadIds?: string[];
+  all?: boolean;
+}): Promise<{ ok: boolean; deletedThreads: number }> {
+  const res = await fetch('/api/ai/conversation-log/delete-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as { error?: string }).error || `Request failed (${res.status})`);
+  }
+  return data as { ok: boolean; deletedThreads: number };
+}
+
 export function exportTranscriptJson(messages: ConversationLogEntry[]): string {
   return JSON.stringify(messages, null, 2);
 }

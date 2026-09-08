@@ -14,7 +14,7 @@ type Props = {
 
 /**
  * Shared Start / Pause / Stop for the Sally outbound dial queue.
- * "Paused" here means the dial queue — not Agent on/off.
+ * "Paused" here means the dial queue ï¿½ not Agent on/off.
  */
 export function OutboundQueueControlBar({ className = '', compact = false }: Props) {
   const [state, setState] = useState<QueueState>('running');
@@ -50,9 +50,9 @@ export function OutboundQueueControlBar({ className = '', compact = false }: Pro
       if (!res.ok) throw new Error((data as { error?: string }).error || 'Failed to update dial queue');
       setState((data as { outboundQueueState?: QueueState }).outboundQueueState ?? next);
       const labels: Record<QueueState, string> = {
-        running: 'started — Sally will dial queued leads',
-        paused: 'paused — no new dials until you start',
-        stopped: 'stopped — queued dials cancelled',
+        running: 'started ï¿½ Sally will dial queued leads',
+        paused: 'paused ï¿½ no new dials until you start',
+        stopped: 'stopped ï¿½ queued dials cancelled',
       };
       toast.success(`Dial queue ${labels[next]}`);
     } catch (err) {
@@ -124,7 +124,7 @@ export function OutboundQueueControlBar({ className = '', compact = false }: Pro
         className={`min-h-9 border-s2d-teal/25 ${isPaused ? 'opacity-50' : ''}`}
         disabled={saving || isPaused}
         onClick={() => void setControl('paused')}
-        title="Pause — no new dials until you start"
+        title="Pause ï¿½ no new dials until you start"
       >
         <Pause className="w-4 h-4 mr-1" />
         Pause

@@ -16,6 +16,29 @@ export interface RecruitmentJob {
   applicantCount?: number;
 }
 
+export type HireRecommendation = 'hire' | 'maybe' | 'no';
+
+export interface HireScorecard {
+  hunger?: number;
+  salesProof?: number;
+  restaurantFit?: number;
+  outboundComfort?: number;
+  cvHonesty?: number;
+}
+
+export type RecruitmentMessageChannel = 'indeed' | 'sms' | 'email' | 'phone';
+
+export interface RecruitmentMessage {
+  id: string;
+  candidateId: string;
+  direction: 'in' | 'out';
+  channel: RecruitmentMessageChannel;
+  body: string;
+  at: string;
+  externalId?: string;
+  fromLabel?: string;
+}
+
 export interface RecruitmentCandidate {
   id: string;
   name: string;
@@ -36,9 +59,13 @@ export interface RecruitmentCandidate {
   createdAt: string;
   rating: number;
   notes?: string;
+  hireScore?: number;
+  hireRecommendation?: HireRecommendation;
+  hireScorecard?: HireScorecard;
+  lastInterviewCallId?: string;
+  callId?: string;
+  messages?: RecruitmentMessage[];
 }
-
-export interface RecruitmentInterview {
   id: string;
   applicationId?: string;
   candidateId: string;
@@ -54,6 +81,11 @@ export interface RecruitmentInterview {
   feedback?: string;
   rating?: number;
   notes?: string;
+  hireScore?: number;
+  hireRecommendation?: HireRecommendation;
+  hireScorecard?: HireScorecard;
+  lastInterviewCallId?: string;
+  callId?: string;
 }
 
 export interface RecruitmentApplication {
@@ -88,7 +120,31 @@ export interface RecruitmentStoreData {
   updatedAt: string;
 }
 
+export const RESTAURANT_SALES_JOB: RecruitmentJob = {
+  id: 'J-S2D-SALES',
+  title: 'Restaurant sales — Sync2Dine',
+  department: 'sales',
+  description: 'Outbound restaurant sales for Sync2Dine, covering venues in Woking / Surrey and London.',
+  location: 'Woking / Surrey and London',
+  salaryRange: '£30,000 - £45,000 + Commission',
+  employmentType: 'full-time',
+  requiredSkills: ['Sales', 'Outbound calling', 'Restaurant trade'],
+  qualifications: ['Sales experience', 'UK Driving License'],
+  status: 'open',
+  createdAt: '2026-09-01',
+  positions: 2,
+  applicantCount: 0,
+};
+
+export function ensureRestaurantSalesJob(jobs: RecruitmentJob[]): RecruitmentJob[] {
+  if (jobs.some((j) => j.id === RESTAURANT_SALES_JOB.id || j.title === RESTAURANT_SALES_JOB.title)) {
+    return jobs;
+  }
+  return [RESTAURANT_SALES_JOB, ...jobs];
+}
+
 const DEFAULT_JOBS: RecruitmentJob[] = [
+  RESTAURANT_SALES_JOB,
   {
     id: 'J001',
     title: 'Senior Sales Representative',
@@ -153,7 +209,7 @@ export function loadRecruitmentStore(): RecruitmentStoreData {
     if (!raw) return createDefaultStore();
     const parsed = JSON.parse(raw) as Partial<RecruitmentStoreData>;
     return {
-      jobs: Array.isArray(parsed.jobs) && parsed.jobs.length ? parsed.jobs : DEFAULT_JOBS,
+      jobs: ensureRestaurantSalesJob(Array.isArray(parsed.jobs) && parsed.jobs.length ? parsed.jobs : DEFAULT_JOBS),
       candidates: Array.isArray(parsed.candidates) ? parsed.candidates : [],
       interviews: Array.isArray(parsed.interviews) ? parsed.interviews : [],
       applications: Array.isArray(parsed.applications) ? parsed.applications : [],
@@ -174,7 +230,7 @@ export async function syncRecruitmentToServer(data: RecruitmentStoreData): Promi
   try {
     await fetch('/api/data/sync', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: recruitmentHeaders(),
       body: JSON.stringify({
         recruitmentJobs: data.jobs,
         recruitmentCandidates: data.candidates,
@@ -190,11 +246,12 @@ export async function syncRecruitmentToServer(data: RecruitmentStoreData): Promi
 
 export async function loadRecruitmentFromApi(): Promise<RecruitmentStoreData | null> {
   try {
-    const res = await fetch('/api/recruitment');
+    const res = await fetch('/api/recruitment', { headers: recruitmentHeaders() });
     if (!res.ok) return null;
     const data = await res.json() as Record<string, unknown>;
+    const jobs = Array.isArray(data.jobs) ? data.jobs as RecruitmentJob[] : [];
     return {
-      jobs: Array.isArray(data.jobs) ? data.jobs as RecruitmentJob[] : [],
+      jobs: jobs.length ? ensureRestaurantSalesJob(jobs) : jobs,
       candidates: Array.isArray(data.candidates) ? data.candidates as RecruitmentCandidate[] : [],
       interviews: Array.isArray(data.interviews) ? data.interviews as RecruitmentInterview[] : [],
       applications: Array.isArray(data.applications) ? data.applications as RecruitmentApplication[] : [],
@@ -210,7 +267,7 @@ export async function patchOnboardingTask(task: { id: string; status: string }):
   try {
     const res = await fetch('/api/recruitment/onboarding', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: recruitmentHeaders(),
       body: JSON.stringify(task),
     });
     return res.ok;
@@ -223,7 +280,7 @@ export async function postRecruitmentJob(job: Record<string, unknown>): Promise<
   try {
     const res = await fetch('/api/recruitment/jobs', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: recruitmentHeaders(),
       body: JSON.stringify(job),
     });
     if (!res.ok) return null;
@@ -238,7 +295,7 @@ export async function postRecruitmentCandidate(candidate: Record<string, unknown
   try {
     const res = await fetch('/api/recruitment/candidates', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: recruitmentHeaders(),
       body: JSON.stringify(candidate),
     });
     if (!res.ok) return null;
@@ -253,7 +310,7 @@ export async function postRecruitmentApplication(app: Record<string, unknown>): 
   try {
     const res = await fetch('/api/recruitment/applications', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: recruitmentHeaders(),
       body: JSON.stringify(app),
     });
     if (!res.ok) return null;
@@ -268,7 +325,7 @@ export async function patchRecruitmentApplication(id: string, patch: Record<stri
   try {
     const res = await fetch(`/api/recruitment/applications/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: recruitmentHeaders(),
       body: JSON.stringify(patch),
     });
     if (!res.ok) return null;
@@ -276,5 +333,83 @@ export async function patchRecruitmentApplication(id: string, patch: Record<stri
     return data.application ?? null;
   } catch {
     return null;
+  }
+}
+
+export type RecruitmentActionResult =
+  | { ok: true; data: Record<string, unknown> }
+  | { ok: false; status: number; error: string };
+
+async function postRecruitmentAction(path: string): Promise<RecruitmentActionResult> {
+  try {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: recruitmentHeaders(),
+    });
+    const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (!res.ok) {
+      const error = typeof data.error === 'string'
+        ? data.error
+        : typeof data.message === 'string'
+          ? data.message
+          : res.status === 404
+            ? 'This action is not available yet'
+            : `Request failed (${res.status})`;
+      return { ok: false, status: res.status, error };
+    }
+    return { ok: true, data };
+  } catch {
+    return { ok: false, status: 0, error: 'Request failed' };
+  }
+}
+
+export function postRecruitmentSeedIndeed(): Promise<RecruitmentActionResult> {
+  return postRecruitmentAction('/api/recruitment/seed-indeed');
+}
+
+export function postRecruitmentQueueInterviews(): Promise<RecruitmentActionResult> {
+  return postRecruitmentAction('/api/recruitment/queue-interviews');
+}
+
+function recruitmentHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const token = localStorage.getItem('authToken');
+    if (token) headers.Authorization = `Bearer ${token}`;
+  } catch {
+    /* ignore */
+  }
+  return headers;
+}
+
+export async function postRecruitmentMessage(input: {
+  candidateId?: string;
+  name?: string;
+  phone?: string;
+  direction: 'in' | 'out';
+  channel: RecruitmentMessageChannel;
+  body: string;
+  fromLabel?: string;
+  externalId?: string;
+  at?: string;
+}): Promise<RecruitmentActionResult & { message?: RecruitmentMessage }> {
+  try {
+    const res = await fetch('/api/recruitment/messages', {
+      method: 'POST',
+      headers: recruitmentHeaders(),
+      body: JSON.stringify(input),
+    });
+    const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (!res.ok) {
+      const error = typeof data.error === 'string' ? data.error : `Request failed (${res.status})`;
+      return { ok: false, status: res.status, error };
+    }
+    return {
+      ok: true,
+      data,
+      message: data.message as RecruitmentMessage | undefined,
+    };
+  } catch {
+    return { ok: false, status: 0, error: 'Request failed' };
   }
 }

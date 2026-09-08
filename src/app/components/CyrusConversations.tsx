@@ -45,6 +45,16 @@ function digitsOnly(value: string): string {
   return String(value || '').replace(/\D/g, '');
 }
 
+function channelBadgeLabel(channel: string | undefined): string {
+  const c = String(channel || '').toLowerCase();
+  if (c === 'whatsapp') return 'App';
+  if (c === 'phone') return 'Phone';
+  if (c === 'portal') return 'Portal';
+  if (c === 'web' || c === 'website') return 'Web';
+  if (c === 'email') return 'Email';
+  return c ? c : 'Thread';
+}
+
 function assistantBadgeLabel(
   fromRole: string | undefined,
   channel: string | undefined,
@@ -305,10 +315,10 @@ export default function CyrusConversations() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
             <MessageCircle className="w-8 h-8 text-green-600" />
-            {cyrusName} Conversations
+            Inbox
           </h1>
           <p className="text-gray-600 mt-1">
-            Live inbox — website and portal — powered by OpenAI via Cynthia
+            Live conversations — phone, website, and portal — powered by {cyrusName}
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
@@ -337,8 +347,7 @@ export default function CyrusConversations() {
               </p>
             ) : threads.length === 0 ? (
               <p className="p-4 text-sm text-gray-500">
-                No conversations yet. Use Integrations → WhatsApp → Simulate inbound, the website embed,
-                or portal Ask Cynthia.
+                No conversations yet. Phone calls, website chat, and portal Ask {cyrusName} land here.
               </p>
             ) : (
               <div className="divide-y max-h-[600px] overflow-auto">
@@ -365,7 +374,7 @@ export default function CyrusConversations() {
                     >
                       <p className="font-medium flex items-center gap-2 flex-wrap">
                         <span>{displayName}</span>
-                        <Badge variant="outline" className="text-[10px] capitalize">{thread.channel}</Badge>
+                        <Badge variant="outline" className="text-[10px]">{channelBadgeLabel(thread.channel)}</Badge>
                         {thread.handoffMode === 'human_takeover' && (
                           <Badge className="text-[10px] bg-blue-100 text-blue-800">Human</Badge>
                         )}

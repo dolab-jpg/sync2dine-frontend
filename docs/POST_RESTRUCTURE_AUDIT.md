@@ -1,12 +1,34 @@
-# Post-restructure audit (Phase 1–3)
+# Post-restructure audit (Phase 1ï¿½3) ï¿½ dated evidence
 
-**Date:** 2026-07-23  
-**Scope:** `sync2dine-frontend` + `sync2dine-backend` after domain regroup, FE `server-legacy/` quarantine, and giant splits.  
-**Method:** Code + mount table + live probes — not “files exist ? works”.
+**Date:** 2026-07-23 (original) ï¿½ **Harness refresh:** 2026-07-23  
+**Scope:** `sync2dine-frontend` + `sync2dine-backend` after domain regroup and agent-harness pass.
 
-## Verdict
+**Living SoT (prefer these over this file):**
 
-The reorganisation **improved navigability** (domain folders, AGENTS maps, disabled FE?BE Sally SCP, live phone path documented). It did **not** finish architecture cleanup. Large parts are still a flat junk drawer with stubs, dual Sally sales trees, a full FE Node twin, and Cursor rules that until this audit pointed agents at Builder Diddies / `app.b-diddies.com`.
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`CAPABILITY_INVENTORY.md`](./CAPABILITY_INVENTORY.md), [`APPLICATION_MASTER.md`](./APPLICATION_MASTER.md)
+- BE [`PHONE_ARCHITECTURE.md`](../../sync2dine-backend/docs/PHONE_ARCHITECTURE.md), [`LEGACY_ALIASES.md`](../../sync2dine-backend/docs/LEGACY_ALIASES.md)
+- Scores: [`AGENT_HARNESS_AUDIT.md`](./AGENT_HARNESS_AUDIT.md)
+
+## Superseded claims (do not re-apply)
+
+| Old claim in this audit | Current state |
+|-------------------------|---------------|
+| FE `server-legacy/` still a full twin hazard on disk | **Removed** from disk and gitignored wholly |
+| APPLICATION_MASTER Builder Diddies-heavy as living ops | Historical body ? [`archive/BUILDER_DIDDIES_OPS.md`](./archive/BUILDER_DIDDIES_OPS.md) |
+| Cursor rules pointed at b-diddies | Fixed to `app.sync2dine.io` + `push-live-local.sh` |
+| `*.vps.ts` as active deploy variants | Only under `server/_quarantine/` |
+
+The narrative below is **dated evidence** from the restructure day. Use CAPABILITY_INVENTORY for current ownership.
+
+---
+
+# Original audit body
+
+**Method:** Code + mount table + live probes ï¿½ not ï¿½files exist ? worksï¿½.
+
+## Verdict (restructure day)
+
+The reorganisation **improved navigability** (domain folders, AGENTS maps, disabled FE?BE Sally SCP, live phone path documented). It did **not** finish architecture cleanup. Large parts remained a flat junk drawer with stubs and dual Sally sales trees.
 
 ## Live probes (audit day)
 
@@ -15,24 +37,24 @@ The reorganisation **improved navigability** (domain folders, AGENTS maps, disab
 | `GET /health` | 200 `{"status":"ok"}` |
 | `GET /api/orders` | 401 (expected) |
 | `GET /api/ops/alerts` | 200 |
-| `POST /api/sally/web` | **404** before fix — handler existed locally **untracked** and was **not mounted** in `server/index.ts` |
+| `POST /api/sally/web` | **404** before fix ï¿½ then mounted |
 
-## Capability inventory (abbreviated)
+## Capability inventory (abbreviated ï¿½ superseded)
 
-| Capability | Lives | Owner | Connected? | Production-ready? |
-|------------|-------|-------|------------|-------------------|
-| Judie diner phone | `server/brains/judie`, `phone/vapi-*`, `phone/tools/*` | BE phone | Yes via Vapi | Yes (live path) |
-| Sally sales phone | `phone/sally-sales-phone.ts` + `brains/sally` | BE phone | Yes via Vapi | Yes, but **duplicates** `server/sally/*` |
-| Sally staff (PIN) | Sally brain + phone auth / staff tools | BE phone | Wired on Sally line | Yes |
-| Web staff orchestrator | `server/ai/orchestrator/*` | BE ai | Mounted via `/api/ai` + agent routes | Yes |
-| Marketing Sally web | `sally-web-routes.ts` | BE (orphan ? mounted in audit fix) | Was **disconnected** | Was **no** (404) |
-| Orders / menu | `server/orders/*` | BE orders | Mounted | Yes |
-| Billing / Stripe | `server/billing/*` | BE billing | Mounted | Partial (complex fare surface) |
-| FE SPA routes | `src/app/routes.tsx` + `routeMap.ts` | FE | Yes | Yes |
-| Domain types | `domainTypes.ts` | FE | Re-exported; **~32 files still import App** | Partial adoption |
-| FE Node API twin | `server-legacy/` | None (legacy) | Not mounted by Vite | **Hazard** for agents |
-| Legacy phone turn | `phone/phone-orchestrator.ts` | — | **Zero callers** | Dead |
-| Deploy variants | `*.vps.ts`, `*.local-full.ts` | — | Not imported by `index.ts` | Edit hazard |
+See living [`CAPABILITY_INVENTORY.md`](./CAPABILITY_INVENTORY.md).
+
+| Capability | Lives | Owner | Notes |
+|------------|-------|-------|-------|
+| Judie diner phone | `brains/judie`, `phone/vapi-*` | BE phone | Live Vapi path |
+| Sally sales phone | `phone/sally-sales-phone.ts` + `brains/sally` | BE phone | Parallel to `server/sally/*` |
+| Sally staff (PIN) | Sally brain staff mode | BE phone | Wired on Sally line |
+| Web staff orchestrator | `server/ai/*` | BE ai | Cynthia ï¿½ not phone |
+| Marketing Sally web | `sally/web-chat.ts` | BE | `POST /api/sally/web` |
+| Orders / menu | `server/orders/*` | BE orders | Supabase |
+| FE SPA routes | `routes.tsx` + `routeMap.ts` | FE | Yes |
+| FE Node API twin | `server-legacy/` | ï¿½ | **Removed** (harness pass) |
+| Legacy phone turn | `phone/phone-orchestrator.ts` | ï¿½ | Throw stub |
+| Deploy variants | `_quarantine/*.vps.ts` | ï¿½ | Not mounted |
 
 ## Phone runtime (verified path)
 
@@ -41,27 +63,9 @@ Inbound DID ? phone-lines ? brains (sally|judie) ? vapi-assistant ? vapi-routes
   ? tool-calls ? phone/tools/execute or phone/sally-sales-phone
 ```
 
-**Not** on the live turn loop: `phone-orchestrator.ts`, FE `server-legacy/*`, root `*.vps.ts` forks.
+## Priority next work (still open after harness pass)
 
-## Single source of truth?
-
-| Concern | SoT today | Still duplicated? |
-|---------|-----------|-------------------|
-| Live API code | `sync2dine-backend/server` | FE `server-legacy/` full twin |
-| Sally phone prompts | `phone/sally-sales-phone.ts` | Also `server/sally/prompts.ts` + `execute.ts` |
-| Deploy | `push-live-local.sh` + BE GH workflow | Stale `deploy-vps.sh` (Builder Diddies) |
-| Agent host rules | Must be `app.sync2dine.io` | Was Cursor alwaysApply ? b-diddies (fixed this audit) |
-| Product atlas | `APPLICATION_MASTER.md` | Still construction/Builder Diddies heavy |
-
-## Scores (0–10, critical)
-
-See executive summary in the Cursor canvas / chat response. Documentation and AI-agent readiness were the weakest before rule/README fixes.
-
-## Priority next work
-
-1. Unify Sally sales: one module tree; phone adapter imports web/offer or vice versa — delete drift.
-2. Delete or archive `server-legacy/` from the FE git tree (keep zip/tag if needed).
-3. Delete unused `phone-orchestrator` + quarantine `*.vps.ts` / `*.local-full.ts`.
-4. Finish FE type adoption (`from './domainTypes'`, not `App`).
-5. Continue domain moves for `data-store`, WhatsApp, platform (or document “root remains”).
-6. Refresh `APPLICATION_MASTER.md` brand/ops header to Sync2Dine-first.
+1. Unify Sally sales: one module tree; phone adapter imports shared offer ï¿½ delete drift.
+2. Finish FE type adoption (`from './domainTypes'`, not `App`).
+3. Continue domain moves for `data-store`, WhatsApp, platform (or document ï¿½root remainsï¿½).
+4. Keep satellite ops docs bannered when they still cite b-diddies.

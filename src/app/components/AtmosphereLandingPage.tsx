@@ -20,18 +20,18 @@ export default function AtmosphereLandingPage() {
         </p>
         <ul className="mt-8 space-y-3 text-sm text-slate-700">
           <li className="flex gap-3">
-            <Music2 className="mt-0.5 h-5 w-5 shrink-0 text-teal-600" aria-hidden />
+            <Music2 className="mt-0.5 h-5 w-5 shrink-0 text-s2d-teal" aria-hidden />
             <span>Zone-based audio and messaging for lunch, dinner, and events</span>
           </li>
           <li className="flex gap-3">
-            <Music2 className="mt-0.5 h-5 w-5 shrink-0 text-teal-600" aria-hidden />
+            <Music2 className="mt-0.5 h-5 w-5 shrink-0 text-s2d-teal" aria-hidden />
             <span>
               Launch from £{pkg.launchWeeklyGbp}/week — normally £{pkg.standardWeeklyGbp}/week
             </span>
           </li>
         </ul>
         <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-          <Button asChild className="min-h-11 bg-teal-700 hover:bg-teal-800">
+          <Button asChild className="min-h-11 bg-s2d-teal hover:bg-s2d-teal-deep">
             <Link to="/start?package=atmosphere">
               Start with Atmosphere
               <ArrowRight className="ml-2 h-4 w-4" />

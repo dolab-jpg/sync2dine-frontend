@@ -19,7 +19,7 @@ export default function MarketingHomePage() {
             See packages and weekly fares, or jump straight into setup when you are ready.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Button asChild className="min-h-11 bg-teal-700 hover:bg-teal-800">
+            <Button asChild className="min-h-11 bg-s2d-teal hover:bg-s2d-teal-deep">
               <Link to="/pricing">
                 View pricing
                 <ArrowRight className="ml-2 h-4 w-4" />

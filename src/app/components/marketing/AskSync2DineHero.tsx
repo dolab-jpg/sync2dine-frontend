@@ -223,7 +223,7 @@ export default function AskSync2DineHero({ compact = false }: AskSync2DineHeroPr
             <button
               type="submit"
               disabled={pending || !input.trim()}
-              className="ml-auto inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-s2d-teal-deep text-white transition enabled:hover:bg-teal-800 disabled:opacity-40"
+              className="ml-auto inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-s2d-teal-deep text-white transition enabled:hover:bg-s2d-teal-ink disabled:opacity-40"
               aria-label="Send message"
             >
               {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowUp className="h-5 w-5" />}
@@ -258,7 +258,7 @@ export default function AskSync2DineHero({ compact = false }: AskSync2DineHeroPr
         <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
           <a
             href={TEL_HREF}
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-s2d-teal-deep px-5 text-sm font-bold text-white transition hover:bg-teal-800"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-s2d-teal-deep px-5 text-sm font-bold text-white transition hover:bg-s2d-teal-ink"
           >
             <Phone className="h-4 w-4" aria-hidden />
             Call {SYNC2DINE_CONTACT.phone} · 24/7

@@ -131,7 +131,7 @@ export default function DietaryFactsEditor({ value, onChange }: Props) {
           type="checkbox"
           checked={value.allergenDeclared}
           onChange={(e) => onChange({ ...value, allergenDeclared: e.target.checked })}
-          className="h-5 w-5 accent-[#0f3d3e]"
+          className="h-5 w-5 accent-s2d-teal"
           data-testid="allergen-declared-check"
         />
         <span className="font-medium text-s2d-teal-deep">I’ve checked this dish (even if none of the 14 apply)</span>

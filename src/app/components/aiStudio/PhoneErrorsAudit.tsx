@@ -9,6 +9,8 @@ import {
   ackPhoneIncident,
   dismissPhoneIncident,
   resolvePhoneIncident,
+  deletePhoneIncident,
+  deletePhoneIncidentsBatch,
   batchPhoneIncidentCodeFix,
   severityLabel,
   statusLabel,
@@ -16,6 +18,7 @@ import {
   type PhoneOpsWebhookHealth,
 } from '../../engine/ai/phoneIncidentsService';
 import { AlertTriangle, ChevronDown, ChevronRight, Phone, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 
 function WebhookHealthStrip({ health }: { health: PhoneOpsWebhookHealth | null }) {
   if (!health) {
@@ -192,6 +195,52 @@ export function PhoneErrorsAudit({ initialId }: { initialId?: string | null }) {
     }
   };
 
+  const handleDeleteSelected = async () => {
+    const ids = selectedIds.size > 0
+      ? [...selectedIds]
+      : selectedId
+        ? [selectedId]
+        : [];
+    if (ids.length === 0) {
+      setNote('Select one or more incidents first.');
+      return;
+    }
+    if (!window.confirm(`Permanently delete ${ids.length} phone incident(s)?`)) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const result = await deletePhoneIncidentsBatch(ids);
+      toast.success(`Deleted ${result.deleted} incident(s)`);
+      if (selectedId && ids.includes(selectedId)) setSelectedId(null);
+      setSelectedIds(new Set());
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDeleteOne = async (id: string) => {
+    if (!window.confirm('Permanently delete this phone incident?')) return;
+    setBusy(true);
+    try {
+      await deletePhoneIncident(id);
+      toast.success('Incident deleted');
+      if (selectedId === id) setSelectedId(null);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-3">
       <WebhookHealthStrip health={health} />
@@ -271,6 +320,15 @@ export function PhoneErrorsAudit({ initialId }: { initialId?: string | null }) {
           onClick={() => void runBatch('enqueue')}
         >
           Enqueue selected
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={busy || (selectedIds.size === 0 && !selectedId)}
+          onClick={() => void handleDeleteSelected()}
+        >
+          Delete selected ({selectedIds.size || (selectedId ? 1 : 0)})
         </Button>
       </div>
 
@@ -369,6 +427,15 @@ export function PhoneErrorsAudit({ initialId }: { initialId?: string | null }) {
                       Dismiss
                     </Button>
                   )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() => void handleDeleteOne(selected.id)}
+                  >
+                    Delete
+                  </Button>
                   {selected.callId && (
                     <Link
                       to="/calls"

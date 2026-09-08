@@ -61,7 +61,7 @@ export function UploadLeadsDialog({ onImport }: Props) {
 
   async function runImport(csvText: string) {
     const campaign = (batchId.trim() || LEEDS_CAMPAIGN_ID);
-    const toastId = toast.loading(queueSally ? 'Importing & queuing Leeds dials…' : 'Importing leads…');
+    const toastId = toast.loading(queueSally ? 'Importing & queuing Leeds dialsï¿½' : 'Importing leadsï¿½');
     setBusy(true);
     try {
       const sheet = await normalizeLeadSheet(csvText, campaign);
@@ -154,9 +154,9 @@ export function UploadLeadsDialog({ onImport }: Props) {
       const parts = [
         `Imported ${added} lead${added === 1 ? '' : 's'}`,
         skipped > 0 ? `skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}` : '',
-        queueSally ? `queued ${queued} for ${campaign}${held ? ` · held ${held} for hours` : ''}` : '',
+        queueSally ? `queued ${queued} for ${campaign}${held ? ` ï¿½ held ${held} for hours` : ''}` : '',
       ].filter(Boolean);
-      toast.success(parts.join(' · '), { id: toastId });
+      toast.success(parts.join(' ï¿½ '), { id: toastId });
       if (errors.length) {
         const dupWarns = errors.filter((e) => /duplicate phone/i.test(e)).length;
         const otherWarns = errors.length - dupWarns;
@@ -234,7 +234,7 @@ export function UploadLeadsDialog({ onImport }: Props) {
             }}
           >
             <Upload className="w-8 h-8 mx-auto text-slate-500 mb-2" />
-            <p className="text-sm text-slate-600 mb-2">Drop a CSV — formats are detected automatically.</p>
+            <p className="text-sm text-slate-600 mb-2">Drop a CSV ï¿½ formats are detected automatically.</p>
             <Input
               type="file"
               accept=".csv,text/csv,.tsv,text/tab-separated-values"
@@ -250,7 +250,7 @@ export function UploadLeadsDialog({ onImport }: Props) {
           <div>
             <Label>Or paste CSV</Label>
             <p className="text-xs text-slate-500 mt-0.5">
-              UK phones (0…, +44…, or missing leading 0) are normalised to E.164.
+              UK phones (0ï¿½, +44ï¿½, or missing leading 0) are normalised to E.164.
             </p>
             <Textarea
               className="mt-1 min-h-[120px] font-mono text-sm"
@@ -264,7 +264,7 @@ export function UploadLeadsDialog({ onImport }: Props) {
             disabled={busy || !paste.trim()}
             onClick={() => runImport(rowsFromPaste(paste))}
           >
-            {busy ? 'Working…' : queueSally ? 'Import & queue Sally' : 'Import into Call Queue'}
+            {busy ? 'Workingï¿½' : queueSally ? 'Import & queue Sally' : 'Import into Call Queue'}
           </Button>
         </div>
       </DialogContent>

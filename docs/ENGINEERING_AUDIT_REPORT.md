@@ -14,27 +14,27 @@ Verified diagrams: [`ARCHITECTURE_DIAGRAMS.md`](./ARCHITECTURE_DIAGRAMS.md) and 
 
 Sync2Dine has a **directionally correct product architecture**: SPA + sibling Node API, domain folders under `server/`, distinct phone brains (`sally` / `judie` / `cynthia`), Sally Web separated from Cynthia staff AI, Supabase-first persistence intent, and a living documentation layer oriented at `https://app.sync2dine.io`.
 
-It is **not yet architecturally production-ready as a codebase**. `npm run typecheck` reports **247** TypeScript errors. Several errors are not cosmetic: post-split modules reference symbols and modules that are not in scope (`server/ai/orchestrator/handle.ts`, `server/sally/execute.ts`, `server/phone/tools/execute.ts`). The product can still run under `tsx` for happy paths (unit tests pass; Sally Web pricing was previously proven live ù **Unverified in this audit session**), but whole tool families are one call away from `ReferenceError` / failed dynamic import.
+It is **not yet architecturally production-ready as a codebase**. `npm run typecheck` reports **247** TypeScript errors. Several errors are not cosmetic: post-split modules reference symbols and modules that are not in scope (`server/ai/orchestrator/handle.ts`, `server/sally/execute.ts`, `server/phone/tools/execute.ts`). The product can still run under `tsx` for happy paths (unit tests pass; Sally Web pricing was previously proven live ÔøΩ **Unverified in this audit session**), but whole tool families are one call away from `ReferenceError` / failed dynamic import.
 
 The repository is a **partially rebranded dual-product tree** (restaurant Sync2Dine + construction/TradePro residue). That residue appears in live FE source (`tradepro_*` keys, Builder Diddies copy), backend symbols (`ensureBdiddiesHomeOrg`, JWT fallback secret name), and hazardous scripts (`scripts/auto-ssl-app.sh` ? `app.b-diddies.com`).
 
 ---
 
-## 2. Overall Repository Health ù **56 / 100**
+## 2. Overall Repository Health ÔøΩ **56 / 100**
 
 | Band | Score contribution | Evidence |
 |------|-------------------:|----------|
 | Product shape / domain split | +18 | `server/index.ts` mounts; `server/brains/index.ts`; FE `routes.tsx` / experience modes |
 | Living docs / agent maps | +10 | `AGENTS.md`, `docs/ARCHITECTURE.md`, BE registries, ADRs |
-| Deploy path clarity | +8 | `scripts/push-live-local.sh`, VPS dir `ù/sync2dine.io/sync2dine-backend` |
+| Deploy path clarity | +8 | `scripts/push-live-local.sh`, VPS dir `ÔøΩ/sync2dine.io/sync2dine-backend` |
 | Tests covering critical slices | +6 | BE `npm test` (explicit file list); FE `test:bridge` |
 | Typecheck / compile health | ?18 | **247** `tsc` errors |
 | Split/import integrity (AI/phone/Sally) | ?14 | Missing imports / wrong relative dynamic import |
 | Auth / multi-tenant safety | ?8 | JWT hardcoded fallback; module-global `requestOrgId` |
-| Legacy / dual-product residue | ?6 | FE branding, `auto-ssl-app.sh`, vite ùtradepro-backendù comments |
+| Legacy / dual-product residue | ?6 | FE branding, `auto-ssl-app.sh`, vite ÔøΩtradepro-backendÔøΩ comments |
 | Bundle / FE hygiene | ?4 | ~2.8 MB main chunk; unguarded `:7756` ingest calls |
 
-**56** = shippable product surface with serious structural debt. Not a greenfield ùclean architectureù score.
+**56** = shippable product surface with serious structural debt. Not a greenfield ÔøΩclean architectureÔøΩ score.
 
 ---
 
@@ -56,10 +56,10 @@ The repository is a **partially rebranded dual-product tree** (restaurant Sync2D
 
 ### Structural issues
 
-1. **Root re-export stubs** keep flat import paths (`./vapi-routes`, `./phone-webhook`) while canonical code lives in domain folders ù intentional, but agents still edit the wrong file if maps fail.
+1. **Root re-export stubs** keep flat import paths (`./vapi-routes`, `./phone-webhook`) while canonical code lives in domain folders ÔøΩ intentional, but agents still edit the wrong file if maps fail.
 2. **Dual experience frontend** (restaurant + construction) increases blast radius for shared `App.tsx` / auth / CRM.
 3. **Persistence dual-write**: Supabase clients exist; `server/data-store.ts` + many JSON stores remain active fallbacks.
-4. **Deploy dual path**: local `push-live-local.sh` (excludes `.env`, `server/data`) vs GitHub Actions SCP of `.` (exclusion behaviour for secrets/data **Unverified** ù `appleboy/scp-action` source `.` without documented exclude).
+4. **Deploy dual path**: local `push-live-local.sh` (excludes `.env`, `server/data`) vs GitHub Actions SCP of `.` (exclusion behaviour for secrets/data **Unverified** ÔøΩ `appleboy/scp-action` source `.` without documented exclude).
 
 ---
 
@@ -86,7 +86,7 @@ The repository is a **partially rebranded dual-product tree** (restaurant Sync2D
 | Phone tools wrong dynamic import | `phone/tools/execute.ts` imports `../sally-receptionist` ? expects `phone/sally-receptionist`; file is `server/sally-receptionist.ts` | Receptionist tool path fails |
 | `isStaffPartyPhone` unbound | Used in `phone/tools/execute.ts`; exported from `phone/tools/leads.ts` but not imported | `bookCallback` / related paths throw |
 
-**Conclusion:** Shared Sally BI docs (`SALLY_ARCHITECTURE.md`) match the *intended* split. Execution modules after splits are **not internally consistent**. Happy-path web Q&A can work without hitting broken tool branches; that must not be read as ùAI layer healthy.ù
+**Conclusion:** Shared Sally BI docs (`SALLY_ARCHITECTURE.md`) match the *intended* split. Execution modules after splits are **not internally consistent**. Happy-path web Q&A can work without hitting broken tool branches; that must not be read as ÔøΩAI layer healthy.ÔøΩ
 
 ---
 
@@ -101,7 +101,7 @@ The repository is a **partially rebranded dual-product tree** (restaurant Sync2D
 
 Registries `docs/TOOL_REGISTRY.md` / `AI_REGISTRY.md` describe ownership accurately at a high level but overstate readiness relative to compile/import integrity.
 
-Workers started from `server/index.ts` listen callback: mailbox poller, outbound worker, connector queue, sales-brain, Sally KB + cache warm, scheduled messages, weekly billing, code-fix, WhatsApp Web client. Persistence mix: Supabase when configured, else JSON/memory ù **Unverified** which store is live for each worker on VPS without env inspection.
+Workers started from `server/index.ts` listen callback: mailbox poller, outbound worker, connector queue, sales-brain, Sally KB + cache warm, scheduled messages, weekly billing, code-fix, WhatsApp Web client. Persistence mix: Supabase when configured, else JSON/memory ÔøΩ **Unverified** which store is live for each worker on VPS without env inspection.
 
 ---
 
@@ -112,16 +112,16 @@ Workers started from `server/index.ts` listen callback: mailbox poller, outbound
 - Clear entry/bootstrap (`App.tsx`), route catalogue, experience switching.
 - Sally Web clients correctly hit `/api/sally/web` (`AskSync2DineHero.tsx`, `public/sally-widget.js`).
 - No tracked FE `server/` / `server-legacy/` API twin in current git tree.
-- `npm run build` succeeds; `test:bridge` passes (63 tests observed in prior session ù **re-run Unverified here**).
+- `npm run build` succeeds; `test:bridge` passes (63 tests observed in prior session ÔøΩ **re-run Unverified here**).
 
 **Weaknesses**
 
-- Dev proxy default `http://127.0.0.1:3001` with comments still naming **tradepro-backend** (`vite.ai-plugin.ts`) ù works only if local BE uses 3001; live is 3011.
+- Dev proxy default `http://127.0.0.1:3001` with comments still naming **tradepro-backend** (`vite.ai-plugin.ts`) ÔøΩ works only if local BE uses 3001; live is 3011.
 - Hardcoded debug ingest to `http://127.0.0.1:7756/ingest/...` in multiple production source files (SoftPhone, WhatsApp, calendar, OAuth, integrations, experience).
 - Dual-product residue in live UI/strings/storage (`tradepro_session_user`, Builder Diddies messaging).
 - Main bundle ~2.8 MB minified; no package `typecheck` / default `test` script.
 - `check:agent-maps` reported failing on backend stub expectations (prior session).
-- Playwright suite named `test:responsive` is broad; many flows need seeded creds ù not a production gate.
+- Playwright suite named `test:responsive` is broad; many flows need seeded creds ÔøΩ not a production gate.
 
 ---
 
@@ -137,7 +137,7 @@ Workers started from `server/index.ts` listen callback: mailbox poller, outbound
 **Weaknesses**
 
 - **247** typecheck errors; top hotspots: `supabase-data.ts` (28), quarantine forks (60 combined), `sally/execute.ts` (20), `orchestrator/handle.ts` (11), `phone/tools/execute.ts` (9), `whatsapp-webhook.ts` (8), Stripe/provision/ai-proxy.
-- Quarantine still typechecked ? noise + false confidence that ùlegacy is inert.ù
+- Quarantine still typechecked ? noise + false confidence that ÔøΩlegacy is inert.ÔøΩ
 - Module-global `requestOrgId` in `data-store.ts` (concurrent request tenant bleed risk).
 - `analytics-routes.ts` present but **not** mounted in `index.ts` (orphaned handler).
 - `PORT` defaults to **3001** in code; production relies on env `PORT=3011` (**Unverified** without reading live `.env`).
@@ -148,7 +148,7 @@ Workers started from `server/index.ts` listen callback: mailbox poller, outbound
 
 Mount order (verified from `server/index.ts`): WhatsApp ? phone webhook ? Vapi ? agent ? projects ? building-control ? AI Studio ? sales-brain ? Sally KB ? conversation audit ? banking ? mailbox ? calendar ? package-updates ? messages ? price-research ? contracts ? Stripe ? auth ? org OpenAI/integrations/phone billing ? weekly billing ? platform ? leads ? orders/menu/reservations ? connectors ? Cyrus ? Cynthia ? **Sally Web** ? channel ? agent credentials ? push ? WhatsApp Web ? gap APIs ? agent activity ? catch-all `/api/ai/*` ? 404.
 
-**Auth pattern:** per-handler, not framework middleware. JWT secret falls back to `'tradepro-dev-jwt-secret-change-in-production'` when `JWT_SECRET` unset (`server/auth.ts`). `AUTH_ENFORCED` appears in a **small** set of files (`auth.ts`, mailbox, calendar, connectors) ù docs that imply blanket `/api/ai/*` auth are **drifted**.
+**Auth pattern:** per-handler, not framework middleware. JWT secret falls back to `'tradepro-dev-jwt-secret-change-in-production'` when `JWT_SECRET` unset (`server/auth.ts`). `AUTH_ENFORCED` appears in a **small** set of files (`auth.ts`, mailbox, calendar, connectors) ÔøΩ docs that imply blanket `/api/ai/*` auth are **drifted**.
 
 Public/marketing surfaces intentionally looser: Sally Web / Cyrus web CORS branches in `index.ts`.
 
@@ -169,7 +169,7 @@ Frontend deploy cannot overwrite backend domain sources if operators use `push-l
 
 ## 10. Documentation Assessment
 
-**Living / mostly aligned:** `AGENTS.md` (both), `docs/ARCHITECTURE.md`, `DEPLOYMENT_MAP.md`, `PHONE_ARCHITECTURE.md`, `SALLY_ARCHITECTURE.md`, ADRs 001ù007, domain READMEs, `LEGACY_ALIASES.md`.
+**Living / mostly aligned:** `AGENTS.md` (both), `docs/ARCHITECTURE.md`, `DEPLOYMENT_MAP.md`, `PHONE_ARCHITECTURE.md`, `SALLY_ARCHITECTURE.md`, ADRs 001ÔøΩ007, domain READMEs, `LEGACY_ALIASES.md`.
 
 **Drift / hazard (actionable-looking wrong hosts or backends):**
 
@@ -181,7 +181,7 @@ Frontend deploy cannot overwrite backend domain sources if operators use `push-l
 | `docker/soho66-vapi-bridge/README.md` | b-diddies / Cynthia deploy path |
 | `server/phone/README.md` | Omits `brains/cynthia` (fixed in this audit pass) |
 | `APPLICATION_MASTER.md` mermaid | Understated BE GitHub deploy (fixed in this audit pass) |
-| Capability inventories marking ùLIVEù | Often mean ùwired in code,ù not ùtypecheck-clean / toolpath-provenù |
+| Capability inventories marking ÔøΩLIVEÔøΩ | Often mean ÔøΩwired in code,ÔøΩ not ÔøΩtypecheck-clean / toolpath-provenÔøΩ |
 
 **75** Markdown files catalogued across both repos; **0** PlantUML; Mermaid limited to APPLICATION_MASTER + archive ops (plus new diagrams from this audit).
 
@@ -193,8 +193,8 @@ Frontend deploy cannot overwrite backend domain sources if operators use `push-l
 |---------|--------|
 | APPLICATION_MASTER deploy flowchart | Updated to include BE CI + exclude note |
 | New FE/BE `ARCHITECTURE_DIAGRAMS.md` | Regenerated from `index.ts` + brains + FE clients |
-| Archive Builder Diddies mermaid | Correctly historical ù leave archived |
-| Backend prior to audit | No Mermaid ù gap closed with verified diagrams |
+| Archive Builder Diddies mermaid | Correctly historical ÔøΩ leave archived |
+| Backend prior to audit | No Mermaid ÔøΩ gap closed with verified diagrams |
 
 No invented components: every node maps to a file or mount found in code.
 
@@ -202,19 +202,19 @@ No invented components: every node maps to a file or mount found in code.
 
 ## 12. Files / Modules Requiring Attention
 
-1. `server/ai/orchestrator/handle.ts` ù re-bind helper imports  
-2. `server/sally/execute.ts` ù restore draft/terms helpers or import from offer/session module  
-3. `server/sally/tools.ts` ù import `SALLY_TOOL_NAMES`  
-4. `server/phone/tools/execute.ts` ù fix `sally-receptionist` path; import `isStaffPartyPhone`  
-5. `server/supabase-data.ts` ù type/contract drift (28 errors)  
-6. `server/whatsapp-webhook.ts` ù unbound `from` / `phoneNumberId` / `accessToken`  
-7. `server/data-store.ts` ù replace global `requestOrgId`  
-8. `server/auth.ts` ù remove JWT fallback secret  
-9. `server/_quarantine/**` ù exclude from `tsc`  
+1. `server/ai/orchestrator/handle.ts` ÔøΩ re-bind helper imports  
+2. `server/sally/execute.ts` ÔøΩ restore draft/terms helpers or import from offer/session module  
+3. `server/sally/tools.ts` ÔøΩ import `SALLY_TOOL_NAMES`  
+4. `server/phone/tools/execute.ts` ÔøΩ fix `sally-receptionist` path; import `isStaffPartyPhone`  
+5. `server/supabase-data.ts` ÔøΩ type/contract drift (28 errors)  
+6. `server/whatsapp-webhook.ts` ÔøΩ unbound `from` / `phoneNumberId` / `accessToken`  
+7. `server/data-store.ts` ÔøΩ replace global `requestOrgId`  
+8. `server/auth.ts` ÔøΩ remove JWT fallback secret  
+9. `server/_quarantine/**` ÔøΩ exclude from `tsc`  
 10. FE `:7756` ingest call sites (8 files)  
-11. `scripts/auto-ssl-app.sh` ù delete or hard-disable  
+11. `scripts/auto-ssl-app.sh` ÔøΩ delete or hard-disable  
 12. `vite.ai-plugin.ts` comments / default port documentation  
-13. `analytics-routes.ts` ù mount or delete  
+13. `analytics-routes.ts` ÔøΩ mount or delete  
 
 ---
 
@@ -222,9 +222,9 @@ No invented components: every node maps to a file or mount found in code.
 
 | Area | Evidence | Verdict |
 |------|----------|---------|
-| Offer facts | Phone imports shared `formatOfferFactsBlock` from `sally/offer.ts` | Shared after Phase 4 ù good |
-| SaaS packages | FE `engine/saas/saasPackages.ts` mirrors BE `saas-packages` | Intentional mirror ù drift risk |
-| Planning action names | FE `planningActionNames.ts` ? BE planning tools | Mirror ù needs sync test |
+| Offer facts | Phone imports shared `formatOfferFactsBlock` from `sally/offer.ts` | Shared after Phase 4 ÔøΩ good |
+| SaaS packages | FE `engine/saas/saasPackages.ts` mirrors BE `saas-packages` | Intentional mirror ÔøΩ drift risk |
+| Planning action names | FE `planningActionNames.ts` ? BE planning tools | Mirror ÔøΩ needs sync test |
 | Cynthia vs Cyrus clients | Parallel FE engines + BE routes | Compatibility layer, not pure dupe |
 | Construction + restaurant shells | Two product UIs in one SPA | Product duality, not accidental copy |
 | Quarantine Vapi forks | `_quarantine/*.vps.ts` vs live `phone/vapi-routes.ts` | Orphaned duplicates (quarantined) |
@@ -249,13 +249,13 @@ No invented components: every node maps to a file or mount found in code.
 
 | Item | Still live? |
 |------|-------------|
-| `ensureBdiddiesHomeOrg` boot | Yes ù `index.ts` |
-| JWT secret name `tradepro-dev-ù` | Yes ù fallback |
-| Cynthia construction phone brain | Yes ù when purpose/persona matches |
+| `ensureBdiddiesHomeOrg` boot | Yes ÔøΩ `index.ts` |
+| JWT secret name `tradepro-dev-ÔøΩ` | Yes ÔøΩ fallback |
+| Cynthia construction phone brain | Yes ÔøΩ when purpose/persona matches |
 | Cyrus routes / widgets | Yes |
 | FE `tradepro_*` storage/events | Yes |
-| Building-control / projects / recruitment routes | Yes ù construction surface |
-| `auto-ssl-app.sh` | Yes ù wrong product host |
+| Building-control / projects / recruitment routes | Yes ÔøΩ construction surface |
+| `auto-ssl-app.sh` | Yes ÔøΩ wrong product host |
 
 ---
 
@@ -263,20 +263,20 @@ No invented components: every node maps to a file or mount found in code.
 
 1. **Hardcoded JWT fallback** if `JWT_SECRET` missing (`server/auth.ts`).  
 2. **CORS default `*`** when `APP_BASE_URL` unset (`index.ts`).  
-3. **Org spoofing risk** if handlers trust `X-Org-Id` / body `orgId` without enforced auth ù pattern present; enforcement uneven.  
+3. **Org spoofing risk** if handlers trust `X-Org-Id` / body `orgId` without enforced auth ÔøΩ pattern present; enforcement uneven.  
 4. **Module-global org context** can cross-contaminate concurrent requests (`data-store.ts`).  
-5. **Sally Web** is intentionally public ù rate limit/CORS must remain correct; secrets must never land in widget responses (logging discipline exists in web path ù depth **Unverified**).  
-6. **GitHub SCP of repo root** may copy local artifacts if present on runner checkout (usually clean) ù still weaker than rsync excludes.  
+5. **Sally Web** is intentionally public ÔøΩ rate limit/CORS must remain correct; secrets must never land in widget responses (logging discipline exists in web path ÔøΩ depth **Unverified**).  
+6. **GitHub SCP of repo root** may copy local artifacts if present on runner checkout (usually clean) ÔøΩ still weaker than rsync excludes.  
 7. FE **local ingest** endpoints can leak operational metadata to any local listener.  
-8. Stripe/Vapi signature verification ù code present; live secret correctness **Unverified**.
+8. Stripe/Vapi signature verification ÔøΩ code present; live secret correctness **Unverified**.
 
 ---
 
 ## 17. Performance Observations
 
-- FE main JS ~2.8 MB minified / ~838 KB gzip ù slow mobile first paint risk.  
-- Many workers use `setInterval` polling ù acceptable at small scale; watch mailbox/WhatsApp/Puppeteer memory on VPS.  
-- Orchestrator tool rounds + vision path are heavy when fixed ù no evidence of request-level concurrency limits beyond Sally Web rate limit.  
+- FE main JS ~2.8 MB minified / ~838 KB gzip ÔøΩ slow mobile first paint risk.  
+- Many workers use `setInterval` polling ÔøΩ acceptable at small scale; watch mailbox/WhatsApp/Puppeteer memory on VPS.  
+- Orchestrator tool rounds + vision path are heavy when fixed ÔøΩ no evidence of request-level concurrency limits beyond Sally Web rate limit.  
 - Global data-store + disk JSON sync can amplify latency under multi-tenant load.
 
 ---
@@ -309,11 +309,11 @@ No invented components: every node maps to a file or mount found in code.
 | Change | Risk |
 |--------|------|
 | Fixing Sally execute helpers | Provision/checkout behaviour may change if drafts were silently failing |
-| Fixing phone tool imports | Receptionist/staff callback paths start working ù may expose latent logic bugs |
+| Fixing phone tool imports | Receptionist/staff callback paths start working ÔøΩ may expose latent logic bugs |
 | Enabling AUTH_ENFORCED broadly | FE clients relying on header org spoofing break |
 | Excluding quarantine from tsc only | Low risk |
-| Removing construction experience | High product risk ù still mounted |
-| Changing deploy CI excludes | Could delete VPS `.env` if misconfigured ù test carefully |
+| Removing construction experience | High product risk ÔøΩ still mounted |
+| Changing deploy CI excludes | Could delete VPS `.env` if misconfigured ÔøΩ test carefully |
 
 ---
 
@@ -352,28 +352,28 @@ No invented components: every node maps to a file or mount found in code.
 
 ---
 
-## Executive Conclusion ù Top 10 improvements (impact ù effort)
+## Executive Conclusion ÔøΩ Top 10 improvements (impact ÔøΩ effort)
 
-1. **Re-bind split imports** in `orchestrator/handle.ts`, `sally/execute.ts`, `sally/tools.ts`, `phone/tools/execute.ts` ù highest latent outage risk, localized fixes.  
-2. **Exclude `_quarantine` from `tsc` and fail CI on typecheck** ù stops silent structural rot.  
-3. **Delete or hard-fail `auto-ssl-app.sh`; strip `:7756` ingest** ù cheap safety.  
-4. **Remove JWT fallback; fail boot without `JWT_SECRET` in production** ù small change, large security win.  
-5. **Replace global `requestOrgId` with AsyncLocalStorage / explicit args** ù correctness under load.  
-6. **Document + enforce single deploy contract** (local script excludes mirrored in CI) ù prevents data/env accidents.  
-7. **Auth audit of high-value `/api/*` families** vs FE header trust ù security.  
-8. **Decide dual-product fate** (extract construction vs quarantine UI) ù largest maintainability lever.  
-9. **FE code-split / drop unused construction weight for restaurant tenants** ù performance.  
-10. **Mirror sync tests** for SaaS packages + tool names FE?BE ù prevents silent commercial drift.
+1. **Re-bind split imports** in `orchestrator/handle.ts`, `sally/execute.ts`, `sally/tools.ts`, `phone/tools/execute.ts` ÔøΩ highest latent outage risk, localized fixes.  
+2. **Exclude `_quarantine` from `tsc` and fail CI on typecheck** ÔøΩ stops silent structural rot.  
+3. **Delete or hard-fail `auto-ssl-app.sh`; strip `:7756` ingest** ÔøΩ cheap safety.  
+4. **Remove JWT fallback; fail boot without `JWT_SECRET` in production** ÔøΩ small change, large security win.  
+5. **Replace global `requestOrgId` with AsyncLocalStorage / explicit args** ÔøΩ correctness under load.  
+6. **Document + enforce single deploy contract** (local script excludes mirrored in CI) ÔøΩ prevents data/env accidents.  
+7. **Auth audit of high-value `/api/*` families** vs FE header trust ÔøΩ security.  
+8. **Decide dual-product fate** (extract construction vs quarantine UI) ÔøΩ largest maintainability lever.  
+9. **FE code-split / drop unused construction weight for restaurant tenants** ÔøΩ performance.  
+10. **Mirror sync tests** for SaaS packages + tool names FE?BE ÔøΩ prevents silent commercial drift.
 
 ---
 
 ## 22. Critical remediation addendum (2026-07-23)
 
-Implemented in the same day as the audit. Scope: items 1ù10 of the critical remediation phase only (no dual-product cleanup / bundle work).
+Implemented in the same day as the audit. Scope: items 1ÔøΩ10 of the critical remediation phase only (no dual-product cleanup / bundle work).
 
 | Item | Result |
 |------|--------|
-| Split imports (`handle.ts`, `sally/execute.ts`, `phone/tools/execute.ts`, `SALLY_TOOL_NAMES`) | **Fixed** ù helpers rebound; receptionist import is `../../sally-receptionist` |
+| Split imports (`handle.ts`, `sally/execute.ts`, `phone/tools/execute.ts`, `SALLY_TOOL_NAMES`) | **Fixed** ÔøΩ helpers rebound; receptionist import is `../../sally-receptionist` |
 | `tsc --noEmit` | **0 errors** (was **247**). `server/_quarantine/**` + `scripts/**` + `server/_repair-*.mts` excluded from compile graph; quarantine still unmounted |
 | CI typecheck/build gate | BE workflow runs `npm run typecheck` before tests; FE `frontend-tests.yml` runs `npm run build` before bridge/playwright |
 | JWT production fail-closed | `server/jwt-secret.ts` + boot assert in `server/index.ts`. Known-dev secrets rejected when `NODE_ENV`/`SYNC2DINE_ENV` is production |
@@ -387,10 +387,10 @@ Implemented in the same day as the audit. Scope: items 1ù10 of the critical reme
 
 | Subsystem | Was | Now |
 |-----------|-----|-----|
-| Cynthia orchestrator helpers | Low | **High** (code) ù imports bound; live OpenAI path still env-dependent |
+| Cynthia orchestrator helpers | Low | **High** (code) ÔøΩ imports bound; live OpenAI path still env-dependent |
 | Sally phone tool imports | Medium-Low | **High** (code-level execution smoke); **live Vapi call Unverified** |
 | Auth JWT boot | Medium | **High** for fail-closed unit + smoke-jwt-boot; live secret present |
-| Org context isolation | ù | **High** (concurrent ALS test) |
+| Org context isolation | ÔøΩ | **High** (concurrent ALS test) |
 | TypeScript health | Fail (247) | **Pass (0)** on active graph |
 
 ### Still deferred (not this phase)
@@ -398,6 +398,11 @@ Implemented in the same day as the audit. Scope: items 1ù10 of the critical reme
 - Dual-product FE cleanup, `:7756` ingest strip, `auto-ssl-app.sh` deletion  
 - Bundle optimisation, execute-module splitting, historical-doc archiving  
 - Live inbound Sally/Judie phone call (requires external telephony)
+- **Final login / permissions / production lockdown** ÔøΩ see BE [`LIVE_TESTING_ACCESS.md`](../../sync2dine-backend/docs/LIVE_TESTING_ACCESS.md) (recommendation only; no gates during live testing)
+
+### Live testing stability (2026-07-23)
+
+Harness: `npm run smoke:live` in sync2dine-backend. Policy: **no access-control changes** while live testing continues.
 
 ---
 

@@ -2,13 +2,13 @@
 
 React/Vite SPA for Sync2Dine (AI phone + restaurant ordering platform).
 
-**AI / agent navigation:** start at [AGENTS.md](AGENTS.md), then [docs/APPLICATION_MASTER.md](docs/APPLICATION_MASTER.md) §24 Feature Location Atlas. Post-restructure review: [docs/POST_RESTRUCTURE_AUDIT.md](docs/POST_RESTRUCTURE_AUDIT.md).
+**AI / agent navigation:** start at [AGENTS.md](AGENTS.md), then [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/CAPABILITY_INVENTORY.md](docs/CAPABILITY_INVENTORY.md). Feature atlas: [docs/APPLICATION_MASTER.md](docs/APPLICATION_MASTER.md) §24.
 
 Live product: **https://app.sync2dine.io**.
 
 ## Backend
 
-Data, auth, telephony, and AI live in the sibling **[sync2dine-backend](../sync2dine-backend)** repo (Supabase + Node). Do **not** edit this frontend’s `server-legacy/` folder — it is a quarantined historical Node tree, not the live API.
+Data, auth, telephony, and AI live in the sibling **[sync2dine-backend](../sync2dine-backend)** repo (Supabase + Node). There is **no** FE API tree — `server-legacy/` was removed from git and must not be restored for product work.
 
 ## Setup
 

@@ -76,6 +76,8 @@ interface CallRecord {
     vapiEndedReason?: string;
     vapiCost?: number | string;
     disposition?: string;
+    aim?: string;
+    source?: string;
   };
 }
 
@@ -217,6 +219,7 @@ const CAMPAIGN_TEMPLATES = [
   { value: 'payment_reminder', label: 'Payment Reminder' },
   { value: 'appointment_reminder', label: 'Appointment Reminder' },
   { value: 'recruitment_screening', label: 'Recruitment Screening' },
+  { value: 'recruitment_interview', label: 'Sally hiring interview' },
   { value: 'satisfaction_check', label: 'Satisfaction Check' },
   { value: 'lead_callback', label: 'Lead Callback' },
   { value: 'customer_review', label: 'Customer Review' },
@@ -245,6 +248,13 @@ function callLineDid(call: CallRecord): string {
     || call.metadata?.lineDid
     || (call.direction === 'outbound' ? call.from : call.to)
     || '';
+}
+
+function isRecruitmentInterviewCall(call: CallRecord): boolean {
+  const meta = call.metadata;
+  return call.campaignTemplate === 'recruitment_interview'
+    || meta?.aim === 'recruitment_interview'
+    || meta?.source === 'recruitment_interview';
 }
 
 function formatTime(iso?: string | null): string {
@@ -285,6 +295,7 @@ export default function CallCenter() {
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [outboundQueue, setOutboundQueue] = useState<OutboundJob[]>([]);
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
+  const [callKindFilter, setCallKindFilter] = useState<'all' | 'recruitment' | 'sales'>('all');
   const [refreshingCallId, setRefreshingCallId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [togglingAgent, setTogglingAgent] = useState(false);
@@ -901,6 +912,11 @@ export default function CallCenter() {
   const linesSummary = agentStatus?.linesSummary;
   const stats = agentStatus?.todayStats;
   const capacity = agentStatus?.capacity;
+  const visibleCalls = useMemo(() => {
+    if (callKindFilter === 'recruitment') return calls.filter(isRecruitmentInterviewCall);
+    if (callKindFilter === 'sales') return calls.filter((c) => !isRecruitmentInterviewCall(c));
+    return calls;
+  }, [calls, callKindFilter]);
 
   function renderActiveCallCards() {
     if (activeCalls.length === 0) {
@@ -1177,15 +1193,44 @@ export default function CallCenter() {
 
           {/* Recent calls log */}
           <div className={cardShell}>
-            <div className="px-4 pt-4 pb-2">
-              <h2 className="text-base font-bold text-s2d-teal-deep">Recent calls</h2>
-              <p className="text-sm text-s2d-ink-muted">Last 20 — click to expand transcript</p>
+            <div className="px-4 pt-4 pb-2 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-s2d-teal-deep">Recent calls</h2>
+                <p className="text-sm text-s2d-ink-muted">Last 20 — click to expand transcript</p>
+              </div>
+              <div className="flex gap-1 rounded-xl border border-s2d-teal/15 bg-s2d-cream/60 p-1 shrink-0 self-start">
+                {([
+                  ['all', 'All'],
+                  ['recruitment', 'Recruitment'],
+                  ['sales', 'Sales'],
+                ] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setCallKindFilter(id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      callKindFilter === id
+                        ? 'bg-s2d-teal-deep text-s2d-cream'
+                        : 'text-s2d-teal-deep hover:bg-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="px-3 pb-4 space-y-2">
               {calls.length === 0 && (
                 <p className="text-s2d-ink-muted text-sm py-8 text-center">No calls yet — use the Test call tab to simulate</p>
               )}
-              {calls.map(call => {
+              {calls.length > 0 && visibleCalls.length === 0 && (
+                <p className="text-s2d-ink-muted text-sm py-8 text-center">
+                  {callKindFilter === 'recruitment'
+                    ? 'No hiring interviews in the last 20 calls'
+                    : 'No sales calls in the last 20'}
+                </p>
+              )}
+              {visibleCalls.map(call => {
                 const expanded = expandedCallId === call.id;
                 const partyPhone = callPartyDisplay(call);
                 const lineDid = callLineDid(call);
@@ -1215,6 +1260,9 @@ export default function CallCenter() {
                         </div>
                       </div>
                       <div className="flex gap-1.5 mt-2 flex-wrap">
+                        {isRecruitmentInterviewCall(call) && (
+                          <Badge variant="outline" className="text-xs border-s2d-teal/20">Hiring</Badge>
+                        )}
                         {call.outcome && <Badge variant="outline" className="text-xs border-s2d-teal/20">{call.outcome}</Badge>}
                         {call.outcome === 'stale_timeout' && (
                           <Badge variant="secondary" className="text-xs">

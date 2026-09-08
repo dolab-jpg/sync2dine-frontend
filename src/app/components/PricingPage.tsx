@@ -61,7 +61,7 @@ function PriceBlock({ pkg, interval }: { pkg: SaasPackageDef; interval: BillingI
         </span>
         <span className="text-sm text-slate-500">/ week</span>
       </p>
-      <p className="mt-1 text-xs text-teal-700 font-medium">Launch offer · 40% off standard</p>
+      <p className="mt-1 text-xs text-s2d-teal-soft font-medium">Launch offer · 40% off standard</p>
     </div>
   );
 }
@@ -90,7 +90,7 @@ function PackageHighlights({ pkg }: { pkg: SaasPackageDef }) {
     <ul className="mt-5 flex-1 space-y-2.5 text-sm text-slate-600">
       {items.map((line) => (
         <li key={line} className="flex gap-2">
-          <Check className="mt-0.5 h-4 w-4 shrink-0 text-teal-600" aria-hidden />
+          <Check className="mt-0.5 h-4 w-4 shrink-0 text-s2d-teal" aria-hidden />
           <span>{line}</span>
         </li>
       ))}
@@ -118,8 +118,8 @@ export default function PricingPage() {
             and optional annual prepay.
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-            <span className="rounded-full bg-teal-700 px-3 py-1 text-xs font-bold text-white">40% launch offer</span>
-            <span className="rounded-full border border-teal-700/30 bg-teal-50 px-3 py-1 text-xs font-bold text-teal-800">
+            <span className="rounded-full bg-s2d-teal px-3 py-1 text-xs font-bold text-white">40% launch offer</span>
+            <span className="rounded-full border border-s2d-teal/30 bg-s2d-cream px-3 py-1 text-xs font-bold text-s2d-teal-deep">
               50% off annual prepay
             </span>
           </div>
@@ -170,11 +170,11 @@ export default function PricingPage() {
               <div
                 key={card.id}
                 className={`relative flex flex-col rounded-2xl border bg-white p-6 shadow-sm ${
-                  highlighted ? 'border-teal-500 ring-2 ring-teal-500/25' : 'border-slate-200'
+                  highlighted ? 'border-s2d-teal ring-2 ring-s2d-teal/25' : 'border-slate-200'
                 }`}
               >
                 {(card.badge || pkg.badge) && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-teal-700 px-3 py-0.5 text-xs font-semibold text-white">
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-s2d-teal px-3 py-0.5 text-xs font-semibold text-white">
                     {card.badge || pkg.badge}
                   </span>
                 )}
@@ -183,7 +183,7 @@ export default function PricingPage() {
                 <p className="mt-2 text-sm text-slate-600">{card.description}</p>
                 <PriceBlock pkg={pkg} interval={interval} />
                 <PackageHighlights pkg={pkg} />
-                <Button asChild className="mt-6 w-full min-h-11 bg-teal-700 hover:bg-teal-800">
+                <Button asChild className="mt-6 w-full min-h-11 bg-s2d-teal hover:bg-s2d-teal-deep">
                   <Link to={`/start?package=${pkg.id}&interval=${interval}`}>Get started</Link>
                 </Button>
               </div>

@@ -1,8 +1,8 @@
-/** Canonical campaign label for the venue lead list (never “Hindi” / scrape-date tags). */
+/** Canonical campaign label for the venue lead list (never ï¿½Hindiï¿½ / scrape-date tags). */
 export const LEEDS_CAMPAIGN_ID = 'Leeds';
 
 export const DEFAULT_SALLY_BRIEF =
-  'Sally from Sync2Dine: introduce the takeaway phone platform — AI answers, takes orders, and drives repeat business. If they want to sign up, research their restaurant online and confirm details before creating their account.';
+  'Sally from Sync2Dine: introduce the takeaway phone platform ï¿½ AI answers, takes orders, and drives repeat business. If they want to sign up, research their restaurant online and confirm details before creating their account.';
 
 /** Legacy batch/campaign/tags from earlier imports of this list. */
 export function looksLikeLeedsLegacyLabel(raw: unknown): boolean {

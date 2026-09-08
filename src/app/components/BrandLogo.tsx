@@ -35,8 +35,8 @@ export function BrandLogo({
   const { width, height } = iconDimensions[size];
   const wordmarkTone =
     variant === 'light'
-      ? 'text-[#0f3d3e]'
-      : 'bg-gradient-to-r from-amber-400 to-amber-200 bg-clip-text text-transparent';
+      ? 'text-s2d-teal'
+      : 'bg-gradient-to-r from-s2d-gold to-s2d-gold-soft bg-clip-text text-transparent';
 
   return (
     <div className={cn('flex items-center gap-2.5 min-w-0', className)}>
@@ -60,7 +60,7 @@ export function BrandLogo({
             <p
               className={cn(
                 'text-[10px] truncate',
-                variant === 'light' ? 'text-[#0f3d3e]/70' : 'text-amber-300/80',
+                variant === 'light' ? 'text-s2d-teal/70' : 'text-s2d-gold-soft/80',
               )}
             >
               {subtitle}

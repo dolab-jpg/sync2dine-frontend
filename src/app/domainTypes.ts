@@ -11,7 +11,7 @@ import {
 
 export interface Customer {
   id: string;
-  /** Restaurant / venue trading name ù primary CRM identity */
+  /** Restaurant / venue trading name ÔøΩ primary CRM identity */
   name: string;
   /** Person to speak to (manager, owner, booker) */
   contactName?: string;
@@ -86,11 +86,11 @@ export interface Product {
   source: string;
   category: string;
   tradeId?: TradeId | null;
-  /** Restaurant food menu fields (Sync2Dine) ù same row Judie reads via getMenu */
+  /** Restaurant food menu fields (Sync2Dine) ÔøΩ same row Judie reads via getMenu */
   price?: number;
   description?: string;
   available?: boolean;
-  /** Meal deal composition (specials) ù expands on placeFoodOrder */
+  /** Meal deal composition (specials) ÔøΩ expands on placeFoodOrder */
   deal?: {
     roles: Array<{ role: string; qtyPerDeal: number; choices: string[] }>;
   };
@@ -273,7 +273,7 @@ export interface AppContextType {
   accountsAccess: AccountsAccess;
   setAccountsAccess: (next: AccountsAccess) => void;
   addCustomer: (customer: Omit<Customer, 'id' | 'createdAt'>) => Customer;
-  /** One state update + one cloud save ó required for CSV imports (avoids Date.now id clashes and save races). */
+  /** One state update + one cloud save ÔøΩ required for CSV imports (avoids Date.now id clashes and save races). */
   addCustomersBulk: (customers: Array<Omit<Customer, 'id' | 'createdAt'> & { id?: string }>) => Customer[];
   upsertCustomer: (customer: Customer) => void;
   updateCustomer: (id: string, customer: Partial<Customer>) => void;

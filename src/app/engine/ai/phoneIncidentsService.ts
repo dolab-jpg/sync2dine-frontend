@@ -88,6 +88,20 @@ export async function resolvePhoneIncident(id: string): Promise<{ incident: Phon
   return api(`/api/ai/phone-incidents/${encodeURIComponent(id)}/resolve`, { method: 'POST' });
 }
 
+export async function deletePhoneIncident(id: string): Promise<{ ok: boolean; id: string }> {
+  return api(`/api/ai/phone-incidents/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function deletePhoneIncidentsBatch(ids: string[]): Promise<{
+  results: Array<{ id: string; ok: boolean }>;
+  deleted: number;
+}> {
+  return api('/api/ai/phone-incidents/delete-batch', {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  });
+}
+
 export async function batchPhoneIncidentCodeFix(payload: {
   ids: string[];
   action: 'offer' | 'enqueue';

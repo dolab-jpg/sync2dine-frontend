@@ -95,13 +95,17 @@ export function useVoiceConversation({ onUserMessage, onError }: UseVoiceConvers
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audioRef.current = audio;
+      let done = false;
       const finish = () => {
+        if (done) return;
+        done = true;
         URL.revokeObjectURL(url);
         if (audioRef.current === audio) audioRef.current = null;
         resolve();
       };
       audio.onended = finish;
       audio.onerror = finish;
+      audio.onpause = finish;
       void audio.play().catch(finish);
     });
   }, []);
@@ -207,6 +211,7 @@ export function useVoiceConversation({ onUserMessage, onError }: UseVoiceConvers
 
     const audioCtx = new AudioContext();
     audioCtxRef.current = audioCtx;
+    void audioCtx.resume().catch(() => undefined);
     const source = audioCtx.createMediaStreamSource(stream);
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 2048;

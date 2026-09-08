@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useContext, useEffect } from 'react';
+import { Link } from 'react-router';
 import { AppContext, canAccessRecruitment } from '../App';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
@@ -30,6 +31,15 @@ import {
   postRecruitmentCandidate,
   postRecruitmentApplication,
   patchRecruitmentApplication,
+  ensureRestaurantSalesJob,
+  postRecruitmentSeedIndeed,
+  postRecruitmentQueueInterviews,
+  postRecruitmentMessage,
+  type HireScorecard,
+  type HireRecommendation,
+  type RecruitmentMessage,
+  type RecruitmentMessageChannel,
+  type RecruitmentJob,
 } from '../engine/recruitment/recruitmentStore';
 
 // Types
@@ -68,6 +78,13 @@ interface Candidate {
   resumeUrl?: string;
   createdAt: string;
   rating: number;
+  notes?: string;
+  hireScore?: number;
+  hireRecommendation?: HireRecommendation;
+  hireScorecard?: HireScorecard;
+  lastInterviewCallId?: string;
+  callId?: string;
+  messages?: RecruitmentMessage[];
 }
 
 interface Application {
@@ -84,9 +101,9 @@ interface Application {
 
 interface Interview {
   id: string;
-  applicationId: string;
+  applicationId?: string;
   candidateId: string;
-  jobId: string;
+  jobId?: string;
   scheduledDate: string;
   scheduledTime: string;
   duration: number;
@@ -98,6 +115,11 @@ interface Interview {
   feedback?: string;
   rating?: number;
   notes?: string;
+  hireScore?: number;
+  hireRecommendation?: HireRecommendation;
+  hireScorecard?: HireScorecard;
+  lastInterviewCallId?: string;
+  callId?: string;
 }
 
 interface OnboardingTask {
@@ -111,14 +133,72 @@ interface OnboardingTask {
   notes?: string;
 }
 
-interface CommunicationLog {
-  id: string;
-  candidateId: string;
-  type: 'email' | 'call' | 'interview' | 'offer';
-  subject: string;
-  message: string;
-  date: string;
-  sentBy: string;
+const SCORECARD_FIELDS: Array<{ key: keyof HireScorecard; label: string }> = [
+  { key: 'hunger', label: 'Hunger' },
+  { key: 'salesProof', label: 'Sales proof' },
+  { key: 'restaurantFit', label: 'Restaurant fit' },
+  { key: 'outboundComfort', label: 'Outbound comfort' },
+  { key: 'cvHonesty', label: 'CV honesty' },
+];
+
+function resolveHireSummary(candidate: Candidate, interviews: Interview[]) {
+  const interview = interviews.find((i) => i.candidateId === candidate.id);
+  const isSallyInterview = candidate.hireScore != null
+    || Boolean(candidate.hireRecommendation)
+    || Boolean(candidate.hireScorecard)
+    || Boolean(candidate.lastInterviewCallId)
+    || Boolean(candidate.callId)
+    || interview?.hireScore != null
+    || Boolean(interview?.hireRecommendation)
+    || Boolean(interview?.hireScorecard)
+    || Boolean(interview?.lastInterviewCallId)
+    || Boolean(interview?.callId);
+  return {
+    hireScore: candidate.hireScore ?? interview?.hireScore,
+    hireRecommendation: candidate.hireRecommendation ?? interview?.hireRecommendation,
+    hireScorecard: candidate.hireScorecard ?? interview?.hireScorecard,
+    callId: candidate.lastInterviewCallId || candidate.callId || interview?.lastInterviewCallId || interview?.callId,
+    notes: candidate.notes || (isSallyInterview ? (interview?.feedback || interview?.notes) : undefined),
+  };
+}
+
+function HireScorecardBlock({ scorecard }: { scorecard: HireScorecard }) {
+  const rows = SCORECARD_FIELDS.filter(({ key }) => scorecard[key] != null);
+  if (rows.length === 0) return null;
+  return (
+    <div className="space-y-1">
+      <p className="text-sm font-medium text-slate-700">Scorecard</p>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+        {rows.map(({ key, label }) => (
+          <div key={key} className="flex justify-between gap-2">
+            <span className="text-slate-600">{label}</span>
+            <span className="font-medium text-slate-900">{scorecard[key]}/5</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InterviewCallLink({ callId }: { callId: string }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-sm">
+      <Link
+        to={`/calls?callId=${encodeURIComponent(callId)}`}
+        className="text-amber-700 underline underline-offset-2"
+      >
+        View call
+      </Link>
+      <a
+        href={`/api/calls/${encodeURIComponent(callId)}/recording`}
+        target="_blank"
+        rel="noreferrer"
+        className="text-slate-600 underline underline-offset-2"
+      >
+        Recording
+      </a>
+    </div>
+  );
 }
 
 export default function RecruitmentCRM() {
@@ -157,9 +237,31 @@ export default function RecruitmentCRM() {
   const [isAddCandidateOpen, setIsAddCandidateOpen] = useState(false);
   const [isScheduleInterviewOpen, setIsScheduleInterviewOpen] = useState(false);
   const [persistReady, setPersistReady] = useState(false);
+  const [seedingIndeed, setSeedingIndeed] = useState(false);
+  const [queuingInterviews, setQueuingInterviews] = useState(false);
+  const [profileTab, setProfileTab] = useState('profile');
+  const [composeBody, setComposeBody] = useState('');
+  const [composeChannel, setComposeChannel] = useState<RecruitmentMessageChannel>('indeed');
+  const [composeDirection, setComposeDirection] = useState<'in' | 'out'>('out');
+  const [savingMessage, setSavingMessage] = useState(false);
 
   // Sample Data
   const [jobs, setJobs] = useState<JobPosting[]>([
+    {
+      id: 'J-S2D-SALES',
+      title: 'Restaurant sales — Sync2Dine',
+      department: 'sales',
+      description: 'Outbound restaurant sales for Sync2Dine, covering venues in Woking / Surrey and London.',
+      location: 'Woking / Surrey and London',
+      salaryRange: '£30,000 - £45,000 + Commission',
+      employmentType: 'full-time',
+      requiredSkills: ['Sales', 'Outbound calling', 'Restaurant trade'],
+      qualifications: ['Sales experience', 'UK Driving License'],
+      status: 'open',
+      createdAt: '2026-09-01',
+      positions: 2,
+      applicantCount: 0,
+    },
     {
       id: 'J001',
       title: 'Senior Sales Representative',
@@ -499,14 +601,20 @@ export default function RecruitmentCRM() {
 
   useEffect(() => {
     const store = loadRecruitmentStore();
-    if (store.jobs.length > 0) setJobs(store.jobs as JobPosting[]);
+    if (store.jobs.length > 0) setJobs(ensureRestaurantSalesJob(store.jobs as RecruitmentJob[]) as JobPosting[]);
+    else setJobs((prev) => ensureRestaurantSalesJob(prev as RecruitmentJob[]) as JobPosting[]);
     if (store.candidates.length > 0) setCandidates(store.candidates as Candidate[]);
     if (store.interviews.length > 0) setInterviews(store.interviews as Interview[]);
     if (store.applications?.length > 0) setApplications(store.applications as Application[]);
     if (store.onboardingTasks?.length > 0) setOnboardingTasks(store.onboardingTasks as OnboardingTask[]);
     loadRecruitmentFromApi().then((api) => {
-      if (!api) { setPersistReady(true); return; }
-      if (api.jobs.length > 0) setJobs(api.jobs as JobPosting[]);
+      if (!api) {
+        setJobs((prev) => ensureRestaurantSalesJob(prev as RecruitmentJob[]) as JobPosting[]);
+        setPersistReady(true);
+        return;
+      }
+      if (api.jobs.length > 0) setJobs(ensureRestaurantSalesJob(api.jobs as RecruitmentJob[]) as JobPosting[]);
+      else setJobs((prev) => ensureRestaurantSalesJob(prev as RecruitmentJob[]) as JobPosting[]);
       if (api.candidates.length > 0) setCandidates(api.candidates as Candidate[]);
       if (api.interviews.length > 0) setInterviews(api.interviews as Interview[]);
       if (api.applications.length > 0) setApplications(api.applications as Application[]);
@@ -529,53 +637,54 @@ export default function RecruitmentCRM() {
     void syncRecruitmentToServer(data);
   }, [jobs, candidates, interviews, applications, onboardingTasks, persistReady]);
 
-  const [communications, setCommunications] = useState<CommunicationLog[]>([
-    {
-      id: 'COM001',
-      candidateId: 'C001',
-      type: 'email',
-      subject: 'Application Received',
-      message: 'Thank you for your application for Senior Sales Representative. We will review and be in touch soon.',
-      date: '2026-04-15',
-      sentBy: 'Recruitment System'
-    },
-    {
-      id: 'COM002',
-      candidateId: 'C001',
-      type: 'call',
-      subject: 'Initial Phone Screen',
-      message: '15 min call to discuss experience and role expectations. Very positive conversation.',
-      date: '2026-04-17',
-      sentBy: 'Emma Jones'
-    },
-    {
-      id: 'COM003',
-      candidateId: 'C001',
-      type: 'email',
-      subject: 'Interview Invitation',
-      message: 'We would like to invite you for a final interview on April 30th at 10am at our London office.',
-      date: '2026-04-20',
-      sentBy: 'Emma Jones'
-    },
-    {
-      id: 'COM004',
-      candidateId: 'C002',
-      type: 'interview',
-      subject: 'Technical Interview',
-      message: 'In-person interview and portfolio review. Discussed previous projects and techniques.',
-      date: '2026-04-23',
-      sentBy: 'David Wilson'
-    },
-    {
-      id: 'COM005',
-      candidateId: 'C002',
-      type: 'offer',
-      subject: 'Job Offer - Microcement Specialist',
-      message: 'Formal offer letter sent for Microcement Installation Specialist position. Salary: £38,000. Start date: May 3rd 2026.',
-      date: '2026-04-25',
-      sentBy: 'HR Team'
+  const applyApiRecruitment = (api: Awaited<ReturnType<typeof loadRecruitmentFromApi>>) => {
+    if (!api) {
+      setJobs((prev) => ensureRestaurantSalesJob(prev as RecruitmentJob[]) as JobPosting[]);
+      return;
     }
-  ]);
+    if (api.jobs.length > 0) setJobs(ensureRestaurantSalesJob(api.jobs as RecruitmentJob[]) as JobPosting[]);
+    else setJobs((prev) => ensureRestaurantSalesJob(prev as RecruitmentJob[]) as JobPosting[]);
+    if (api.candidates.length > 0) setCandidates(api.candidates as Candidate[]);
+    if (api.interviews.length > 0) setInterviews(api.interviews as Interview[]);
+    if (api.applications.length > 0) setApplications(api.applications as Application[]);
+    if (api.onboardingTasks.length > 0) setOnboardingTasks(api.onboardingTasks as OnboardingTask[]);
+  };
+
+  const handleLoadIndeedCvs = async () => {
+    setSeedingIndeed(true);
+    try {
+      const result = await postRecruitmentSeedIndeed();
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      const api = await loadRecruitmentFromApi();
+      applyApiRecruitment(api);
+      toast.success('Indeed CVs loaded');
+    } catch {
+      toast.error('Failed to load Indeed CVs');
+    } finally {
+      setSeedingIndeed(false);
+    }
+  };
+
+  const handleQueueSallyInterviews = async () => {
+    setQueuingInterviews(true);
+    try {
+      const result = await postRecruitmentQueueInterviews();
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      const api = await loadRecruitmentFromApi();
+      applyApiRecruitment(api);
+      toast.success('Sally interviews queued');
+    } catch {
+      toast.error('Failed to queue Sally interviews');
+    } finally {
+      setQueuingInterviews(false);
+    }
+  };
 
   // Helper functions
   const getCandidateById = (id: string) => candidates.find(c => c.id === id);
@@ -583,7 +692,52 @@ export default function RecruitmentCRM() {
   const getApplicationsForJob = (jobId: string) => applications.filter(a => a.jobId === jobId);
   const getApplicationsForCandidate = (candidateId: string) => applications.filter(a => a.candidateId === candidateId);
   const getInterviewsForCandidate = (candidateId: string) => interviews.filter(i => i.candidateId === candidateId);
-  const getCommunicationsForCandidate = (candidateId: string) => communications.filter(c => c.candidateId === candidateId);
+
+  function threadForCandidate(candidate: Candidate | null): RecruitmentMessage[] {
+    if (!candidate) return [];
+    return Array.isArray(candidate.messages) ? [...candidate.messages].sort((a, b) => String(a.at).localeCompare(String(b.at))) : [];
+  }
+
+  const applyMessageToCandidate = (candidateId: string, message: RecruitmentMessage) => {
+    const merge = (c: Candidate): Candidate => {
+      if (c.id !== candidateId) return c;
+      const existing = Array.isArray(c.messages) ? c.messages : [];
+      if (existing.some((m) => m.id === message.id)) return c;
+      return { ...c, messages: [...existing, message] };
+    };
+    setCandidates((prev) => prev.map(merge));
+    setSelectedCandidate((prev) => (prev ? merge(prev) : prev));
+  };
+
+  const handleSaveRecruitmentMessage = async () => {
+    if (!selectedCandidate) return;
+    const body = composeBody.trim();
+    if (!body) {
+      toast.error('Write a message first');
+      return;
+    }
+    setSavingMessage(true);
+    try {
+      const result = await postRecruitmentMessage({
+        candidateId: selectedCandidate.id,
+        name: selectedCandidate.name,
+        phone: selectedCandidate.phone,
+        direction: composeDirection,
+        channel: composeChannel,
+        body,
+        fromLabel: composeDirection === 'out' ? 'Sync2Dine recruitment' : selectedCandidate.name,
+      });
+      if (!result.ok || !result.message) {
+        toast.error(result.ok ? 'Saved locally only' : result.error);
+        return;
+      }
+      applyMessageToCandidate(selectedCandidate.id, result.message);
+      setComposeBody('');
+      toast.success(composeDirection === 'out' ? 'Outbound message saved' : 'Inbound Indeed message saved');
+    } finally {
+      setSavingMessage(false);
+    }
+  };
   const getOnboardingTasksForCandidate = (candidateId: string) => onboardingTasks.filter(t => t.candidateId === candidateId);
 
   // Analytics calculations
@@ -820,10 +974,54 @@ export default function RecruitmentCRM() {
             </div>
           )}
 
+          {(() => {
+            const hire = resolveHireSummary(candidate, interviews);
+            const hasHire =
+              hire.hireScore != null
+              || hire.hireRecommendation
+              || hire.callId
+              || hire.hireScorecard
+              || hire.notes;
+            if (!hasHire) return null;
+            return (
+              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                {(hire.hireScore != null || hire.hireRecommendation) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {hire.hireScore != null && (
+                      <p className="text-sm text-slate-700">
+                        <span className="font-medium">Hire score:</span> {hire.hireScore}/5
+                      </p>
+                    )}
+                    {hire.hireRecommendation && (
+                      <Badge
+                        variant={hire.hireRecommendation === 'hire' ? 'default' : hire.hireRecommendation === 'no' ? 'destructive' : 'secondary'}
+                        className="text-xs capitalize"
+                      >
+                        {hire.hireRecommendation}
+                      </Badge>
+                    )}
+                  </div>
+                )}
+                {hire.hireScorecard && <HireScorecardBlock scorecard={hire.hireScorecard} />}
+                {hire.callId && <InterviewCallLink callId={hire.callId} />}
+                {hire.notes && (
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">Sally notes</p>
+                    <p className="text-sm text-slate-600 line-clamp-3">{hire.notes}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           <div className="flex gap-2">
             <Button
               size="sm"
-              onClick={() => setSelectedCandidate(candidate)}
+              onClick={() => {
+                setProfileTab('profile');
+                setComposeBody('');
+                setSelectedCandidate(candidate);
+              }}
               className="flex-1"
             >
               <Eye className="w-4 h-4 mr-2" />
@@ -1054,7 +1252,7 @@ export default function RecruitmentCRM() {
           <div className="space-y-3">
             {interviews.filter(i => i.status === 'scheduled').map(interview => {
               const candidate = getCandidateById(interview.candidateId);
-              const job = getJobById(interview.jobId);
+              const job = interview.jobId ? getJobById(interview.jobId) : undefined;
 
               if (!candidate || !job) return null;
 
@@ -1199,7 +1397,13 @@ export default function RecruitmentCRM() {
           </h1>
           <p className="text-slate-600 mt-2">Manage hiring for office staff and construction teams</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => void handleLoadIndeedCvs()} disabled={seedingIndeed}>
+            {seedingIndeed ? 'Loading…' : 'Load Indeed CVs'}
+          </Button>
+          <Button variant="outline" onClick={() => void handleQueueSallyInterviews()} disabled={queuingInterviews}>
+            {queuingInterviews ? 'Queuing…' : 'Queue Sally interviews'}
+          </Button>
           <Button onClick={() => setIsAddCandidateOpen(true)}>
             <UserPlus className="w-4 h-4 mr-2" />
             Add Candidate
@@ -1730,7 +1934,7 @@ export default function RecruitmentCRM() {
               </DialogTitle>
             </DialogHeader>
 
-            <Tabs defaultValue="profile" className="mt-4">
+            <Tabs value={profileTab} onValueChange={setProfileTab} className="mt-4">
               <TabsList className="flex w-full overflow-x-auto">
                 <TabsTrigger value="profile" className="shrink-0 sm:flex-1">Profile</TabsTrigger>
                 <TabsTrigger value="applications" className="shrink-0 sm:flex-1">Applications</TabsTrigger>
@@ -1824,8 +2028,52 @@ export default function RecruitmentCRM() {
                   </div>
                 </div>
 
+                {(() => {
+                  const hire = resolveHireSummary(selectedCandidate, interviews);
+                  const hasHire =
+                    hire.hireScore != null
+                    || hire.hireRecommendation
+                    || hire.callId
+                    || hire.hireScorecard
+                    || hire.notes;
+                  if (!hasHire) return null;
+                  return (
+                    <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                      <Label className="text-slate-600">Sally interview</Label>
+                      {(hire.hireScore != null || hire.hireRecommendation) && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {hire.hireScore != null && (
+                            <p className="font-medium text-slate-900">Hire score: {hire.hireScore}/5</p>
+                          )}
+                          {hire.hireRecommendation && (
+                            <Badge
+                              variant={hire.hireRecommendation === 'hire' ? 'default' : hire.hireRecommendation === 'no' ? 'destructive' : 'secondary'}
+                              className="capitalize"
+                            >
+                              {hire.hireRecommendation}
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+                      {hire.hireScorecard && <HireScorecardBlock scorecard={hire.hireScorecard} />}
+                      {hire.callId && (
+                        <div>
+                          <Label className="text-slate-600 mb-1 block">Last interview call</Label>
+                          <InterviewCallLink callId={hire.callId} />
+                        </div>
+                      )}
+                      {hire.notes && (
+                        <div>
+                          <Label className="text-slate-600 mb-1 block">Sally notes</Label>
+                          <p className="text-sm text-slate-900">{hire.notes}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div className="flex gap-2">
-                  <Button>
+                  <Button type="button" onClick={() => setProfileTab('communications')}>
                     <MessageSquare className="w-4 h-4 mr-2" />
                     Send Message
                   </Button>
@@ -1898,8 +2146,8 @@ export default function RecruitmentCRM() {
 
               <TabsContent value="interviews" className="space-y-4 mt-6">
                 {getInterviewsForCandidate(selectedCandidate.id).map(interview => {
-                  const job = getJobById(interview.jobId);
-                  if (!job) return null;
+                  const job = interview.jobId ? getJobById(interview.jobId) : undefined;
+                  const interviewCallId = interview.lastInterviewCallId || interview.callId;
 
                   return (
                     <Card key={interview.id}>
@@ -1907,13 +2155,32 @@ export default function RecruitmentCRM() {
                         <div className="space-y-4">
                           <div className="flex justify-between items-start">
                             <div>
-                              <h3 className="font-semibold text-lg">{job.title}</h3>
+                              <h3 className="font-semibold text-lg">{job?.title ?? selectedCandidate.desiredRole}</h3>
                               <p className="text-sm text-slate-600 capitalize">{interview.type} Interview</p>
                             </div>
                             <Badge variant={interview.status === 'completed' ? 'secondary' : 'default'}>
                               {interview.status}
                             </Badge>
                           </div>
+
+                          {(interview.hireScore != null || interview.hireRecommendation) && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              {interview.hireScore != null && (
+                                <p className="text-sm font-medium text-slate-900">Hire score: {interview.hireScore}/5</p>
+                              )}
+                              {interview.hireRecommendation && (
+                                <Badge
+                                  variant={interview.hireRecommendation === 'hire' ? 'default' : interview.hireRecommendation === 'no' ? 'destructive' : 'secondary'}
+                                  className="text-xs capitalize"
+                                >
+                                  {interview.hireRecommendation}
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+
+                          {interview.hireScorecard && <HireScorecardBlock scorecard={interview.hireScorecard} />}
+                          {interviewCallId && <InterviewCallLink callId={interviewCallId} />}
 
                           <div className="grid grid-cols-2 gap-4 text-sm">
                             <div>
@@ -1982,30 +2249,65 @@ export default function RecruitmentCRM() {
               </TabsContent>
 
               <TabsContent value="communications" className="space-y-4 mt-6">
-                {getCommunicationsForCandidate(selectedCandidate.id).map(comm => (
-                  <Card key={comm.id}>
-                    <CardContent className="pt-6">
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-start">
-                          <div className="flex items-center gap-2">
-                            {comm.type === 'email' && <Mail className="w-5 h-5 text-blue-500" />}
-                            {comm.type === 'call' && <Phone className="w-5 h-5 text-green-500" />}
-                            {comm.type === 'interview' && <Video className="w-5 h-5 text-purple-500" />}
-                            {comm.type === 'offer' && <FileText className="w-5 h-5 text-amber-500" />}
-                            <div>
-                              <p className="font-semibold">{comm.subject}</p>
-                              <p className="text-sm text-slate-600">by {comm.sentBy}</p>
-                            </div>
-                          </div>
-                          <p className="text-sm text-slate-500">
-                            {new Date(comm.date).toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </p>
-                        </div>
-                        <p className="text-sm text-slate-700">{comm.message}</p>
+                <p className="text-sm text-slate-600">
+                  Log Indeed (and SMS/email) back-and-forth here. Paste what they sent as inbound, or save a reply you typed on Indeed as outbound. This stays in recruitment — not restaurant CRM.
+                </p>
+                <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
+                  {threadForCandidate(selectedCandidate).length === 0 && (
+                    <p className="text-sm text-slate-500 py-6 text-center">No messages yet.</p>
+                  )}
+                  {threadForCandidate(selectedCandidate).map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`rounded-xl border px-3 py-2 ${
+                        msg.direction === 'out'
+                          ? 'ml-8 border-s2d-teal/20 bg-s2d-cream/50'
+                          : 'mr-8 border-slate-200 bg-white'
+                      }`}
+                    >
+                      <div className="flex justify-between gap-2 text-xs text-slate-500 mb-1">
+                        <span>
+                          {msg.direction === 'out' ? 'Us' : 'Them'}
+                          {' · '}
+                          {msg.channel}
+                          {msg.fromLabel ? ` · ${msg.fromLabel}` : ''}
+                        </span>
+                        <span>
+                          {new Date(msg.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </span>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      <p className="text-sm text-slate-800 whitespace-pre-wrap">{msg.body}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Select value={composeChannel} onValueChange={(v) => setComposeChannel(v as RecruitmentMessageChannel)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="indeed">Indeed</SelectItem>
+                      <SelectItem value="sms">SMS</SelectItem>
+                      <SelectItem value="email">Email</SelectItem>
+                      <SelectItem value="phone">Phone note</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={composeDirection} onValueChange={(v) => setComposeDirection(v as 'in' | 'out')}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="out">Outbound (we sent)</SelectItem>
+                      <SelectItem value="in">Inbound (they sent)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Textarea
+                  value={composeBody}
+                  onChange={(e) => setComposeBody(e.target.value)}
+                  placeholder="Paste the Indeed message or type the reply you sent…"
+                  rows={4}
+                />
+                <Button type="button" onClick={() => void handleSaveRecruitmentMessage()} disabled={savingMessage}>
+                  <Send className="w-4 h-4 mr-2" />
+                  {savingMessage ? 'Saving…' : 'Save to recruitment'}
+                </Button>
               </TabsContent>
             </Tabs>
           </DialogContent>
