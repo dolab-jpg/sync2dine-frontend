@@ -1703,11 +1703,8 @@ export default function RecruitmentCRM() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {candidates
-              .filter(c => searchTerm === '' ||
-                c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                c.desiredRole.toLowerCase().includes(searchTerm.toLowerCase())
-              )
+              .filter(c => searchTerm === '' || [c.name, c.email, c.desiredRole, c.phone]
+                .some(field => String(field ?? '').toLowerCase().includes(searchTerm.toLowerCase())))
               .map(candidate => renderCandidateCard(candidate))}
           </div>
         </TabsContent>
