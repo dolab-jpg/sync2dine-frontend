@@ -66,6 +66,8 @@ export interface RecruitmentCandidate {
   callId?: string;
   messages?: RecruitmentMessage[];
 }
+
+export interface RecruitmentInterview {
   id: string;
   applicationId?: string;
   candidateId: string;
