@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useContext, useEffect } from 'react';
+import { useState, useContext, useEffect, useRef } from 'react';
 import { Link } from 'react-router';
 import { AppContext, canAccessRecruitment } from '../App';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
@@ -34,6 +34,7 @@ import {
   ensureRestaurantSalesJob,
   postRecruitmentSeedIndeed,
   postRecruitmentQueueInterviews,
+  postRecruitmentCvs,
   postRecruitmentMessage,
   type HireScorecard,
   type HireRecommendation,
@@ -74,7 +75,7 @@ interface Candidate {
   willingToRelocate: boolean;
   preferredLocations: string[];
   availability: string;
-  source: 'job-board' | 'referral' | 'website' | 'linkedin' | 'indeed' | 'direct';
+  source: 'job-board' | 'referral' | 'website' | 'linkedin' | 'indeed' | 'direct' | 'cv_upload' | 'phone' | 'recruitment_interview';
   resumeUrl?: string;
   createdAt: string;
   rating: number;
@@ -85,6 +86,24 @@ interface Candidate {
   lastInterviewCallId?: string;
   callId?: string;
   messages?: RecruitmentMessage[];
+  /** CV on file (uploaded through the dropzone) */
+  cvFilename?: string;
+  cvUploadedAt?: string;
+  cvText?: string;
+  cvSummary?: string;
+  needsPhone?: boolean;
+  /** What Sally wrote down on the screening call */
+  fieldComfort?: string;
+  outboundExperience?: string;
+  rightToWork?: string;
+  notice?: string;
+  salaryExpectation?: string;
+  travelOk?: string;
+  drivingLicence?: string;
+  hireDoNotCall?: boolean;
+  faceToFaceBooked?: boolean;
+  faceToFaceArrangeQueued?: boolean;
+  faceToFace?: { date?: string; time?: string; type?: string; location?: string };
 }
 
 interface Application {
@@ -180,6 +199,97 @@ function HireScorecardBlock({ scorecard }: { scorecard: HireScorecard }) {
   );
 }
 
+const HR_NOTE_FIELDS: Array<{ key: keyof Candidate; label: string }> = [
+  { key: 'experience', label: 'Experience' },
+  { key: 'fieldComfort', label: 'Cold / face-to-face comfort' },
+  { key: 'outboundExperience', label: 'Outbound experience' },
+  { key: 'rightToWork', label: 'Right to work' },
+  { key: 'notice', label: 'Notice / start' },
+  { key: 'salaryExpectation', label: 'Salary expectation' },
+  { key: 'travelOk', label: 'Travel' },
+  { key: 'availability', label: 'Availability' },
+  { key: 'drivingLicence', label: 'Driving licence' },
+];
+
+/** The CV Sally worked from, what she wrote down, and any booked face-to-face. */
+function CandidateCvPanel({ candidate, interviews }: { candidate: Candidate; interviews: Interview[] }) {
+  const [showCvText, setShowCvText] = useState(false);
+  const cvText = String(candidate.cvText || candidate.cvSummary || '').trim();
+  const notes = HR_NOTE_FIELDS
+    .map(({ key, label }) => ({ label, value: String(candidate[key] ?? '').trim() }))
+    .filter((row) => row.value);
+  const booked = interviews.find(
+    (i) => i.candidateId === candidate.id && i.type === 'in-person' && i.status === 'scheduled',
+  );
+  const f2f = candidate.faceToFace;
+  if (!candidate.cvFilename && !cvText && !notes.length && !booked && !candidate.needsPhone) return null;
+
+  return (
+    <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Label className="text-slate-600">CV and screening notes</Label>
+        {candidate.cvFilename && (
+          <a
+            href={`/api/recruitment/candidates/${encodeURIComponent(candidate.id)}/cv`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1 text-sm text-amber-700 underline underline-offset-2"
+          >
+            <FileText className="w-3 h-3" />
+            {candidate.cvFilename}
+          </a>
+        )}
+      </div>
+
+      {candidate.needsPhone && (
+        <p className="flex items-center gap-2 text-sm text-amber-700">
+          <AlertCircle className="w-4 h-4" />
+          No phone number on this CV — add one, then use Queue Sally interviews.
+        </p>
+      )}
+
+      {(booked || candidate.faceToFaceBooked || candidate.faceToFaceArrangeQueued) && (
+        <p className="flex items-center gap-2 text-sm text-slate-900">
+          <Calendar className="w-4 h-4 text-emerald-600" />
+          {booked || candidate.faceToFaceBooked
+            ? `Face-to-face ${[booked?.scheduledDate || f2f?.date, booked?.scheduledTime || f2f?.time].filter(Boolean).join(' at ') || 'booked'}${
+              booked?.location || f2f?.location ? ` — ${booked?.location || f2f?.location}` : ''
+            }`
+            : 'Sally is calling back to arrange the face-to-face'}
+        </p>
+      )}
+
+      {notes.length > 0 && (
+        <div className="grid gap-2 md:grid-cols-2">
+          {notes.map((row) => (
+            <div key={row.label}>
+              <p className="text-xs uppercase tracking-wide text-slate-500">{row.label}</p>
+              <p className="text-sm text-slate-900 whitespace-pre-wrap">{row.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {cvText && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowCvText((v) => !v)}
+            className="text-sm text-slate-600 underline underline-offset-2"
+          >
+            {showCvText ? 'Hide CV text Sally used' : 'Show CV text Sally used'}
+          </button>
+          {showCvText && (
+            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-3 text-xs text-slate-700">
+              {cvText}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InterviewCallLink({ callId }: { callId: string }) {
   return (
     <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -239,6 +349,9 @@ export default function RecruitmentCRM() {
   const [persistReady, setPersistReady] = useState(false);
   const [seedingIndeed, setSeedingIndeed] = useState(false);
   const [queuingInterviews, setQueuingInterviews] = useState(false);
+  const [uploadingCvs, setUploadingCvs] = useState(false);
+  const [cvDragActive, setCvDragActive] = useState(false);
+  const cvInputRef = useRef<HTMLInputElement | null>(null);
   const [profileTab, setProfileTab] = useState('profile');
   const [composeBody, setComposeBody] = useState('');
   const [composeChannel, setComposeChannel] = useState<RecruitmentMessageChannel>('indeed');
@@ -665,6 +778,33 @@ export default function RecruitmentCRM() {
       toast.error('Failed to load Indeed CVs');
     } finally {
       setSeedingIndeed(false);
+    }
+  };
+
+  const handleUploadCvs = async (files: File[]) => {
+    const accepted = files.filter((f) => /\.(pdf|docx?|rtf|txt)$/i.test(f.name));
+    if (!accepted.length) {
+      toast.error('Upload CVs as PDF, DOCX, RTF or TXT');
+      return;
+    }
+    setUploadingCvs(true);
+    try {
+      const result = await postRecruitmentCvs(accepted);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      const api = await loadRecruitmentFromApi();
+      applyApiRecruitment(api);
+      const parts = [`${result.created} CV${result.created === 1 ? '' : 's'} added`];
+      if (result.queued) parts.push(`${result.queued} Sally screen${result.queued === 1 ? '' : 's'} queued`);
+      if (result.needsPhone) parts.push(`${result.needsPhone} need a phone number`);
+      toast.success(parts.join(' · '));
+    } catch {
+      toast.error('Failed to upload CVs');
+    } finally {
+      setUploadingCvs(false);
+      setCvDragActive(false);
     }
   };
 
@@ -1397,7 +1537,38 @@ export default function RecruitmentCRM() {
           </h1>
           <p className="text-slate-600 mt-2">Manage hiring for office staff and construction teams</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            onDragOver={(e) => { e.preventDefault(); setCvDragActive(true); }}
+            onDragLeave={() => setCvDragActive(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setCvDragActive(false);
+              void handleUploadCvs(Array.from(e.dataTransfer.files || []));
+            }}
+            onClick={() => cvInputRef.current?.click()}
+            className={`flex cursor-pointer items-center gap-2 rounded-lg border-2 border-dashed px-4 py-2 text-sm transition-colors ${
+              cvDragActive
+                ? 'border-amber-500 bg-amber-50 text-amber-800'
+                : 'border-slate-300 text-slate-600 hover:border-amber-400 hover:text-amber-700'
+            }`}
+            title="Drop CVs here — Sally starts screening anyone with a UK mobile"
+          >
+            <Upload className="w-4 h-4" />
+            {uploadingCvs ? 'Uploading…' : 'Drop CVs to screen'}
+            <input
+              ref={cvInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.rtf,.txt"
+              className="hidden"
+              onChange={(e) => {
+                const files = Array.from(e.target.files || []);
+                e.target.value = '';
+                void handleUploadCvs(files);
+              }}
+            />
+          </div>
           <Button variant="outline" onClick={() => void handleLoadIndeedCvs()} disabled={seedingIndeed}>
             {seedingIndeed ? 'Loading…' : 'Load Indeed CVs'}
           </Button>
@@ -2028,6 +2199,8 @@ export default function RecruitmentCRM() {
                   </div>
                 </div>
 
+                <CandidateCvPanel candidate={selectedCandidate} interviews={interviews} />
+
                 {(() => {
                   const hire = resolveHireSummary(selectedCandidate, interviews);
                   const hasHire =
@@ -2081,10 +2254,23 @@ export default function RecruitmentCRM() {
                     <Calendar className="w-4 h-4 mr-2" />
                     Schedule Interview
                   </Button>
-                  <Button variant="outline">
-                    <Download className="w-4 h-4 mr-2" />
-                    Download CV
-                  </Button>
+                  {selectedCandidate.cvFilename ? (
+                    <Button variant="outline" asChild>
+                      <a
+                        href={`/api/recruitment/candidates/${encodeURIComponent(selectedCandidate.id)}/cv`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Download CV
+                      </a>
+                    </Button>
+                  ) : (
+                    <Button variant="outline" disabled title="No CV uploaded for this candidate">
+                      <Download className="w-4 h-4 mr-2" />
+                      Download CV
+                    </Button>
+                  )}
                 </div>
               </TabsContent>
 

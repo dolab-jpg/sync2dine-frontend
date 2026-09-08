@@ -54,7 +54,7 @@ export interface RecruitmentCandidate {
   willingToRelocate: boolean;
   preferredLocations: string[];
   availability: string;
-  source: 'job-board' | 'referral' | 'website' | 'linkedin' | 'indeed' | 'direct' | 'phone';
+  source: 'job-board' | 'referral' | 'website' | 'linkedin' | 'indeed' | 'direct' | 'phone' | 'cv_upload' | 'recruitment_interview';
   resumeUrl?: string;
   createdAt: string;
   rating: number;
@@ -65,6 +65,22 @@ export interface RecruitmentCandidate {
   lastInterviewCallId?: string;
   callId?: string;
   messages?: RecruitmentMessage[];
+  cvFilename?: string;
+  cvUploadedAt?: string;
+  cvText?: string;
+  cvSummary?: string;
+  needsPhone?: boolean;
+  fieldComfort?: string;
+  outboundExperience?: string;
+  rightToWork?: string;
+  notice?: string;
+  salaryExpectation?: string;
+  travelOk?: string;
+  drivingLicence?: string;
+  hireDoNotCall?: boolean;
+  faceToFaceBooked?: boolean;
+  faceToFaceArrangeQueued?: boolean;
+  faceToFace?: { date?: string; time?: string; type?: string; location?: string };
 }
 
 export interface RecruitmentInterview {
@@ -371,6 +387,56 @@ export function postRecruitmentSeedIndeed(): Promise<RecruitmentActionResult> {
 
 export function postRecruitmentQueueInterviews(): Promise<RecruitmentActionResult> {
   return postRecruitmentAction('/api/recruitment/queue-interviews');
+}
+
+export type CvUploadOutcome = {
+  filename: string;
+  ok: boolean;
+  candidateId?: string;
+  name?: string;
+  phone?: string;
+  queued: boolean;
+  needsPhone: boolean;
+  reason?: string;
+};
+
+export type CvUploadResult =
+  | { ok: true; created: number; queued: number; needsPhone: number; results: CvUploadOutcome[] }
+  | { ok: false; status: number; error: string };
+
+/** Upload one or many CVs — each becomes a candidate profile, and Sally screens the ones with a mobile. */
+export async function postRecruitmentCvs(files: File[]): Promise<CvUploadResult> {
+  if (!files.length) return { ok: false, status: 0, error: 'Choose at least one CV' };
+  const form = new FormData();
+  for (const file of files) form.append('cvs', file, file.name);
+  const headers: Record<string, string> = {};
+  try {
+    const token = localStorage.getItem('authToken');
+    if (token) headers.Authorization = `Bearer ${token}`;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const res = await fetch('/api/recruitment/cvs', { method: 'POST', headers, body: form });
+    const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (!res.ok) {
+      const error = typeof data.error === 'string'
+        ? data.error
+        : res.status === 404
+          ? 'CV upload is not available on this API yet'
+          : `Upload failed (${res.status})`;
+      return { ok: false, status: res.status, error };
+    }
+    return {
+      ok: true,
+      created: Number(data.created ?? 0),
+      queued: Number(data.queued ?? 0),
+      needsPhone: Number(data.needsPhone ?? 0),
+      results: Array.isArray(data.results) ? (data.results as CvUploadOutcome[]) : [],
+    };
+  } catch {
+    return { ok: false, status: 0, error: 'Upload failed' };
+  }
 }
 
 function recruitmentHeaders(): Record<string, string> {
